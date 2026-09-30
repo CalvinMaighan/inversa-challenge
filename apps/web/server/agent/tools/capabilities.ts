@@ -20,6 +20,18 @@ import {
 } from "@/server/agent/tools/evidence";
 import { lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
+import {
+  alertsView,
+  backtestView,
+  cellsView,
+  conditionsViews,
+  explainView,
+  feedsView,
+  sightingsView,
+  withView,
+  type ReadingRow,
+  type SightingRow,
+} from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
 import { worstHealth, type FeedState } from "@/shared/feed-state";
 import { QUALITY_CODES } from "@/shared/frames";
@@ -29,6 +41,13 @@ const HOUR_MS = 3_600_000;
 /** Frames cover a 30-day window (PLAN.md C15). */
 const MAX_LOOKBACK_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
+/** Default sightings lookback; with no window given and nothing in it, the tool widens to MAX_LOOKBACK_HOURS. */
+const DEFAULT_SIGHTING_HOURS = 24 * 7;
+/**
+ * Conditions query this much around the asked-for box. Rows inside the box win; when no station lies inside it
+ * ("water levels near Homestead", with the nearest gauge a few km out), the nearby stations answer instead.
+ */
+export const NEARBY_DEG = 0.25;
 
 // ---------------------------------------------------------------- schemas
 
@@ -44,7 +63,8 @@ const bboxSchema = z
 
 const timeSchema = z
   .string()
-  .refine((value) => Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
+  // Models often send "" for an optional time they mean to leave out; treat it as not given.
+  .refine((value) => value === "" || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
   .describe("ISO 8601 time, e.g. 2026-01-15T03:00:00Z");
 
 const speciesSchema = z.enum(SPECIES_KEYS).describe("python | tegu | iguana | lionfish");
@@ -83,6 +103,20 @@ function resolveWindow(
   const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
   if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
   return { from: from.toISOString(), to: to.toISOString() };
+}
+
+const inBox = (bbox: BBox, lat: number, lon: number) =>
+  lat >= bbox.south && lat <= bbox.north && lon >= bbox.west && lon <= bbox.east;
+
+/** `bbox` grown by `deg` on every side, clamped to the operating region. */
+function padBbox(bbox: BBox, deg: number): BBox {
+  const r = (v: number) => Math.round(v * 1e6) / 1e6;
+  return {
+    west: r(Math.max(REGION_BBOX.west, bbox.west - deg)),
+    south: r(Math.max(REGION_BBOX.south, bbox.south - deg)),
+    east: r(Math.min(REGION_BBOX.east, bbox.east + deg)),
+    north: r(Math.min(REGION_BBOX.north, bbox.north + deg)),
+  };
 }
 
 function atTime(input: string | undefined, ctx: CapabilityContext): string {
@@ -190,23 +224,34 @@ const sightingsInput = z.object({
 const sightings = {
   name: LAYER.sightings,
   description:
-    "Invasive species sightings (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags.",
+    "Invasive species sightings (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags. Default window: the last 7 days. A window ending now that comes back empty is widened to the last 30 days (the result says so). The user sees every row in a table panel.",
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
-    const window = resolveWindow(input, ctx, 24 * 7);
+    const explicit = Boolean(input.from) || Boolean(input.to) || input.hours !== undefined;
+    const asked = resolveWindow(input, ctx, DEFAULT_SIGHTING_HOURS);
+    // The same call fetches the whole 30 days before `to`. A "recent" window (none given, or one ending now) that
+    // comes back empty widens to them; an empty historical window tells the model how many older records exist.
+    const endsNow = Math.abs(Date.parse(asked.to) - ctx.now.getTime()) <= HOUR_MS;
+    const fetched = {
+      from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - MAX_LOOKBACK_HOURS * HOUR_MS)).toISOString(),
+      to: asked.to,
+    };
     const data = await gqlWithFeeds<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
       "AgentSightings",
       SIGHTINGS_QUERY,
       {
         bbox,
-        ...window,
+        ...fetched,
         taxa: input.species?.map((key) => speciesByKey(key).taxonId) ?? null,
         quality: input.quality?.map((quality) => quality.toUpperCase()) ?? null,
       },
       ctx.signal,
     );
-    const rows = [...data.sightings].sort(
+    const recent = data.sightings.filter((row) => Date.parse(row.observedAt) >= Date.parse(asked.from));
+    const widened = (!explicit || endsNow) && recent.length === 0 && data.sightings.length > 0;
+    const window = widened ? fetched : asked;
+    const rows = [...(widened ? data.sightings : recent)].sort(
       (a, b) =>
         (QUALITY_RANK[lower(a.quality)] ?? 9) - (QUALITY_RANK[lower(b.quality)] ?? 9) ||
         Date.parse(b.observedAt) - Date.parse(a.observedAt),
@@ -227,10 +272,34 @@ const sightings = {
       ),
     );
     const feeds = feedsFor(data.feeds, new Set(rows.map((row) => row.source)), ["inat", "nas", "gbif"]);
-    return output(
+    const viewRows: SightingRow[] = rows.map((row) => ({
+      evidenceId: `sighting:${row.id}`,
+      species: row.taxon.commonName,
+      source: row.source,
+      quality: lower(row.quality),
+      observedAt: row.observedAt,
+      lat: row.lat,
+      lon: row.lon,
+      duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
+      idConflict: row.conflict,
+    }));
+    const species = input.species?.map((key) => speciesByKey(key).common.toLowerCase()).join(", ") ?? "invasive";
+    const days = Math.max(1, Math.round((Date.parse(window.to) - Date.parse(window.from)) / (24 * HOUR_MS)));
+    const span = endsNow ? `last ${days} ${days === 1 ? "day" : "days"}` : `${window.from.slice(5, 10)} to ${window.to.slice(5, 10)}`;
+    const title = `${species} sightings · ${span}`;
+    const view = sightingsView(viewRows, bbox, title.charAt(0).toUpperCase() + title.slice(1));
+    const older = !widened && recent.length === 0 ? data.sightings.length : 0;
+    const askedDays = Math.max(1, Math.round((Date.parse(asked.to) - Date.parse(asked.from)) / (24 * HOUR_MS)));
+    const out = output(
       {
         bbox,
         window,
+        ...(widened
+          ? { widened: `Nothing in the ${askedDays} days asked for; the window was widened to the last 30 days. Say so.` }
+          : {}),
+        ...(older > 0
+          ? { olderInLast30Days: older, hint: `Nothing in this window, but ${older} older in the 30 days before it: call again with hours: 720 to show them.` }
+          : {}),
         total: rows.length,
         distinctAnimals: rows.length - duplicates.length,
         duplicates: duplicates.length,
@@ -255,6 +324,7 @@ const sightings = {
       feeds,
       rows.length,
     );
+    return withView(out, view);
   },
 };
 
@@ -313,7 +383,7 @@ const conditionsInput = z.object({
     .describe("lst_c land skin temp, air_c, water_c, sst_c, rain_mm, stage_m, wave_m, wind_ms, fire_frp. Omit for all."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
-  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default 24)."),
+  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default 24). Keep the default for right-now questions: buoys and satellite passes report hourly or slower, so a short window misses the latest reading and its gaps."),
 });
 
 function mean(values: number[]): number {
@@ -323,19 +393,24 @@ function mean(values: number[]): number {
 const conditions = {
   name: "conditions",
   description:
-    "Latest readings per station, parameter and origin (measured in-situ, satellite, modeled) in an area. Includes missing/flagged series and cross-origin conflicts.",
+    "Latest readings per station, parameter and origin (measured in-situ, satellite, modeled) in an area (the nearest stations within 0.25° when none is inside it). Includes missing/flagged series and cross-origin conflicts. The user sees each parameter's time series as a chart. For current conditions leave from/to/hours unset (last 24 h): a one-hour window misses sparse satellite passes and buoy reports.",
   inputSchema: conditionsInput,
   async execute(input: z.infer<typeof conditionsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const bbox = resolveBbox(input.bbox, ctx);
+    const area = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, 24);
+    const around = padBbox(area, NEARBY_DEG);
     const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
       "AgentReadings",
       READINGS_QUERY,
-      { bbox, ...window, params: input.params?.map((param) => param.toUpperCase()) ?? null },
+      { bbox: around, ...window, params: input.params?.map((param) => param.toUpperCase()) ?? null },
       ctx.signal,
     );
+    const inside = data.readings.filter((row) => inBox(area, row.station.lat, row.station.lon));
+    const nearby = inside.length === 0 && data.readings.length > 0;
+    const readings = nearby ? data.readings : inside;
+    const bbox = nearby ? around : area;
     const latest = new Map<string, { row: GqlReading; count: number }>();
-    for (const row of data.readings) {
+    for (const row of readings) {
       const key = `${row.station.id}|${lower(row.param)}|${lower(row.origin)}`;
       const seen = latest.get(key);
       if (!seen) latest.set(key, { row, count: 1 });
@@ -398,14 +473,38 @@ const conditions = {
         }
       }
     }
-    const seenSources = new Set(data.readings.map((row) => row.station.source));
+    const seenSources = new Set(readings.map((row) => row.station.source));
     const fallback = [...new Set((input.params ?? PARAMS).flatMap((param) => PARAM_SOURCES[param]))];
     const feeds = feedsFor(data.feeds, seenSources, fallback);
-    return output(
+    const toRow = (row: GqlReading): ReadingRow => ({
+      evidenceId: idOf(row),
+      stationId: row.station.id,
+      station: row.station.name,
+      source: row.station.source,
+      lat: row.station.lat,
+      lon: row.station.lon,
+      param: lower(row.param),
+      value: row.value,
+      flag: lower(row.flag),
+      origin: lower(row.origin),
+      observedAt: row.observedAt,
+    });
+    const scope = nearby ? `nearest stations within ${NEARBY_DEG}°` : "";
+    const view = conditionsViews(
+      readings.map(toRow),
+      series.map(({ row }) => toRow(row)),
+      bbox,
+      input.params ?? [],
+      scope,
+    );
+    const out = output(
       {
         bbox,
         window,
-        readings: data.readings.length,
+        ...(nearby
+          ? { scope: `No station inside the area; these are the nearest within ${NEARBY_DEG}° of it.`, area }
+          : {}),
+        readings: readings.length,
         series: series.length,
         truncated: series.length > shown.length,
         conflicts,
@@ -425,8 +524,9 @@ const conditions = {
       },
       evidenceRows,
       feeds,
-      data.readings.length,
+      readings.length,
     );
+    return withView(out, view);
   },
 };
 
@@ -464,16 +564,8 @@ const alerts = {
     );
     const evidenceRows = data.alerts.map((row) => evidence("alert", row.id, `${row.event} (${row.severity})`));
     const feeds = feedsFor(data.feeds, [], ["nws", "nwws"]);
-    return output(
-      {
-        bbox,
-        at,
-        rows: data.alerts.map((row, index) => ({ evidenceId: evidenceRows[index]!.id, ...row })),
-      },
-      evidenceRows,
-      feeds,
-      data.alerts.length,
-    );
+    const rows = data.alerts.map((row, index) => ({ evidenceId: evidenceRows[index]!.id, ...row }));
+    return withView(output({ bbox, at, rows }, evidenceRows, feeds, data.alerts.length), alertsView(rows, bbox, at));
   },
 };
 
@@ -515,18 +607,14 @@ const hotspots = {
     const evidenceRows = grid.cells.map((cell) =>
       evidence("hotspot", hotspotKey(grid.species, cell.cell, grid.at), `${grid.species} cell ${cell.cell} score ${cell.score.toFixed(2)}`),
     );
-    return output(
-      {
-        species: grid.species,
-        at: grid.at,
-        heuristic: true,
-        note: HOTSPOT_NOTE,
-        cells: grid.cells.map((cell, index) => ({ evidenceId: evidenceRows[index]!.id, ...cell })),
-      },
+    const cells = grid.cells.map((cell, index) => ({ evidenceId: evidenceRows[index]!.id, ...cell }));
+    const out = output(
+      { species: grid.species, at: grid.at, heuristic: true, note: HOTSPOT_NOTE, cells },
       evidenceRows,
       feedsFor(data.feeds, [], "all"),
       grid.cells.length,
     );
+    return withView(out, cellsView(grid.species, grid.at, cells, bbox));
   },
 };
 
@@ -575,12 +663,14 @@ const explainCell = {
       hotspotKey(explained.species, explained.cell, explained.at),
       `${explained.species} cell ${explained.cell} score ${explained.score.toFixed(2)}`,
     );
-    return output(
-      { ...explained, evidenceId: row.id, center: cellCenter(explained.cell), heuristic: true, note: HOTSPOT_NOTE },
+    const center = cellCenter(explained.cell);
+    const out = output(
+      { ...explained, evidenceId: row.id, center, heuristic: true, note: HOTSPOT_NOTE },
       [row],
       feedsFor(data.feeds, [], "all"),
       explained.terms.length,
     );
+    return withView(out, explainView(explained, row.id, center));
   },
 };
 
@@ -624,18 +714,20 @@ const backtest = {
       `${result.species}:${result.days}`,
       `${result.species} backtest ${result.days} d: hit rate ${result.hitRate} vs baseline ${result.baseline}`,
     );
-    return output(
+    const out = output(
       {
         evidenceId: row.id,
         ...result,
         lift: result.baseline > 0 ? Number((result.hitRate / result.baseline).toFixed(2)) : null,
         sightingsScored: scored,
         heuristic: true,
+        note: HOTSPOT_NOTE,
       },
       [row],
       feedsFor(data.feeds, [], "all"),
       result.perDay.length,
     );
+    return withView(out, backtestView(result, row.id));
   },
 };
 
@@ -649,7 +741,8 @@ const feedState = {
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx.signal);
-    return output({ asOf: ctx.now.toISOString() }, [], data.feeds, data.feeds.length);
+    const out = output({ asOf: ctx.now.toISOString() }, [], data.feeds, data.feeds.length);
+    return withView(out, feedsView(out.feeds));
   },
 };
 

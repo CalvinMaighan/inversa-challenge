@@ -8,6 +8,8 @@ import { AGENT_CHAT, LAYERS, SELECTION, TIME, VIEW } from "client/state";
 import { onTaskEvent } from "client/voice/voice-runtime";
 import type { AgentStreamEvent } from "shared/agent/events";
 
+import { clearHighlight, showTurn } from "../panels/effects";
+import { clearPanels, recordToolEnd } from "../panels/store";
 import { applyAgentSideEffects } from "./effects";
 import { AGENT_STREAM_URL, streamAgentTurn } from "./ndjson";
 import { buildAgentRequest, type ViewSnapshot } from "./request";
@@ -55,6 +57,9 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
   const enqueue = useCallback(
     (id: string, event: AgentStreamEvent, voiceTaskId?: string) => {
       applyAgentSideEffects(event);
+      recordToolEnd(id, event);
+      // A finished answer brackets its results on the globe and frames them.
+      if (event.type === "done") showTurn(id);
       const last = pending.current[pending.current.length - 1];
       if (last && last.id === id) last.events.push(event);
       else pending.current.push({ id, voiceTaskId, events: [event] });
@@ -120,6 +125,8 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
   const clear = useCallback(() => {
     if (abortRef.current) return;
     dispatch({ type: "clear" });
+    clearPanels();
+    clearHighlight();
   }, []);
 
   return { thread, asking: isAsking(thread), send, stop, clear };

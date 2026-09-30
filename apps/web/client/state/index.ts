@@ -1,6 +1,6 @@
 import { catalog } from "@calvinjs/active-state";
 
-import { AGENT_CARD, AGENT_CHAT } from "./agent";
+import { AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
 import { FEEDS } from "./feeds";
 import { LAYERS } from "./layers";
 import { ME } from "./me";
@@ -12,7 +12,7 @@ import { TIME } from "./time";
 import { VIEW } from "./view";
 import { VOICE } from "./voice";
 
-export { AGENT_CARD, AGENT_CHAT } from "./agent";
+export { AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
 export { FEEDS } from "./feeds";
 export { LAYERS } from "./layers";
 export { ME } from "./me";
@@ -25,9 +25,9 @@ export { VIEW } from "./view";
 export { VOICE } from "./voice";
 
 /** Snapshot for `<ActiveState init={state} />`. Importing this module runs every `key()`. */
-export const state = catalog(TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, AGENT_CARD, AGENT_CHAT, VOICE, THEME, ACCENT_COLOR);
+export const state = catalog(TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR);
 
-export type StateKeyId = "TIME" | "VIEW" | "LAYERS" | "SELECTION" | "FEEDS" | "MISSIONS" | "PEERS" | "ME" | "AGENT_CARD" | "AGENT_CHAT" | "VOICE" | "THEME" | "ACCENT_COLOR";
+export type StateKeyId = "TIME" | "VIEW" | "LAYERS" | "SELECTION" | "FEEDS" | "MISSIONS" | "PEERS" | "ME" | "AGENT_CARD" | "AGENT_CHAT" | "AGENT_HIGHLIGHT" | "VOICE" | "THEME" | "ACCENT_COLOR";
 
 /**
  * Every key id in code-unit order. PLAN.md C6: a key's position here is its `keyIndex` on the SAB transport,

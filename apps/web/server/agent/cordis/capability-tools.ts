@@ -3,13 +3,14 @@ import type { Context } from "@deepseek-ai/cordis";
 import type { JsonValue, ToolDefinition } from "@deepseek-ai/dsh-tools";
 
 import type { CapabilityContext, CapabilityRegistry, Evidence } from "@/server/agent/runtime/registry";
+import { viewOf, type ToolViewData } from "@/server/agent/tools/views";
 import type { FeedState } from "@/shared/feed-state";
 
-/** Structured details on each tool result. `data` is the compact UI payload of `tool_end`. */
+/** Structured details on each tool result. `data` is the UI payload of `tool_end`, with the C17 views. */
 export type AgentToolDetails = {
   capabilityName: string;
   ok: boolean;
-  data?: { count: number; evidence: Evidence[]; feeds: FeedState[] };
+  data?: { count: number; evidence: Evidence[]; feeds: FeedState[] } & ToolViewData;
   error?: string;
   /** Full JSON result for the model. Dropped from the presentation meta. */
   modelText?: string;
@@ -72,7 +73,7 @@ export function bindCapabilityTools(
         return {
           capabilityName: cap.name,
           ok: true,
-          data: { count: result.output.count, evidence: result.output.evidence, feeds: result.output.feeds },
+          data: { count: result.output.count, evidence: result.output.evidence, feeds: result.output.feeds, ...viewOf(result.output) },
           modelText: JSON.stringify(result.output.data),
         } satisfies AgentToolDetails;
       },

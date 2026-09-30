@@ -188,12 +188,17 @@ describe("capability tools", () => {
   });
 
   test("time windows default from the reference time and reject empty windows", async () => {
-    await run("sightings", { hours: 48 });
+    const out = await run("sightings", { hours: 48 });
+    expect(out.data.window).toEqual({ from: "2026-01-13T03:00:00.000Z", to: "2026-01-15T03:00:00.000Z" });
+    // The call fetches the 30 days before `to`, so an empty window can say what is older.
     expect(env.stub.requests[0]!.variables).toMatchObject({
-      from: "2026-01-13T03:00:00.000Z",
+      from: "2025-12-16T03:00:00.000Z",
       to: "2026-01-15T03:00:00.000Z",
       bbox: { west: -83.2, south: 24.3, east: -79.8, north: 27.5 },
     });
+    const fixed = await run("sightings", { from: "2026-01-13T00:00:00Z", to: "2026-01-14T00:00:00Z" });
+    expect(env.stub.requests[1]!.variables).toMatchObject({ from: "2025-12-15T00:00:00.000Z", to: "2026-01-14T00:00:00.000Z" });
+    expect(fixed.data.window).toEqual({ from: "2026-01-13T00:00:00.000Z", to: "2026-01-14T00:00:00.000Z" });
     const bad = await registry.execute("sightings", { from: "2026-01-15T00:00:00Z", to: "2026-01-14T00:00:00Z" }, ctx);
     expect(bad).toMatchObject({ ok: false, code: "error" });
     const outside = await registry.execute("alerts", { bbox: { west: -100, south: 40, east: -99, north: 41 } }, ctx);

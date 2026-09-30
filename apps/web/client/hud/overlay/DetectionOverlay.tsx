@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { getGlobe, onGlobeReady, type GlobeApi, type ScreenPoint } from "client/globe/api";
 import styled from "client/styled";
 
+import { CELL_DEG, cellCenter, parseHotspotId } from "../drawer/evidence";
 import { openEvidence } from "../selection";
 import { acquireAlpha, bracketSegments, monoWidth } from "./brackets";
 import { LabelArbiter, type LabelCandidate, type Rect } from "./label-arbiter";
@@ -60,14 +61,34 @@ const LabelButton = styled.button<{ $selected: boolean }>`
   }
 `;
 
-type Colors = { selected: string; cited: string };
+type Colors = { selected: string; cited: string; highlight: string };
 
 function readColors(el: Element): Colors {
   const s = getComputedStyle(el);
   return {
     selected: s.getPropertyValue("--accent").trim() || "#d34b4d",
     cited: s.getPropertyValue("--hud-line").trim() || "#aaa",
+    highlight: s.getPropertyValue("--warn").trim() || "#c89b3c",
   };
+}
+
+/** Agent-highlighted entities (PLAN.md C17) bracket smaller; the hovered one pulses. */
+const BRACKET_HIGHLIGHT = 9;
+const PULSE_MS = 900;
+
+/** Outline of a hotspot cell (0.01° square), projected corner by corner, or null when a corner is off screen. */
+function cellOutline(globe: GlobeApi, id: string): ScreenPoint[] | null {
+  const ref = parseHotspotId(id);
+  if (!ref) return null;
+  const c = cellCenter(ref.col, ref.row);
+  const h = CELL_DEG / 2;
+  const corners = [
+    [c.lon - h, c.lat - h],
+    [c.lon + h, c.lat - h],
+    [c.lon + h, c.lat + h],
+    [c.lon - h, c.lat + h],
+  ].map(([lon, lat]) => globe.project(lon!, lat!));
+  return corners.every((p): p is ScreenPoint => p !== null) ? corners : null;
 }
 
 function sizeCanvas(canvas: HTMLCanvasElement, w: number, h: number, dpr: number): CanvasRenderingContext2D | null {
@@ -133,6 +154,8 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       const candidates: LabelCandidate[] = [];
       let selectedPoint: ScreenPoint | null = null;
       let fading = false;
+      let drawn = 0;
+      let drawnHighlight = 0;
 
       for (const t of list) {
         const p = globe ? globe.project(t.lon, t.lat) : null;
@@ -141,16 +164,31 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
         if (!firstSeen.has(t.id)) firstSeen.set(t.id, now);
         const alpha = acquireAlpha(firstSeen.get(t.id)!, now, FADE_MS);
         if (alpha < 1) fading = true;
-        const half = t.selected ? BRACKET_SELECTED : BRACKET_CITED;
+        const agent = !t.selected && !t.cited;
+        // A hovered panel row breathes: the bracket swells and shrinks until the pointer leaves.
+        const pulse = t.hovered ? 1 + 0.45 * (0.5 + 0.5 * Math.sin((now / PULSE_MS) * Math.PI * 2)) : 1;
+        if (t.hovered) fading = true;
+        const half = (t.selected ? BRACKET_SELECTED : agent ? BRACKET_HIGHLIGHT : BRACKET_CITED) * pulse;
+        const color = t.selected ? colors.selected : agent ? colors.highlight : colors.cited;
         ctx.globalAlpha = alpha;
-        ctx.strokeStyle = t.selected ? colors.selected : colors.cited;
-        ctx.lineWidth = t.selected ? 2 : 1.5;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = t.selected || t.hovered ? 2 : agent ? 1.25 : 1.5;
+        const outline = t.kind === "hotspot" && globe ? cellOutline(globe, t.id) : null;
+        if (outline) {
+          // Hotspot cells are areas: outline the 0.01° square as well as bracketing its centre.
+          ctx.beginPath();
+          outline.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+          ctx.closePath();
+          ctx.stroke();
+        }
         ctx.beginPath();
         for (const [x0, y0, x1, y1] of bracketSegments(p.x, p.y, half * (2 - alpha), half * 0.45)) {
           ctx.moveTo(x0, y0);
           ctx.lineTo(x1, y1);
         }
         ctx.stroke();
+        drawn += 1;
+        if (t.highlight) drawnHighlight += 1;
         if (t.selected) {
           ctx.beginPath();
           ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
@@ -161,6 +199,10 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       }
       ctx.globalAlpha = 1;
       for (const id of [...firstSeen.keys()]) if (!list.some((t) => t.id === id)) firstSeen.delete(id);
+      // Counts for tests and the e2e: brackets on screen, and how many of them are the agent's highlight.
+      canvas.dataset.brackets = String(drawn);
+      canvas.dataset.highlightBrackets = String(drawnHighlight);
+      canvas.dataset.highlightTargets = String(list.filter((t) => t.highlight).length);
 
       const scope = scoped ? drawScope(ctx, w, h, selectedPoint) : null;
 

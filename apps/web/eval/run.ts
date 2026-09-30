@@ -16,6 +16,7 @@ import { join } from "node:path";
 
 import { GOLDEN, type Golden } from "./golden";
 import { FIXTURE_NOW, startStub } from "./stub-server";
+import { checkViews } from "./views";
 
 import { REGION_BBOX } from "@/server/agent/config";
 import { resetHarness } from "@/server/agent/cordis/boot";
@@ -112,9 +113,16 @@ async function main(): Promise<number> {
   let qualityPassed = 0;
   let tokensIn = 0;
   let tokensOut = 0;
+  let viewsValid = 0;
+  let viewsTotal = 0;
   for (const golden of questions) {
     const outcome = outcomes.find((row) => row.golden === golden)!;
     const { reasons, tools, cited } = check(golden, outcome.events);
+    // C17: every successful data tool call carries a ToolResultData with a view for the card.
+    const views = checkViews(outcome.events);
+    viewsValid += views.valid;
+    viewsTotal += views.total;
+    reasons.push(...views.reasons);
     const ok = reasons.length === 0;
     if (ok) passed += 1;
     if (ok && golden.quality) qualityPassed += 1;
@@ -141,6 +149,7 @@ async function main(): Promise<number> {
   // Cache reads are billed below list price, so this is an upper bound.
   const cost = (tokensIn * PRICE_IN + tokensOut * PRICE_OUT) / 1_000_000;
   console.log(`EVAL tokens in=${tokensIn} out=${tokensOut} cost<=$${cost.toFixed(4)}`);
+  console.log(`EVAL views valid ${viewsValid}/${viewsTotal}`);
   console.log(`EVAL quality passed ${qualityPassed}/${qualityTotal}`);
   console.log(`EVAL passed ${passed}/${total}`);
   return passed === total ? 0 : 1;

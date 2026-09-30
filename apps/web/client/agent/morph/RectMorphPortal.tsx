@@ -36,6 +36,8 @@ export default function RectMorphPortal({ open, sourceRef, computeTarget, label,
       const target = event.target as Node | null;
       if (!target) return;
       if (panelRef.current?.contains(target) || sourceRef.current?.contains(target)) return;
+      // Surfaces the card opened (the expanded data panel) belong to it.
+      if (target instanceof Element && target.closest("[data-agent-overlay]")) return;
       requestClose("pointer");
     };
     document.addEventListener("pointerdown", onPointerDown, true);

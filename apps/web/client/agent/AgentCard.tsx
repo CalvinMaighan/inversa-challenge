@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
 import type { VoiceState } from "client/state/voice";
 
@@ -33,6 +33,8 @@ import type { AgentThread, AgentTurn } from "./chat/thread";
 import { ClearIcon, CloseIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
 import { ORB_LABELS, voiceIsLive, type OrbPhase } from "./orb-phase";
+import DataPanels from "./panels/DataPanels";
+import ExpandedPanels from "./panels/ExpandedPanels";
 
 /** Route limit (app/api/agent/stream: MAX_QUESTION_CHARS). */
 const MAX_QUESTION_CHARS = 4_000;
@@ -64,12 +66,14 @@ const AssistantTurn = memo(function AssistantTurn({
   objective,
   selected,
   onCite,
+  onExpand,
 }: {
   turn: AgentTurn;
   /** Voice task objective, for voice turns. */
   objective: string | undefined;
   selected: string | null;
   onCite: (id: string) => void;
+  onExpand: (turnId: string) => void;
 }) {
   const streaming = turn.status === "streaming";
   return (
@@ -79,6 +83,7 @@ const AssistantTurn = memo(function AssistantTurn({
       <ActionTimeline turn={turn} />
       {streaming && !turn.text && turn.phase ? <PhaseLine>{PHASE_TEXT[turn.phase]}</PhaseLine> : null}
       {turn.text ? <StreamMarkdown text={turn.text} citations={turn.citations} onCite={onCite} /> : null}
+      <DataPanels turnId={turn.id} onExpand={onExpand} />
       {turn.stopped ? <Note>Stopped.</Note> : null}
       {turn.errors?.map((message, i) => (
         <ErrorLine key={i} role="alert">
@@ -157,6 +162,8 @@ export default function AgentCard({
   onClose,
 }: AgentCardProps) {
   const [draft, setDraft] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const closeExpanded = useCallback(() => setExpanded(null), []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const live = voiceIsLive(voice);
@@ -224,11 +231,13 @@ export default function AgentCard({
                 objective={turn.taskId ? voice?.tasks?.find((t) => t.id === turn.taskId)?.objective : undefined}
                 selected={selected}
                 onCite={onCite}
+                onExpand={setExpanded}
               />
             ),
           )
         )}
       </Thread>
+      {expanded && thread.messages.some((m) => m.id === expanded) ? <ExpandedPanels turnId={expanded} onClose={closeExpanded} /> : null}
       <Composer onSubmit={submit}>
         <Input
           ref={inputRef}

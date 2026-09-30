@@ -31,8 +31,22 @@ export type AgentChatState = {
   messages: AgentChatMessage[];
 };
 
+/** One entity an agent answer points at (PLAN.md C17 `highlight`), with its position when the result carried it. */
+export type AgentHighlightTarget = { id: string; label: string; lon?: number; lat?: number };
+
+export type AgentHighlightState = {
+  /** Assistant turn the highlight came from, or null when nothing is highlighted. */
+  turnId: string | null;
+  /** Evidence ids to bracket on the globe, capped at 50, most relevant first. */
+  targets: AgentHighlightTarget[];
+  /** Id under the pointer in a data panel; the globe pulses it. */
+  hover: AgentHighlightTarget | null;
+};
+
 const cardDefaults: AgentCardState = { open: false, anchor: null };
 const chatDefaults: AgentChatState = { sessionId: null, messages: [] };
+const highlightDefaults: AgentHighlightState = { turnId: null, targets: [], hover: null };
 
 export const AGENT_CARD = key("AGENT_CARD", cardDefaults);
 export const AGENT_CHAT = key("AGENT_CHAT", chatDefaults);
+export const AGENT_HIGHLIGHT = key("AGENT_HIGHLIGHT", highlightDefaults);
