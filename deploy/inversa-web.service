@@ -1,0 +1,46 @@
+[Unit]
+Description=Inversa web (Next.js standalone on bun) on 127.0.0.1:3050
+After=network-online.target inversa-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=inversa
+Group=inversa
+EnvironmentFile=/etc/inversa/env
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3050
+Environment=INVERSA_API_ORIGIN=http://127.0.0.1:4041
+Environment=BUN_RUNTIME_TRANSPILER_CACHE_PATH=/var/lib/inversa/web-cache/bun
+WorkingDirectory=/opt/inversa/web/apps/web
+# Exactly one process: voice sessions live in this process's memory, so no cluster
+# mode, no second instance, no template unit. Scale up the VM, not the process count.
+ExecStart=/usr/local/bin/bun /opt/inversa/web/apps/web/server.js
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+UMask=0027
+# Only the web cache is writable; .next/cache in each release links to web-cache/next.
+# The databases stay read-only to this process.
+ReadWritePaths=/var/lib/inversa/web-cache
+
+[Install]
+WantedBy=multi-user.target

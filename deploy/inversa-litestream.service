@@ -1,0 +1,40 @@
+[Unit]
+Description=Litestream replication of Inversa SQLite databases to Cloudflare R2
+# Start only after the API unit (and its restore step) is up, so a freshly restored
+# database is what gets replicated, never an empty one.
+After=network-online.target inversa-api.service
+Wants=network-online.target
+Requires=inversa-api.service
+
+[Service]
+Type=simple
+User=inversa
+Group=inversa
+EnvironmentFile=/etc/inversa/env
+ExecStart=/usr/local/bin/litestream replicate -config /opt/inversa/deploy/litestream.yml
+Restart=always
+RestartSec=5
+
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+UMask=0027
+# Litestream checkpoints the WAL and keeps its metadata next to each database.
+ReadWritePaths=/var/lib/inversa
+
+[Install]
+WantedBy=multi-user.target

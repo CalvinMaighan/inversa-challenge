@@ -1,0 +1,102 @@
+name: deploy
+
+# Ship a release artifact to the Hetzner VM and restart the units. Manual only.
+# Pick a release workflow run id to deploy (or roll back to); blank = latest success.
+# Secrets:
+#   DOPPLER_TOKEN    Doppler service token for project inversa, config prd
+#   HETZNER_SSH_KEY  private key for root@HETZNER_HOST
+#   HETZNER_HOST     VM IPv4 address or hostname (no user@)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: "Run id of a successful release workflow run (blank = latest)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check secrets are configured
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          HETZNER_SSH_KEY: ${{ secrets.HETZNER_SSH_KEY }}
+          HETZNER_HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          missing=0
+          for name in DOPPLER_TOKEN HETZNER_SSH_KEY HETZNER_HOST; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is not set"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Download release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.release_run_id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow release.yml \
+              --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          fi
+          test -n "$RUN_ID" || { echo "::error::no successful release run found"; exit 1; }
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name inversa-release --dir stage
+          (cd stage && sha256sum -c SHA256SUMS)
+          VERSION="$(jq -r .version stage/release.json)"
+          if ! [[ "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::bad version '$VERSION' in release.json"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Deploying \`$VERSION\` ($(jq -r '.ref + " " + .sha' stage/release.json)) from release run $RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: dopplerhq/cli-action@v3
+
+      - name: Render /etc/inversa/env from Doppler inversa/prd
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          doppler secrets download --no-file --format env --project inversa --config prd > stage/env
+          # Litestream restore and replication cannot run without these.
+          for key in R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            grep -q "^${key}=" stage/env || { echo "::error::$key missing from Doppler inversa/prd"; exit 1; }
+          done
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Ship, unpack and restart
+        env:
+          HOST: ${{ secrets.HETZNER_HOST }}
+        run: |
+          set -euo pipefail
+          ssh_opts=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20)
+          remote="root@${HOST}"
+          staging="/var/tmp/inversa-${VERSION}"
+          tar --zstd -xOf stage/inversa.tar.zst ./deploy/remote-unpack.sh > stage/remote-unpack.sh
+          # VERSION is validated to [A-Za-z0-9._-], so these words need no remote quoting.
+          ssh "${ssh_opts[@]}" -- "$remote" rm -rf "$staging" '&&' install -d -m 700 "$staging"
+          scp "${ssh_opts[@]}" stage/inversa.tar.zst stage/SHA256SUMS stage/env stage/remote-unpack.sh \
+            "$remote:$staging/"
+          ssh "${ssh_opts[@]}" -- "$remote" sh "$staging/remote-unpack.sh" "$VERSION"
+
+      - name: Remove rendered env
+        if: always()
+        run: rm -f stage/env

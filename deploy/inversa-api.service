@@ -1,0 +1,45 @@
+[Unit]
+Description=Inversa API (Axum + SQLite) on 127.0.0.1:4041
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=inversa
+Group=inversa
+EnvironmentFile=/etc/inversa/env
+Environment=INVERSA_BIND=127.0.0.1:4041
+Environment=INVERSA_DATA_DIR=/var/lib/inversa
+WorkingDirectory=/var/lib/inversa
+# Fresh box or lost disk: pull both databases back from R2 before the API would create
+# empty ones. A no-op when the files exist or no replica exists yet; any other failure
+# keeps the API down rather than letting it start on an empty database.
+ExecStartPre=/opt/inversa/deploy/restore.sh
+ExecStart=/opt/inversa/api/inversa-api
+Restart=always
+RestartSec=5
+# A cold restore of a large observations.db can take minutes.
+TimeoutStartSec=15min
+
+NoNewPrivileges=true
+CapabilityBoundingSet=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+UMask=0027
+ReadWritePaths=/var/lib/inversa
+
+[Install]
+WantedBy=multi-user.target
