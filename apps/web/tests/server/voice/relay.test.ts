@@ -3,9 +3,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { get } from "@calvinjs/active-state";
+import { get, init } from "@calvinjs/active-state";
 
-import { ensureVoiceState, VIEW } from "client/voice/state";
+import { state, VIEW } from "client/state";
 import { emitTaskEvent } from "client/voice/task-events";
 import { applyUiCommand } from "client/voice/ui-command-handler";
 import { onTaskEvent } from "client/voice/voice-runtime";
@@ -61,7 +61,7 @@ function announced(mock: MockXai): boolean {
   return mock.received.some((e) => e.type === "conversation.item.create" && JSON.stringify(e.item).includes("<result_context>"));
 }
 
-beforeAll(() => ensureVoiceState());
+beforeAll(() => init(state));
 
 afterEach(() => {
   for (const { mock, session } of open.splice(0)) {

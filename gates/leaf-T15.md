@@ -43,6 +43,11 @@ Scope:
   EXPECT: /1 pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail
 
+- [x] G9: next build succeeds with the voice routes bundled against the real agent runner
+  CHECK: bun run --cwd apps/web build >/dev/null 2>&1 && echo BUILD-OK
+  EXPECT: BUILD-OK
+  EVIDENCE: BUILD-OK
+
 - [ ] G7: (live, blocked on H6) spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
   EVIDENCE: pending
 

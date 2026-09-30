@@ -17,6 +17,10 @@ export type ViewState = {
   heading: number;
   /** Degrees; -90 looks straight down. */
   pitch: number;
+  /** Named target of the last fly command (voice `fly_to`), or null. */
+  place: string | null;
+  /** Bumped on every fly command, so the globe re-flies even to the same spot. */
+  seq: number;
 };
 
 /**
@@ -38,6 +42,8 @@ const defaults: ViewState = {
   altitudeM: altitudeToFit(REGION_BBOX),
   heading: 0,
   pitch: -90,
+  place: null,
+  seq: 0,
 };
 
 export const VIEW = key("VIEW", defaults);

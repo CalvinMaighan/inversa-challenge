@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { parseEvidenceId } from "client/state/selection";
 import { resolvePlace } from "client/voice/gazetteer";
 import { parseUiCommand, uiToolSchemas, UI_TOOL_NAMES, type UiCommand, type UiToolName } from "shared/voice/ui-tools";
 
@@ -64,6 +65,14 @@ export function validateUiToolCall(name: string, args: unknown): UiToolResult {
       }
       return { ok: true, command };
     }
+    case "select":
+    case "open_evidence":
+      return parseEvidenceId(command.args.evidenceId)
+        ? { ok: true, command }
+        : {
+            ok: false,
+            error: `Invalid evidence id "${command.args.evidenceId}": use <kind>:<key> exactly as a result gave it (kinds: sighting, reading, alert, fetch, hotspot).`,
+          };
     default:
       return { ok: true, command };
   }
