@@ -16,9 +16,11 @@ import {
   evfFrameBytes,
   evfFrameLayout,
   readEvfHeader,
+  readSightingRecords,
   SIGHTING_FLAG,
   SIGHTING_RECORD_BYTES,
   type EvfHeader,
+  type SightingRecord,
 } from "shared/frames";
 
 import { REGION_BBOX } from "client/state/view";
@@ -71,8 +73,11 @@ const HOTSPOTS: Blob[][] = [
 
 const inside = (f: number, [s, e]: readonly [number, number]) => f >= s && f < e;
 
-export type SightingRecord = { lon: number; lat: number; taxon: number; frame: number };
-export type Fixture = { bytes: Uint8Array; header: EvfHeader; records: SightingRecord[] };
+/** Fixture sighting ids start here; the fixture's primed evidence uses ids below it. */
+export const FIXTURE_FIRST_SIGHTING_ID = 100_000;
+
+export type FixtureSighting = SightingRecord & { frame: number };
+export type Fixture = { bytes: Uint8Array; header: EvfHeader; records: FixtureSighting[] };
 
 export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed = 7): Fixture {
   const rand = mulberry32(seed);
@@ -126,7 +131,7 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
     }
   }
 
-  const records: SightingRecord[] = [];
+  const records: FixtureSighting[] = [];
   let offset = EVF_HEADER_BYTES;
   for (let f = 0; f < frames; f++) {
     const t = frame0Ms + f * FIXTURE_STEP_MINUTES * 60_000;
@@ -175,24 +180,32 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
       }
     }
 
-    // Sightings: near a species hotspot, f32 lon, f32 lat, u16 taxon, u8 quality, u8 flags.
+    // Sightings near a species hotspot, 16-byte records: u32 id, f32 lon, f32 lat, u16 taxon, u8 quality, u8 flags.
     const at = offset + layout.sightingsOffset;
     const n = counts[f]!;
     view.setUint32(at, n, true);
     for (let k = 0; k < n; k++) {
       const s = Math.floor(rand() * header.speciesCount);
       const b = HOTSPOTS[s]![0]!;
-      const lon = b.lon + (rand() - 0.5) * b.sigma * 2;
-      const lat = b.lat + (rand() - 0.5) * b.sigma * 2;
-      const rec = at + 4 + k * 12;
-      view.setFloat32(rec, lon, true);
-      view.setFloat32(rec + 4, lat, true);
-      view.setUint16(rec + 8, s + 1, true);
-      view.setUint8(rec + 10, Math.floor(rand() * 4));
-      view.setUint8(rec + 11, rand() < 0.1 ? SIGHTING_FLAG.duplicate : rand() < 0.05 ? SIGHTING_FLAG.conflict : 0);
-      records.push({ lon, lat, taxon: s + 1, frame: f });
+      const record: FixtureSighting = {
+        id: FIXTURE_FIRST_SIGHTING_ID + records.length,
+        lon: Math.fround(b.lon + (rand() - 0.5) * b.sigma * 2),
+        lat: Math.fround(b.lat + (rand() - 0.5) * b.sigma * 2),
+        taxon: s + 1,
+        quality: Math.floor(rand() * 4),
+        flags: rand() < 0.1 ? SIGHTING_FLAG.duplicate : rand() < 0.05 ? SIGHTING_FLAG.conflict : 0,
+        frame: f,
+      };
+      const rec = at + 4 + k * SIGHTING_RECORD_BYTES;
+      view.setUint32(rec, record.id, true);
+      view.setFloat32(rec + 4, record.lon, true);
+      view.setFloat32(rec + 8, record.lat, true);
+      view.setUint16(rec + 12, record.taxon, true);
+      view.setUint8(rec + 14, record.quality);
+      view.setUint8(rec + 15, record.flags);
+      records.push(record);
     }
-    offset = at + 4 + n * 12;
+    offset = at + 4 + n * SIGHTING_RECORD_BYTES;
   }
   return { bytes, header, records };
 }
@@ -225,11 +238,12 @@ export function evfFrames(bytes: Uint8Array): { header: EvfHeader; offsets: Uint
 export function evfFrameSightings(bytes: Uint8Array): FrameSightings {
   const { header, offsets, counts } = evfFrames(bytes);
   const { sightingsOffset } = evfFrameLayout(header);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   return {
     counts,
     records(i) {
       if (!Number.isInteger(i) || i < 0 || i >= counts.length) throw new RangeError(`frame ${i} out of range`);
-      return new DataView(bytes.buffer, bytes.byteOffset + offsets[i]! + sightingsOffset + 4, counts[i]! * SIGHTING_RECORD_BYTES);
+      return readSightingRecords(view, offsets[i]! + sightingsOffset + 4, counts[i]!);
     },
   };
 }

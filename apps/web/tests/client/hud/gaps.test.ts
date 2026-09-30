@@ -113,12 +113,10 @@ describe("gap segmentation", () => {
     const sightings = evfFrameSightings(fixture.bytes);
     expect(sightings.counts).toEqual(counts);
     const busy = counts.findIndex((n) => n > 1);
-    const view = sightings.records(busy);
-    expect(view.byteLength).toBe(counts[busy]! * 12);
-    const first = fixture.records.find((r) => r.frame === busy)!;
-    expect(view.getFloat32(0, true)).toBeCloseTo(first.lon, 4);
-    expect(view.getFloat32(4, true)).toBeCloseTo(first.lat, 4);
-    expect(view.getUint16(8, true)).toBe(first.taxon);
+    // 16-byte records with the sighting id first, decoded back exactly as written.
+    const written = fixture.records.filter((r) => r.frame === busy).map((r) => ({ id: r.id, lon: r.lon, lat: r.lat, taxon: r.taxon, quality: r.quality, flags: r.flags }));
+    expect(sightings.records(busy)).toEqual(written);
+    expect(new Set(fixture.records.map((r) => r.id)).size).toBe(fixture.records.length);
     expect(() => sightings.records(FIXTURE_FRAMES)).toThrow(RangeError);
     const grid = allocFrameGrid({ ...header });
     for (let f = 0; f < header.frameCount; f++) writeFrameFromEvf(grid, f, fixture.bytes, offsets[f]!);
@@ -143,7 +141,8 @@ describe("gap segmentation", () => {
 describe("frame index mapping", () => {
   const from = Date.parse("2026-09-01T00:00:00Z");
   const to = from + 95 * STEP;
-  const meta: FrameMeta = { frame0UnixMs: from, stepMinutes: FIXTURE_STEP_MINUTES, frameCount: 96 };
+  const geometry = { west: -83.2, south: 24.3, hsCellDeg: 0.02, envCellDeg: 0.05 };
+  const meta: FrameMeta = { frame0UnixMs: from, stepMinutes: FIXTURE_STEP_MINUTES, frameCount: 96, geometry };
 
   test("scrubber steps land on grid frames when the grid has one frame per step", () => {
     expect(windowSteps(from, to)).toBe(95);
@@ -156,7 +155,7 @@ describe("frame index mapping", () => {
   });
 
   test("hourly grids share a frame across four steps; outside the grid there is no frame", () => {
-    const hourly: FrameMeta = { frame0UnixMs: from, stepMinutes: 60, frameCount: 24 };
+    const hourly: FrameMeta = { frame0UnixMs: from, stepMinutes: 60, frameCount: 24, geometry };
     expect([0, 1, 2, 3, 4].map((s) => frameIndexAt(timeAtStep(s, from), hourly))).toEqual([0, 0, 0, 0, 1]);
     expect(frameIndexAt(from - STEP, hourly)).toBeNull();
     expect(frameIndexAt(from + 24 * 3_600_000, hourly)).toBeNull();
