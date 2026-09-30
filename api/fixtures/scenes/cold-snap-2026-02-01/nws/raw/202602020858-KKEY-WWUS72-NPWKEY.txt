@@ -1,0 +1,36 @@
+492 
+WWUS72 KKEY 020858
+NPWKEY
+
+URGENT - WEATHER MESSAGE
+National Weather Service Key West FL
+358 AM EST Mon Feb 2 2026
+
+FLZ076-021500-
+/O.CON.KKEY.CW.Y.0002.000000T0000Z-260202T1500Z/
+Monroe Upper Keys-
+Including the cities of Key Largo
+358 AM EST Mon Feb 2 2026
+
+...COLD WEATHER ADVISORY REMAINS IN EFFECT UNTIL 10 AM EST THIS 
+MORNING...
+
+* WHAT...Very cold wind chills as low as 30.
+
+* WHERE...Monroe Upper Keys.
+
+* WHEN...Until 10 AM EST this morning.
+
+* IMPACTS...Very cold temperatures can lead to hypothermia with 
+  prolonged exposure.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Use caution while traveling outside. Wear appropriate clothing, a 
+hat, and gloves.
+
+&&
+
+$$
+
+JAM

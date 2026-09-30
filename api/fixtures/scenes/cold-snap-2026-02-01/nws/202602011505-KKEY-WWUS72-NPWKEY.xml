@@ -1,0 +1,37 @@
+<message xmlns="jabber:client" type="groupchat" from="nwws@conference.nwws-oi.weather.gov/nwws-oi"><body>KKEY issues NPW valid 2026-02-01T15:05:00Z</body><x xmlns="nwws-oi" cccc="KKEY" ttaaii="WWUS72" issue="2026-02-01T15:05:00Z" awipsid="NPWKEY" id="202602011505-KKEY-WWUS72-NPWKEY">724 
+WWUS72 KKEY 011505
+NPWKEY
+
+URGENT - WEATHER MESSAGE
+National Weather Service Key West FL
+1005 AM EST Sun Feb 1 2026
+
+FLZ076-011615-
+/O.EXP.KKEY.CW.Y.0001.000000T0000Z-260201T1500Z/
+/O.EXP.KKEY.WI.Y.0001.000000T0000Z-260201T1500Z/
+Monroe Upper Keys-
+Including the cities of Key Largo
+1005 AM EST Sun Feb 1 2026
+
+...COLD WEATHER ADVISORY HAS EXPIRED...
+...WIND ADVISORY HAS EXPIRED...
+
+$$
+
+FLZ077-078-011615-
+/O.EXP.KKEY.WI.Y.0001.000000T0000Z-260201T1500Z/
+Monroe Middle Keys-Monroe Lower Keys-
+Including the cities of Key West and Marathon
+1005 AM EST Sun Feb 1 2026
+
+...WIND ADVISORY HAS EXPIRED...
+
+Wind speeds have fallen below 35 mph and wind chill values have 
+risen to 35 degrees. Winds will continue to gradually diminish 
+through the day, allowing wind chill values to continue to increase 
+through this morning.
+
+$$
+
+LIW
+</x></message>
