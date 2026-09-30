@@ -289,7 +289,7 @@ How it works:
 - **Snapshot.** `hostThread` sends every catalog value on connect (`snapshot: false` to skip). Values must be JSON-serializable.
 - **Ordering** is per key and, in practice, global per direction.
 
-Bulk data stays out of the ring. `allocFrameGrid({ frameCount, cols, rows, speciesCount })` lays out `Float32Array` frames over a SAB in the EVF1 order (`hotspot` per species, then `lst`, then `sst`); the writer fills `grid.frame(i)` and calls `grid.bump()`, readers `attachFrameGrid(buffer)` and take `hotspot(i, s)` / `lst(i)` / `sst(i)` views with no copy and `await grid.waitVersion(seen)`.
+Bulk data stays out of the ring. `allocFrameGrid({ frameCount, hsCols, hsRows, speciesCount, envCols, envRows, hotspotScale })` lays out quantized frames over a SAB in the EVF2 body order: `u8` hotspot per species, pad to 2, `i16` lst and sst (centi-degC, `ENV_MISSING` = -32768), pad to 4. The writer copies a decoded frame in with `writeFrameFromEvf(grid, i, evfBytes, frameOffset)` and calls `grid.bump()`; readers `attachFrameGrid(buffer)` and take `hotspot(i, s)` (`Uint8Array`), `lst(i)` / `sst(i)` (`Int16Array`) views with no copy, read `grid.hotspotScale` and `grid.shape`, and `await grid.waitVersion(seen)`. The library takes the shape as parameters and never parses an EVF header.
 
 Requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` for the SAB path; without them the postMessage fallback is used automatically.
 
@@ -309,7 +309,7 @@ Requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Po
 | `recommended` / `publicPages` from `@calvinjs/active-state/eslint` | Flat-config guardrails (named exports) |
 | `hostThread(worker, catalog, opts?)` / `connectThread(self, catalog, opts?)` from `/threads` | Mirror the store across a Worker; returns `{ ids, ready, transport, close }` |
 | `createChannel(opts?)` / `openChannel(handle)` from `/threads` | SAB ring pair or MessageChannel behind one `Transport` |
-| `allocFrameGrid(shape)` / `attachFrameGrid(sab)` from `/threads` | Zero-copy `Float32Array` frame views with a version counter |
+| `allocFrameGrid(shape)` / `attachFrameGrid(sab)` / `writeFrameFromEvf(grid, i, bytes, offset)` from `/threads` | Zero-copy `Uint8Array` hotspot and `Int16Array` lst/sst frame views with a version counter |
 
 ## Scope
 
@@ -338,9 +338,9 @@ Requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Po
 | `@calvinjs/active-state/dom` | ~5.1KB | ~4.6KB | HTML verbs — `each` / `model` / `click` / drag-drop (+ core) |
 | `@calvinjs/active-state/react` | ~0.7KB | ~0.6KB | Next.js / React — `<ActiveState init={state} />` + `useActiveState` (+ core) |
 | CDN IIFE | ~5.3KB | ~4.8KB | core + dom in one browser build |
-| `@calvinjs/active-state/threads` | ~5.0KB | ~4.4KB | Workers — `hostThread` / `connectThread`, SAB ring, frame grids (+ core) |
+| `@calvinjs/active-state/threads` | ~5.4KB | ~4.8KB | Workers — `hostThread` / `connectThread`, SAB ring, EVF2 frame grids (+ core) |
 
-Threads is a separate entry: adding it changed no other entry (measured with `bun run size` on the v0.2 build: `dist/threads/index.js` 17,913 bytes raw, 5,130 gzip, 4,534 brotli; transport 1.4KB, ring 1.3KB, bulk 0.9KB, thread link 0.8KB of gzip).
+Threads is a separate entry: adding it changed no other entry (measured with `bun run size` on the v0.2 build: `dist/threads/index.js` 19,467 bytes raw, 5,534 gzip, 4,903 brotli; transport 1.4KB, bulk 1.3KB, ring 1.3KB, thread link 0.8KB of gzip).
 
 Sizes are per entry (gzip level 9 / brotli quality 11). `/react` and `/dom` depend on core (one shared singleton). Importing `ActiveState` from `/react` also pulls `/dom` for `bind`. ESLint (`@calvinjs/active-state/eslint`) is opt-in. CDNs typically serve brotli when the browser accepts it.
 

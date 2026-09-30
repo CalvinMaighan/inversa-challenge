@@ -198,36 +198,55 @@ declare function connectThread(scope: WorkerScopeLike, catalog: Record<string, u
 
 type GridShape = {
     frameCount: number;
-    cols: number;
-    rows: number;
+    hsCols: number;
+    hsRows: number;
     speciesCount: number;
+    envCols: number;
+    envRows: number;
+    /** score = u8 * hotspotScale. */
+    hotspotScale: number;
 };
-/** "EVF1" as a little-endian u32. */
-declare const GRID_MAGIC = 826693189;
+/** i16 sentinel for a missing or flagged environment cell. */
+declare const ENV_MISSING = -32768;
+/** "EVF2" as a little-endian u32. */
+declare const GRID_MAGIC = 843470405;
 declare const GRID_HEADER_BYTES: number;
+type FrameLayout = {
+    hotspotBytes: number;
+    hsCells: number;
+    envCells: number;
+    lstOffset: number;
+    sstOffset: number;
+    /** Bytes of one frame's fixed part, padded to 4. */
+    frameBytes: number;
+};
 type FrameGrid = {
     readonly buffer: SharedArrayBuffer;
     readonly shape: GridShape;
-    readonly cells: number;
-    /** Floats per frame: (speciesCount + 2) × cells. */
-    readonly frameFloats: number;
-    /** Every frame, contiguous. */
-    readonly floats: Float32Array;
-    /** One frame's fixed part; matches the EVF1 frame layout so a decoded frame can be `set` directly. */
-    frame(index: number): Float32Array;
-    hotspot(frame: number, species: number): Float32Array;
-    lst(frame: number): Float32Array;
-    sst(frame: number): Float32Array;
+    readonly layout: FrameLayout;
+    readonly hotspotScale: number;
+    /** One frame's fixed part, byte-identical to the EVF2 frame body up to the sightings. */
+    frame(index: number): Uint8Array;
+    hotspot(frame: number, species: number): Uint8Array;
+    lst(frame: number): Int16Array;
+    sst(frame: number): Int16Array;
     version(): number;
     /** Publish a change: increments the version and wakes waiters. Returns the new version. */
     bump(): number;
     /** Resolves with the current version once it differs from `seen`. */
     waitVersion(seen: number, timeoutMs?: number): Promise<number>;
 };
+declare function frameLayout(shape: GridShape): FrameLayout;
 declare function frameGridBytes(shape: GridShape): number;
 /** Allocate a zeroed grid buffer for `shape` and return views over it. */
 declare function allocFrameGrid(shape: GridShape): FrameGrid;
 /** Views over a grid buffer allocated elsewhere (another thread). */
 declare function attachFrameGrid(buffer: SharedArrayBuffer): FrameGrid;
+/**
+ * Copy one decoded EVF2 frame body (its fixed part: hotspot, lst, sst) from
+ * `evfBytes` at `frameOffset` into frame `index`. Sightings that follow the
+ * fixed part are left in `evfBytes`. Call `grid.bump()` after a batch.
+ */
+declare function writeFrameFromEvf(grid: FrameGrid, index: number, evfBytes: Uint8Array, frameOffset: number): void;
 
-export { CTRL_BYTES, CTRL_READ, CTRL_VERSION, CTRL_WRITE, type Channel, type ChannelHandle, type ChannelKind, type ChannelOptions, type ConnectThreadOptions, DEFAULT_CAPACITY, type FrameGrid, GRID_HEADER_BYTES, GRID_MAGIC, type GridShape, type HostThreadOptions, MAX_KEYS, MIN_CAPACITY, type MessageListener, type MessagePortLike, MessageTransport, PAD_MARKER, Ring, type RingRecord, SabTransport, type SabTransportOptions, type ThreadLink, type Transport, type WaitMode, type WorkerLike, type WorkerScopeLike, allocFrameGrid, allocRing, attachFrameGrid, connectThread, createChannel, decodeValue, encodeValue, frameGridBytes, hasWaitAsync, hostThread, keyIndexTable, openChannel, sabAvailable, waitChange };
+export { CTRL_BYTES, CTRL_READ, CTRL_VERSION, CTRL_WRITE, type Channel, type ChannelHandle, type ChannelKind, type ChannelOptions, type ConnectThreadOptions, DEFAULT_CAPACITY, ENV_MISSING, type FrameGrid, type FrameLayout, GRID_HEADER_BYTES, GRID_MAGIC, type GridShape, type HostThreadOptions, MAX_KEYS, MIN_CAPACITY, type MessageListener, type MessagePortLike, MessageTransport, PAD_MARKER, Ring, type RingRecord, SabTransport, type SabTransportOptions, type ThreadLink, type Transport, type WaitMode, type WorkerLike, type WorkerScopeLike, allocFrameGrid, allocRing, attachFrameGrid, connectThread, createChannel, decodeValue, encodeValue, frameGridBytes, frameLayout, hasWaitAsync, hostThread, keyIndexTable, openChannel, sabAvailable, waitChange, writeFrameFromEvf };

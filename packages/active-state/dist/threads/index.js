@@ -453,37 +453,66 @@ function connectThread(scope, catalog, options = {}) {
 }
 
 // src/threads/bulk.ts
-var GRID_MAGIC = 826693189;
+var ENV_MISSING = -32768;
+var GRID_MAGIC = 843470405;
 var HDR_MAGIC = 0;
 var HDR_VERSION = 1;
 var HDR_FRAMES = 2;
-var HDR_COLS = 3;
-var HDR_ROWS = 4;
+var HDR_HS_COLS = 3;
+var HDR_HS_ROWS = 4;
 var HDR_SPECIES = 5;
-var HDR_LENGTH = 8;
+var HDR_ENV_COLS = 6;
+var HDR_ENV_ROWS = 7;
+var HDR_SCALE = 8;
+var HDR_LENGTH = 12;
 var GRID_HEADER_BYTES = HDR_LENGTH * 4;
+var align = (n, to) => Math.ceil(n / to) * to;
 function assertShape(shape) {
-  for (const [name, n] of Object.entries(shape)) {
+  for (const name of [
+    "frameCount",
+    "hsCols",
+    "hsRows",
+    "speciesCount",
+    "envCols",
+    "envRows"
+  ]) {
+    const n = shape[name];
     if (!Number.isInteger(n) || n < 0) {
       throw new Error(
         `[active-state/threads] grid ${name} must be a non-negative integer, got ${n}`
       );
     }
   }
+  if (!Number.isFinite(shape.hotspotScale)) {
+    throw new Error(
+      `[active-state/threads] grid hotspotScale must be finite, got ${shape.hotspotScale}`
+    );
+  }
+}
+function frameLayout(shape) {
+  assertShape(shape);
+  const hsCells = shape.hsCols * shape.hsRows;
+  const hotspotBytes = shape.speciesCount * hsCells;
+  const envCells = shape.envCols * shape.envRows;
+  const lstOffset = align(hotspotBytes, 2);
+  const sstOffset = lstOffset + envCells * 2;
+  const frameBytes = align(sstOffset + envCells * 2, 4);
+  return { hotspotBytes, hsCells, envCells, lstOffset, sstOffset, frameBytes };
 }
 function frameGridBytes(shape) {
-  assertShape(shape);
-  const cells = shape.cols * shape.rows;
-  return GRID_HEADER_BYTES + shape.frameCount * (shape.speciesCount + 2) * cells * 4;
+  return GRID_HEADER_BYTES + shape.frameCount * frameLayout(shape).frameBytes;
 }
 function allocFrameGrid(shape) {
   const buffer = new SharedArrayBuffer(frameGridBytes(shape));
   const hdr = new Int32Array(buffer, 0, HDR_LENGTH);
   hdr[HDR_MAGIC] = GRID_MAGIC;
   hdr[HDR_FRAMES] = shape.frameCount;
-  hdr[HDR_COLS] = shape.cols;
-  hdr[HDR_ROWS] = shape.rows;
+  hdr[HDR_HS_COLS] = shape.hsCols;
+  hdr[HDR_HS_ROWS] = shape.hsRows;
   hdr[HDR_SPECIES] = shape.speciesCount;
+  hdr[HDR_ENV_COLS] = shape.envCols;
+  hdr[HDR_ENV_ROWS] = shape.envRows;
+  new Float32Array(buffer, HDR_SCALE * 4, 1)[0] = shape.hotspotScale;
   return attachFrameGrid(buffer);
 }
 function attachFrameGrid(buffer) {
@@ -496,23 +525,20 @@ function attachFrameGrid(buffer) {
   }
   const shape = {
     frameCount: hdr[HDR_FRAMES],
-    cols: hdr[HDR_COLS],
-    rows: hdr[HDR_ROWS],
-    speciesCount: hdr[HDR_SPECIES]
+    hsCols: hdr[HDR_HS_COLS],
+    hsRows: hdr[HDR_HS_ROWS],
+    speciesCount: hdr[HDR_SPECIES],
+    envCols: hdr[HDR_ENV_COLS],
+    envRows: hdr[HDR_ENV_ROWS],
+    hotspotScale: new Float32Array(buffer, HDR_SCALE * 4, 1)[0]
   };
+  const layout = frameLayout(shape);
   const expected = frameGridBytes(shape);
   if (buffer.byteLength !== expected) {
     throw new Error(
       `[active-state/threads] grid buffer is ${buffer.byteLength} bytes, header implies ${expected}`
     );
   }
-  const cells = shape.cols * shape.rows;
-  const frameFloats = (shape.speciesCount + 2) * cells;
-  const floats = new Float32Array(
-    buffer,
-    GRID_HEADER_BYTES,
-    shape.frameCount * frameFloats
-  );
   const check = (name, n, limit) => {
     if (!Number.isInteger(n) || n < 0 || n >= limit) {
       throw new RangeError(
@@ -522,30 +548,37 @@ function attachFrameGrid(buffer) {
   };
   const frameStart = (frame) => {
     check("frame", frame, shape.frameCount);
-    return frame * frameFloats;
+    return GRID_HEADER_BYTES + frame * layout.frameBytes;
   };
   return {
     buffer,
     shape,
-    cells,
-    frameFloats,
-    floats,
+    layout,
+    hotspotScale: shape.hotspotScale,
     frame(index) {
-      const start = frameStart(index);
-      return floats.subarray(start, start + frameFloats);
+      return new Uint8Array(buffer, frameStart(index), layout.frameBytes);
     },
     hotspot(frame, species) {
       check("species", species, shape.speciesCount);
-      const start = frameStart(frame) + species * cells;
-      return floats.subarray(start, start + cells);
+      return new Uint8Array(
+        buffer,
+        frameStart(frame) + species * layout.hsCells,
+        layout.hsCells
+      );
     },
     lst(frame) {
-      const start = frameStart(frame) + shape.speciesCount * cells;
-      return floats.subarray(start, start + cells);
+      return new Int16Array(
+        buffer,
+        frameStart(frame) + layout.lstOffset,
+        layout.envCells
+      );
     },
     sst(frame) {
-      const start = frameStart(frame) + (shape.speciesCount + 1) * cells;
-      return floats.subarray(start, start + cells);
+      return new Int16Array(
+        buffer,
+        frameStart(frame) + layout.sstOffset,
+        layout.envCells
+      );
     },
     version() {
       return Atomics.load(hdr, HDR_VERSION);
@@ -562,12 +595,27 @@ function attachFrameGrid(buffer) {
     }
   };
 }
+function writeFrameFromEvf(grid, index, evfBytes, frameOffset) {
+  const n = grid.layout.frameBytes;
+  if (!Number.isInteger(frameOffset) || frameOffset < 0) {
+    throw new RangeError(
+      `[active-state/threads] frameOffset must be a non-negative integer, got ${frameOffset}`
+    );
+  }
+  if (frameOffset + n > evfBytes.length) {
+    throw new RangeError(
+      `[active-state/threads] EVF frame at ${frameOffset} needs ${n} bytes, buffer has ${evfBytes.length - frameOffset}`
+    );
+  }
+  grid.frame(index).set(evfBytes.subarray(frameOffset, frameOffset + n));
+}
 export {
   CTRL_BYTES,
   CTRL_READ,
   CTRL_VERSION,
   CTRL_WRITE,
   DEFAULT_CAPACITY,
+  ENV_MISSING,
   GRID_HEADER_BYTES,
   GRID_MAGIC,
   MAX_KEYS,
@@ -584,10 +632,12 @@ export {
   decodeValue,
   encodeValue,
   frameGridBytes,
+  frameLayout,
   hasWaitAsync,
   hostThread,
   keyIndexTable,
   openChannel,
   sabAvailable,
-  waitChange
+  waitChange,
+  writeFrameFromEvf
 };
