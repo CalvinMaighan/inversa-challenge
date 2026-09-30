@@ -17,7 +17,8 @@
     "paths": {
       "@calvinjs/active-state": ["./src/core/index.ts"],
       "@calvinjs/active-state/dom": ["./src/dom/index.ts"],
-      "@calvinjs/active-state/react": ["./src/react/index.ts"]
+      "@calvinjs/active-state/react": ["./src/react/index.ts"],
+      "@calvinjs/active-state/threads": ["./src/threads/index.ts"]
     }
   },
   "include": ["src", "tests", "tsup.config.ts"],

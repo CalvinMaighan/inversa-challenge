@@ -37,6 +37,10 @@
       "types": "./dist/eslint/index.d.ts",
       "import": "./dist/eslint/index.js"
     },
+    "./threads": {
+      "types": "./dist/threads/index.d.ts",
+      "import": "./dist/threads/index.js"
+    },
     "./package.json": "./package.json"
   },
   "unpkg": "./dist/active-state.min.js",
