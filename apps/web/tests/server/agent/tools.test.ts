@@ -4,10 +4,11 @@ import { NOW, setupAgentEnv, type AgentEnv } from "./helpers";
 
 import { answerCacheKey, normalizeQuestion, readAnswerCache, writeAnswerCache, ANSWER_CACHE_TTL_MS } from "@/server/agent/cache";
 import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
-import { AGENT_TOOL_NAMES, buildAgentRegistry } from "@/server/agent/tools/capabilities";
+import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { cellCenter, cellFor, parseEvidenceId } from "@/server/agent/tools/evidence";
 import { lookupGazetteer } from "@/server/agent/tools/gazetteer";
-import { dataVersion, toFeedState } from "@/server/agent/tools/gql";
+import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
+import { startStub } from "@/eval/stub-server";
 import type { AgentStreamEvent } from "@/shared/agent/events";
 
 let env: AgentEnv;
@@ -35,7 +36,7 @@ async function run(name: string, input: unknown): Promise<CapabilityOutput> {
 
 describe("capability tools", () => {
   test("registry exposes the nine tools", () => {
-    expect(registry.list().map((cap) => cap.name)).toEqual([...AGENT_TOOL_NAMES]);
+    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "set_view"]);
   });
 
   test("each data tool makes exactly one GraphQL POST and carries evidence plus feeds", async () => {
@@ -101,6 +102,8 @@ describe("capability tools", () => {
     expect(biscayne.evidence.map((row) => row.id)).toEqual([
       "reading:21:sst_c:1768440600000:satellite",
       "reading:11:water_c:1768417200000:measured",
+      "fetch:90410",
+      "fetch:90414",
     ]);
     const sharkValley = await run("conditions", {
       bbox: { west: -80.85, south: 25.67, east: -80.68, north: 25.84 },
@@ -137,10 +140,45 @@ describe("capability tools", () => {
     const out = await run("hotspots", { species: "python", top: 2 });
     expect(out.data.heuristic).toBe(true);
     expect(String(out.data.note)).toContain("not a forecast");
-    expect(out.evidence.map((row) => row.id)).toEqual([
+    expect(out.evidence.filter((row) => row.kind === "hotspot").map((row) => row.id)).toEqual([
       "hotspot:python:243:145:1768446000000",
       "hotspot:python:244:147:1768446000000",
     ]);
+  });
+
+  test("feed_state cites each feed's last fetch run and backtest cites species:days", async () => {
+    const feeds = await run("feed_state", {});
+    // nwws has never fetched, so 9 of 10 feeds are citable.
+    expect(feeds.evidence).toHaveLength(9);
+    expect(feeds.evidence.find((row) => row.id === "fetch:90410")).toEqual({
+      id: "fetch:90410",
+      kind: "fetch",
+      label: "ndbc stale · last fetch 2026-01-15T02:52:00Z",
+    });
+    const modelFeeds = feeds.data.feeds as { source: string; evidenceId: string | null }[];
+    expect(modelFeeds.find((feed) => feed.source === "nwws")?.evidenceId).toBeNull();
+    const backtest = await run("backtest", { species: "iguana", days: 7 });
+    expect(backtest.data.evidenceId).toBe("backtest:iguana:7");
+    expect(backtest.evidence[0]).toMatchObject({ id: "backtest:iguana:7", kind: "backtest" });
+  });
+
+  test("an API without FeedState.lastFetchRunId: one retry, then the field is dropped", async () => {
+    resetFeedFieldProbe();
+    const legacy = startStub(0, { legacyFeeds: true });
+    process.env.INVERSA_API_ORIGIN = legacy.origin;
+    try {
+      const first = await run("alerts", {});
+      expect(legacy.requests.map((request) => request.operationName)).toEqual(["AgentAlerts", "AgentAlerts"]);
+      expect(first.evidence.every((row) => row.kind === "alert")).toBe(true);
+      expect(first.feeds.length).toBe(2);
+      legacy.requests.length = 0;
+      await run("feed_state", {});
+      expect(legacy.requests).toHaveLength(1);
+    } finally {
+      process.env.INVERSA_API_ORIGIN = env.stub.origin;
+      legacy.stop();
+      resetFeedFieldProbe();
+    }
   });
 
   test("explain_cell accepts lat/lon and computes the cell", async () => {

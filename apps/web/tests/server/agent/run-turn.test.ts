@@ -57,7 +57,11 @@ describe("runTurn tool loop", () => {
     expect(end[0]!.toolCallId).toBe(start[0]!.toolCallId);
     const data = end[0]!.data as { count: number; evidence: { id: string }[]; feeds: { source: string; state: string }[] };
     expect(data.count).toBe(4);
+    // Rows, then the last fetch run of each source involved (citable staleness).
     expect(data.evidence.map((row) => row.id).sort()).toEqual([
+      "fetch:90377",
+      "fetch:90381",
+      "fetch:90412",
       "sighting:1001",
       "sighting:1002",
       "sighting:1003",

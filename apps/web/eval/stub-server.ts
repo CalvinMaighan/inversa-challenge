@@ -101,8 +101,11 @@ const RESOLVERS: Record<string, (v: Vars) => Record<string, unknown>> = {
 
 export type Stub = { origin: string; requests: StubRequest[]; stop(): void };
 
-/** Port 0 picks a free port. */
-export function startStub(port = 0): Stub {
+/**
+ * Port 0 picks a free port. `legacyFeeds` mimics an API from before
+ * `FeedState.lastFetchRunId`: selecting the field is a GraphQL error.
+ */
+export function startStub(port = 0, options: { legacyFeeds?: boolean } = {}): Stub {
   const requests: StubRequest[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -110,14 +113,22 @@ export function startStub(port = 0): Stub {
     async fetch(request) {
       const url = new URL(request.url);
       if (request.method !== "POST" || url.pathname !== "/v1/graphql") return new Response("not found", { status: 404 });
-      const body = (await request.json()) as { operationName?: string; variables?: Vars };
+      const body = (await request.json()) as { operationName?: string; query?: string; variables?: Vars };
       const operationName = body.operationName ?? "";
       const variables = body.variables ?? {};
       requests.push({ operationName, variables });
+      if (options.legacyFeeds && body.query?.includes("lastFetchRunId")) {
+        return Response.json({ data: null, errors: [{ message: 'Unknown field "lastFetchRunId" on type "FeedState".' }] });
+      }
       const resolve = RESOLVERS[operationName];
       if (!resolve) return Response.json({ data: null, errors: [{ message: `unknown operation ${operationName}` }] });
       try {
-        return Response.json({ data: resolve(variables) });
+        const data = resolve(variables);
+        return options.legacyFeeds
+          ? new Response(JSON.stringify({ data }, (key, value: unknown) => (key === "lastFetchRunId" ? undefined : value)), {
+              headers: { "content-type": "application/json" },
+            })
+          : Response.json({ data });
       } catch (error) {
         return Response.json({ data: null, errors: [{ message: error instanceof Error ? error.message : String(error) }] });
       }

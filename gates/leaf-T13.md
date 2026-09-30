@@ -11,7 +11,7 @@ Scope:
 - [x] G1: harness tests pass with the mock LLM (tool loop, citation stripping, limits, view event, cache hit)
   CHECK: cd apps/web && bun test tests/server/agent 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: 50 pass | 0 fail
+  EVIDENCE: 52 pass | 0 fail
 
 - [x] G2: the citation checker strips an id that no tool returned (named test)
   CHECK: cd apps/web && bun test tests/server/agent -t "strips unverified citation" 2>&1 | grep -E "pass|fail"
