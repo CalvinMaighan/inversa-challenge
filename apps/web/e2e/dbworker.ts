@@ -66,7 +66,7 @@ function framesResponse(url: URL): Response {
   return new Response(gz, { status: 200, headers: { "content-type": "application/x-evf", "content-encoding": "gzip", etag: `"${from}-${to}-${step}"`, "cache-control": "no-store" } });
 }
 
-type WsData = { kind: "gql"; subs: Map<string, string> } | { kind: "relay"; upstream: WebSocket; queue: (string | Uint8Array)[] };
+type WsData = { kind: "gql"; subs: Map<string, string> } | { kind: "relay"; upstream: WebSocket; queue: (string | ArrayBuffer)[] };
 
 export const startStub = () =>
   Bun.serve<WsData>({
@@ -130,7 +130,7 @@ export const startStub = () =>
     },
     message(ws, raw) {
       if (ws.data.kind === "relay") {
-        const data = typeof raw === "string" ? raw : new Uint8Array(raw);
+        const data = typeof raw === "string" ? raw : (new Uint8Array(raw).slice().buffer as ArrayBuffer);
         if (ws.data.upstream.readyState === WebSocket.OPEN) ws.data.upstream.send(data);
         else ws.data.queue.push(data);
         return;
