@@ -1,0 +1,21 @@
+{
+  "recorded_at": "2026-09-30T20:40:00Z",
+  "files": [
+    {
+      "file": "python-2026-p1.json",
+      "url": "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Python&state=FL&year=2026&offset=0&limit=20"
+    },
+    {
+      "file": "salvator-2026-p1.json",
+      "url": "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Salvator&state=FL&year=2026&offset=0&limit=20"
+    },
+    {
+      "file": "iguana-2026-p1.json",
+      "url": "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Iguana&state=FL&year=2026&offset=0&limit=20"
+    },
+    {
+      "file": "pterois-2026-p1.json",
+      "url": "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Pterois&state=FL&year=2026&offset=0&limit=20"
+    }
+  ]
+}
