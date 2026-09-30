@@ -1,0 +1,5 @@
+public/active-state.min.js
+public/shared
+dist
+.astro
+node_modules
