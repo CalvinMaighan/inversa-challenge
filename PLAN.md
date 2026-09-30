@@ -237,3 +237,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - W0 started: brief saved to `docs/BUILD_BRIEF.md`.
 - W0: skeleton compiles (cargo test 2 passed, web 5 pass, next build ok); W1 gates written; W2+ gates pending before their dispatch
 - W0 done: T1 gates ALL MET (6/6). W1 dispatched: T2 T4 T5 T6 T7 T20 (worktrees). T3 waits for T2.
+- W2 early dispatch (contract-only deps): T11 T12 T13 T15. Pending: T3 (after T2), T8 T9 (after T5), T10 (after T4 T11 T12), T16 (after T2)
