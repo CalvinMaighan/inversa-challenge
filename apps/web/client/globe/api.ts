@@ -26,7 +26,7 @@ export type GlobeApi = {
   onPostRender(cb: () => void): () => void;
   requestRender(): void;
   /** Globe position under the pointer as it moves (null when it leaves the globe); for the top bar and peers. */
-  onCursor(cb: (at: GeoPoint | null) => void): () => void;
+  onCursor?(cb: (at: GeoPoint | null) => void): () => void;
 };
 
 let current: GlobeApi | null = null;

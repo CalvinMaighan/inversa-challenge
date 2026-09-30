@@ -5,6 +5,8 @@
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 
+import type { SightingRecord } from "shared/frames";
+
 export type GqlVariables = Record<string, unknown>;
 
 export class GqlError extends Error {
@@ -98,14 +100,19 @@ export function onFrameGrid(cb: (grid: FrameGrid) => void): () => void {
  * Time axis of the published grid (PLAN.md C16). Frames are uniform: frame i covers
  * [frame0UnixMs + i*step, frame0UnixMs + (i+1)*step). One hourly grid spans the TIME window.
  */
-export type FrameMeta = { frame0UnixMs: number; stepMinutes: number; frameCount: number };
+export type FrameMeta = {
+  frame0UnixMs: number;
+  stepMinutes: number;
+  frameCount: number;
+  /** Grid placement from the EVF2 header (south-west corner and cell sizes, degrees). */
+  geometry: { west: number; south: number; hsCellDeg: number; envCellDeg: number };
+};
 
 /**
  * EVF2 sighting sections, which the SAB grid does not carry. `counts[i]` is frame i's sighting
- * count; `records(i)` returns that frame's raw 12-byte records (f32 lon, f32 lat, u16 taxon,
- * u8 quality, u8 flags; see shared/frames.ts).
+ * count; `records(i)` returns that frame's decoded records (shared/frames.ts readSightingRecords).
  */
-export type FrameSightings = { counts: Uint32Array; records(i: number): DataView };
+export type FrameSightings = { counts: Uint32Array; records(i: number): readonly SightingRecord[] };
 
 let frameMeta: FrameMeta | null = null;
 let frameSightings: FrameSightings | null = null;

@@ -265,3 +265,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T10 merged+verified 9/9 (api 156). C14 backtest kind listed.
 - T8 merged+verified 5/5 (api 200 tests). Cargo.lock regenerated.
 - T14 merged+verified 5/5. Deferred T14 requests: mock golden autoload (T13), evidence lat/lon (T10/T13).
+- T17 merged (6/7, G7 ABANDON H7). Contract: EVF2 sighting record 16B with u32 id; SightingRecord+readSightingRecords in shared/frames.ts; FrameMeta.geometry; FrameSightings decoded; GlobeApi.onCursor optional. T17 to drop FrameTimeline; T11 to write ids.
