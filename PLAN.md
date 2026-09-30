@@ -285,3 +285,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T22 data-plane integration: clippy -D warnings clean; migration 0003 (`sources.disabled_reason`, disabled sources listed as down with a note); `backfill --fixtures` covers every fixture source (manifests for physical, GOES, NWWS; NWWS fixtures moved to `api/fixtures/nwws/`) and rebuilds frames; GBIF baseline paged per year (search stalls past offset 10k); e2e_fixture_pipeline; api 204 passed, 2 ignored (live).
 - T22 merged; node-data 8/8. NWS freshness fix (alert-only feeds).
 - T32 merged 4/4 (README, demo, interview notes, brief-compliance 37 rows). Fixed: allowedDevOrigins 127.0.0.1, GOES doc volumes. Time clamp -> T23/24.
+- T21 merged+verified 4/4 (rtc p50 18ms, ws p50 86ms). Web 542 tests.
