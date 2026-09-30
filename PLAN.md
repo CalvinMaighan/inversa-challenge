@@ -243,3 +243,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T6 merged+verified (G7 ABANDON H1-3,H8). Fixed gate id format for (live...) gates.
 - T4 merged+verified 9/9; contract requests applied: publisher at boot, migration 0002
 - T12 merged+verified 5/5 (14 vectors). Contract change for T10: Board gains notes: [Mission!]!
+- T15 merged+verified 6/7 (G7 ABANDON H6). Contract: voice task.event added. Keys to reconcile at T3 merge: client/voice/state.ts
