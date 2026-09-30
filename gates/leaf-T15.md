@@ -11,7 +11,7 @@ Scope:
 - [x] G1: voice tests pass
   CHECK: cd apps/web && bun test tests/server/voice tests/client/voice 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: 61 pass | 0 fail
+  EVIDENCE: 62 pass | 0 fail
 
 - [x] G2: PCM resample produces the expected sample count at 16 kHz from a 48 kHz input, phase-continuous across batches (test)
   CHECK: cd apps/web && bun test tests/client/voice -t "resample" 2>&1 | grep -E "pass|fail"
