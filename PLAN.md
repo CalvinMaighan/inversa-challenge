@@ -240,3 +240,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - W2 early dispatch (contract-only deps): T11 T12 T13 T15. Pending: T3 (after T2), T8 T9 (after T5), T10 (after T4 T11 T12), T16 (after T2)
 - T2 merged+verified 11/11. T20 merged+verified 4/5, G5 ABANDON H3.
 - T5 merged+verified 6/7 (G7 ABANDON H3). Note: pollers use governor::check_response.
+- T6 merged+verified (G7 ABANDON H1-3,H8). Fixed gate id format for (live...) gates.
