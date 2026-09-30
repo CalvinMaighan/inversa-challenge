@@ -17,6 +17,8 @@ const isolationHeaders = [
 const nextConfig: NextConfig = {
   turbopack: { root: REPO_ROOT },
   outputFileTracingRoot: REPO_ROOT,
+  /* The agent harness reads its plugin tree at runtime; tracing cannot see the file read. */
+  outputFileTracingIncludes: { "/api/agent/**": ["./server/agent/cordis/cordis.yml"] },
   output: "standalone",
   poweredByHeader: false,
   compiler: { emotion: true },
