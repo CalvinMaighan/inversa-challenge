@@ -7,16 +7,16 @@ import { alertBucket } from "client/globe/layers/alerts";
 import { createHotspotLayer } from "client/globe/layers/hotspots";
 import { createMissionsLayer, MISSION_ID_PREFIX, missionMark } from "client/globe/layers/missions";
 import { createPeersLayer, cursorPeers } from "client/globe/layers/peers";
-import { createSightingsLayer, recordsFromGql, SIGHTING_TRAIL_MS, trailAlpha, trailFromFrames, visibleRecords } from "client/globe/layers/sightings";
+import { createSightingsLayer, SIGHTING_TRAIL_MS, trailAlpha, trailFromFrames, visibleRecords } from "client/globe/layers/sightings";
 import { createStationsLayer, latestPerStation, stationBucket } from "client/globe/layers/stations";
 import { createLstLayer } from "client/globe/layers/env-raster";
 import type { GlobeLayer } from "client/globe/layers/types";
 import { LAYERS } from "client/state/layers";
 import { MISSIONS } from "client/state/missions";
-import { ENV_MISSING, SIGHTING_FLAG } from "shared/frames";
+import { ENV_MISSING, SIGHTING_FLAG, type SightingRecord } from "shared/frames";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { fakeContext, fakeViewer, flush, installDom, smallGrid } from "./fakes";
+import { fakeContext, fakeMeta, fakeViewer, flush, installDom, smallGrid } from "./fakes";
 
 let restore: () => void;
 beforeAll(() => {
@@ -24,12 +24,10 @@ beforeAll(() => {
 });
 afterAll(() => restore());
 
-const STEP = 15 * 60_000;
+const STEP = 60 * 60_000;
 const T0 = Date.parse("2026-09-30T00:00:00Z");
 
-function timeline(frames: number, sightings: (f: number) => { lon: number; lat: number; taxon: number; quality: number; flags: number; id?: string }[] = () => []) {
-  return { frame0Ms: T0, stepMs: STEP, frameCount: frames, sightings };
-}
+const rec = (over: Partial<SightingRecord> = {}): SightingRecord => ({ id: 1, lon: -80.9, lat: 25.6, taxon: 1, quality: 0, flags: 0, ...over });
 
 describe("layer contract", () => {
   test("every LAYER_ID has exactly one layer, in draw order rasters → areas → points → people", () => {
@@ -39,7 +37,7 @@ describe("layer contract", () => {
   });
 
   test("init / enable / update / disable / stats / destroy on a fake viewer, for all eight layers", async () => {
-    const ctx = fakeContext({ timeMs: T0 + 2 * STEP, timeline: timeline(3) });
+    const ctx = fakeContext({ timeMs: T0 + 2 * STEP, meta: fakeMeta(T0, 3), sightings: () => [rec()] });
     const viewer = fakeViewer();
     const grid = smallGrid(3);
     grid.hotspot(2, 0)[100] = 255;
@@ -70,7 +68,7 @@ describe("layer contract", () => {
 
 describe("hotspot heatmap", () => {
   test("paints the frame, repaints in place on frame change, and picks a C14 hotspot id", () => {
-    const ctx = fakeContext({ timeline: timeline(3) });
+    const ctx = fakeContext({ meta: fakeMeta(T0, 3) });
     const viewer = fakeViewer();
     const grid = smallGrid(3);
     // Cell (col 20, row 30) of the 0.02° grid: python 40 in frame 1, iguana 200 in frame 1.
@@ -92,8 +90,9 @@ describe("hotspot heatmap", () => {
 
     const lon = -83.2 + 20.5 * 0.02;
     const lat = 24.3 + 30.5 * 0.02;
+    // The C14 cell is on the 0.01° grid; the id carries frame 1's start.
     expect(layer.pickAt!(lon, lat)).toBe(`hotspot:iguana:${Math.floor(20.5 * 2)}:${Math.floor(30.5 * 2)}:${T0 + STEP}`);
-    // Species filter: with iguana off, python's 40 is under the display floor? No, 40/255 is above 5 %.
+    // With iguana filtered out, python's 40 (above the display floor) is what is under the cursor.
     ctx.state.layers = { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, iguana: false } };
     layer.update(1, grid);
     expect(layer.pickAt!(lon, lat)).toMatch(/^hotspot:python:/);
@@ -103,8 +102,9 @@ describe("hotspot heatmap", () => {
     expect(layer.pickAt!(lon, lat)).toBeNull();
   });
 
-  test("a sub-grid is placed and picked by the timeline geometry", () => {
-    const ctx = fakeContext({ timeline: { ...timeline(1), geometry: { west: -80.5, south: 25.2, hsCellDeg: 0.02, envCellDeg: 0.05 } } });
+  test("a sub-grid is placed and picked by the FrameMeta geometry", () => {
+    const meta = { ...fakeMeta(T0, 1), geometry: { west: -80.5, south: 25.2, hsCellDeg: 0.02, envCellDeg: 0.05 } };
+    const ctx = fakeContext({ meta });
     const grid = allocFrameGrid({ frameCount: 1, hsCols: 10, hsRows: 5, speciesCount: 4, envCols: 4, envRows: 2, hotspotScale: 0.01 });
     grid.hotspot(0, 3)[1 * 10 + 4] = 180;
     const layer = createHotspotLayer(ctx);
@@ -132,6 +132,20 @@ describe("hotspot heatmap", () => {
     expect(layer.stats().count).toBe(0);
     expect((viewer.added[0] as GroundPrimitive).show).toBe(false);
   });
+
+  test("a republished grid repaints even at the same frame and version", () => {
+    const ctx = fakeContext({ meta: fakeMeta(T0, 1) });
+    const layer = createHotspotLayer(ctx);
+    layer.init(fakeViewer());
+    layer.enable();
+    const a = smallGrid(1);
+    layer.update(0, a);
+    const b = smallGrid(1);
+    b.hotspot(0, 0)[0] = 255;
+    ctx.state.revision += 1;
+    layer.update(0, b);
+    expect(layer.stats().count).toBe(1);
+  });
 });
 
 describe("LST raster", () => {
@@ -151,21 +165,13 @@ describe("LST raster", () => {
 });
 
 describe("sightings", () => {
-  const rec = (over: Partial<{ lon: number; lat: number; taxon: number; quality: number; flags: number; id: string }> = {}) => ({
-    lon: -80.9,
-    lat: 25.6,
-    taxon: 1,
-    quality: 0,
-    flags: 0,
-    ...over,
-  });
-
-  test("trail: frames within 24 h, aged by whole frames", () => {
-    const trail = trailFromFrames((f) => [rec({ taxon: (f % 4) + 1 })], 5, STEP);
+  test("trail: 24 h of frames, aged by whole frames", () => {
+    const trail = trailFromFrames((f) => [rec({ id: f, taxon: (f % 4) + 1 })], 5, STEP);
     expect(trail.length).toBe(6);
     expect(trail.map((r) => r.ageMs)).toEqual([0, 1, 2, 3, 4, 5].map((n) => n * STEP));
     const long = trailFromFrames(() => [rec()], 500, STEP);
     expect(long.length).toBe(SIGHTING_TRAIL_MS / STEP);
+    expect(trailFromFrames(() => [rec()], 500, 15 * 60_000).length).toBe(96);
     expect(trailAlpha(0)).toBe(1);
     expect(trailAlpha(SIGHTING_TRAIL_MS)).toBeCloseTo(0.25);
   });
@@ -175,22 +181,10 @@ describe("sightings", () => {
     expect(visibleRecords(records, [0]).map((r) => r.taxon)).toEqual([1, 42]);
   });
 
-  test("GraphQL rows become records with ids, quality codes and flags", () => {
-    const [r] = recordsFromGql(
-      [{ id: "812", lat: 25.1, lon: -80.4, observedAt: "2026-09-30T11:00:00Z", quality: "NEEDS_ID", canonicalId: "7", conflict: true, taxon: { id: "3" } }],
-      Date.parse("2026-09-30T12:00:00Z"),
-    );
-    expect(r).toMatchObject({ id: "812", taxon: 3, quality: 1, flags: SIGHTING_FLAG.duplicate | SIGHTING_FLAG.conflict, ageMs: 3_600_000 });
-  });
-
-  test("draws EVF records as points plus focus-species icons; paused, swaps in GraphQL rows carrying sighting:<id>", async () => {
-    let asked: Record<string, unknown> | undefined;
+  test("draws the frame's records as points plus focus-species icons, each carrying sighting:<id>", () => {
     const ctx = fakeContext({
-      timeline: timeline(4, (f) => (f === 3 ? [rec(), rec({ taxon: 99 })] : [])),
-      gql: async (_q, vars) => {
-        asked = vars;
-        return { sightings: [{ id: "55", lat: 25.2, lon: -80.6, observedAt: "2026-09-30T00:40:00Z", quality: "RESEARCH", canonicalId: null, conflict: false, taxon: { id: "4" } }] };
-      },
+      meta: fakeMeta(T0, 4),
+      sightings: (f) => (f === 3 ? [rec({ id: 4_000_123 }), rec({ id: 77, taxon: 99 })] : f === 2 ? [rec({ id: 5, taxon: 4 })] : []),
     });
     const viewer = fakeViewer();
     const layer = createSightingsLayer(ctx);
@@ -198,28 +192,36 @@ describe("sightings", () => {
     layer.enable();
     layer.update(3, smallGrid(4));
     const [points, icons] = viewer.added as [PointPrimitiveCollection, BillboardCollection];
-    expect(points.length).toBe(2);
-    expect(icons.length).toBe(1); // taxon 99 is not a focus species
-    expect(points.get(0).id).toBeUndefined(); // EVF2 records carry no id
-    await flush(400);
-    // Frame 3 covers 00:45–01:00; the trail is the 24 h ending there.
-    expect(asked).toMatchObject({ from: "2026-09-29T01:00:00.000Z", to: "2026-09-30T01:00:00.000Z" });
-    expect(points.length).toBe(1);
-    expect(points.get(0).id).toBe("sighting:55");
-    expect(icons.get(0).id).toBe("sighting:55");
-    expect(layer.stats()).toMatchObject({ count: 1, frame: 3, error: null });
+    expect(points.length).toBe(3); // frame 3 plus frame 2 in the trail
+    expect(icons.length).toBe(2); // taxon 99 is not a focus species
+    expect([0, 1, 2].map((i) => points.get(i).id)).toEqual(["sighting:4000123", "sighting:77", "sighting:5"]);
+    expect(icons.get(0).id).toBe("sighting:4000123");
+    expect(layer.stats()).toMatchObject({ count: 3, frame: 3, error: null });
   });
 
-  test("while playing, no GraphQL request goes out", async () => {
+  test("no frame (outside the grid) or no meta clears the dots; no network is used", () => {
     let calls = 0;
-    const ctx = fakeContext({ playing: true, timeline: timeline(2, () => [rec()]), gql: async () => ((calls += 1), { sightings: [] }) });
+    const ctx = fakeContext({
+      meta: fakeMeta(T0, 2),
+      sightings: () => [rec()],
+      gql: async () => {
+        calls += 1;
+        return {};
+      },
+    });
+    const viewer = fakeViewer();
     const layer = createSightingsLayer(ctx);
-    layer.init(fakeViewer());
+    layer.init(viewer);
     layer.enable();
     layer.update(1, smallGrid(2));
-    await flush(400);
-    expect(calls).toBe(0);
     expect(layer.stats().count).toBe(2);
+    layer.update(-1, smallGrid(2));
+    expect(layer.stats().count).toBe(0);
+    expect((viewer.added[0] as PointPrimitiveCollection).length).toBe(0);
+    ctx.state.meta = null;
+    layer.update(1, null);
+    expect(layer.stats().count).toBe(0);
+    expect(calls).toBe(0);
   });
 });
 

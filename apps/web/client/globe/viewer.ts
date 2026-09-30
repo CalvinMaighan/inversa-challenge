@@ -13,14 +13,14 @@ import { LAYERS, type LayersState } from "client/state/layers";
 import { MISSIONS, type MissionsState } from "client/state/missions";
 import { PEERS, type Peer } from "client/state/peers";
 import { parseEvidenceId, SELECTION, type SelectionState } from "client/state/selection";
-import { TIME, TIME_STEP_MINUTES, type TimeState } from "client/state/time";
+import { TIME, type TimeState } from "client/state/time";
 import { VIEW } from "client/state/view";
-import { gqlRequest, onFrameGrid } from "client/threads/api";
+import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
 
-import { onFrameTimeline, registerGlobe, type FrameTimeline, type GeoPoint, type GlobeApi } from "./api";
+import { registerGlobe, type GeoPoint, type GlobeApi } from "./api";
 import { cesium } from "./cesium";
 import { posesDiffer, shouldFly, viewFromPose, type CameraPose, type ViewSyncState, type ViewValue } from "./camera";
-import { assumedFrame0, frameIndexAt } from "./frame-index";
+import { frameForTime } from "./frame-index";
 import { createRenderGovernor, type GovernorDiagnostics } from "./governor";
 import { installImagery, type ImageryState } from "./imagery";
 import { createLayers, type GlobeLayer, type GlobeViewer, type LayerContext, type LayerStats } from "./layers";
@@ -28,7 +28,6 @@ import { MISSION_ID_PREFIX } from "./layers/missions";
 import { RASTER_PICK_PREFIX } from "./layers/types";
 import { browserQuotaStore } from "./quota";
 
-const STEP_MS = TIME_STEP_MINUTES * 60_000;
 const VIEW_WRITE_DEBOUNCE_MS = 250;
 const DEFAULT_FLIGHT_S = 1.6;
 const BACKGROUND = "#07090d";
@@ -94,25 +93,22 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
 
   // ---- data -------------------------------------------------------------------------------------------
   let grid: FrameGrid | null = null;
-  let published: FrameTimeline | null = null;
+  let frameSightings: FrameSightings | null = null;
+  let revision = 0;
   let frame = -1;
 
   const time = () => ({ ...TIME.defaults, ...get<TimeState>(TIME) });
-
-  /** The published timeline when it describes this grid, else the live-edge assumption at the TIME step. */
-  const timeline = (): FrameTimeline | null => {
-    if (!grid) return published;
-    const n = grid.shape.frameCount;
-    if (published && published.frameCount === n) return published;
-    return { frame0Ms: assumedFrame0(Date.parse(time().to), STEP_MS, n), stepMs: STEP_MS, frameCount: n, sightings: () => [] };
-  };
+  /** Meta of the published grid; meaningless without one. */
+  const meta = (): FrameMeta | null => (grid ? getFrameMeta() : null);
 
   const ctx: LayerContext = {
     requestRender: () => governor.request(),
     now: () => performance.now(),
     timeMs: () => Date.parse(time().at),
     playing: () => time().playing,
-    timeline,
+    meta,
+    sightings: (i) => (frameSightings && i >= 0 && i < frameSightings.counts.length ? frameSightings.records(i) : []),
+    revision: () => revision,
     layers: () => ({ ...LAYERS.defaults, ...get<LayersState>(LAYERS) }),
     missions: () => ({ ...MISSIONS.defaults, ...get<MissionsState>(MISSIONS) }),
     peers: () => get<Peer[]>(PEERS) ?? [],
@@ -136,8 +132,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
 
   const refresh = () => {
     if (destroyed) return;
-    const t = timeline();
-    frame = grid && t ? frameIndexAt(ctx.timeMs(), t.frame0Ms, t.stepMs, grid.shape.frameCount) : -1;
+    frame = frameForTime(ctx.timeMs(), meta());
     for (const layer of layers) if (layer.stats().enabled) layer.update(frame, grid);
   };
 
@@ -211,13 +206,15 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   disposers.push(
     onFrameGrid((g) => {
       grid = g;
+      revision += 1;
       watchGrid(g);
       scheduleRefresh();
     }),
   );
   disposers.push(
-    onFrameTimeline((t) => {
-      published = t;
+    onFrameSightings((s) => {
+      frameSightings = s;
+      revision += 1;
       scheduleRefresh();
     }),
   );

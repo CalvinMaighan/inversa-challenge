@@ -1,14 +1,15 @@
 /**
- * Where a frame grid sits on the map. The FrameGrid carries only cell counts; the EVF2 header carries the
- * south-west corner and cell sizes, which the publisher passes on in `FrameTimeline.geometry`. Without it the
- * grid is assumed to be the C4 layout over the C15 region (0.02° hotspot cells, 0.05° environment cells).
+ * Where a frame grid sits on the map. The FrameGrid carries only cell counts; `FrameMeta.geometry` (C16, from
+ * the EVF2 header) carries the south-west corner and cell sizes. Without meta the grid is taken to be the C4
+ * layout over the C15 region (0.02° hotspot cells, 0.05° environment cells).
  */
 import type { GridShape } from "@calvinjs/active-state/threads";
 
 import { REGION_BBOX } from "client/state/view";
+import type { FrameMeta } from "client/threads/api";
 import type { BBox } from "shared/agent/events";
 
-import type { GridGeometry } from "./api";
+export type GridGeometry = FrameMeta["geometry"];
 
 export const C4_GEOMETRY: Readonly<GridGeometry> = Object.freeze({
   west: REGION_BBOX.west,

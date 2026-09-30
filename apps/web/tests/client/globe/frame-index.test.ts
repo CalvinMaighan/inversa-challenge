@@ -1,46 +1,38 @@
 import { describe, expect, test } from "bun:test";
 
-import { assumedFrame0, frameIndexAt, frameStartMs } from "client/globe/frame-index";
+import { frameForTime, frameStartMs, stepMsOf } from "client/globe/frame-index";
 
-const STEP = 15 * 60_000;
+import { fakeMeta } from "./fakes";
+
+const HOUR = 60 * 60_000;
 const T0 = Date.parse("2026-09-01T00:00:00Z");
+const meta = fakeMeta(T0, 720); // one hourly grid over 30 days
 
-describe("frameIndexAt", () => {
-  test("maps (at - frame0) / step onto whole frames", () => {
-    expect(frameIndexAt(T0, T0, STEP, 96)).toBe(0);
-    expect(frameIndexAt(T0 + STEP, T0, STEP, 96)).toBe(1);
-    expect(frameIndexAt(T0 + 10 * STEP, T0, STEP, 96)).toBe(10);
+describe("TIME → frame index (C16)", () => {
+  test("floors (at - frame0) / step", () => {
+    expect(frameForTime(T0, meta)).toBe(0);
+    expect(frameForTime(T0 + HOUR - 1, meta)).toBe(0);
+    expect(frameForTime(T0 + HOUR, meta)).toBe(1);
+    // TIME moves in 15-minute steps; four of them land in the same hourly frame.
+    expect([0, 15, 30, 45].map((m) => frameForTime(T0 + 5 * HOUR + m * 60_000, meta))).toEqual([5, 5, 5, 5]);
+    expect(frameForTime(T0 + 719 * HOUR + 59 * 60_000, meta)).toBe(719);
   });
 
-  test("an instant inside a frame belongs to that frame (floor, not round)", () => {
-    expect(frameIndexAt(T0 + STEP - 1, T0, STEP, 96)).toBe(0);
-    expect(frameIndexAt(T0 + 2.5 * STEP, T0, STEP, 96)).toBe(2);
+  test("-1 outside the grid, never clamped onto an edge frame", () => {
+    expect(frameForTime(T0 - 1, meta)).toBe(-1);
+    expect(frameForTime(T0 + 720 * HOUR, meta)).toBe(-1);
+    expect(frameForTime(T0, null)).toBe(-1);
+    expect(frameForTime(Number.NaN, meta)).toBe(-1);
+    expect(frameForTime(T0, fakeMeta(T0, 0))).toBe(-1);
   });
 
-  test("clamps to the resident grid", () => {
-    expect(frameIndexAt(T0 - 7 * STEP, T0, STEP, 96)).toBe(0);
-    expect(frameIndexAt(T0 + 500 * STEP, T0, STEP, 96)).toBe(95);
+  test("15-minute grids work the same", () => {
+    const quarter = fakeMeta(T0, 96, 15);
+    expect(stepMsOf(quarter)).toBe(15 * 60_000);
+    expect(frameForTime(T0 + 2.5 * 15 * 60_000, quarter)).toBe(2);
   });
 
-  test("-1 when there is nothing to show", () => {
-    expect(frameIndexAt(T0, T0, STEP, 0)).toBe(-1);
-    expect(frameIndexAt(T0, T0, 0, 96)).toBe(-1);
-    expect(frameIndexAt(Number.NaN, T0, STEP, 96)).toBe(-1);
-  });
-
-  test("hourly frames (EVF2 default step) work the same", () => {
-    const hour = 60 * 60_000;
-    expect(frameIndexAt(T0 + 5 * hour + 59 * 60_000, T0, hour, 744)).toBe(5);
-  });
-
-  test("frameStartMs inverts frameIndexAt on step boundaries", () => {
-    for (const i of [0, 1, 47, 95]) expect(frameIndexAt(frameStartMs(i, T0, STEP), T0, STEP, 96)).toBe(i);
-  });
-
-  test("assumedFrame0 puts the last frame on the live edge", () => {
-    const to = T0 + 95 * STEP;
-    expect(assumedFrame0(to, STEP, 96)).toBe(T0);
-    expect(frameIndexAt(to, assumedFrame0(to, STEP, 96), STEP, 96)).toBe(95);
-    expect(assumedFrame0(to, STEP, 0)).toBe(to);
+  test("frameStartMs inverts the mapping on frame boundaries", () => {
+    for (const i of [0, 1, 47, 719]) expect(frameForTime(frameStartMs(i, T0, HOUR), meta)).toBe(i);
   });
 });

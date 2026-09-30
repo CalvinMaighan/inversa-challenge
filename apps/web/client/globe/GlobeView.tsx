@@ -3,11 +3,10 @@
 import { useEffect, useRef } from "react";
 import { get } from "@calvinjs/active-state";
 
-import { TIME, TIME_STEP_MINUTES, type TimeState } from "client/state/time";
+import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
-import { getFrameGrid, publishFrameGrid } from "client/threads/api";
+import { getFrameGrid, publishFrameGrid, publishFrameSightings } from "client/threads/api";
 
-import { publishFrameTimeline } from "./api";
 import { CESIUM_BASE_URL, loadCesium } from "./cesium";
 import { mountGlobe, type GlobeHandle } from "./viewer";
 
@@ -97,11 +96,11 @@ export default function GlobeView({ onMount }: GlobeViewProps) {
       void import("./dev-fixture").then(async ({ loadDevFrames }) => {
         const to = Date.parse((get<TimeState>(TIME) ?? TIME.defaults).to);
         const force = new URLSearchParams(window.location.search).get("fixture") === "sample";
-        const { grid, timeline, source, note } = await loadDevFrames({ toMs: to, stepMs: TIME_STEP_MINUTES * 60_000, force });
+        const { grid, meta, sightings, source, note } = await loadDevFrames({ toMs: to, force });
         if (cancelled || getFrameGrid()) return;
-        publishFrameTimeline(timeline);
-        publishFrameGrid(grid);
-        console.info(`[globe] dev frames: ${source}, ${timeline.frameCount} frames (${note})`);
+        publishFrameSightings(sightings);
+        publishFrameGrid(grid, meta);
+        console.info(`[globe] dev frames: ${source}, ${meta.frameCount} × ${meta.stepMinutes} min (${note})`);
       });
     }
 

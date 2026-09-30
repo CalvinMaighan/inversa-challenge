@@ -1,25 +1,20 @@
 /**
- * TIME cursor to frame index (PLAN.md C16): `(at - frame0) / step`, floored because a frame covers
- * `[frame_at, frame_at + step)`, and clamped into the resident grid. Pure, so the scrubber and tests share it.
+ * TIME cursor to frame index for the globe (PLAN.md C16). `frameIndexAt` from the threads API floors
+ * `(at - frame0) / step` and returns null outside the published grid; the layers take -1 for "no frame".
  */
+import { frameIndexAt, type FrameMeta } from "client/threads/api";
 
-/** Index of the frame containing `atMs`, clamped to `[0, frameCount)`; -1 when there is no frame to show. */
-export function frameIndexAt(atMs: number, frame0Ms: number, stepMs: number, frameCount: number): number {
-  if (!(frameCount > 0) || !(stepMs > 0) || !Number.isFinite(atMs) || !Number.isFinite(frame0Ms)) return -1;
-  // The epsilon absorbs float error when `at` sits exactly on a step boundary.
-  const raw = Math.floor((atMs - frame0Ms) / stepMs + 1e-9);
-  return Math.min(frameCount - 1, Math.max(0, raw));
+/** Frame containing `atMs`, or -1 when no grid is published or the instant is outside it. */
+export function frameForTime(atMs: number, meta: FrameMeta | null): number {
+  if (!Number.isFinite(atMs)) return -1;
+  return frameIndexAt(atMs, meta) ?? -1;
+}
+
+export function stepMsOf(meta: Pick<FrameMeta, "stepMinutes">): number {
+  return meta.stepMinutes * 60_000;
 }
 
 /** Start instant of frame `index`, in unix ms. */
 export function frameStartMs(index: number, frame0Ms: number, stepMs: number): number {
   return frame0Ms + index * stepMs;
-}
-
-/**
- * Timeline for a grid published without one: the resident window is assumed to end on the live edge
- * (`toMs`, TIME.to) at the TIME step, which is how the db worker fills it.
- */
-export function assumedFrame0(toMs: number, stepMs: number, frameCount: number): number {
-  return toMs - Math.max(0, frameCount - 1) * stepMs;
 }

@@ -9,7 +9,7 @@ import type { BBox } from "shared/agent/events";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { hotspotEvidenceId } from "../evidence";
-import { frameStartMs } from "../frame-index";
+import { frameStartMs, stepMsOf } from "../frame-index";
 import { boundsKey, cellAt, gridBounds } from "../geometry";
 import { heatLut, paintHeat } from "../ramp";
 import { enabledSpecies } from "../species";
@@ -74,9 +74,9 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
         }
         return;
       }
-      const bounds = gridBounds(grid.shape, ctx.timeline()?.geometry).hotspot;
+      const bounds = gridBounds(grid.shape, ctx.meta()?.geometry).hotspot;
       const species = enabledSpecies(ctx.layers().species, HOTSPOTS).filter((s) => s < grid.shape.speciesCount);
-      const key = `${frameIndex}|${grid.version()}|${species.join(",")}|${grid.buffer.byteLength}|${boundsKey(bounds)}`;
+      const key = `${frameIndex}|${grid.version()}|${species.join(",")}|${grid.buffer.byteLength}|${boundsKey(bounds)}|${ctx.revision()}`;
       if (key === drawnKey && shown?.grid === grid) return;
       const target = ensureSurface(grid, bounds);
       if (!target) return;
@@ -114,9 +114,9 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
       }
       // A cell under the display floor is clear on screen, so it is not something anyone clicked.
       if (best < 0 || lut[bestValue * 4 + 3] === 0) return null;
-      const timeline = ctx.timeline();
-      if (!timeline) return null;
-      return hotspotEvidenceId(best, lon, lat, frameStartMs(frame, timeline.frame0Ms, timeline.stepMs));
+      const meta = ctx.meta();
+      if (!meta) return null;
+      return hotspotEvidenceId(best, lon, lat, frameStartMs(frame, meta.frame0UnixMs, stepMsOf(meta)));
     },
     destroy() {
       surface?.destroy();
