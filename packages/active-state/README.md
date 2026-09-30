@@ -255,6 +255,44 @@ export default [
 
 `recommended` = string keys + attr shape. `publicPages({ files })` = hook ban on those paths only — list public/marketing globs; leave `app/(app)/**` (or whatever your product shell is) out so agents can use hooks there.
 
+## 6. Threads (`@calvinjs/active-state/threads`)
+
+Run the same store on the main thread and in Web Workers. `set` on one thread lands in the other thread's store, where `subscribe` and `useActiveState` fire as usual. The public `key / get / set / subscribe` API does not change.
+
+```ts
+// main thread
+import { catalog, init } from "@calvinjs/active-state";
+import { hostThread } from "@calvinjs/active-state/threads";
+
+const state = catalog(TIME, VIEW, LAYERS);
+init(state);
+const worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module" });
+const link = hostThread(worker, state);
+// later: link.close()
+```
+
+```ts
+// db.worker.ts — call at the top level, before the first await
+import { set, subscribe } from "@calvinjs/active-state";
+import { connectThread } from "@calvinjs/active-state/threads";
+
+const link = connectThread(self, state); // calls init(state) when needed
+subscribe(TIME, (t) => set(FRAMES_READY, computeFrames(t)));
+```
+
+How it works:
+
+- **Key index.** Each key's index is its position in the sorted id list of the catalog (`keyIndexTable(state)`). Both threads must pass the same catalog; the host's table wins on mismatch.
+- **Transport.** `createChannel()` picks a `SharedArrayBuffer` pair when `crossOriginIsolated` (or outside browsers) and a `MessageChannel` otherwise; both implement `Transport { send, onMessage, close }`. Pass `{ transport: "message" }` to force the fallback.
+- **Ring.** One SPSC byte ring per direction: an `Int32Array[2 + 256]` control block (`writeCursor`, `readCursor`, one version per key index) and a power-of-2 data region of `u16 keyIndex, u32 len, UTF-8 JSON` records. A record never straddles the wrap: a `0xFFFF` pad marker sends the reader back to 0. Writers `Atomics.notify`; readers use `Atomics.waitAsync` where available and sliced `Atomics.wait` in workers without it. A full ring queues in the sender (backpressure, never overwrites). The default 2 MiB ring takes values up to 1 MB; larger values throw, so raise `capacity` instead of chunking.
+- **No echo.** A value applied from the other thread is not sent back. With several workers, main fans a worker's `set` out to the others.
+- **Snapshot.** `hostThread` sends every catalog value on connect (`snapshot: false` to skip). Values must be JSON-serializable.
+- **Ordering** is per key and, in practice, global per direction.
+
+Bulk data stays out of the ring. `allocFrameGrid({ frameCount, cols, rows, speciesCount })` lays out `Float32Array` frames over a SAB in the EVF1 order (`hotspot` per species, then `lst`, then `sst`); the writer fills `grid.frame(i)` and calls `grid.bump()`, readers `attachFrameGrid(buffer)` and take `hotspot(i, s)` / `lst(i)` / `sst(i)` views with no copy and `await grid.waitVersion(seen)`.
+
+Requires `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` for the SAB path; without them the postMessage fallback is used automatically.
+
 ## API reference
 
 
@@ -269,6 +307,9 @@ export default [
 | `bind()` | Wire path + verb attrs (`text`, `model`, `click`, `each`, drag/drop, …) |
 | `reset()` | Clear store **and** key registry (tests / hot reload) |
 | `recommended` / `publicPages` from `@calvinjs/active-state/eslint` | Flat-config guardrails (named exports) |
+| `hostThread(worker, catalog, opts?)` / `connectThread(self, catalog, opts?)` from `/threads` | Mirror the store across a Worker; returns `{ ids, ready, transport, close }` |
+| `createChannel(opts?)` / `openChannel(handle)` from `/threads` | SAB ring pair or MessageChannel behind one `Transport` |
+| `allocFrameGrid(shape)` / `attachFrameGrid(sab)` from `/threads` | Zero-copy `Float32Array` frame views with a version counter |
 
 ## Scope
 
@@ -297,6 +338,9 @@ export default [
 | `@calvinjs/active-state/dom` | ~5.1KB | ~4.6KB | HTML verbs — `each` / `model` / `click` / drag-drop (+ core) |
 | `@calvinjs/active-state/react` | ~0.7KB | ~0.6KB | Next.js / React — `<ActiveState init={state} />` + `useActiveState` (+ core) |
 | CDN IIFE | ~5.3KB | ~4.8KB | core + dom in one browser build |
+| `@calvinjs/active-state/threads` | ~5.0KB | ~4.4KB | Workers — `hostThread` / `connectThread`, SAB ring, frame grids (+ core) |
+
+Threads is a separate entry: adding it changed no other entry (measured with `bun run size` on the v0.2 build: `dist/threads/index.js` 17,913 bytes raw, 5,130 gzip, 4,534 brotli; transport 1.4KB, ring 1.3KB, bulk 0.9KB, thread link 0.8KB of gzip).
 
 Sizes are per entry (gzip level 9 / brotli quality 11). `/react` and `/dom` depend on core (one shared singleton). Importing `ActiveState` from `/react` also pulls `/dom` for `bind`. ESLint (`@calvinjs/active-state/eslint`) is opt-in. CDNs typically serve brotli when the browser accepts it.
 

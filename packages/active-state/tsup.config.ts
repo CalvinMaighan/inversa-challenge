@@ -37,6 +37,15 @@ export default defineConfig([
     banner: { js: '"use client";' },
   },
   {
+    entry: { "threads/index": "src/threads/index.ts" },
+    format: ["esm"],
+    dts: true,
+    splitting: false,
+    clean: false,
+    external: ["@calvinjs/active-state"],
+    target: "es2020",
+  },
+  {
     entry: { "eslint/index": "src/eslint/index.ts" },
     format: ["esm"],
     dts: true,
