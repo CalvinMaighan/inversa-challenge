@@ -260,3 +260,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T15 reconcile merged (web 225/0, build ok). T11 EVF2 merged 8/8. hotspotScale rounded in frames.ts.
 - T10 merged+verified 9/9 (api 156). C14 backtest kind listed.
 - T8 merged+verified 5/5 (api 200 tests). Cargo.lock regenerated.
+- T14 merged+verified 5/5. Deferred T14 requests: mock golden autoload (T13), evidence lat/lon (T10/T13).
