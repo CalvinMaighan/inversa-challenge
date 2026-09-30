@@ -22,6 +22,7 @@ import { lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazettee
 import { FEED_FIELDS, gql, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
 import type { BBox } from "@/shared/agent/events";
 import { worstHealth, type FeedState } from "@/shared/feed-state";
+import { QUALITY_CODES } from "@/shared/frames";
 
 const HOUR_MS = 3_600_000;
 /** Frames cover a 30-day window (PLAN.md C15). */
@@ -47,7 +48,7 @@ const timeSchema = z
 
 const speciesSchema = z.enum(SPECIES_KEYS).describe("python | tegu | iguana | lionfish");
 
-const QUALITY = ["research", "needs_id", "casual", "curated"] as const;
+const QUALITY = QUALITY_CODES;
 const PARAMS = ["lst_c", "air_c", "water_c", "sst_c", "rain_mm", "stage_m", "wave_m", "wind_ms", "fire_frp"] as const;
 type Param = (typeof PARAMS)[number];
 
@@ -172,6 +173,7 @@ const sightingsInput = z.object({
 });
 
 const sightings = {
+  // eslint-disable-next-line inversa/prefer-catalog-constants -- agent tool name, not a globe layer id.
   name: "sightings",
   description:
     "Invasive species sightings (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags.",
@@ -434,6 +436,7 @@ type GqlAlert = {
 const alertsInput = z.object({ bbox: bboxSchema.optional(), at: timeSchema.optional() });
 
 const alerts = {
+  // eslint-disable-next-line inversa/prefer-catalog-constants -- agent tool name, not a globe layer id.
   name: "alerts",
   description: "NWS alerts (freeze, heat, marine, flood) in effect over an area at a time.",
   inputSchema: alertsInput,
@@ -482,6 +485,7 @@ const hotspotsInput = z.object({
 });
 
 const hotspots = {
+  // eslint-disable-next-line inversa/prefer-catalog-constants -- agent tool name, not a globe layer id.
   name: "hotspots",
   description:
     "Top-scoring 0.01° cells for a species at a time (explainable heuristic, not a prediction). Use explain_cell for why a cell scores.",
@@ -652,6 +656,7 @@ const setView = {
   },
 };
 
+/* eslint-disable inversa/prefer-catalog-constants -- agent tool names, not globe layer ids. */
 export const AGENT_TOOL_NAMES = [
   "geocode",
   "sightings",
@@ -663,6 +668,7 @@ export const AGENT_TOOL_NAMES = [
   "feed_state",
   "set_view",
 ] as const;
+/* eslint-enable inversa/prefer-catalog-constants */
 
 export function buildAgentRegistry(): CapabilityRegistry {
   return new CapabilityRegistry()

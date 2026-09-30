@@ -1,6 +1,6 @@
 import { get, set } from "@calvinjs/active-state";
 
-import { LAYERS, SELECTION, TIME, VIEW, VOICE } from "client/state";
+import { SELECTION, TIME, VIEW, VOICE } from "client/state";
 import { setLayerVisible, setSpeciesVisible } from "client/state/layers";
 import { parseEvidenceId, type SelectionState } from "client/state/selection";
 import { clampToWindow, timeWindow, type TimeState } from "client/state/time";

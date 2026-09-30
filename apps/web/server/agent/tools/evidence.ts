@@ -5,12 +5,14 @@ import type { Evidence } from "@/server/agent/runtime/registry";
 import type { EvidenceKind } from "@/shared/agent/events";
 
 /** Species order and `taxa.id` 1–4 (PLAN.md C4). */
+/* eslint-disable inversa/prefer-catalog-constants -- metadata table keyed by the SPECIES_IDS values, same order. */
 export const SPECIES = [
   { key: "python", taxonId: "1", common: "Burmese python", scientific: "Python bivittatus" },
   { key: "tegu", taxonId: "2", common: "Argentine black and white tegu", scientific: "Salvator merianae" },
   { key: "iguana", taxonId: "3", common: "Green iguana", scientific: "Iguana iguana" },
   { key: "lionfish", taxonId: "4", common: "Red lionfish", scientific: "Pterois volitans" },
 ] as const;
+/* eslint-enable inversa/prefer-catalog-constants */
 
 export type SpeciesKey = (typeof SPECIES)[number]["key"];
 export const SPECIES_KEYS = SPECIES.map((species) => species.key) as [SpeciesKey, ...SpeciesKey[]];

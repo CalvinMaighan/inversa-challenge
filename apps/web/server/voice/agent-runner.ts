@@ -1,7 +1,8 @@
+import type { AgentStreamEvent, AgentStreamRequest, BBox } from "shared/agent/events";
+
 /**
- * What `spawn_thinking` runs. Typed here, not imported from the agent leaf, so voice builds
- * and tests without it; the default implementation resolves `server/agent/run-turn.ts` at
- * call time.
+ * What `spawn_thinking` runs. The session depends on this interface only, so tests inject a fake;
+ * the default implementation is the cordis agent's `runTurn` (server/agent/run-turn.ts).
  */
 
 export type AgentRunInput = {
@@ -14,9 +15,9 @@ export type AgentRunInput = {
 };
 
 /**
- * Agent stream events (C7). The session relays every valid one to the browser as
- * `task.event` (content deltas, tools, citations, view, done) and reads `status` / `tool_start`
- * for spoken progress. The default runner passes `onEvent` straight through to `runTurn`.
+ * Agent stream events (C7). The session relays every valid one to the browser as `task.event`
+ * (content deltas, tools, citations, view, done) and reads `status` / `tool_start` for spoken
+ * progress.
  */
 export type AgentRunEvent = { type: string } & Record<string, unknown>;
 
@@ -26,55 +27,45 @@ export interface AgentRunner {
   run(input: AgentRunInput, onEvent: (event: AgentRunEvent) => void): Promise<AgentRunResult>;
 }
 
-/** Path under `server/` of the agent leaf's turn runner. */
-const RUN_TURN_MODULE = "agent/run-turn";
+type AgentView = NonNullable<AgentStreamRequest["view"]>;
 
-function normalizeResult(value: unknown): AgentRunResult {
-  if (typeof value === "string") return { content: value, citations: [] };
-  if (value && typeof value === "object") {
-    const { content, citations } = value as { content?: unknown; citations?: unknown };
-    return {
-      content: typeof content === "string" ? content : "",
-      citations: Array.isArray(citations) ? citations : [],
-    };
-  }
-  return { content: "", citations: [] };
+function isBBox(value: unknown): value is BBox {
+  if (!value || typeof value !== "object") return false;
+  const b = value as Record<string, unknown>;
+  return ["west", "south", "east", "north"].every((k) => typeof b[k] === "number" && Number.isFinite(b[k]));
 }
-
-type RunTurn = (input: AgentRunInput, onEvent: (event: AgentRunEvent) => void) => Promise<unknown>;
-
-let cached: Promise<RunTurn> | null = null;
 
 /**
- * `modulePath` is a parameter under `server/`, so neither tsc nor Turbopack pins one file that
- * may not exist yet: Turbopack bundles a `server/**` context and the lookup happens at call
- * time. Voice builds before the agent leaf lands and picks `server/agent/run-turn` up once it does.
+ * The HUD snapshot (`client/voice/hud-state.ts` HudState) reduced to the agent's view input.
+ * Undefined when the browser has not posted one or it is malformed: the agent then uses no view.
  */
-async function loadServerModule(modulePath: string): Promise<{ runTurn?: unknown }> {
-  return (await import(`../${modulePath}`)) as { runTurn?: unknown };
+export function agentViewFromHud(hud: unknown): AgentView | undefined {
+  if (!hud || typeof hud !== "object") return undefined;
+  const { bbox, time, layers, selection } = hud as Record<string, unknown>;
+  const at = typeof time === "string" ? time : (time as { at?: unknown } | null)?.at;
+  if (!isBBox(bbox) || typeof at !== "string" || !Number.isFinite(Date.parse(at))) return undefined;
+  return {
+    bbox: { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north },
+    time: at,
+    layers: Array.isArray(layers) ? layers.filter((l): l is string => typeof l === "string") : [],
+    selection: typeof selection === "string" ? selection : null,
+  };
 }
 
-async function loadRunTurn(): Promise<RunTurn> {
-  let mod: { runTurn?: unknown };
-  try {
-    mod = await loadServerModule(RUN_TURN_MODULE);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Analysis is unavailable: server/agent/run-turn could not be loaded (${reason})`);
-  }
-  if (typeof mod.runTurn !== "function") {
-    throw new Error("Analysis is unavailable: server/agent/run-turn does not export runTurn");
-  }
-  return mod.runTurn as RunTurn;
-}
-
+/** Cordis `runTurn`, loaded on first use so opening a voice session does not boot the agent harness. */
 export const defaultAgentRunner: AgentRunner = {
   async run(input, onEvent) {
-    cached ??= loadRunTurn().catch((error: unknown) => {
-      cached = null;
-      throw error instanceof Error ? error : new Error(String(error));
-    });
-    const runTurn = await cached;
-    return normalizeResult(await runTurn(input, onEvent));
+    const { runTurn } = await import("server/agent/run-turn");
+    // runTurn never throws: failures come back as content plus an `error` event.
+    const result = await runTurn(
+      {
+        sessionId: `voice-${input.sessionId}`,
+        question: input.question,
+        view: agentViewFromHud(input.view),
+        signal: input.signal,
+      },
+      (event: AgentStreamEvent) => onEvent(event),
+    );
+    return { content: result.content, citations: result.citations };
   },
 };
