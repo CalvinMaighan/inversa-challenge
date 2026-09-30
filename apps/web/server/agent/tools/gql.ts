@@ -105,6 +105,7 @@ export function toFeedState(feed: GqlFeedState): FeedState {
     state: HEALTH.has(state) ? state : "down",
     newestObservedAt: feed.newestObservedAt ?? null,
     lastFetchAt: feed.lastFetchAt ?? null,
+    lastFetchRunId: feed.lastFetchRunId ?? null,
     lagSeconds: feed.lagSeconds ?? null,
     note: feed.note ?? null,
   };
