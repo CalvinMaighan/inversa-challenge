@@ -10,7 +10,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use rusqlite::{Connection, OpenFlags, Transaction};
 
-const OBSERVATIONS: &[(&str, &str)] = &[("0001_init", include_str!("../../migrations/observations/0001_init.sql"))];
+const OBSERVATIONS: &[(&str, &str)] = &[
+    ("0001_init", include_str!("../../migrations/observations/0001_init.sql")),
+    ("0002_source_indexes", include_str!("../../migrations/observations/0002_source_indexes.sql")),
+];
 const TEAM: &[(&str, &str)] = &[("0001_init", include_str!("../../migrations/team/0001_init.sql"))];
 
 pub fn migrations(name: &str) -> &'static [(&'static str, &'static str)] {

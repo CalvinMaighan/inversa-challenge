@@ -78,7 +78,6 @@ pub async fn compute(db: &Db, now_ms: i64) -> anyhow::Result<Vec<FeedState>> {
 /// health, last fetch or newest observation changed since the last publish (every source on the
 /// first pass). Health also changes with no event at all, when a feed silently stops: this is
 /// what moves it to lagging, stale and down for `feeds` subscribers.
-#[cfg_attr(not(test), expect(dead_code, reason = "CONTRACT-REQUEST: main.rs should call this at startup"))]
 pub fn spawn_publisher(obs: Db, hub: Hub, period: Duration) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut last: HashMap<String, (Health, Option<i64>, Option<i64>)> = HashMap::new();
