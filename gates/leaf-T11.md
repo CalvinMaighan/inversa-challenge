@@ -13,37 +13,37 @@ Scope:
   - exposes `pub async fn chunk(db, from_ms, to_ms, step_min) -> Vec<u8>`.
 - `spec/frames/sample.evf` is the golden file.
 
-- [ ] G1: api tests pass
+- [x] G1: api tests pass
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep "test result" | grep -v " 0 passed" | head -1
   EXPECT: /test result: ok\. \d+ passed; 0 failed/
-  EVIDENCE: pending
+  EVIDENCE: test result: ok. 22 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.25s
 
-- [ ] G2: score unit tests against hand-computed cells for all 4 species, including a cold-stun iguana case and a lionfish no-access (waves) case
+- [x] G2: score unit tests against hand-computed cells for all 4 species, including a cold-stun iguana case and a lionfish no-access (waves) case
   CHECK: cargo test --manifest-path api/Cargo.toml hotspot 2>&1 | grep -E "running|test result"
   EXPECT: /running ([4-9]|[1-9][0-9]) tests[\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 16 tests | test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.14s
 
-- [ ] G3: EVF1 golden round-trip; the Rust writer output byte-equals spec/frames/sample.evf for the fixed seed input
+- [x] G3: EVF1 golden round-trip; the Rust writer output byte-equals spec/frames/sample.evf for the fixed seed input
   CHECK: cargo test --manifest-path api/Cargo.toml evf_golden 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
 
-- [ ] G4: the TS reader (apps/web/shared/frames.ts readEvfHeader) parses the golden file
+- [x] G4: the TS reader (apps/web/shared/frames.ts readEvfHeader) parses the golden file
   CHECK: bun -e 'import {readEvfHeader} from "./apps/web/shared/frames.ts"; const b=await Bun.file("spec/frames/sample.evf").arrayBuffer(); console.log(JSON.stringify(readEvfHeader(new DataView(b))))'
   EXPECT: /"speciesCount":4/
-  EVIDENCE: pending
+  EVIDENCE: {"frameCount":3,"cols":8,"rows":6,"west":-80.5,"south":25.2,"cellDeg":0.01,"frame0UnixMs":1738368000000,"stepMinutes":15,"speciesCount":4}
 
-- [ ] G5: backtest returns hitRate and baseline=0.1 on a seeded dataset (test)
+- [x] G5: backtest returns hitRate and baseline=0.1 on a seeded dataset (test)
   CHECK: cargo test --manifest-path api/Cargo.toml backtest 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 3 tests | test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 20 filtered out; finished in 0.11s
 
-- [ ] G6: a release-mode benchmark for 30 days × 96 frames/day on the full 340×320 grid prints its measured duration
+- [x] G6: a release-mode benchmark for 30 days × 96 frames/day on the full 340×320 grid prints its measured duration
   CHECK: cargo test --release --manifest-path api/Cargo.toml bench_frames -- --ignored --nocapture 2>&1 | grep -E "BENCH frames"
   EXPECT: /BENCH frames \d+ in [0-9.]+ ?(ms|s)/
-  EVIDENCE: pending
+  EVIDENCE: BENCH frames 2880 in 3.51s (261720 readings, 2193 compressed MB, 1.2 ms/frame)
 
-- [ ] G7: every rule in rules.rs has a non-empty rationale (test)
+- [x] G7: every rule in rules.rs has a non-empty rationale (test)
   CHECK: cargo test --manifest-path api/Cargo.toml rules_have_rationale 2>&1 | grep "test result"
   EXPECT: /test result: ok\. [1-9]/
-  EVIDENCE: pending
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 0.00s
