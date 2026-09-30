@@ -1,0 +1,1 @@
+https://marine-api.open-meteo.com/v1/marine?latitude=24.925,25.175,25.675,24.425&longitude=-80.575,-80.825,-80.825,-81.825&hourly=wave_height,sea_surface_temperature&timeformat=unixtime&timezone=GMT&past_days=1&forecast_days=2&cell_selection=nearest
