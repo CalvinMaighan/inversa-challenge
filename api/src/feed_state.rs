@@ -77,6 +77,9 @@ struct Inputs {
     source: SourceRow,
     runs: Vec<RunRow>,
     newest_observed_at: Option<i64>,
+    /// Alert-only feed (no sightings or stations): quiet weather is not stale data, so freshness
+    /// is the newest successful fetch rather than the newest alert onset.
+    event_feed: bool,
 }
 
 /// The state of every registered source at `now_ms` (unix ms), ordered by source id.
@@ -161,8 +164,8 @@ fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
                 Ok(RunRow { id: r.get(0)?, fetched_at: r.get(1)?, status: r.get(2)?, error: r.get(3)? })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        let newest_observed_at = newest_observed_at(conn, &source.id, now_ms)?;
-        out.push(Inputs { source, runs, newest_observed_at });
+        let (newest_observed_at, event_feed) = newest_observed_at(conn, &source.id, now_ms)?;
+        out.push(Inputs { source, runs, newest_observed_at, event_feed });
     }
     Ok(out)
 }
@@ -172,7 +175,7 @@ fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
 ///
 /// Each table gets an existence check first (index-backed for sightings and stations; alerts is
 /// small), so a source never pays for a max() scan over a table it does not write to.
-fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqlite::Result<Option<i64>> {
+fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqlite::Result<(Option<i64>, bool)> {
     const PROBES: [(&str, &str); 3] = [
         (
             "select exists(select 1 from sightings where source_id = ?1)",
@@ -189,24 +192,32 @@ fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqli
         ),
     ];
     let mut newest: Option<i64> = None;
-    for (exists_sql, max_sql) in PROBES {
-        let has_rows: bool = conn.prepare_cached(exists_sql)?.query_row([source_id], |r| r.get(0))?;
-        if !has_rows {
+    let mut has = [false; 3];
+    for (i, (exists_sql, max_sql)) in PROBES.into_iter().enumerate() {
+        has[i] = conn.prepare_cached(exists_sql)?.query_row([source_id], |r| r.get(0))?;
+        if !has[i] {
             continue;
         }
         let max: Option<i64> =
             conn.prepare_cached(max_sql)?.query_row(params![source_id, now_ms], |r| r.get(0)).optional()?.flatten();
         newest = newest.max(max);
     }
-    Ok(newest)
+    // Alerts only: sightings and stations empty, alerts present.
+    let event_feed = !has[0] && !has[1] && has[2];
+    Ok((newest, event_feed))
 }
 
 fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
-    let Inputs { source, runs, newest_observed_at } = inputs;
+    let Inputs { source, runs, newest_observed_at, event_feed } = inputs;
     let last_fetch_at = runs.first().map(|r| r.fetched_at);
     let last_fetch_run_id = runs.first().map(|r| r.id.to_string());
     let silent_s = last_fetch_at.map(|t| (now_ms - t) / 1000);
-    let lag_seconds = newest_observed_at.map(|t| (now_ms - t).max(0) / 1000);
+    let fresh_at = if event_feed {
+        runs.iter().find(|r| r.status != "error").map(|r| r.fetched_at)
+    } else {
+        newest_observed_at
+    };
+    let lag_seconds = fresh_at.map(|t| (now_ms - t).max(0) / 1000);
     let down_after_s = DOWN_AFTER_CADENCES * source.cadence_s;
     let lagging_after_s = source.cadence_s + LAGGING_GRACE_S;
 
@@ -470,7 +481,9 @@ mod tests {
         let states = compute(&db, NOW).await.unwrap();
         let ids: Vec<_> = states.iter().map(|s| s.source.as_str()).collect();
         assert_eq!(ids, ["nws", "usgs"]);
-        assert_eq!((states[0].mode.as_str(), states[0].state, states[0].lag_seconds), ("push", Health::Lagging, Some(240)));
+        // nws is an alert-only feed: freshness is its last successful fetch (1 min), not the alert onset (4 min).
+        assert_eq!((states[0].mode.as_str(), states[0].state, states[0].lag_seconds), ("push", Health::Nominal, Some(60)));
+        assert_eq!(states[0].newest_observed_at, Some(NOW - 4 * MIN));
         assert_eq!((states[1].state, states[1].lag_seconds), (Health::Nominal, Some(600)));
     }
 

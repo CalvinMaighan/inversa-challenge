@@ -10,14 +10,14 @@ Scope: the Axum data plane runs end to end on fixtures: ingest pipeline, then DB
 - [x] N2: the full api test suite and clippy are clean on the merged tree
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep -c "test result: ok" && cargo clippy --manifest-path api/Cargo.toml --all-targets -- -D warnings 2>&1 | tail -1
   EXPECT: /[1-9][\s\S]*Finished/
-  EVIDENCE: 1 | Finished `dev` profile [unoptimized + debuginfo] target(s) in 21.75s
+  EVIDENCE: 1 | Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s
 
 - [x] N3: an end-to-end fixture run (backfill --fixtures, then a GraphQL query for sightings, frames and evidence) returns non-empty results; the test is named e2e_fixture_pipeline
   CHECK: cargo test --manifest-path api/Cargo.toml e2e_fixture_pipeline 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 205 filtered out; finished in 8.81s
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 206 filtered out; finished in 7.85s
 
 - [x] N4: the schema contract still holds
   CHECK: cargo test --manifest-path api/Cargo.toml schema_matches_contract 2>&1 | grep "test result"
   EXPECT: /test result: ok\. [1-9]/
-  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 205 filtered out; finished in 0.01s
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 206 filtered out; finished in 0.00s
