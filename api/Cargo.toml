@@ -12,6 +12,8 @@ anyhow = "1"
 async-graphql = { version = "7", default-features = false }
 async-graphql-axum = "7"
 async-trait = "0.1"
+aws-credential-types = { version = "1", default-features = false }
+aws-sigv4 = { version = "1", default-features = false, features = ["sign-http", "http1"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 flate2 = "1"
