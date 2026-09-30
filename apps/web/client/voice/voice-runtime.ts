@@ -16,7 +16,11 @@ import { readHudState } from "./hud-state";
 import { startMicCapture, type MicCapture } from "./mic-capture";
 import { createPcmPlayback, type PcmPlayback } from "./playback";
 import { ensureVoiceState, LAYERS, SELECTION, TIME, VIEW, VOICE, type VoiceKeyState } from "./state";
+import { emitTaskEvent } from "./task-events";
 import { applyUiCommand } from "./ui-command-handler";
+
+/** Orb card API: `onTaskEvent((taskId, event) => …)` streams agent output for voice tasks. */
+export { onTaskEvent, type TaskEventListener } from "./task-events";
 
 /**
  * Browser side of voice mode (ported from deedee). One module-level runtime so any component
@@ -109,6 +113,9 @@ function handleEvent(event: VoiceServerEvent): void {
       patchVoice({ tasks: [...tasks, event.task].slice(-20) });
       return;
     }
+    case "task.event":
+      emitTaskEvent(event.taskId, event.event);
+      return;
     case "tool.call":
       patchVoice({ activeTool: event.status === "started" ? event.name : null });
       return;

@@ -38,6 +38,11 @@ Scope:
   EXPECT: CLEAN
   EVIDENCE: CLEAN
 
+- [x] G8: agent events of a spawned task reach the client as task.event, in order, through the onTaskEvent subscribe API (test)
+  CHECK: cd apps/web && bun test tests -t "task events stream to client" 2>&1 | grep -E "pass|fail"
+  EXPECT: /1 pass[\s\S]*0 fail/
+  EVIDENCE: 1 pass | 0 fail
+
 - [ ] G7: (live, blocked on H6) spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
   EVIDENCE: pending
 

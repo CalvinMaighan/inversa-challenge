@@ -6,7 +6,10 @@ import path from "node:path";
 import { get } from "@calvinjs/active-state";
 
 import { ensureVoiceState, VIEW } from "client/voice/state";
+import { emitTaskEvent } from "client/voice/task-events";
 import { applyUiCommand } from "client/voice/ui-command-handler";
+import { onTaskEvent } from "client/voice/voice-runtime";
+import type { AgentStreamEvent } from "shared/agent/events";
 import type { AgentRunEvent, AgentRunInput, AgentRunner } from "server/voice/agent-runner";
 import { VoiceBudget } from "server/voice/budget";
 import { UI_TOOL_NAMES } from "shared/voice/ui-tools";
@@ -240,6 +243,56 @@ describe("voice relay against a mocked xAI socket", () => {
       status: "ok",
       task: { task_id: taskId, status: "completed", summary: expect.stringContaining("Twelve") },
     });
+  });
+
+  test("task events stream to client", async () => {
+    let emit: (event: AgentRunEvent) => void = () => undefined;
+    let finish: () => void = () => undefined;
+    const runner: AgentRunner = {
+      run(_input, onEvent) {
+        emit = onEvent;
+        return new Promise((resolve) => (finish = () => resolve({ content: "Three alerts.", citations: ["alert:1"] })));
+      },
+    };
+    const { mock, session, events } = await startSession(runner);
+
+    // Browser side: the orb card subscribes; the runtime hands each `task.event` from the stream to the bus.
+    const seen: { taskId: string; event: AgentStreamEvent }[] = [];
+    const off = onTaskEvent((taskId, event) => seen.push({ taskId, event }));
+    const unsubscribe = session.subscribe((e) => {
+      if (e.type === "task.event") emitTaskEvent(e.taskId, e.event);
+    });
+
+    modelCalls(mock, "resp_te", "call_te", "spawn_thinking", { objective: "Any NWS alerts over Florida Bay?" });
+    await until(() => toolOutputs(mock).length === 1);
+    const taskId = String(toolOutputs(mock)[0]!.output.task_id);
+
+    const stream: AgentStreamEvent[] = [
+      { type: "status", state: "thinking" },
+      { type: "tool_start", toolCallId: "t1", capabilityName: "alerts", args: { area: "Florida Bay" } },
+      { type: "tool_end", toolCallId: "t1", capabilityName: "alerts", ok: true, data: { ids: ["alert:1"] } },
+      { type: "content_delta", text: "Three " },
+      { type: "content_delta", text: "alerts." },
+      { type: "citation", id: "alert:1", kind: "alert", label: "Small Craft Advisory" },
+      { type: "view", bbox: { west: -81.2, south: 24.8, east: -80.4, north: 25.3 }, time: "2026-09-30T12:00:00Z" },
+      { type: "done", content: "Three alerts." },
+    ];
+    for (const event of stream) emit(event);
+    emit({ type: "not_an_agent_event", junk: true });
+    finish();
+    await until(() => events.some((e) => e.type === "task.updated" && e.task.status === "completed"));
+    emit({ type: "content_delta", text: "late" });
+    await until(() => seen.length >= stream.length);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(seen).toEqual(stream.map((event) => ({ taskId, event })));
+    // Spoken progress still comes from the same stream.
+    expect(events.some((e) => e.type === "task.updated" && e.task.step === "alerts")).toBe(true);
+
+    off();
+    unsubscribe();
+    emitTaskEvent(taskId, { type: "content_delta", text: "after off" });
+    expect(seen).toHaveLength(stream.length);
   });
 
   test("cancel_task aborts the runner and nothing is announced", async () => {

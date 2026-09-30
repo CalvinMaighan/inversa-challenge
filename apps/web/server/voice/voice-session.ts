@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
+import { isAgentStreamEvent } from "shared/agent/events";
 import {
   VOICE_INPUT_SAMPLE_RATE,
   VOICE_OUTPUT_SAMPLE_RATE,
@@ -705,6 +706,8 @@ export class VoiceSession {
         { sessionId: this.id, question: trimmed, view: this.viewState, signal: abort.signal },
         (event) => {
           if (tracked.status !== "running") return;
+          // Every C7 agent event streams to the orb card; anything else the runner emits stays local.
+          if (isAgentStreamEvent(event)) this.emit({ type: "task.event", taskId: tracked.id, event });
           if (event.type === "tool_start") this.onTaskStep(tracked.id, str(event.capabilityName) || "working");
           if (event.type === "status") this.onTaskStep(tracked.id, str(event.state) || "working");
         },

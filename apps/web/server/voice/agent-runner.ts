@@ -13,7 +13,11 @@ export type AgentRunInput = {
   signal?: AbortSignal;
 };
 
-/** Agent stream events (C7). Only `status` and `tool_start` are read here, for progress. */
+/**
+ * Agent stream events (C7). The session relays every valid one to the browser as
+ * `task.event` (content deltas, tools, citations, view, done) and reads `status` / `tool_start`
+ * for spoken progress. The default runner passes `onEvent` straight through to `runTurn`.
+ */
 export type AgentRunEvent = { type: string } & Record<string, unknown>;
 
 export type AgentRunResult = { content: string; citations: unknown[] };
