@@ -224,7 +224,11 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
   - `client/hud/missions/index.tsx` exports `MissionsPanel` (T21).
   - `client/agent/index.tsx` exports `AgentOrb` (T14).
   - The driver composes them in `app/page.tsx` through `AppShell` slots.
-- **Frame grid:** a `FrameGrid` from `@calvinjs/active-state/threads` (EVF2 shape). Layers read `hotspot(i, s)`, `lst(i)` and `sst(i)`. The frame index is derived from TIME.
+- **Frame grid:** a `FrameGrid` from `@calvinjs/active-state/threads` (EVF2 shape). Layers read `hotspot(i, s)`, `lst(i)` and `sst(i)`.
+  - There is one hourly grid for the 30-day TIME window, published with `publishFrameGrid(grid, meta)`, where `meta` is `FrameMeta {frame0UnixMs, stepMinutes, frameCount}`.
+  - Everyone maps time to frames with `frameIndexAt(atMs)` from `client/threads/api.ts`, which floors `(at − frame0) / step` and returns null outside the grid. Don't spread frames evenly over TIME.
+  - Sighting sections come through `publishFrameSightings`, `getFrameSightings` and `onFrameSightings`: `counts` plus the raw 12-byte `records(i)`.
+  - The HUD owns FEEDS sync (its `feeds` query and subscription). The workers don't write FEEDS.
 
 ## Tree
 

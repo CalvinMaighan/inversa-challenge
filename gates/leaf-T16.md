@@ -35,5 +35,5 @@ Scope: `packages/active-state/src/threads/**`, exported as `@calvinjs/active-sta
 
 - [x] G6: EVF2 view sizes: FrameGrid exposes u8 hotspot views of 170x160 per species and i16 lst/sst views of 68x64, frame stride padded to 4, with hotspotScale and env dims in the header
   CHECK: cd packages/active-state && bun test tests/threads/bulk.test.ts -t "EVF2 view sizes" 2>&1 | grep -E "pass|fail"
-  EXPECT: /[1-9] pass[\s\S]*0 fail/
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail

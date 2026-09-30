@@ -15,7 +15,7 @@ Scope:
 
 - [x] G2: PCM resample produces the expected sample count at 16 kHz from a 48 kHz input, phase-continuous across batches (test)
   CHECK: cd apps/web && bun test tests/client/voice -t "resample" 2>&1 | grep -E "pass|fail"
-  EXPECT: /[1-9] pass[\s\S]*0 fail/
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 4 pass | 0 fail
 
 - [x] G3: a mocked xAI socket session: the model calls fly_to, the relay emits ui.command, and the client handler sets the VIEW key (test)

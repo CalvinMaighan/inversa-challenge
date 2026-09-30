@@ -23,7 +23,7 @@ Scope: `apps/web/client/hud/**`, excluding `hud/missions`:
 
 - [x] G4: opening a share link restores camera, time and layers (test)
   CHECK: cd apps/web && bun test tests/client/hud -t "share link" 2>&1 | grep -E "pass|fail"
-  EXPECT: /[1-9] pass[\s\S]*0 fail/
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 11 pass | 0 fail
 
 - [x] G5: typecheck and lint clean
