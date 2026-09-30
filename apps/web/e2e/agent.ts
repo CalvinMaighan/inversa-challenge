@@ -155,6 +155,8 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   const inside = sheet.x >= 0 && sheet.y >= 0 && sheet.x + sheet.width <= 375 && sheet.y + sheet.height <= 812;
   assert(inside, `card at 375 px leaves the viewport: ${JSON.stringify(sheet)}`);
   await card.locator("[data-timeline-toggle]").last().click();
+  // The Next.js dev badge sits in the bottom-left corner over the composer; it is not part of the app.
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
   mkdirSync(dirname(SCREENSHOT), { recursive: true });
   await page.screenshot({ path: SCREENSHOT });
   log(`375 px card ${sheet.width}x${sheet.height} at ${sheet.x},${sheet.y}; screenshot ${SCREENSHOT}`);

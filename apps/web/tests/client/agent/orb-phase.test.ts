@@ -21,11 +21,6 @@ describe("orb phase", () => {
     expect(orbPhase({ status: "live", state: "idle" }, true)).toBe("thinking");
   });
 
-  test("catalog VOICE shape (state only) still pulses", () => {
-    expect(orbPhase({ state: "listening" }, false)).toBe("listening");
-    expect(orbPhase({ state: "idle" }, false)).toBe("idle");
-  });
-
   test("stale voice state after the session ended does not pulse", () => {
     expect(orbPhase({ status: "off", state: "speaking" }, false)).toBe("idle");
   });

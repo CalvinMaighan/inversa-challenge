@@ -2,6 +2,9 @@ import { notFound } from "next/navigation";
 
 import DevAgent from "./DevAgent";
 
+/** The env check below must run per request, not once at build time. */
+export const dynamic = "force-dynamic";
+
 /**
  * Scratch route for the agent orb (T14 e2e): the orb in the app shell with no globe or HUD. `?at=<ISO>` moves
  * the replay window to that instant (the eval fixtures live in January 2026). Dev server or mock harness only.

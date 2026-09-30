@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { get, set } from "@calvinjs/active-state";
+import { get, set, uuid } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { AGENT_CHAT, LAYERS, SELECTION, TIME, VIEW } from "client/state";
@@ -80,11 +80,11 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
       if (!text || abortRef.current || isAsking(asThread(get<AgentThread>(AGENT_CHAT)))) return false;
       let sessionId = asThread(get<AgentThread>(AGENT_CHAT)).sessionId;
       if (!sessionId) {
-        sessionId = crypto.randomUUID();
+        sessionId = uuid();
         dispatch({ type: "session", sessionId });
       }
-      const userId = crypto.randomUUID();
-      const assistantId = crypto.randomUUID();
+      const userId = uuid();
+      const assistantId = uuid();
       const nowMs = Date.now();
       dispatch({ type: "user", id: userId, text, nowMs });
       dispatch({ type: "assistant", id: assistantId, nowMs });

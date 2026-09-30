@@ -11,15 +11,13 @@ import type { SelectionState } from "client/state/selection";
 import { timeWindow, type TimeState } from "client/state/time";
 import AppShell from "client/ui/AppShell";
 
-type Selection = SelectionState & { drawerOpen?: boolean };
-
 /**
  * Stand-ins for the globe (T17) and evidence drawer (T18): a GlobeApi that records camera targets, and a
  * readout of SELECTION and TIME as data attributes the e2e asserts on.
  */
 export default function DevAgent({ at }: { at: string | null }) {
   const [flights, setFlights] = useState<CameraTarget[]>([]);
-  const [selection] = useActiveState<Selection>(SELECTION);
+  const [selection] = useActiveState<SelectionState>(SELECTION);
   const [time] = useActiveState<TimeState>(TIME);
 
   useEffect(() => {

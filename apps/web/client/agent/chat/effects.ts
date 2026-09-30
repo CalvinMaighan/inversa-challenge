@@ -13,9 +13,6 @@ export const HOTSPOT_CELL_DEG = 0.01;
 /** Camera height when flying to one cited entity. */
 export const EVIDENCE_ALTITUDE_M = 12_000;
 
-/** Voice (T15) also writes `drawerOpen`; the drawer (T18) opens on it. */
-type SelectionWithDrawer = SelectionState & { drawerOpen?: boolean };
-
 /**
  * Coordinates an evidence id carries by itself. Only hotspot ids do (`hotspot:<species>:<col>:<row>:<ms>`,
  * the cell centre); sightings, readings, alerts and fetch runs need a lookup, so they return null.
@@ -72,7 +69,7 @@ export function applyViewEvent(event: Extract<AgentStreamEvent, { type: "view" }
 
 /** Citation chip: select the evidence, open the drawer, and fly there when the id carries coordinates. */
 export function openEvidence(id: string): void {
-  set<SelectionWithDrawer>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId: id, drawerOpen: true }));
+  set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId: id, drawerOpen: true }));
   const at = evidenceCoordinates(id);
   if (at) getGlobe()?.flyTo({ ...at, altitudeM: EVIDENCE_ALTITUDE_M });
 }

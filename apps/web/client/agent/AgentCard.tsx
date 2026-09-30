@@ -1,6 +1,8 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+import { memo, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+
+import type { VoiceState } from "client/state/voice";
 
 import {
   Assistant,
@@ -30,18 +32,14 @@ import { formatWorkDuration } from "./chat/tools";
 import type { AgentThread, AgentTurn } from "./chat/thread";
 import { ClearIcon, CloseIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
-import { ORB_LABELS, voiceIsLive, type OrbPhase, type OrbVoice } from "./orb-phase";
+import { ORB_LABELS, voiceIsLive, type OrbPhase } from "./orb-phase";
 
 /** Route limit (app/api/agent/stream: MAX_QUESTION_CHARS). */
 const MAX_QUESTION_CHARS = 4_000;
 /** Distance from the bottom that still counts as "following" the stream. */
 const STICK_PX = 48;
 
-export type CardVoice = OrbVoice & {
-  userText?: string;
-  assistantText?: string;
-  tasks?: { id: string; objective: string }[];
-};
+export type CardVoice = Partial<VoiceState>;
 
 const PHASE_TEXT: Record<NonNullable<AgentTurn["phase"]>, string> = {
   thinking: "Thinking…",
@@ -60,19 +58,20 @@ function ReasoningBlock({ turn }: { turn: AgentTurn }) {
   );
 }
 
-function AssistantTurn({
+/** Memoized: the reducer replaces only the turn that changed, so a streaming turn re-renders alone. */
+const AssistantTurn = memo(function AssistantTurn({
   turn,
-  voice,
+  objective,
   selected,
   onCite,
 }: {
   turn: AgentTurn;
-  voice: CardVoice | undefined;
+  /** Voice task objective, for voice turns. */
+  objective: string | undefined;
   selected: string | null;
   onCite: (id: string) => void;
 }) {
   const streaming = turn.status === "streaming";
-  const objective = turn.source === "voice" ? voice?.tasks?.find((t) => t.id === turn.taskId)?.objective : undefined;
   return (
     <Assistant data-turn={turn.id} data-source={turn.source ?? "text"} data-status={turn.status} aria-busy={streaming}>
       {turn.source === "voice" ? <VoiceTag title={objective}>{objective ? `voice · ${objective}` : "voice"}</VoiceTag> : null}
@@ -105,7 +104,7 @@ function AssistantTurn({
       ) : null}
     </Assistant>
   );
-}
+});
 
 function VoiceStrip({ voice }: { voice: CardVoice | undefined }) {
   if (!voice || (voice.status !== "live" && voice.status !== "connecting" && !(voice.status === "error" && voice.error))) return null;
@@ -219,7 +218,13 @@ export default function AgentCard({
                 {turn.text}
               </UserBubble>
             ) : (
-              <AssistantTurn key={turn.id} turn={turn} voice={voice} selected={selected} onCite={onCite} />
+              <AssistantTurn
+                key={turn.id}
+                turn={turn}
+                objective={turn.taskId ? voice?.tasks?.find((t) => t.id === turn.taskId)?.objective : undefined}
+                selected={selected}
+                onCite={onCite}
+              />
             ),
           )
         )}
