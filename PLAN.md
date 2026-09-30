@@ -256,3 +256,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T3 merged (8/8 on branch). Accepted: test tsconfig flag; build copies static+public; slots via default exports client/globe, client/hud, client/agent wired by driver. T15 reconciling voice keys with catalog.
 - T13 merged (lint fixes pending on T13 branch). Contract: C14 backtest kind + FeedState.lastFetchRunId (T10). next.config traces cordis.yml.
 - T9 merged+verified 6/6 (api 123 tests). T13 lint follow-up merged+verified 5/5+1 abandoned. EvidenceKind += backtest. 1 web test fail pending T15 key reconcile.
+- T15 reconcile merged (web 225/0, build ok). T11 EVF2 merged 8/8. hotspotScale rounded in frames.ts.

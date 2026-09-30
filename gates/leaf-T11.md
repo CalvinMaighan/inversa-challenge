@@ -17,17 +17,17 @@ Scope:
 - [x] G1: api tests pass
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep "test result" | grep -v " 0 passed" | head -1
   EXPECT: /test result: ok\. \d+ passed; 0 failed/
-  EVIDENCE: test result: ok. 100 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 1.92s
+  EVIDENCE: test result: ok. 125 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.03s
 
 - [x] G2: score unit tests against hand-computed cells for all 4 species, including a cold-stun iguana case and a lionfish no-access (waves) case
   CHECK: cargo test --manifest-path api/Cargo.toml hotspot 2>&1 | grep -E "running|test result"
   EXPECT: /running ([4-9]|[1-9][0-9]) tests[\s\S]*test result: ok/
-  EVIDENCE: running 16 tests | test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.15s
+  EVIDENCE: running 16 tests | test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 110 filtered out; finished in 0.15s
 
 - [x] G3: EVF2 golden round-trip; the Rust writer output byte-equals spec/frames/sample.evf for the fixed seed input, and the test decodes hand-computed hotspot, environment and sighting values from it
   CHECK: cargo test --manifest-path api/Cargo.toml evf_golden 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.00s
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 125 filtered out; finished in 0.00s
 
 - [x] G4: the TS reader (apps/web/shared/frames.ts readEvfHeader) parses the EVF2 golden file
   CHECK: bun -e 'import {readEvfHeader} from "./apps/web/shared/frames.ts"; const b=await Bun.file("spec/frames/sample.evf").arrayBuffer(); console.log(JSON.stringify(readEvfHeader(new DataView(b))))'
@@ -37,19 +37,19 @@ Scope:
 - [x] G5: backtest returns hitRate and baseline=0.1 on a seeded dataset (test)
   CHECK: cargo test --manifest-path api/Cargo.toml backtest 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: running 3 tests | test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 98 filtered out; finished in 0.11s
+  EVIDENCE: running 3 tests | test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 123 filtered out; finished in 0.12s
 
 - [x] G6: a release-mode benchmark for 30 days × 24 hourly frames on the full 340×320 scoring grid prints its duration, the raw bytes per EVF2 frame and the gzip size of the month
   CHECK: cargo test --release --manifest-path api/Cargo.toml bench_frames -- --ignored --nocapture 2>&1 | grep -E "BENCH frames"
   EXPECT: /BENCH frames 720 in [0-9.]+ ?(ms|s) \(\d+ bytes\/frame raw, \d+ KB gzip/
-  EVIDENCE: BENCH frames 720 in 3.37s (126261 bytes/frame raw, 30988 KB gzip for 30 days, 38412 KB zlib stored, 261720 readings, build 1.29s, 1.8 ms/frame)
+  EVIDENCE: BENCH frames 720 in 3.05s (126261 bytes/frame raw, 30988 KB gzip for 30 days, 38412 KB zlib stored, 261720 readings, build 1.09s, 1.5 ms/frame)
 
 - [x] G7: every rule in rules.rs has a non-empty rationale (test)
   CHECK: cargo test --manifest-path api/Cargo.toml rules_have_rationale 2>&1 | grep "test result"
   EXPECT: /test result: ok\. [1-9]/
-  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.01s
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 125 filtered out; finished in 0.00s
 
 - [x] G8: the REST route GET /v1/frames answers a oneshot request with content-type application/x-evf, gzip content-encoding and a body whose header parses (test frames_rest_route)
   CHECK: cargo test --manifest-path api/Cargo.toml frames_rest_route 2>&1 | grep "test result"
   EXPECT: /test result: ok\. 1 passed; 0 failed/
-  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.08s
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 125 filtered out; finished in 0.05s

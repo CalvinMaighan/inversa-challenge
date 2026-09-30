@@ -66,7 +66,7 @@ export function readEvfHeader(view: DataView): EvfHeader {
     envCols: view.getUint16(56, true),
     envRows: view.getUint16(58, true),
     envCellDeg: Math.round(view.getFloat32(60, true) * 1e6) / 1e6,
-    hotspotScale: view.getFloat32(64, true),
+    hotspotScale: Math.round(view.getFloat32(64, true) * 1e6) / 1e6,
   };
 }
 
