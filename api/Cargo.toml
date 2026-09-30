@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 async-graphql = { version = "7", default-features = false }
 async-graphql-axum = "7"
 async-trait = "0.1"
