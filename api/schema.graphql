@@ -82,7 +82,7 @@ type FrameChunk {
   to: Time!
   stepMinutes: Int!
   frameCount: Int!
-  """Base64 of the EVF1 binary format (PLAN.md C4)."""
+  """Base64 of EVF2 (PLAN.md C4), at most 24 frames. Bulk frames: GET /v1/frames."""
   data: String!
 }
 

@@ -57,7 +57,7 @@ Tests mirror their source: `apps/web/tests/<path>` belongs to whichever leaf own
   - `Time` is an RFC 3339 string.
   - `JSON` is arbitrary JSON.
 - `BBox` is an input `{west,south,east,north}`.
-- `FrameChunk.data` is base64 of the C4 format.
+- `FrameChunk.data` is base64 of the C4 EVF2 format (at most 24 frames); bulk frames use REST `GET /v1/frames`.
 
 ### C3: feed-state envelope
 
@@ -69,33 +69,25 @@ Tests mirror their source: `apps/web/tests/<path>` belongs to whichever leaf own
 - Rust: `feed_state::FeedState`.
 - TS: `apps/web/shared/feed-state.ts`.
 
-### C4: binary frame format "EVF1" (little-endian)
+### C4: binary frame format "EVF2" (little-endian; revised after T11)
 
-**Header, 56 bytes.** Byte offsets are in `apps/web/shared/frames.ts`.
+EVF1 used f32 grids at 0.01°, which is 2.6 MB per frame and 7.5 GB per month. EVF2 fixes that by quantizing and using coarser grids.
 
-| Field | Type |
-|---|---|
-| magic | `"EVF1"` (4 bytes) |
-| frameCount | u32 |
-| cols | u32 |
-| rows | u32 |
-| west | f64 |
-| south | f64 |
-| cellDeg | f64 |
-| frame0UnixMs | i64 |
-| stepMinutes | u32 |
-| speciesCount | u32 |
+The authoritative byte layout is the doc comment in `apps/web/shared/frames.ts` (72-byte header). Summary:
 
-**Per frame, in order:**
-
-- `hotspot`: f32 × speciesCount × cells, species-major.
-- `lst`: f32 × cells, where NaN means missing.
-- `sst`: f32 × cells, where NaN means missing.
-- `sightingCount`: u32, followed by that many sightings, each 12 bytes: `f32 lon`, `f32 lat`, `u16 taxon`, `u8 quality`, `u8 flags`.
-- Padding up to a 4-byte boundary.
+- **Hotspot grid:** 0.02°, 170 × 160 cells. Values are u8, with `score = u8 × hotspotScale`.
+- **Environment grid:** 0.05°, 68 × 64 cells, identical to the GOES `g5` cells. LST and SST are stored as i16 centi-°C, with `-32768` meaning missing or flagged.
+- **Sightings:** a u32 count, then 12-byte records: `f32 lon`, `f32 lat`, `u16 taxon`, `u8 quality`, `u8 flags`.
+- **Step:** hourly by default. 15 min is allowed for windows of 24 h or less.
+- **Size:** about 45 KB raw per frame. 30 days of hourly frames compress to a few MB with gzip.
+- **Transport:**
+  - Bulk: REST `GET /v1/frames?from=&to=&step=`, returning `application/x-evf` with gzip content encoding. At most 744 frames.
+  - GraphQL `frames` returns `data` = base64 of EVF2 for at most 24 frames.
+- **Storage:** the `frames` table stores zlib-compressed EVF2 bodies, one per `frame_at`.
 
 Notes:
-- `cells = cols × rows`, row-major from the south-west corner.
+- Grids are row-major from the south-west corner (−83.2, 24.3).
+- Hotspot cell ids stay on the 0.01° C14 grid for `explainCell`. The 0.02° frame grid is a display downsample (max of its 2×2 children).
 - Species order: python, tegu, iguana, lionfish (`taxa.id` 1–4).
 - `quality`: 0 = research, 1 = needs_id, 2 = casual, 3 = curated.
 - `flags` bits: 1 = duplicate (has `canonical_id`), 2 = conflict, 4 = late.
