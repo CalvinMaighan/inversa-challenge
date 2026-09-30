@@ -1,0 +1,224 @@
+"""RFC 3339 timestamp."""
+scalar Time
+"""Arbitrary JSON value."""
+scalar JSON
+
+input BBox {
+  west: Float!
+  south: Float!
+  east: Float!
+  north: Float!
+}
+
+enum FeedMode { PUSH POLL }
+enum FeedHealth { NOMINAL LAGGING STALE DOWN }
+enum Quality { RESEARCH NEEDS_ID CASUAL CURATED }
+enum Param { LST_C AIR_C WATER_C SST_C RAIN_MM STAGE_M WAVE_M WIND_MS FIRE_FRP }
+enum ReadingOrigin { MEASURED SATELLITE MODELED }
+enum ReadingFlag { OK CLOUD BAD_DQF MISSING }
+
+type FeedState {
+  source: String!
+  mode: FeedMode!
+  state: FeedHealth!
+  newestObservedAt: Time
+  lastFetchAt: Time
+  lagSeconds: Int
+  note: String
+}
+
+type Taxon {
+  id: ID!
+  scientificName: String!
+  commonName: String!
+  focus: Boolean!
+}
+
+type Sighting {
+  id: ID!
+  source: String!
+  extId: String!
+  taxon: Taxon!
+  lat: Float!
+  lon: Float!
+  accuracyM: Float
+  observedAt: Time!
+  quality: Quality!
+  photoUrl: String
+  canonicalId: ID
+  conflict: Boolean!
+}
+
+type Station {
+  id: ID!
+  source: String!
+  name: String!
+  lat: Float!
+  lon: Float!
+  kind: String!
+}
+
+type Reading {
+  station: Station!
+  param: Param!
+  value: Float
+  flag: ReadingFlag!
+  observedAt: Time!
+  origin: ReadingOrigin!
+}
+
+type Alert {
+  id: ID!
+  event: String!
+  severity: String!
+  headline: String
+  areaGeojson: JSON
+  onset: Time
+  expires: Time
+}
+
+type FrameChunk {
+  from: Time!
+  to: Time!
+  stepMinutes: Int!
+  frameCount: Int!
+  """Base64 of the EVF1 binary format (PLAN.md C4)."""
+  data: String!
+}
+
+type HotspotCell {
+  cell: ID!
+  lat: Float!
+  lon: Float!
+  score: Float!
+}
+
+type HotspotGrid {
+  species: ID!
+  at: Time!
+  cells: [HotspotCell!]!
+}
+
+type HotspotTerm {
+  name: String!
+  value: Float!
+  rationale: String!
+}
+
+type HotspotExplain {
+  cell: ID!
+  species: ID!
+  at: Time!
+  score: Float!
+  terms: [HotspotTerm!]!
+}
+
+type BacktestDay {
+  day: Time!
+  sightings: Int!
+  hits: Int!
+}
+
+type Backtest {
+  species: ID!
+  days: Int!
+  hitRate: Float!
+  baseline: Float!
+  perDay: [BacktestDay!]!
+}
+
+type EvidenceLink {
+  id: ID!
+  relation: String!
+  source: String!
+}
+
+type Evidence {
+  id: ID!
+  kind: String!
+  record: JSON!
+  raw: JSON
+  rawKey: String
+  sourceUrl: String
+  fetchedAt: Time
+  ingestLagSeconds: Int
+  feed: FeedState
+  links: [EvidenceLink!]!
+}
+
+type Op {
+  seq: Int!
+  id: ID!
+  hlc: String!
+  boardId: ID!
+  entity: String!
+  entityId: ID!
+  field: String!
+  value: JSON
+  nodeId: String!
+}
+
+input OpInput {
+  id: ID!
+  hlc: String!
+  entity: String!
+  entityId: ID!
+  field: String!
+  value: JSON
+  nodeId: String!
+}
+
+type ApplyResult {
+  applied: Int!
+  duplicates: Int!
+  lastSeq: Int!
+}
+
+type Mission {
+  id: ID!
+  fields: JSON!
+}
+
+type Message {
+  id: ID!
+  body: String!
+  hlc: String!
+  nodeId: String!
+}
+
+type Board {
+  id: ID!
+  lastSeq: Int!
+  missions: [Mission!]!
+  messages: [Message!]!
+  removals: JSON!
+}
+
+type FrameRange {
+  from: Time!
+  to: Time!
+}
+
+type Query {
+  feeds: [FeedState!]!
+  sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
+  readings(bbox: BBox!, from: Time!, to: Time!, params: [Param!]): [Reading!]!
+  alerts(bbox: BBox!, at: Time!): [Alert!]!
+  frames(from: Time!, to: Time!, stepMinutes: Int!): FrameChunk!
+  hotspots(species: ID!, at: Time!, bbox: BBox!, top: Int): HotspotGrid!
+  explainCell(cell: ID!, species: ID!, at: Time!): HotspotExplain!
+  backtest(species: ID!, days: Int!): Backtest!
+  evidence(id: ID!): Evidence!
+  board(id: ID!): Board!
+  opsSince(boardId: ID!, seq: Int!): [Op!]!
+}
+
+type Mutation {
+  applyOps(boardId: ID!, ops: [OpInput!]!): ApplyResult!
+}
+
+type Subscription {
+  feeds: FeedState!
+  framesUpdated: FrameRange!
+  ops(boardId: ID!, afterSeq: Int!): Op!
+}

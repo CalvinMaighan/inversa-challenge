@@ -1,0 +1,22 @@
+{
+  "name": "inversa-challenge",
+  "private": true,
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun run --cwd apps/web dev",
+    "api": "cargo run --manifest-path api/Cargo.toml",
+    "build": "bun run --cwd apps/web build && cargo build --release --manifest-path api/Cargo.toml",
+    "lint": "bun run --cwd apps/web lint",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "test:api": "cargo test --manifest-path api/Cargo.toml",
+    "eval": "bun run --cwd apps/web eval",
+    "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK"
+  }
+}

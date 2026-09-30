@@ -1,0 +1,1 @@
+//! Query resolvers (T10).

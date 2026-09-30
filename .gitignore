@@ -6,3 +6,8 @@ dist/
 *.db
 *.db-shm
 *.db-wal
+target/
+data/
+.cache/
+*.tsbuildinfo
+.wrangler/

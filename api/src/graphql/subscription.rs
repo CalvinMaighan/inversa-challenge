@@ -1,0 +1,1 @@
+//! Subscription resolvers (T10).
