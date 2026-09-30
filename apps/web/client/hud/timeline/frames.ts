@@ -1,12 +1,12 @@
 /**
- * TIME ↔ scrubber position ↔ frame-grid index.
+ * TIME ↔ scrubber position, and grid frames on the TIME axis.
  *
  * The scrubber has one position per 15-minute step of the TIME window (PLAN.md C15), so 30 days is 2,881
- * positions. The frame grid (PLAN.md C16) holds `frameCount` frames spread evenly over the same window:
- * frame 0 at `TIME.from`, frame `frameCount − 1` at `TIME.to`. At the 15-minute step the two coincide; with
- * hourly frames four positions share a frame. The grid header carries no timestamps, so this even spread is
- * the rule every reader (globe layers, HUD) applies.
+ * positions. Which grid frame a time falls in is `frameIndexAt` from `client/threads/api` (PLAN.md C16):
+ * frame i covers `[frame0 + i·step, frame0 + (i+1)·step)` of the published `FrameMeta`. With hourly frames
+ * four scrubber positions share a frame; outside the grid there is no frame.
  */
+import type { FrameMeta } from "client/threads/api";
 import { TIME_STEP_MINUTES } from "client/state/time";
 
 export const STEP_MS = TIME_STEP_MINUTES * 60_000;
@@ -24,16 +24,8 @@ export function timeAtStep(step: number, fromMs: number): number {
   return fromMs + step * STEP_MS;
 }
 
-/** Grid frame for an instant, or -1 when there is no grid. */
-export function frameIndexAt(atMs: number, fromMs: number, toMs: number, frameCount: number): number {
-  if (frameCount <= 0) return -1;
-  if (frameCount === 1 || toMs <= fromMs) return 0;
-  const t = Math.min(1, Math.max(0, (atMs - fromMs) / (toMs - fromMs)));
-  return Math.round(t * (frameCount - 1));
-}
-
-/** Instant a grid frame stands for. */
-export function frameTimeMs(index: number, fromMs: number, toMs: number, frameCount: number): number {
-  if (frameCount <= 1) return fromMs;
-  return fromMs + (index / (frameCount - 1)) * (toMs - fromMs);
+/** Time span of grid frames `[start, end)`, for drawing them on the timeline. */
+export function framesSpanMs(start: number, end: number, meta: FrameMeta): [number, number] {
+  const step = meta.stepMinutes * 60_000;
+  return [meta.frame0UnixMs + start * step, meta.frame0UnixMs + end * step];
 }

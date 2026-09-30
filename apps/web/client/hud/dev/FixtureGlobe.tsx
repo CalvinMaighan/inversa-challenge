@@ -10,8 +10,8 @@ import { registerGlobe, type GlobeApi } from "client/globe/api";
 import { TIME, type TimeState } from "client/state/time";
 import { REGION_BBOX, VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
+import { frameIndexAt } from "client/threads/api";
 
-import { frameIndexAt } from "../timeline/frames";
 import { isLand } from "./fixture";
 
 const Canvas = styled.canvas`
@@ -59,7 +59,7 @@ export default function FixtureGlobe({ grid }: { grid: FrameGrid }) {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
-    const { hsCols, hsRows, envCols, envRows, speciesCount, frameCount } = grid.shape;
+    const { hsCols, hsRows, envCols, envRows, speciesCount } = grid.shape;
     const heat = new ImageData(hsCols, hsRows);
     const heatCanvas = document.createElement("canvas");
     heatCanvas.width = hsCols;
@@ -102,13 +102,13 @@ export default function FixtureGlobe({ grid }: { grid: FrameGrid }) {
       }
       view = fit(w, h);
       const time = get<TimeState>(TIME) ?? TIME.defaults;
-      const frame = frameIndexAt(Date.parse(time.at ?? time.to), Date.parse(time.from), Date.parse(time.to), frameCount);
+      const frame = frameIndexAt(Date.parse(time.at ?? time.to));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       const { rect } = view;
       ctx.imageSmoothingEnabled = true;
       ctx.drawImage(base, rect.x, rect.y, rect.w, rect.h);
-      if (frame >= 0) {
+      if (frame !== null) {
         // Heat: strongest species per cell, rows flipped (grid rows run south to north).
         const px = heat.data;
         const planes = Array.from({ length: speciesCount }, (_, s) => grid.hotspot(frame, s));
@@ -159,7 +159,7 @@ export default function FixtureGlobe({ grid }: { grid: FrameGrid }) {
       ctx.strokeStyle = "rgba(160, 220, 180, 0.35)";
       ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
       // Which frame is on screen, for the scrub e2e to check against the scrubber.
-      canvas.dataset.frame = String(frame);
+      canvas.dataset.frame = String(frame ?? -1);
       for (const cb of listeners) cb();
     };
     const requestRender = () => {

@@ -3,9 +3,9 @@ import { allocFrameGrid, writeFrameFromEvf } from "@calvinjs/active-state/thread
 
 import { ENV_MISSING } from "shared/frames";
 
-import { buildFixtureEvf, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "client/hud/dev/fixture";
-import { evfFrames, evfSightingCounts } from "client/hud/timeline/frame-stats";
-import { frameIndexAt, frameTimeMs, stepAt, timeAtStep, windowSteps } from "client/hud/timeline/frames";
+import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "client/hud/dev/fixture";
+import { framesSpanMs, stepAt, timeAtStep, windowSteps } from "client/hud/timeline/frames";
+import { frameIndexAt, type FrameMeta } from "client/threads/api";
 import { CLOUD_FRACTION, frameGapFlags, GAP_FLAG, gapSegments, QUIET_RUN_MS, segmentFlags, type EnvFrames } from "client/hud/timeline/gaps";
 
 const STEP = FIXTURE_STEP_MINUTES * 60_000;
@@ -107,8 +107,19 @@ describe("gap segmentation", () => {
     const fixture = buildFixtureEvf(from);
     const { header, offsets, counts } = evfFrames(fixture.bytes);
     expect(header.frameCount).toBe(FIXTURE_FRAMES);
-    expect(evfSightingCounts(fixture.bytes)).toEqual(counts);
     expect(counts.reduce((a, b) => a + b, 0)).toBe(fixture.records.length);
+
+    // FrameSightings (PLAN.md C16): counts plus each frame's raw 12-byte records, in order.
+    const sightings = evfFrameSightings(fixture.bytes);
+    expect(sightings.counts).toEqual(counts);
+    const busy = counts.findIndex((n) => n > 1);
+    const view = sightings.records(busy);
+    expect(view.byteLength).toBe(counts[busy]! * 12);
+    const first = fixture.records.find((r) => r.frame === busy)!;
+    expect(view.getFloat32(0, true)).toBeCloseTo(first.lon, 4);
+    expect(view.getFloat32(4, true)).toBeCloseTo(first.lat, 4);
+    expect(view.getUint16(8, true)).toBe(first.taxon);
+    expect(() => sightings.records(FIXTURE_FRAMES)).toThrow(RangeError);
     const grid = allocFrameGrid({ ...header });
     for (let f = 0; f < header.frameCount; f++) writeFrameFromEvf(grid, f, fixture.bytes, offsets[f]!);
 
@@ -132,25 +143,25 @@ describe("gap segmentation", () => {
 describe("frame index mapping", () => {
   const from = Date.parse("2026-09-01T00:00:00Z");
   const to = from + 95 * STEP;
+  const meta: FrameMeta = { frame0UnixMs: from, stepMinutes: FIXTURE_STEP_MINUTES, frameCount: 96 };
 
-  test("scrubber steps and grid frames coincide when the grid has one frame per step", () => {
+  test("scrubber steps land on grid frames when the grid has one frame per step", () => {
     expect(windowSteps(from, to)).toBe(95);
     for (let s = 0; s <= 95; s++) {
       const at = timeAtStep(s, from);
       expect(stepAt(at, from, to)).toBe(s);
-      expect(frameIndexAt(at, from, to, 96)).toBe(s);
-      expect(frameTimeMs(s, from, to, 96)).toBe(at);
+      expect(frameIndexAt(at, meta)).toBe(s);
+      expect(framesSpanMs(s, s + 1, meta)).toEqual([at, at + STEP]);
     }
   });
 
-  test("coarser grids share frames across steps; out-of-window instants clamp; no grid is -1", () => {
-    const hourlyTo = from + 24 * 4 * STEP; // 24 h window, 25 hourly frames
-    expect(frameIndexAt(from + 4 * STEP, from, hourlyTo, 25)).toBe(1);
-    expect(frameIndexAt(from + 5 * STEP, from, hourlyTo, 25)).toBe(1);
-    expect(frameIndexAt(from - 10 * STEP, from, to, 96)).toBe(0);
-    expect(frameIndexAt(to + 10 * STEP, from, to, 96)).toBe(95);
+  test("hourly grids share a frame across four steps; outside the grid there is no frame", () => {
+    const hourly: FrameMeta = { frame0UnixMs: from, stepMinutes: 60, frameCount: 24 };
+    expect([0, 1, 2, 3, 4].map((s) => frameIndexAt(timeAtStep(s, from), hourly))).toEqual([0, 0, 0, 0, 1]);
+    expect(frameIndexAt(from - STEP, hourly)).toBeNull();
+    expect(frameIndexAt(from + 24 * 3_600_000, hourly)).toBeNull();
+    expect(framesSpanMs(2, 5, hourly)).toEqual([from + 2 * 3_600_000, from + 5 * 3_600_000]);
     expect(stepAt(to + STEP, from, to)).toBe(95);
-    expect(frameIndexAt(from, from, to, 0)).toBe(-1);
-    expect(frameIndexAt(to, from, to, 1)).toBe(0);
   });
 });
+

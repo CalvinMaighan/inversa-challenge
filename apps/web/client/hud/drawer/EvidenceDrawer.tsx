@@ -8,9 +8,9 @@ import styled from "client/styled";
 
 import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
-import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, parseBacktestId, type HudSelection } from "../selection";
+import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
-import { evidenceBadges, loadEvidence, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
+import { evidenceBadges, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
 import { useLoad } from "./use-load";

@@ -7,6 +7,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import { THEME } from "client/state/theme";
 import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
+import { frameIndexAt } from "client/threads/api";
 
 import { Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
 import { useCell } from "../store";
@@ -14,10 +15,9 @@ import { alertRows } from "../Sync";
 import { formatClocks, isLive } from "../topbar/clock";
 import { alertBands } from "./alerts";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
-import { sightingCounts } from "./frame-stats";
-import { frameIndexAt, STEP_MS, stepAt, timeAtStep, windowSteps } from "./frames";
+import { stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
-import { useFrameGrid } from "./use-frame-grid";
+import { useFrameGrid, useFrameSightings } from "./use-frame-grid";
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32] as const;
 
@@ -233,19 +233,19 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   const tipRef = useRef<HTMLSpanElement>(null);
   const [width, setWidth] = useState(0);
   const [theme] = useActiveState(THEME);
-  const { grid, version } = useFrameGrid();
-  const counts = useCell(sightingCounts);
+  const { grid, meta, version } = useFrameGrid();
+  const sightings = useFrameSightings();
   const alerts = useCell(alertRows);
   const at = useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? "";
   const steps = windowSteps(from, to);
 
-  const frameCount = grid?.shape.frameCount ?? 0;
-  const frameSpacing = frameCount > 1 ? (to - from) / (frameCount - 1) : STEP_MS;
+  // Counts only mean something when they index the same frames as the grid.
+  const counts = sightings && meta && sightings.counts.length === meta.frameCount ? sightings.counts : null;
   // Recomputed per grid write, not per scrub step. `version` is the dependency that tracks SAB writes.
   const flags = useMemo(
-    () => (grid ? frameGapFlags(grid, counts && counts.length === frameCount ? counts : null, frameSpacing) : null),
+    () => (grid && meta ? frameGapFlags(grid, counts, meta.stepMinutes * 60_000) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version changes when the grid's contents change
-    [grid, version, counts, frameCount, frameSpacing],
+    [grid, meta, version, counts],
   );
   const bands = useMemo(() => alertBands(alerts, from, to), [alerts, from, to]);
 
@@ -264,8 +264,8 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(TRACK.height * dpr);
-    drawTrack(ctx, width, dpr, { fromMs: from, toMs: to, frameCount, flags, counts, bands }, readColors(canvas));
-  }, [width, from, to, frameCount, flags, counts, bands, theme]);
+    drawTrack(ctx, width, dpr, { fromMs: from, toMs: to, meta, flags, counts, bands }, readColors(canvas));
+  }, [width, from, to, meta, flags, counts, bands, theme]);
 
   const onPointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -274,11 +274,12 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
       const rect = e.currentTarget.getBoundingClientRect();
       const fx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
       const ms = from + fx * (to - from);
-      const frame = frameIndexAt(ms, from, to, frameCount);
+      const frame = frameIndexAt(ms, meta);
       const clock = formatClocks(ms);
       const lines = [`${clock.date} ${clock.utc}`];
-      if (frame >= 0 && counts && counts.length === frameCount) lines.push(`${counts[frame]} sightings`);
-      const f = frame >= 0 && flags ? flags[frame] : 0;
+      if (frame === null) lines.push("outside the loaded frames");
+      else if (counts) lines.push(`${counts[frame]} sightings`);
+      const f = frame !== null && flags ? flags[frame]! : 0;
       if (f & GAP_FLAG.ENV_MISSING) lines.push("no satellite data");
       else if (f & GAP_FLAG.CLOUD) lines.push("cloud / masked");
       if (f & GAP_FLAG.NO_SIGHTINGS) lines.push("no sightings ≥12 h");
@@ -289,7 +290,7 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
       const tipWidth = tip.offsetWidth;
       tip.style.transform = `translateX(${Math.min(rect.width - tipWidth, Math.max(0, fx * rect.width - tipWidth / 2))}px)`;
     },
-    [bands, counts, flags, frameCount, from, to, width],
+    [bands, counts, flags, meta, from, to, width],
   );
 
   const step = stepAt(Date.parse(at), from, to);

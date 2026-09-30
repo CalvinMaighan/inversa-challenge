@@ -15,6 +15,7 @@ describe("SELECTION", () => {
       key: "8723214:water_temp:1759262400000:ndbc",
     });
     expect(parseEvidenceId("hotspot:python:120:44:1759262400000")?.kind).toBe("hotspot");
+    expect(parseEvidenceId("backtest:python:14")).toEqual({ kind: "backtest", key: "python:14" });
   });
 
   test("parseEvidenceId rejects unknown kinds and empty parts", () => {

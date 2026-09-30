@@ -53,6 +53,12 @@ export function targetLabel(id: string, citationLabel?: string): string {
 
 type Located = { lon: number; lat: number } | null;
 
+/** Fetch runs and backtests have no place on the globe; skip them instead of loading their evidence for nothing. */
+function isPlaced(id: string): boolean {
+  const kind = parseEvidenceId(id)?.kind;
+  return kind !== undefined && kind !== "fetch" && kind !== "backtest";
+}
+
 /** Location for an id without a request, when the id itself carries it (hotspot cells). */
 function localLocation(id: string): Located | undefined {
   const hotspot = parseHotspotId(id);
@@ -75,8 +81,8 @@ export function useTargets(): Target[] {
   const wanted = useMemo(() => {
     const cites = citationKey ? citationKey.split("\u0002").map((row) => row.split("\u0001") as [string, string]) : [];
     const list: { id: string; label: string; selected: boolean }[] = [];
-    if (selectedId && parseEvidenceId(selectedId)) list.push({ id: selectedId, label: targetLabel(selectedId, cites.find(([id]) => id === selectedId)?.[1]), selected: true });
-    for (const [id, label] of cites) if (id !== selectedId) list.push({ id, label: targetLabel(id, label), selected: false });
+    if (selectedId && isPlaced(selectedId)) list.push({ id: selectedId, label: targetLabel(selectedId, cites.find(([id]) => id === selectedId)?.[1]), selected: true });
+    for (const [id, label] of cites) if (id !== selectedId && isPlaced(id)) list.push({ id, label: targetLabel(id, label), selected: false });
     return list;
   }, [selectedId, citationKey]);
 
