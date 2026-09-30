@@ -16,11 +16,7 @@ State at commit `81596be`, checked against the code:
    bun run data
    bun run dev
    ```
-2. With no `FIREWORKS_API_KEY`, load the scripted answers once the web server is up:
-   ```sh
-   curl -X POST http://localhost:3050/dev/agent/mock
-   ```
-   Against a local database, 7 of the 15 scripted questions complete. The other 8 look up station names that exist only in the eval's fixture stub, and end with `replay: no matching conditions row` or a similar error. Measured on the `bun run data` database with the questions in `apps/web/eval/golden.ts`. The walkthrough uses only questions that complete. With a Fireworks key, any question works and the answers are the live model's.
+2. The agent is the live model, `openai/gpt-6-luna` on OpenRouter. `bun run dev` reads `OPENROUTER_API_KEY` from Doppler `inversa`/`dev`; check that its first line says `agent: openrouter openai/gpt-6-luna`. If it says `agent: unavailable`, log in with `doppler login`: without the key the chat card shows `agent unavailable: OPENROUTER_API_KEY not set` (HTTP 503) and there is no scripted fallback. Answers are the model's own words, so they differ from run to run; the tools, citations and caveats are what to point at.
 3. Voice needs `XAI_API_KEY`. Without it, skip the voice beat in step 3; text covers the same ground.
 4. Open http://localhost:3050 in Chrome, full screen. For step 7, open a second Chrome window, not a tab, on the same URL.
 
@@ -110,7 +106,7 @@ bun run --cwd apps/signal-worker e2e                                            
 
 ### Close (6:30–7:00)
 
-Name what is not live yet: the deploy (H1–H3, H8), GOES push (H4), the real LLM (H5), voice (H6) and ion imagery (H7). Each has a gate with an `ABANDON` line naming the human step, not a silent gap.
+Name what is not live yet: the deploy (H1–H3, H8), GOES push (H4), voice (H6) and ion imagery (H7). Each has a gate with an `ABANDON` line naming the human step, not a silent gap.
 
 ## Scene: South Florida cold snap, 30 Jan – 3 Feb 2026
 
@@ -205,7 +201,7 @@ Times are UTC, with Miami local time (EST, UTC−5) in brackets.
 
 ## What to ask the agent
 
-These answers need the live agent (H5) and a working cold-snap window in the UI. The explain numbers below were measured on a database with only the scene loaded (`backfill --scene` into an empty data dir). With `bun run data`, the GBIF baseline changes the density normalization, and the same cell reads density 0.353 and score 0.707 at 17:00 on 1 Feb.
+These answers come from the live agent and need a working cold-snap window in the UI. The explain numbers below were measured on a database with only the scene loaded (`backfill --scene` into an empty data dir). With `bun run data`, the GBIF baseline changes the density normalization, and the same cell reads density 0.353 and score 0.707 at 17:00 on 1 Feb.
 
 - "Did the cold snap change iguana reports?" Expect the daily counts (8, 10, 63, 32, 28), tied to the sub-10 °C hours and the NWS warnings. Citations should include `sighting:`, `reading:` and `alert:` ids.
 - "Why is cell 292:142 hot at noon on 1 February?" Expect `explain_cell` at `2026-02-01T17:00:00Z`. Density 0.79, `activity.iguana_cold_stun_easy_capture_window` 2.0, `access.land_access` 1.0, score 1.58. Conditions: air 7.0 °C, stage 0.9 m, wave 1.3 m, wind 5.4 m/s.

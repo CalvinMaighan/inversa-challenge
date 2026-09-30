@@ -1,17 +1,60 @@
 /**
- * `bun run dev`: Axum API + Next web together, prefixed output, one Ctrl-C stops both.
- * Data lives in ./data (fill it with `bun run data`). Without FIREWORKS_API_KEY the agent runs in mock mode.
+ * `bun run dev`: Axum API, Next web and the signal Worker together, prefixed output, one Ctrl-C stops all three.
+ * Data lives in ./data (fill it with `bun run data`, which needs no secrets).
+ *
+ * Secrets come from Doppler project `inversa`, config `dev` (OPENROUTER_API_KEY for the agent, and any other
+ * keys set there), downloaded straight into the children's env and never printed. When doppler is missing or
+ * not logged in, the children get the plain env with a warning; without OPENROUTER_API_KEY the agent route
+ * answers 503 "agent unavailable: OPENROUTER_API_KEY not set".
  */
 import type { Subprocess } from "bun";
 
 const root = new URL("..", import.meta.url).pathname;
 
-const env = {
+/** Doppler `inversa`/`dev` secrets, or null with the reason it could not load them. */
+function dopplerSecrets(): { secrets: Record<string, string> } | { error: string } {
+  let result;
+  try {
+    result = Bun.spawnSync(
+      ["doppler", "secrets", "download", "--no-file", "--format", "json", "--project", "inversa", "--config", "dev"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+  } catch {
+    return { error: "doppler CLI not found" };
+  }
+  if (result.exitCode !== 0) {
+    // stderr carries doppler's reason (not logged in, no access); it never contains secret values.
+    const reason = result.stderr.toString().trim().split("\n").at(-1) || `exit ${result.exitCode}`;
+    return { error: reason };
+  }
+  try {
+    const parsed = JSON.parse(result.stdout.toString()) as Record<string, unknown>;
+    return {
+      secrets: Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string")),
+    };
+  } catch {
+    return { error: "doppler returned output that is not JSON" };
+  }
+}
+
+const doppler = dopplerSecrets();
+if ("error" in doppler) {
+  console.warn(`\x1b[33mwarning:\x1b[0m Doppler inversa/dev not loaded (${doppler.error}); using the plain environment.`);
+}
+
+// Variables already set in the shell win over Doppler, so a one-off override needs no Doppler edit.
+const env: Record<string, string | undefined> = {
+  ...("secrets" in doppler ? doppler.secrets : {}),
   ...process.env,
   INVERSA_DATA_DIR: process.env.INVERSA_DATA_DIR ?? `${root}data`,
   NEXT_PUBLIC_INVERSA_WS_URL: process.env.NEXT_PUBLIC_INVERSA_WS_URL ?? "ws://127.0.0.1:4041/v1/graphql",
-  AGENT_HARNESS: process.env.AGENT_HARNESS ?? (process.env.FIREWORKS_API_KEY ? "live" : "mock"),
 };
+
+const keySource = !env.OPENROUTER_API_KEY?.trim()
+  ? null
+  : process.env.OPENROUTER_API_KEY?.trim()
+    ? "shell env"
+    : "doppler inversa/dev";
 
 const procs: { name: string; color: string; proc: Subprocess }[] = [];
 
@@ -48,6 +91,11 @@ function shutdown(code: number) {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${env.AGENT_HARNESS} · web: http://localhost:3050`);
+const agent = keySource
+  ? `openrouter openai/gpt-6-luna (key from ${keySource})`
+  : "unavailable, OPENROUTER_API_KEY not set (/api/agent/stream answers 503)";
+console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${agent} · web: http://localhost:3050 · signal: http://127.0.0.1:8799`);
 start("api", "36", ["cargo", "run", "-q", "--release", "--manifest-path", "api/Cargo.toml"], root);
 start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
+// Same pinned wrangler as apps/signal-worker (package.json `dev`, scripts/e2e.ts); env dev allows origin localhost:3050.
+start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", "8799", "--env", "dev"], `${root}apps/signal-worker`);

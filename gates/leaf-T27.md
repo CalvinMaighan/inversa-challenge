@@ -7,8 +7,8 @@ Scope: seed each R5 case (stale, missing, duplicate, conflicting, late). Each on
   EXPECT: /running [1-9][\s\S]*test result: ok/
   EVIDENCE: pending
 
-- [ ] G2: the agent eval includes the 5 quality questions and states each case; the replay eval prints the quality subset `EVAL quality passed 5/5`
-  CHECK: cd apps/web && AGENT_EVAL_MODE=replay bun run eval 2>&1 | grep "EVAL quality"
+- [ ] G2: the agent eval includes the 5 quality questions and states each case; the live eval prints the quality subset `EVAL quality passed 5/5`
+  CHECK: bun run eval 2>&1 | grep "EVAL quality"
   EXPECT: EVAL quality passed 5/5
   EVIDENCE: pending
 

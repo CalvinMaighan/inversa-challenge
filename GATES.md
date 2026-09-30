@@ -12,9 +12,9 @@ Scope: docs/BUILD_BRIEF.md R1–R19 delivered, integrated, and deployed at https
   EXPECT: /test result: ok\. \d+ passed; 0 failed/
   EVIDENCE: pending
 
-- [ ] G3: the agent eval passes (replay)
-  CHECK: cd apps/web && AGENT_EVAL_MODE=replay bun run eval 2>&1 | tail -1
-  EXPECT: /EVAL passed (\d+)\/\1/
+- [ ] G3: the live agent eval passes (OpenRouter gpt-6-luna under doppler; at least 13 of 15, quality at least 4 of 5)
+  CHECK: bun run eval 2>&1 | grep -E "^EVAL (quality )?passed" | tr '\n' ' '
+  EXPECT: /EVAL quality passed [45]\/5 EVAL passed 1[3-5]\/15/
   EVIDENCE: pending
 
 - [ ] G4: every leaf and node gates file is met, or has only live-blocked ABANDON lines

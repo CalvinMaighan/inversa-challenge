@@ -27,14 +27,14 @@ The first release build compiles HDF5 from source and takes a few minutes. Later
 ```sh
 bun install
 bun run data      # backfill live iNat, NAS and GBIF into ./data, rebuild frames, load the cold-snap scene
-bun run dev       # Axum on 127.0.0.1:4041 and Next on http://localhost:3050
+bun run dev       # Axum on 127.0.0.1:4041, Next on http://localhost:3050, signal Worker on 127.0.0.1:8799
 ```
 
 Open http://localhost:3050 (http://127.0.0.1:3050 works too).
 
 - `bun run data` defaults to 2 days of iNaturalist plus a 5-year NAS and GBIF baseline. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline is about 14,500 records and dominates the run time.
 - `INVERSA_DATA_DIR=/some/dir` moves the databases and the raw archive. Every script defaults it to `./data`, which git ignores.
-- `bun run dev` needs ports 4041 and 3050 free. Both ports are fixed in `scripts/dev.ts` and `apps/web/package.json`, and a second checkout running `bun run dev` blocks them.
+- `bun run dev` needs ports 4041, 3050 and 8799 free. The ports are fixed in `scripts/dev.ts` and `apps/web/package.json`, and a second checkout running `bun run dev` blocks them. The signal Worker runs `wrangler dev --local --env dev` from `apps/signal-worker`, the env that allows origin localhost:3050; Ctrl-C stops all three processes.
 - The running API polls the live feeds on its own. Set `INVERSA_SOURCES=off` to stop all fetching and work from what is already in the databases.
 
 Offline, with no network at all, load the recorded fixtures instead of `bun run data`:
@@ -51,7 +51,7 @@ Put keys in a `.env.local` at the repo root. Bun loads it for `bun run dev` and 
 
 | Variable | Enables | Without it |
 |---|---|---|
-| `FIREWORKS_API_KEY` | The live agent: DeepSeek `deepseek-v4-flash` on Fireworks through the cordis harness | `scripts/dev.ts` sets `AGENT_HARNESS=mock` (see mock mode below) |
+| `OPENROUTER_API_KEY` | The agent: `openai/gpt-6-luna` on OpenRouter through the cordis harness. `bun run dev` loads it from Doppler `inversa`/`dev` (see [Agent](#agent) below) | `POST /api/agent/stream` answers 503 `agent unavailable: OPENROUTER_API_KEY not set`. There is no mock or fallback model |
 | `XAI_API_KEY` | Voice: the grok-voice relay behind `/api/voice/*` | `POST /api/voice/session` answers 503 "Voice mode is not configured". Text chat still works |
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | The ion imagery rung: Cesium World Terrain, Bing aerial, and Google Photorealistic 3D tiles over Miami and the Keys. Deploys read it from Doppler as `CESIUM_ION_TOKEN` | Keyless Esri World Imagery on the ellipsoid, with OpenStreetMap if Esri fails |
 | `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | GOES-19 push: SQS long-poll on the NODD `NewGOES19Object` topic, then LST, SST, fire and cloud cells. Setup: [deploy/aws/README.md](deploy/aws/README.md) | The `goes19` feed chip reads DOWN with the note `disabled: GOES_SQS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY not set` |
@@ -59,27 +59,13 @@ Put keys in a `.env.local` at the repo root. Bun loads it for `bun run dev` and 
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RAW` | Raw payloads archived to Cloudflare R2 | Raw payloads go to `<data dir>/archive/raw/<source>/<yyyy>/<mm>/<dd>/` |
 | `INGEST_HOOK_SECRET` | The HMAC webhook `POST /v1/ingest/hook/:source` | The hook answers 503 |
 
-### Mock mode
+### Agent
 
-With no `FIREWORKS_API_KEY`, the agent runs on a scripted mock LLM with no network. It answers "ok" to anything it has no script for. To get real answers in mock mode, load the 15 golden eval plans first:
+The agent always calls a real model: `openai/gpt-6-luna` on OpenRouter (`https://openrouter.ai/api/v1`), with `reasoning: {effort: "low"}`. There is no mock mode. `bun run dev` downloads the Doppler `inversa`/`dev` secrets into the child processes' environment without printing them. When doppler is missing or not logged in, it warns and uses the plain environment. A variable already set in your shell wins over Doppler.
 
-```sh
-curl -X POST http://localhost:3050/dev/agent/mock
-```
+Without `OPENROUTER_API_KEY`, `POST /api/agent/stream` answers 503 with `{"error":"agent unavailable: OPENROUTER_API_KEY not set"}`. The chat card shows that error. Nothing falls back to scripted answers.
 
-The mock then answers the eval's questions, typed word for word, with real tool calls against your local API and citations that open in the drawer. The questions are in `apps/web/eval/golden.ts`. The route returns 404 unless `AGENT_HARNESS=mock`.
-
-The replay plans were written for the eval's fixture stub, so against a local database only 7 of the 15 complete. Measured on the `bun run data` database, these work:
-
-- Which data feeds are stale or down right now?
-- Any NWS alerts in effect for Florida Bay right now?
-- Why does the top python cell score so high tonight?
-- How well have the python hotspot scores held up over the last two weeks?
-- Take me to Flamingo.
-- Show me recent tegu sightings around Homestead.
-- How many distinct pythons were reported around Shark Valley this week?
-
-The other 8 end with an error such as `replay: no matching conditions row`, because they look up stations by fixture names.
+The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/M input and $0.50/M output that is about $1.50 a day, and never more than $5.
 
 ## Architecture
 
@@ -92,7 +78,7 @@ The other 8 end with an error such as `replay: no matching conditions row`, beca
         v                                           v
    Axum API (Rust, 127.0.0.1:4041)             Next 16 on Bun (127.0.0.1:3050)
      push: GOES SQS, NWWS XMPP, HMAC hook         UI shell and static assets
-     poll: iNat, NWS, USGS, NDBC, CO-OPS,          agent: cordis + dsh, DeepSeek on Fireworks
+     poll: iNat, NWS, USGS, NDBC, CO-OPS,          agent: cordis + dsh, GPT-6 Luna, OpenRouter
            Open-Meteo, NAS, GBIF                   voice: grok-voice relay
      SQLite: 1 writer thread + read pool           agent tools call /v1/graphql over loopback
      frames + hotspots (rayon), GraphQL, Hub
@@ -198,11 +184,12 @@ The agent also strips any `[e:<id>]` citation whose id no tool returned in that 
 
 | Command | What it runs | Last measured on this commit |
 |---|---|---|
-| `bun run test` | bun tests in every workspace | web 516 pass, active-state 96, signal-worker 35, active-theme 4, all 0 fail |
+| `bun run test` | bun tests in every workspace; needs no secrets and skips `apps/web/tests/live` | web 541 pass, active-state 96, signal-worker 35, active-theme 4, all 0 fail |
+| `bun run test:live` | the agent against the real model under `doppler run --project inversa --config dev`: a real tool call, verified citations, the route's NDJSON ending in `done`, the turn, tool-call and runtime limits, the answer cache, and the voice runner | 8 pass, 0 fail |
 | `bun run test:api` | `cargo test` for the API | 205 passed, 0 failed, 2 ignored: a live call to five upstream APIs, and the release-mode frames benchmark |
-| `cd apps/web && AGENT_EVAL_MODE=replay bun run eval` | 15 golden questions against a fixture GraphQL stub with the scripted LLM; checks tools called, citation validity and required phrases | `EVAL passed 15/15`, `EVAL quality passed 5/5` |
+| `bun run eval` | 15 golden questions to the live model (under doppler) with tools answering from a fixture GraphQL stub; checks tools called, citation validity, citations per evidence kind and required phrases | varies run to run: 15/15, 15/15, 14/15 and 14/15 over four runs (quality 5/5, 5/5, 5/5, 4/5), about $0.02 a run |
 | `bun run check` | lint, typecheck, `bun run test`, `bun run test:api`; prints `CHECK-OK` | `CHECK-OK` |
-| `bun run --cwd apps/web e2e:agent`, `e2e:globe`, `e2e:scrub`, `e2e:dbworker` | Playwright against a production build | see the leaf gates below |
+| `bun run --cwd apps/web e2e:agent`, `e2e:globe`, `e2e:scrub`, `e2e:dbworker` | Playwright against a production build; `e2e:agent` runs `next dev` with the live model under doppler | see the leaf gates below |
 | `bun run --cwd apps/signal-worker e2e` | two peers against `wrangler dev --local`; prints `EXCHANGE-OK` | `gates/leaf-T20.md` G3 |
 
 Gate ledgers: every task has a gates file under [gates/](gates/), with a runnable `CHECK`, an `EXPECT` and the recorded `EVIDENCE`. The root file is [GATES.md](GATES.md). To re-run one:
@@ -223,7 +210,7 @@ The runbook is [deploy/README.md](deploy/README.md): one Hetzner VM with Caddy, 
 | H2 | DNS `A` record for `inversa.calvinmaighan.dev` | TLS and the public URL |
 | H3 | R2 buckets `inversa-raw`, `inversa-litestream`, `inversa-signal` with a 1-day lifecycle, an R2 token, a TURN key, `CLOUDFLARE_API_TOKEN` | raw archive, Litestream, signal Worker |
 | H4 | SQS queue subscribed to the NODD topic with the filter policy, an IAM user limited to receive and delete ([deploy/aws/README.md](deploy/aws/README.md)) | GOES push |
-| H5 | `FIREWORKS_API_KEY` | the live agent |
+| H5 | `OPENROUTER_API_KEY` in Doppler `inversa`: done, set in `dev` and `prd` | the agent |
 | H6 | `XAI_API_KEY` | voice |
 | H7 | `CESIUM_ION_TOKEN` | ion imagery and Google 3D |
 | H8 | Doppler project `inversa` with `dev` and `prd`, and the `DOPPLER_TOKEN` GitHub secret | release and deploy workflows |

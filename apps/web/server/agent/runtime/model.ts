@@ -1,65 +1,48 @@
 /**
- * Catalog id to Fireworks wire route. Ids match deedee
- * `shared/providers/fireworks/fireworks-models.ts`.
+ * The agent's one model: GPT-6 Luna through OpenRouter's OpenAI-compatible API.
+ * cordis.yml names it (`agent-default-model`); this module owns the wire route.
  */
 
-export const FIREWORKS_OPENAI_BASE_URL = "https://api.fireworks.ai/inference/v1";
+export const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 
-export type AgentModelTier = "flash" | "pro";
+/** OpenRouter model id, as written in cordis.yml and sent on the wire. */
+export const AGENT_MODEL_ID = "openai/gpt-6-luna";
+
+/** OpenRouter app attribution. */
+export const OPENROUTER_HEADERS = {
+  "HTTP-Referer": "https://inversa.calvinmaighan.dev",
+  "X-Title": "Everglades Ops",
+} as const;
+
+export const MISSING_KEY_MESSAGE = "agent unavailable: OPENROUTER_API_KEY not set";
+
+/** OpenRouter `reasoning.effort` values the agent uses. */
+export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high";
 
 export type AgentLlmEndpoint = {
-  tier: AgentModelTier;
-  /** Catalog id, as written in cordis.yml. */
-  catalogId: string;
-  provider: "fireworks";
-  /** Wire id sent to Fireworks. */
+  provider: "openrouter";
   model: string;
   baseUrl: string;
   contextWindow: number;
+  /** Output cap. Reasoning tokens count against it. */
   maxTokens: number;
-  /** Fireworks `reasoning_effort` for DeepSeek v4. */
-  reasoningEffort: "none" | "low" | "medium" | "high";
+  reasoningEffort: ReasoningEffort;
 };
 
-/** Default model (cordis.yml `agent-default-model`). */
-export const FLASH_CATALOG_ID = "deepseek-v4-flash";
-/** Escalation model (cordis.yml `agent-escalation-model`). */
-export const PRO_CATALOG_ID = "deepseek-v4-pro-0813";
-
-const ENDPOINTS: Record<string, AgentLlmEndpoint> = {
-  [FLASH_CATALOG_ID]: {
-    tier: "flash",
-    catalogId: FLASH_CATALOG_ID,
-    provider: "fireworks",
-    model: "accounts/fireworks/models/deepseek-v4p1-flash",
-    baseUrl: FIREWORKS_OPENAI_BASE_URL,
-    contextWindow: 160_000,
-    maxTokens: 8_192,
-    reasoningEffort: "low",
-  },
-  [PRO_CATALOG_ID]: {
-    tier: "pro",
-    catalogId: PRO_CATALOG_ID,
-    provider: "fireworks",
-    model: "accounts/fireworks/models/deepseek-v4-pro-0813",
-    baseUrl: FIREWORKS_OPENAI_BASE_URL,
-    contextWindow: 1_048_576,
-    maxTokens: 8_192,
-    reasoningEffort: "medium",
-  },
+const LUNA: AgentLlmEndpoint = {
+  provider: "openrouter",
+  model: AGENT_MODEL_ID,
+  baseUrl: OPENROUTER_BASE_URL,
+  contextWindow: 1_050_000,
+  maxTokens: 16_384,
+  reasoningEffort: "low",
 };
 
-/** Accepts a catalog id, the `deepseek-v4-pro` alias, or a Fireworks wire id. */
 export function resolveAgentEndpoint(modelId: string): AgentLlmEndpoint {
-  const id = modelId.trim() === "deepseek-v4-pro" ? PRO_CATALOG_ID : modelId.trim();
-  const found =
-    ENDPOINTS[id] ??
-    Object.values(ENDPOINTS).find((endpoint) => endpoint.model === id || endpoint.model.split("/").pop() === id);
-  if (!found) throw new Error(`Unknown agent model: ${modelId}`);
-  // FIREWORKS_BASE_URL points the adapter at a proxy or a local OpenAI-compatible fake.
-  return { ...found, baseUrl: process.env.FIREWORKS_BASE_URL?.trim() || found.baseUrl };
+  if (modelId.trim() !== AGENT_MODEL_ID) throw new Error(`Unknown agent model: ${modelId} (only ${AGENT_MODEL_ID})`);
+  return LUNA;
 }
 
-export function fireworksApiKey(): string | undefined {
-  return process.env.FIREWORKS_API_KEY?.trim() || undefined;
+export function openRouterApiKey(): string | undefined {
+  return process.env.OPENROUTER_API_KEY?.trim() || undefined;
 }

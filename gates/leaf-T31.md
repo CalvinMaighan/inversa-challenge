@@ -3,7 +3,7 @@
 Scope: verify the HMAC hook, the media proxy SSRF guard, signal Worker CORS, that no secrets reach the client bundle, and rate limits on /api/agent and /api/voice.
 
 - [ ] G1: no secret names or key prefixes appear in the client bundle
-  CHECK: cd apps/web && bun run build >/dev/null 2>&1 && grep -rlE "FIREWORKS_API_KEY|XAI_API_KEY|INGEST_HOOK_SECRET|R2_SECRET|sk-[A-Za-z0-9]{20}|xai-[A-Za-z0-9]{20}" .next/static | wc -l | tr -d ' '
+  CHECK: cd apps/web && bun run build >/dev/null 2>&1 && grep -rlE "OPENROUTER_API_KEY|sk-or-[A-Za-z0-9-]{20}|XAI_API_KEY|INGEST_HOOK_SECRET|R2_SECRET|sk-[A-Za-z0-9]{20}|xai-[A-Za-z0-9]{20}" .next/static | wc -l | tr -d ' '
   EXPECT: /^0$/m
   EVIDENCE: pending
 

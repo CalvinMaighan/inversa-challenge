@@ -5,12 +5,12 @@ import { SessionId } from "@deepseek-ai/dsh-session";
 
 import { recordTokens, tokenBudget } from "@/server/agent/budget";
 import { answerCacheKey, readAnswerCache, writeAnswerCache } from "@/server/agent/cache";
-import { bootHarness, harnessModels, type HarnessMode } from "@/server/agent/cordis/boot";
+import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
 import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
 import { AGENT_SYSTEM_PROMPT, viewContext } from "@/server/agent/prompt";
-import { resolveAgentEndpoint } from "@/server/agent/runtime/model";
+import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
@@ -18,8 +18,6 @@ import { dataVersion, fetchFeeds } from "@/server/agent/tools/gql";
 import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
 
 export type RunTurnParams = AgentStreamRequest & {
-  /** Defaults to `AGENT_HARNESS=mock` from the environment, else live. */
-  harnessMode?: HarnessMode;
   /** Client disconnect. Cancels the loop and any in-flight GraphQL call. */
   signal?: AbortSignal;
   /** Tests tighten these. */
@@ -36,7 +34,7 @@ export type RunTurnResult = {
   citations: string[];
   toolCalls: ToolCallRecord[];
   usage: TurnUsage;
-  /** Catalog id of the model that produced the answer, or "cache". */
+  /** OpenRouter model id that produced the answer, "cache", or "none". */
   model: string;
   cached: boolean;
   limitHit?: LimitHit;
@@ -52,10 +50,6 @@ const REPLAYED = new Set<AgentStreamEvent["type"]>([
   "debug",
 ]);
 
-function harnessModeFromEnv(): HarnessMode {
-  return process.env.AGENT_HARNESS?.trim() === "mock" ? "mock" : "live";
-}
-
 function referenceTime(params: RunTurnParams): Date {
   if (params.now) return params.now;
   const viewTime = params.view ? Date.parse(params.view.time) : NaN;
@@ -68,22 +62,10 @@ function transcript(history: SessionMessage[]): string {
 
 const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
-type Attempt = {
-  content: string;
-  citations: string[];
-  toolCalls: ToolCallRecord[];
-  usage: TurnUsage;
-  error?: string;
-  streamedContent: boolean;
-  limitHit?: LimitHit;
-};
-
 /**
  * Runs one agent turn: opens a fresh harness session, binds the capability
  * tools, seeds the prior transcript and the current view, asks the question
- * and streams C7 events. Flash answers; Pro (cordis.yml escalation row) re-runs
- * the turn when Flash fails before any answer text reached the client.
- * Always ends with exactly one `done` event.
+ * and streams C7 events. Always ends with exactly one `done` event.
  */
 export async function runTurn(
   params: RunTurnParams,
@@ -116,7 +98,6 @@ async function runTurnUnguarded(
   params: RunTurnParams,
   onEvent: (event: AgentStreamEvent) => void,
 ): Promise<RunTurnResult> {
-  const mode = params.harnessMode ?? harnessModeFromEnv();
   const limits: AgentLimits = { ...AGENT_LIMITS, ...params.limits };
   const now = referenceTime(params);
   const question = params.question.trim();
@@ -125,15 +106,18 @@ async function runTurnUnguarded(
     onEvent({ type: "done", content: result.content });
     return result;
   };
+  const refuse = (message: string) => {
+    onEvent({ type: "error", message });
+    return finish({ content: "", citations: [], toolCalls: [], usage: empty, model: "none", cached: false });
+  };
 
   const budget = tokenBudget();
   if (budget.remaining <= 0) {
-    onEvent({
-      type: "error",
-      message: `Daily agent token budget (${budget.limit.toLocaleString("en-US")}) is used up. It resets at 00:00 UTC.`,
-    });
-    return finish({ content: "", citations: [], toolCalls: [], usage: empty, model: "none", cached: false });
+    return refuse(
+      `Daily agent token budget (${budget.limit.toLocaleString("en-US")}) is used up. It resets at 00:00 UTC.`,
+    );
   }
+  if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
 
   const history = sessionHistory(params.sessionId);
 
@@ -172,14 +156,14 @@ async function runTurnUnguarded(
   };
 
   const registry = params.registry ?? buildAgentRegistry();
-  const root = await bootHarness(mode);
-  const models = harnessModels(root);
-  const primary = resolveAgentEndpoint(models.primary.model);
+  const root = await bootHarness();
+  const entry = harnessModel(root);
+  const endpoint = resolveAgentEndpoint(entry.model);
   const context = viewContext(params.view, now);
   const prior = transcript(history);
   emit({
     type: "context",
-    windowTokens: primary.contextWindow,
+    windowTokens: endpoint.contextWindow,
     segments: [
       { label: "system", tokens: estimateTokens(AGENT_SYSTEM_PROMPT) },
       {
@@ -194,15 +178,12 @@ async function runTurnUnguarded(
   const deadline = AbortSignal.timeout(limits.maxRuntimeMs);
   const turnSignal = params.signal ? AbortSignal.any([params.signal, deadline]) : deadline;
 
-  // Reasoning effort is the adapter's per-model default (resolveModel), so the mock and Fireworks both accept it.
-  const attempt = async (
-    entry: { provider: string; model: string },
-    emit: (event: AgentStreamEvent) => void,
-  ): Promise<Attempt> => {
-    const endpoint = resolveAgentEndpoint(entry.model);
-    const ledger = new EvidenceLedger();
-    const agentOptions = { provider: entry.provider, model: endpoint.catalogId, maxTokens: endpoint.maxTokens };
-    const handle = await root.agents.create({
+  // Reasoning effort is the adapter's per-model default (resolveModel).
+  const ledger = new EvidenceLedger();
+  const agentOptions = { provider: entry.provider, model: endpoint.model, maxTokens: endpoint.maxTokens };
+  let handle: Awaited<ReturnType<typeof root.agents.create>>;
+  try {
+    handle = await root.agents.create({
       sessionId: SessionId(`${params.sessionId}-${randomUUID()}`),
       agentOptions,
       setup(agentCtx) {
@@ -211,100 +192,75 @@ async function runTurnUnguarded(
         agentCtx.on("agent/request", async (_payload, next) => ({ ...(await next()), ...agentOptions }));
       },
     });
-    const agent = handle.agent;
-    let limitHit: LimitHit | undefined;
-    const onLimit = (hit: LimitHit) => {
-      limitHit ??= hit;
-      const what = hit.kind === "runtime" ? `${hit.limit / 1000} s runtime` : `${hit.limit} ${hit.kind.replace("_", " ")}`;
-      emit({ type: "debug", text: `limit reached: ${what}` });
-    };
-    attachTurnLimits(agent, agent.ctx, limits, onLimit);
-    const bridge = attachStreamBridge(agent, ledger, emit);
-    const cancel = () => {
-      if (deadline.aborted) onLimit({ kind: "runtime", limit: limits.maxRuntimeMs });
-      agent.cancel({ kind: "hook", reason: "timeout-or-client-abort" });
-    };
-    if (turnSignal.aborted) cancel();
-    else turnSignal.addEventListener("abort", cancel, { once: true });
-    try {
-      if (prior) {
-        agent.inject(
-          createUserMessage({
-            content: [{ type: "text", text: `Conversation so far:\n${prior}` }],
-            source: { kind: "plugin", plugin: "inversa-history", form: "recall" },
-          }),
-        );
-      }
-      agent.inject(
-        createUserMessage({
-          content: [{ type: "text", text: context }],
-          source: { kind: "plugin", plugin: "inversa-view", form: "recall" },
-        }),
-      );
-      agent.followup(createUserMessage({ content: [{ type: "text", text: question }], source: { kind: "user" } }));
-      await agent.whenIdle();
-      return {
-        content: bridge.finalText(),
-        citations: bridge.citations(),
-        toolCalls: bridge.toolCalls,
-        usage: bridge.usage,
-        error: bridge.finishError,
-        streamedContent: bridge.streamedContent,
-        limitHit,
-      };
-    } finally {
-      turnSignal.removeEventListener("abort", cancel);
-      await handle.dispose();
-    }
-  };
-
-  let model = primary.catalogId;
-  let result: Attempt;
-  try {
-    // Hold the primary's error events until we know whether Pro takes over.
-    const heldErrors: AgentStreamEvent[] = [];
-    result = await attempt(models.primary, (event) => (event.type === "error" ? heldErrors.push(event) : emit(event)));
-    const failedEarly = !result.streamedContent && (result.error !== undefined || !result.content);
-    if (!(failedEarly && !result.limitHit && !turnSignal.aborted)) {
-      for (const event of heldErrors) emit(event);
-    } else {
-      model = resolveAgentEndpoint(models.escalation.model).catalogId;
-      emit({ type: "debug", text: `escalating to ${model}: ${result.error ?? "empty reply"}` });
-      const first = result;
-      result = await attempt(models.escalation, emit);
-      result.usage = {
-        promptTokens: first.usage.promptTokens + result.usage.promptTokens,
-        completionTokens: first.usage.completionTokens + result.usage.completionTokens,
-        cacheRead: first.usage.cacheRead + result.usage.cacheRead,
-      };
-      result.toolCalls = [...first.toolCalls, ...result.toolCalls];
-    }
   } catch (error) {
     emit({ type: "error", message: error instanceof Error ? error.message : "Agent turn failed" });
-    return finish({ content: "", citations: [], toolCalls: [], usage: empty, model, cached: false });
+    return finish({ content: "", citations: [], toolCalls: [], usage: empty, model: endpoint.model, cached: false });
   }
 
-  recordTokens(result.usage.promptTokens + result.usage.completionTokens);
-  if (!result.content && !result.error) {
+  const agent = handle.agent;
+  let limitHit: LimitHit | undefined;
+  const onLimit = (hit: LimitHit) => {
+    limitHit ??= hit;
+    const what = hit.kind === "runtime" ? `${hit.limit / 1000} s runtime` : `${hit.limit} ${hit.kind.replace("_", " ")}`;
+    emit({ type: "debug", text: `limit reached: ${what}` });
+  };
+  attachTurnLimits(agent, agent.ctx, limits, onLimit);
+  const bridge = attachStreamBridge(agent, ledger, emit);
+  const cancel = () => {
+    if (deadline.aborted) onLimit({ kind: "runtime", limit: limits.maxRuntimeMs });
+    agent.cancel({ kind: "hook", reason: "timeout-or-client-abort" });
+  };
+  if (turnSignal.aborted) cancel();
+  else turnSignal.addEventListener("abort", cancel, { once: true });
+  let failed = false;
+  try {
+    if (prior) {
+      agent.inject(
+        createUserMessage({
+          content: [{ type: "text", text: `Conversation so far:\n${prior}` }],
+          source: { kind: "plugin", plugin: "inversa-history", form: "recall" },
+        }),
+      );
+    }
+    agent.inject(
+      createUserMessage({
+        content: [{ type: "text", text: context }],
+        source: { kind: "plugin", plugin: "inversa-view", form: "recall" },
+      }),
+    );
+    agent.followup(createUserMessage({ content: [{ type: "text", text: question }], source: { kind: "user" } }));
+    await agent.whenIdle();
+  } catch (error) {
+    failed = true;
+    emit({ type: "error", message: error instanceof Error ? error.message : "Agent turn failed" });
+  } finally {
+    turnSignal.removeEventListener("abort", cancel);
+    await handle.dispose();
+  }
+
+  const content = bridge.finalText();
+  const usage = bridge.usage;
+  recordTokens(usage.promptTokens + usage.cacheRead + usage.completionTokens);
+  if (!content && !bridge.finishError && !failed) {
     emit({
       type: "error",
-      message: result.limitHit
-        ? `Stopped at the ${result.limitHit.kind.replace("_", " ")} limit before an answer.`
+      message: limitHit
+        ? `Stopped at the ${limitHit.kind.replace("_", " ")} limit before an answer.`
         : "The model returned an empty reply.",
     });
   }
-  appendSessionTurn(params.sessionId, question, result.content);
-  const clean = result.content && !result.error && !result.limitHit;
+  appendSessionTurn(params.sessionId, question, content);
+  const clean = content && !bridge.finishError && !failed && !limitHit;
   if (cacheKey && clean) {
-    writeAnswerCache(cacheKey, { events: recorded, content: result.content, citations: result.citations });
+    writeAnswerCache(cacheKey, { events: recorded, content, citations: bridge.citations() });
   }
   return finish({
-    content: result.content,
-    citations: result.citations,
-    toolCalls: result.toolCalls,
-    usage: result.usage,
-    model,
+    content,
+    citations: bridge.citations(),
+    toolCalls: bridge.toolCalls,
+    usage,
+    model: endpoint.model,
     cached: false,
-    limitHit: result.limitHit,
+    limitHit,
   });
 }

@@ -1,7 +1,11 @@
 /**
- * Daily token budget (`AGENT_DAILY_TOKENS`, default 2,000,000), counted in
+ * Daily token budget (`AGENT_DAILY_TOKENS`, default 10,000,000), counted in
  * process and mirrored to `<data dir>/agent-budget.json` so a restart keeps
  * the day's spend. The day rolls over at UTC midnight.
+ *
+ * GPT-6 Luna on OpenRouter costs $0.10/M input and $0.50/M output. A turn is
+ * mostly input (system prompt, tools and tool results are re-sent each step),
+ * so 10M tokens is about $1 to $1.50 a day and never more than $5.
  */
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
@@ -9,7 +13,7 @@ import { join } from "node:path";
 
 import { dataDir } from "@/server/agent/config";
 
-const DEFAULT_DAILY_TOKENS = 2_000_000;
+export const DEFAULT_DAILY_TOKENS = 10_000_000;
 
 type BudgetFile = { day: string; used: number };
 

@@ -17,6 +17,7 @@
     "lint": "bun run --cwd apps/web lint",
     "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
+    "test:live": "bun run --cwd apps/web test:live",
     "test:api": "cargo test --manifest-path api/Cargo.toml",
     "eval": "bun run --cwd apps/web eval",
     "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK"

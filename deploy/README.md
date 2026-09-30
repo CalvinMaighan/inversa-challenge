@@ -62,7 +62,7 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
 - [ ] In `prd`, set these secrets. The first three are required: `deploy.yml` refuses to ship without them, because Litestream restore and replication need them. The others enable their own features.
   - `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`
   - `R2_BUCKET_RAW` (`inversa-raw`)
-  - `FIREWORKS_API_KEY`, `XAI_API_KEY`
+  - `OPENROUTER_API_KEY` (the agent: `openai/gpt-6-luna` on OpenRouter; set in `dev` and `prd`. Without it `/api/agent/stream` answers 503), `XAI_API_KEY`
   - `CESIUM_ION_TOKEN`: `release.yml` inlines it into the client bundle as `NEXT_PUBLIC_CESIUM_ION_TOKEN`.
   - `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - `NWWS_USER`, `NWWS_PASS` (optional)

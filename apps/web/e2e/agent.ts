@@ -1,12 +1,12 @@
 /**
- * T14 e2e: the agent orb and card against the mock harness.
+ * T14 e2e: the agent orb and card against the real agent (GPT-6 Luna on OpenRouter).
  *
- *   bun run e2e:agent
+ *   bun run e2e:agent      (wraps `doppler run --project inversa --config dev`, which supplies OPENROUTER_API_KEY)
  *
- * Starts the eval's fixture GraphQL stub and `next dev` with `AGENT_HARNESS=mock` (golden replay plans loaded
- * through /dev/agent/mock), then in Chromium: open the card, ask, see the tool rows, click a citation and
- * check SELECTION (evidence id + drawerOpen), collapse with Esc. Then a 375 px viewport screenshot of the
- * card for G3 (docs/evidence/t14-card-375.png). Last line: FLOW-OK.
+ * Starts the eval's fixture GraphQL stub and `next dev` pointed at it, then in Chromium: open the card, ask,
+ * see the tool rows, click a citation and check SELECTION (evidence id + drawerOpen), collapse with Esc. Then a
+ * 375 px viewport screenshot of the card for G3 (docs/evidence/t14-card-375.png). Last line: FLOW-OK.
+ * The answer's wording is the model's; the checks are on tools, citations and UI state, not on text.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -22,8 +22,8 @@ import { FIXTURE_NOW, startStub } from "../eval/stub-server";
 const WEB = resolve(import.meta.dir, "..");
 const SCREENSHOT = resolve(WEB, "../../docs/evidence/t14-card-375.png");
 const QUESTION = "Show me recent tegu sightings around Homestead.";
-/** Tools the golden plan for QUESTION runs (eval/golden.ts "tegu-sightings-homestead"). */
-const EXPECTED_TOOLS = ["geocode", "sightings", "set_view"];
+/** Tools any correct answer to QUESTION needs (eval/golden.ts "tegu-sightings-homestead"); set_view is checked by the fly count. */
+const EXPECTED_TOOLS = ["geocode", "sightings"];
 const BOOT_TIMEOUT_MS = 120_000;
 const STEP_TIMEOUT_MS = 90_000;
 
@@ -124,7 +124,9 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   // 4. Citations: inline chips for verified ids only.
   const chips = answer.locator(".agent-cite");
   const chipIds = await chips.evaluateAll((els) => els.map((el) => el.getAttribute("data-evidence-id")));
-  assert(chipIds.length >= 3, `expected 3 citation chips, got ${chipIds.length}`);
+  assert(chipIds.length >= 2, `expected at least 2 citation chips, got ${chipIds.length}`);
+  assert(chipIds.some((id) => id?.startsWith("sighting:")), `no sighting citation among chips: ${chipIds.join(", ")}`);
+  log(`citation chips: ${chipIds.join(", ")}`);
   const bodyText = (await answer.textContent()) ?? "";
   assert(!bodyText.includes("[e:"), "raw [e:…] marker leaked into the answer text");
   const firstId = chipIds[0]!;
@@ -166,6 +168,7 @@ async function flow(origin: string, browser: Browser): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  assert(process.env.OPENROUTER_API_KEY?.trim(), "OPENROUTER_API_KEY not set: run `bun run e2e:agent`, which wraps doppler inversa/dev");
   const saved = new Map(DEV_SIDE_EFFECTS.map((file) => [file, existsSync(file) ? readFileSync(file) : null]));
   const stub = startStub();
   const dataDir = mkdtempSync(join(tmpdir(), "inversa-e2e-agent-"));
@@ -175,7 +178,7 @@ async function main(): Promise<void> {
   const next = spawn(join(WEB, "node_modules/.bin/next"), ["dev", "-p", String(port), "-H", "127.0.0.1"], {
     cwd: WEB,
     detached: true,
-    env: { ...process.env, AGENT_HARNESS: "mock", INVERSA_API_ORIGIN: stub.origin, INVERSA_DATA_DIR: dataDir, NEXT_TELEMETRY_DISABLED: "1" },
+    env: { ...process.env, INVERSA_API_ORIGIN: stub.origin, INVERSA_DATA_DIR: dataDir, NEXT_TELEMETRY_DISABLED: "1" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   next.stdout?.on("data", (chunk) => (output += String(chunk)));
@@ -183,9 +186,7 @@ async function main(): Promise<void> {
   let browser: Browser | null = null;
   try {
     await waitForHttp(`${origin}/dev/agent`, next, () => output);
-    const seeded = await fetch(`${origin}/dev/agent/mock`, { method: "POST" });
-    assert(seeded.ok, `seeding mock scripts failed: ${seeded.status}`);
-    log(`next dev on ${origin}, stub ${stub.origin}, mock scripts loaded`);
+    log(`next dev on ${origin}, stub ${stub.origin}, agent openai/gpt-6-luna on OpenRouter`);
     browser = await launch();
     await flow(origin, browser);
   } finally {

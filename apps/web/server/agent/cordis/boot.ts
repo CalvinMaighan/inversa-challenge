@@ -18,9 +18,8 @@ import * as tokenMeter from "@deepseek-ai/dsh-token-meter";
 import * as tools from "@deepseek-ai/dsh-tools";
 
 import { ensureAgentDshHome } from "@/server/agent/cordis/home";
-import * as fireworks from "@/server/agent/cordis/plugins/llm-openai-compat";
-import * as mockLlm from "@/server/agent/cordis/plugins/mock-llm";
-import { FLASH_CATALOG_ID, PRO_CATALOG_ID } from "@/server/agent/runtime/model";
+import * as openRouter from "@/server/agent/cordis/plugins/llm-openrouter";
+import { AGENT_MODEL_ID } from "@/server/agent/runtime/model";
 
 const BIN = "inversa-agent";
 
@@ -69,10 +68,7 @@ function installStaticModules(ctx: Context): void {
   ctx.loader.internal = moduleLoader as unknown as typeof ctx.loader.internal;
 }
 
-export type HarnessMode = "live" | "mock";
-
-let liveBoot: Promise<Context> | undefined;
-let mockBoot: Promise<Context> | undefined;
+let booted: Promise<Context> | undefined;
 
 function formatPluginTreeError(error: unknown): Error {
   const messages: string[] = [];
@@ -88,7 +84,7 @@ function formatPluginTreeError(error: unknown): Error {
   return new Error([...new Set(messages)].join(" — ") || "plugin tree failed to load", { cause: error });
 }
 
-async function mountHarness(mode: HarnessMode): Promise<Context> {
+async function mountHarness(): Promise<Context> {
   ensureAgentDshHome();
   let ctx: Context;
   try {
@@ -96,45 +92,35 @@ async function mountHarness(mode: HarnessMode): Promise<Context> {
   } catch (error) {
     throw formatPluginTreeError(error);
   }
-  await ctx.plugin(mode === "mock" ? mockLlm : fireworks);
+  await ctx.plugin(openRouter);
   await assertEntriesActivated(ctx, BIN);
   return ctx;
 }
 
-/** One cached root context per mode. Concurrent callers share the boot. */
-export function bootHarness(mode: HarnessMode = "live"): Promise<Context> {
-  if (mode === "mock") {
-    mockBoot ??= mountHarness("mock").catch((error: unknown) => {
-      mockBoot = undefined;
-      throw error;
-    });
-    return mockBoot;
-  }
-  liveBoot ??= mountHarness("live").catch((error: unknown) => {
-    liveBoot = undefined;
+/** One cached root context. Concurrent callers share the boot. */
+export function bootHarness(): Promise<Context> {
+  booted ??= mountHarness().catch((error: unknown) => {
+    booted = undefined;
     throw error;
   });
-  return liveBoot;
+  return booted;
 }
 
-/** Test-only: drop cached contexts so the next boot is fresh. */
+/** Test-only: drop the cached context so the next boot is fresh. */
 export async function resetHarness(): Promise<void> {
-  const pending = [liveBoot, mockBoot];
-  liveBoot = undefined;
-  mockBoot = undefined;
-  for (const booted of pending) {
-    if (!booted) continue;
-    try {
-      await (await booted).fiber.dispose();
-    } catch {
-      // Boot failed; nothing to dispose.
-    }
+  const pending = booted;
+  booted = undefined;
+  if (!pending) return;
+  try {
+    await (await pending).fiber.dispose();
+  } catch {
+    // Boot failed; nothing to dispose.
   }
 }
 
 type ModelEntry = { provider: string; model: string };
 
-/** Read a model row from the loaded cordis.yml, including disabled rows. */
+/** Read a model row from the loaded cordis.yml. */
 function configuredModel(ctx: Context, entryId: string): ModelEntry | undefined {
   for (const entry of ctx.loader.entries()) {
     if (entry.options.id !== entryId) continue;
@@ -146,10 +132,7 @@ function configuredModel(ctx: Context, entryId: string): ModelEntry | undefined 
   return undefined;
 }
 
-/** The default and escalation models declared in cordis.yml. */
-export function harnessModels(ctx: Context): { primary: ModelEntry; escalation: ModelEntry } {
-  return {
-    primary: configuredModel(ctx, "agent-default-model") ?? { provider: "fireworks", model: FLASH_CATALOG_ID },
-    escalation: configuredModel(ctx, "agent-escalation-model") ?? { provider: "fireworks", model: PRO_CATALOG_ID },
-  };
+/** The model cordis.yml declares (`agent-default-model`). */
+export function harnessModel(ctx: Context): ModelEntry {
+  return configuredModel(ctx, "agent-default-model") ?? { provider: "openrouter", model: AGENT_MODEL_ID };
 }

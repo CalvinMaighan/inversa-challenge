@@ -13,21 +13,13 @@
 - id: agent
   name: "@deepseek-ai/dsh-agent"
 
-# DeepSeek V4 Flash on the Fireworks OpenAI-compatible endpoint (FIREWORKS_API_KEY).
+# GPT-6 Luna on OpenRouter's OpenAI-compatible endpoint (OPENROUTER_API_KEY).
+# The only model the agent runs. There is no escalation row.
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
   config:
-    provider: fireworks
-    model: deepseek-v4-flash
-
-# Escalation target. Never mounted: runTurn reads this entry's config and
-# re-runs a turn on it when Flash fails before streaming any answer text.
-- id: agent-escalation-model
-  name: "@deepseek-ai/dsh-agent-default-model"
-  disabled: true
-  config:
-    provider: fireworks
-    model: deepseek-v4-pro-0813
+    provider: openrouter
+    model: openai/gpt-6-luna
 
 - id: llm-retry
   name: "@deepseek-ai/dsh-llm-retry"

@@ -12,13 +12,13 @@ Scope: `apps/web/client/agent/**`:
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
   EVIDENCE: 55 pass | 0 fail
 
-- [x] G2: Playwright flow against the mock agent: open the card, ask, tool rows render, click a citation, the drawer opens; prints FLOW-OK
+- [x] G2: Playwright flow against the live agent (GPT-6 Luna on OpenRouter, key from Doppler inversa/dev, fixture API): open the card, ask, tool rows render, the globe flies, click a citation, the drawer opens; prints FLOW-OK
   CHECK: cd apps/web && bun run e2e:agent 2>&1 | tail -1
   EXPECT: FLOW-OK
   EVIDENCE: FLOW-OK
 
 - [x] G3: a 375 px viewport screenshot shows the card fully inside the viewport (manual; attach the screenshot path)
-  EVIDENCE: docs/evidence/t14-card-375.png (written by e2e:agent at 375×812). Card measured 375×480 at x=0,y=332, so right edge 375 ≤ 375 and bottom 812 ≤ 812. e2e asserts this box before it takes the shot. Viewed: header, question, "Worked for" rows, answer with chips 1–3, and the composer all visible.
+  EVIDENCE: docs/evidence/t14-card-375.png (written by e2e:agent at 375×812). Card measured 375×480 at x=0,y=332, so right edge 375 ≤ 375 and bottom 812 ≤ 812. e2e asserts this box before it takes the shot. Viewed (re-shot by the live-model run, T39): header, "Worked for" rows, the live answer with chips 1–4, and the composer all visible.
 
 - [x] G4: reduced motion disables the morph animation (test asserts duration 0 under prefers-reduced-motion)
   CHECK: cd apps/web && bun test tests/client/agent -t "reduced motion" 2>&1 | grep -E "pass|fail"

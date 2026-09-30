@@ -1,13 +1,14 @@
 import { z } from "zod";
 
 import { runTurn } from "@/server/agent/run-turn";
+import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import { isValidSessionId } from "@/server/agent/session";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-/** 90 s turn cap plus one escalation re-run and slack. */
-export const maxDuration = 200;
+/** 90 s turn cap plus slack. */
+export const maxDuration = 120;
 
 const MAX_QUESTION_CHARS = 4_000;
 
@@ -42,6 +43,8 @@ export async function POST(request: Request): Promise<Response> {
   }
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "Invalid agent request", parsed.error.issues);
+  // No key, no agent: say so before streaming, never fall back to anything else.
+  if (!openRouterApiKey()) return jsonError(503, MISSING_KEY_MESSAGE);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

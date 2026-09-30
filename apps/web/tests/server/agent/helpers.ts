@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { FIXTURE_NOW, startStub, type Stub } from "@/eval/stub-server";
 import { resetBudgetCache } from "@/server/agent/budget";
 import { clearAnswerCache } from "@/server/agent/cache";
-import { clearMockScripts } from "@/server/agent/cordis/plugins/mock-llm";
 import { runTurn, type RunTurnParams, type RunTurnResult } from "@/server/agent/run-turn";
 import { resetSessions } from "@/server/agent/session";
 import type { AgentStreamEvent } from "@/shared/agent/events";
@@ -32,7 +31,6 @@ export function setupAgentEnv(): AgentEnv {
 }
 
 export function resetState(): void {
-  clearMockScripts();
   clearAnswerCache();
   resetBudgetCache();
   resetSessions();
@@ -41,7 +39,7 @@ export function resetState(): void {
 
 let sessionSeq = 0;
 
-/** One mock-harness turn; returns every streamed event. */
+/** One agent turn at the fixture time; returns every streamed event. */
 export async function turn(
   question: string,
   extra: Partial<RunTurnParams> = {},
@@ -49,7 +47,7 @@ export async function turn(
   const events: AgentStreamEvent[] = [];
   sessionSeq += 1;
   const result = await runTurn(
-    { sessionId: `test-${Date.now()}-${sessionSeq}`, question, harnessMode: "mock", now: NOW, cache: false, ...extra },
+    { sessionId: `test-${Date.now()}-${sessionSeq}`, question, now: NOW, cache: false, ...extra },
     (event) => events.push(event),
   );
   return { events, result };
