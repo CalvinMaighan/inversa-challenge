@@ -21,6 +21,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: { "/api/agent/**": ["./server/agent/cordis/cordis.yml"] },
   output: "standalone",
   poweredByHeader: false,
+  /* Next dev refuses its own assets to hosts other than localhost; allow the loopback IP too. */
+  allowedDevOrigins: ["127.0.0.1"],
   compiler: { emotion: true },
   async headers() {
     return [{ source: "/:path*", headers: isolationHeaders }];

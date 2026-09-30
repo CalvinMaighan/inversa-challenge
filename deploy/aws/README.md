@@ -147,7 +147,7 @@ Rows are written only inside each product's domain, and inside it a cell is neve
 Measured on the fixtures (2026-09-26 18:01Z scene): LSTC window 175 x 152 pixels, 1,613 land
 cells (1,550 with a value, 45 cloud, 18 bad_dqf); ACMC 1,267 cloud cells; FDCC 0 fires;
 SSTF window 175 x 152 pixels, 2,833 water cells (2,267 with a value, 566 bad_dqf).
-Rows per hourly scan set: 5,713, so about 137k rows a day against the 250k budget
+Rows per hourly scan set: 7,232 with the SSTF fixture present (test `goes_fixture_rows_per_scan`), so about 174k rows a day against the 250k budget
 (`goes_fixture_rows_per_scan_under_daily_budget` prints `GOES rows/scan N` and enforces it).
 
 Readings precedence on a repeated key (`api/src/ingest/scheduler.rs`, the readings upsert): a null
