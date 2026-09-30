@@ -12,3 +12,5 @@ data/
 *.tsbuildinfo
 .wrangler/
 .claude/worktrees/
+apps/web/AGENTS.md
+apps/web/CLAUDE.md

@@ -199,6 +199,7 @@ Evidence ids take the form `<kind>:<key>`:
 | `alert` | `alerts.id` |
 | `fetch` | `fetch_runs.id` |
 | `hotspot` | `<species>:<cell>:<frame ms>` |
+| `backtest` | `<species>:<days>` |
 
 Cell ids are `<col>:<row>` on the 0.01° grid anchored at the bbox south-west corner (24.3°N, 83.2°W).
 
@@ -223,7 +224,11 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
   - `client/hud/missions/index.tsx` exports `MissionsPanel` (T21).
   - `client/agent/index.tsx` exports `AgentOrb` (T14).
   - The driver composes them in `app/page.tsx` through `AppShell` slots.
-- **Frame grid:** a `FrameGrid` from `@calvinjs/active-state/threads` (EVF2 shape). Layers read `hotspot(i, s)`, `lst(i)` and `sst(i)`. The frame index is derived from TIME.
+- **Frame grid:** a `FrameGrid` from `@calvinjs/active-state/threads` (EVF2 shape). Layers read `hotspot(i, s)`, `lst(i)` and `sst(i)`.
+  - There is one hourly grid for the 30-day TIME window, published with `publishFrameGrid(grid, meta)`, where `meta` is `FrameMeta {frame0UnixMs, stepMinutes, frameCount}`.
+  - Everyone maps time to frames with `frameIndexAt(atMs)` from `client/threads/api.ts`, which floors `(at − frame0) / step` and returns null outside the grid. Don't spread frames evenly over TIME.
+  - Sighting sections come through `publishFrameSightings`, `getFrameSightings` and `onFrameSightings`: `counts` plus the raw 12-byte `records(i)`.
+  - The HUD owns FEEDS sync (its `feeds` query and subscription). The workers don't write FEEDS.
 
 ## Tree
 
@@ -255,3 +260,9 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T11 merged (EVF1) -> rework to EVF2. T16 merged+verified 5/5 -> FrameGrid rework to EVF2.
 - T3 merged (8/8 on branch). Accepted: test tsconfig flag; build copies static+public; slots via default exports client/globe, client/hud, client/agent wired by driver. T15 reconciling voice keys with catalog.
 - T13 merged (lint fixes pending on T13 branch). Contract: C14 backtest kind + FeedState.lastFetchRunId (T10). next.config traces cordis.yml.
+- T9 merged+verified 6/6 (api 123 tests). T13 lint follow-up merged+verified 5/5+1 abandoned. EvidenceKind += backtest. 1 web test fail pending T15 key reconcile.
+- T15 reconcile merged (web 225/0, build ok). T11 EVF2 merged 8/8. hotspotScale rounded in frames.ts.
+- T10 merged+verified 9/9 (api 156). C14 backtest kind listed.
+- T8 merged+verified 5/5 (api 200 tests). Cargo.lock regenerated.
+- T14 merged+verified 5/5. Deferred T14 requests: mock golden autoload (T13), evidence lat/lon (T10/T13).
+- T17 merged (6/7, G7 ABANDON H7). Contract: EVF2 sighting record 16B with u32 id; SightingRecord+readSightingRecords in shared/frames.ts; FrameMeta.geometry; FrameSightings decoded; GlobeApi.onCursor optional. T17 to drop FrameTimeline; T11 to write ids.

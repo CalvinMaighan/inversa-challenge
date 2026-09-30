@@ -3,8 +3,14 @@ import type { z } from "zod";
 import type { AgentStreamEvent, BBox, EvidenceKind } from "@/shared/agent/events";
 import type { FeedState } from "@/shared/feed-state";
 
+/**
+ * C14 kinds. `backtest:<species>:<days>` was accepted into C14 after
+ * `shared/agent/events.ts` was written, so it is added here until EvidenceKind carries it.
+ */
+export type CitableKind = EvidenceKind | "backtest";
+
 /** One citable record (PLAN.md C14). `id` is `<kind>:<key>`. */
-export type Evidence = { id: string; kind: EvidenceKind; label: string };
+export type Evidence = { id: string; kind: CitableKind; label: string };
 
 /** What every capability returns: model-facing data plus its evidence and feed envelopes. */
 export type CapabilityOutput = {

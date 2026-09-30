@@ -1,121 +1,153 @@
 /**
  * Data access contract for UI code (PLAN.md C16). UI leaves call only these functions.
- *
- * Internals run on the workers (T19): queries go to the db worker, which answers cacheable ones from
- * SQLite (stale-while-revalidate) and forwards the rest to the gql worker; subscriptions ride the gql
- * worker's graphql-transport-ws socket; the frame grid is the SAB (or transferred buffer) the db worker
- * fills. Outside a browser (SSR, bun) `gqlRequest` falls back to a direct fetch.
+ * This driver version runs on the main thread (fetch + graphql-transport-ws); T19 swaps the
+ * internals to the gql and db workers without changing the signatures.
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 
-import { bootThreads } from "./boot";
-import { ttlForQuery } from "./db/cache";
-import { frameIndexAt, type FrameWindow } from "./db/frames";
-import type { GqlErrorShape, GqlResult } from "./gql/protocol";
+import type { SightingRecord } from "shared/frames";
 
 export type GqlVariables = Record<string, unknown>;
 
 export class GqlError extends Error {
   constructor(
     message: string,
-    readonly errors: GqlErrorShape[],
+    readonly errors: { message: string; extensions?: Record<string, unknown> }[],
   ) {
     super(message);
-    this.name = "GqlError";
   }
 }
 
 const HTTP_URL = "/v1/graphql";
 
-const inBrowser = () => typeof window !== "undefined" && typeof Worker === "function";
-
-function unwrap<T>(body: GqlResult<T>): T {
-  if (body.errors?.length) throw new GqlError(body.errors.map((e) => e.message).join("; "), body.errors);
-  if (body.data === undefined) throw new GqlError(`graphql http ${body.status ?? 0}`, []);
-  return body.data;
+function wsUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_INVERSA_WS_URL;
+  if (explicit) return explicit;
+  const { protocol, host } = window.location;
+  return `${protocol === "https:" ? "wss" : "ws"}://${host}/v1/graphql`;
 }
 
-async function directRequest<T>(query: string, variables: GqlVariables, signal?: AbortSignal): Promise<T> {
+export async function gqlRequest<T>(query: string, variables: GqlVariables = {}, signal?: AbortSignal): Promise<T> {
   const res = await fetch(HTTP_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
     signal,
   });
-  const body = (await res.json()) as GqlResult<T>;
-  body.status = res.status;
-  return unwrap(body);
+  const body = (await res.json()) as { data?: T; errors?: { message: string; extensions?: Record<string, unknown> }[] };
+  if (body.errors?.length) throw new GqlError(body.errors.map((e) => e.message).join("; "), body.errors);
+  if (!res.ok || body.data === undefined) throw new GqlError(`graphql http ${res.status}`, []);
+  return body.data;
 }
 
-function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) return p;
-  if (signal.aborted) return Promise.reject(new DOMException("aborted", "AbortError"));
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new DOMException("aborted", "AbortError"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
-  });
-}
+/** graphql-transport-ws subscription. Reconnects with backoff until unsubscribed. */
+export function gqlSubscribe<T>(
+  query: string,
+  variables: GqlVariables,
+  onData: (data: T) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  let closed = false;
+  let socket: WebSocket | null = null;
+  let attempt = 0;
 
-/**
- * Run a query or mutation. Cacheable queries (see `db/cache.ts` for the TTL table) are answered by the db
- * worker from SQLite when fresh, served stale and revalidated when past their TTL, and fetched otherwise.
- * Mutations and uncacheable roots go straight to the gql worker.
- */
-export async function gqlRequest<T>(query: string, variables: GqlVariables = {}, signal?: AbortSignal): Promise<T> {
-  if (!inBrowser()) return directRequest<T>(query, variables, signal);
-  const threads = bootThreads();
-  if (ttlForQuery(query) === 0) return unwrap(await threads.gql.request(query, variables, signal) as GqlResult<T>);
-  const result = await abortable(threads.db("query", { query, variables }), signal);
-  return unwrap(result as GqlResult<T>);
-}
+  const connect = () => {
+    if (closed) return;
+    socket = new WebSocket(wsUrl(), "graphql-transport-ws");
+    socket.onopen = () => socket?.send(JSON.stringify({ type: "connection_init" }));
+    socket.onmessage = (ev) => {
+      const msg = JSON.parse(String(ev.data)) as { type: string; payload?: { data?: T; errors?: unknown } | unknown[] };
+      if (msg.type === "connection_ack") {
+        attempt = 0;
+        socket?.send(JSON.stringify({ id: "1", type: "subscribe", payload: { query, variables } }));
+      } else if (msg.type === "next" && msg.payload && !Array.isArray(msg.payload) && msg.payload.data !== undefined) {
+        onData(msg.payload.data);
+      } else if (msg.type === "error") {
+        onError?.(new Error(JSON.stringify(msg.payload)));
+      } else if (msg.type === "ping") {
+        socket?.send(JSON.stringify({ type: "pong" }));
+      }
+    };
+    socket.onclose = () => {
+      if (closed) return;
+      attempt += 1;
+      setTimeout(connect, Math.min(30_000, 500 * 2 ** attempt));
+    };
+  };
+  connect();
 
-/** graphql-transport-ws subscription on the gql worker's socket. Reconnects with backoff until unsubscribed. */
-export function gqlSubscribe<T>(query: string, variables: GqlVariables, onData: (data: T) => void, onError?: (err: Error) => void): () => void {
-  if (!inBrowser()) throw new Error("gqlSubscribe: needs a browser");
-  return bootThreads().gql.subscribe(query, variables, { next: (data) => onData(data as T), error: onError });
+  return () => {
+    closed = true;
+    socket?.close();
+  };
 }
 
 let frameGrid: FrameGrid | null = null;
-let frameWindow: FrameWindow | null = null;
 const gridListeners = new Set<(grid: FrameGrid) => void>();
-let wired = false;
 
-function wire(): void {
-  if (wired || !inBrowser()) return;
-  wired = true;
-  bootThreads().onGrid(({ grid, window }) => publishFrameGrid(grid, window));
-}
-
-/** The frame grid the db worker fills (T19). Null until the first chunk loads. */
+/** The SAB-backed frame grid the db worker fills (T19). Null until the first chunk loads. */
 export function getFrameGrid(): FrameGrid | null {
-  wire();
   return frameGrid;
 }
 
-/** Time bounds and densities of the current grid; `frameIndexFor` maps a TIME cursor onto it. */
-export function getFrameWindow(): FrameWindow | null {
-  wire();
-  return frameWindow;
-}
-
-/** Grid index of the frame at or before `at` (RFC 3339 or unix ms), or -1 before any grid is published. */
-export function frameIndexFor(at: string | number): number {
-  const w = getFrameWindow();
-  if (!w) return -1;
-  return frameIndexAt(w, typeof at === "number" ? at : Date.parse(at));
-}
-
 export function onFrameGrid(cb: (grid: FrameGrid) => void): () => void {
-  wire();
   if (frameGrid) cb(frameGrid);
   gridListeners.add(cb);
   return () => gridListeners.delete(cb);
 }
 
+/**
+ * Time axis of the published grid (PLAN.md C16). Frames are uniform: frame i covers
+ * [frame0UnixMs + i*step, frame0UnixMs + (i+1)*step). One hourly grid spans the TIME window.
+ */
+export type FrameMeta = {
+  frame0UnixMs: number;
+  stepMinutes: number;
+  frameCount: number;
+  /** Grid placement from the EVF2 header (south-west corner and cell sizes, degrees). */
+  geometry: { west: number; south: number; hsCellDeg: number; envCellDeg: number };
+};
+
+/**
+ * EVF2 sighting sections, which the SAB grid does not carry. `counts[i]` is frame i's sighting
+ * count; `records(i)` returns that frame's decoded records (shared/frames.ts readSightingRecords).
+ */
+export type FrameSightings = { counts: Uint32Array; records(i: number): readonly SightingRecord[] };
+
+let frameMeta: FrameMeta | null = null;
+let frameSightings: FrameSightings | null = null;
+const sightingListeners = new Set<(s: FrameSightings) => void>();
+
+export function getFrameMeta(): FrameMeta | null {
+  return frameMeta;
+}
+
+/** Frame index for a time, or null when no grid is loaded or the time falls outside it. */
+export function frameIndexAt(atMs: number, meta: FrameMeta | null = frameMeta): number | null {
+  if (!meta || meta.frameCount === 0) return null;
+  const i = Math.floor((atMs - meta.frame0UnixMs) / (meta.stepMinutes * 60_000));
+  return i >= 0 && i < meta.frameCount ? i : null;
+}
+
 /** Called by the thread boot code (T19) when a grid is allocated or replaced. */
-export function publishFrameGrid(grid: FrameGrid, window?: FrameWindow): void {
+export function publishFrameGrid(grid: FrameGrid, meta: FrameMeta): void {
   frameGrid = grid;
-  if (window) frameWindow = window;
+  frameMeta = meta;
   for (const cb of gridListeners) cb(grid);
+}
+
+export function getFrameSightings(): FrameSightings | null {
+  return frameSightings;
+}
+
+export function onFrameSightings(cb: (s: FrameSightings) => void): () => void {
+  if (frameSightings) cb(frameSightings);
+  sightingListeners.add(cb);
+  return () => sightingListeners.delete(cb);
+}
+
+/** Called by T19's EVF2 decoder alongside publishFrameGrid. */
+export function publishFrameSightings(s: FrameSightings): void {
+  frameSightings = s;
+  for (const cb of sightingListeners) cb(s);
 }

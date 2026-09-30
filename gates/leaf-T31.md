@@ -9,7 +9,7 @@ Scope: verify the HMAC hook, the media proxy SSRF guard, signal Worker CORS, tha
 
 - [ ] G2: /api/agent/stream and /api/voice/session are rate limited per IP (test: the 11th request within a minute returns 429)
   CHECK: cd apps/web && bun test tests -t "rate limit" 2>&1 | grep -E "pass|fail"
-  EXPECT: /[1-9] pass[\s\S]*0 fail/
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: pending
 
 - [ ] G3: the hook, media SSRF and CORS tests still pass on the merged tree

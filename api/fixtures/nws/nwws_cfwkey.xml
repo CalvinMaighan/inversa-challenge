@@ -1,0 +1,42 @@
+<message xmlns="jabber:client" to="inversa@nwws-oi.weather.gov/inversa" type="groupchat" from="nwws@conference.nwws-oi.weather.gov/nwws-oi"><body>KKEY issues CFW valid 2026-09-30T15:36:00Z</body><html xmlns="http://jabber.org/protocol/xhtml-im"><body xmlns="http://www.w3.org/1999/xhtml">KKEY issues CFW valid 2026-09-30T15:36:00Z</body></html><x xmlns="nwws-oi" cccc="KKEY" ttaaii="WHUS42" issue="2026-09-30T15:36:00Z" awipsid="CFWKEY" id="11723.46810">
+
+
+000
+WHUS42 KKEY 301536
+CFWKEY
+
+Coastal Hazard Message
+National Weather Service Key West FL
+1136 AM EDT Wed Sep 30 2026
+
+FLZ076&gt;078-010900-
+/O.EXT.KKEY.CF.Y.0003.000000T0000Z-261001T0900Z/
+Monroe Upper Keys-Monroe Middle Keys-Monroe Lower Keys-
+1136 AM EDT Wed Sep 30 2026
+
+...COASTAL FLOOD ADVISORY NOW IN EFFECT UNTIL 5 AM EDT THURSDAY...
+
+* WHAT...Saltwater flooding.
+
+* WHERE...Florida Keys.
+
+* WHEN...Until 5 AM EDT Thursday.
+
+* IMPACTS...Saltwater flooding of low elevation streets and lots 
+  is expected. Some storm drains will overflow, and some 
+  seawalls and docks will be overtopped. Boaters can expect less 
+  clearance under fixed bridges. Motorists should remember that 
+  persistent puddles around the times of high tide are almost 
+  certain to contain a mix of saltwater.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+If travel is required, allow extra time as some roads may be
+closed. Do not drive around barricades or through water of
+unknown depth. Take the necessary actions to protect flood-prone
+property.
+
+&amp;&amp;
+
+$$
+</x></message>

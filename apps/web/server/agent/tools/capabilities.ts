@@ -19,9 +19,11 @@ import {
   speciesByKey,
 } from "@/server/agent/tools/evidence";
 import { lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
-import { FEED_FIELDS, gql, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
+import { gqlWithFeeds, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
 import type { BBox } from "@/shared/agent/events";
 import { worstHealth, type FeedState } from "@/shared/feed-state";
+import { QUALITY_CODES } from "@/shared/frames";
+import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
 const HOUR_MS = 3_600_000;
 /** Frames cover a 30-day window (PLAN.md C15). */
@@ -47,7 +49,11 @@ const timeSchema = z
 
 const speciesSchema = z.enum(SPECIES_KEYS).describe("python | tegu | iguana | lionfish");
 
-const QUALITY = ["research", "needs_id", "casual", "curated"] as const;
+const QUALITY = QUALITY_CODES;
+
+type LayerId = (typeof LAYER_IDS)[number];
+/** Tools that fill a globe layer are named after it, so a tool row can highlight that layer. */
+const LAYER = Object.fromEntries(LAYER_IDS.map((id) => [id, id])) as { readonly [K in LayerId]: K };
 const PARAMS = ["lst_c", "air_c", "water_c", "sst_c", "rain_mm", "stage_m", "wave_m", "wind_ms", "fire_frp"] as const;
 type Param = (typeof PARAMS)[number];
 
@@ -84,13 +90,19 @@ function atTime(input: string | undefined, ctx: CapabilityContext): string {
 }
 
 /** Feeds this result depends on: the sources seen in rows, else the tool's defaults. */
-function feedsFor(all: GqlFeedState[], seen: Iterable<string>, fallback: readonly string[] | "all"): FeedState[] {
-  const feeds = all.map(toFeedState);
-  if (fallback === "all") return feeds;
+function feedsFor(all: GqlFeedState[], seen: Iterable<string>, fallback: readonly string[] | "all"): GqlFeedState[] {
+  if (fallback === "all") return all;
   const wanted = new Set(seen);
-  const matches = (feed: FeedState) =>
-    wanted.has(feed.source) || (wanted.size === 0 && fallback.some((prefix) => feed.source.startsWith(prefix)));
-  return feeds.filter(matches);
+  return all.filter(
+    (feed) => wanted.has(feed.source) || (wanted.size === 0 && fallback.some((prefix) => feed.source.startsWith(prefix))),
+  );
+}
+
+/** A feed's last fetch run, citable as `fetch:<id>` when the API reports it. */
+function fetchEvidence(feed: GqlFeedState): Evidence | null {
+  if (!feed.lastFetchRunId) return null;
+  const state = toFeedState(feed);
+  return evidence("fetch", feed.lastFetchRunId, `${feed.source} ${state.state} · last fetch ${feed.lastFetchAt ?? "never"}`);
 }
 
 /** The analyst reads this summary before any claim about freshness. */
@@ -107,13 +119,17 @@ function feedSummary(feeds: FeedState[]) {
 function output(
   data: Record<string, unknown>,
   evidenceRows: Evidence[],
-  feeds: FeedState[],
+  rawFeeds: GqlFeedState[],
   count: number,
 ): CapabilityOutput {
+  const feeds = rawFeeds.map(toFeedState);
+  const fetches = rawFeeds.map(fetchEvidence);
+  const allEvidence = [...evidenceRows, ...fetches.filter((row): row is Evidence => row !== null)];
+  const modelFeeds = feeds.map((feed, index) => ({ ...feed, evidenceId: fetches[index]?.id ?? null }));
   return {
     // Data-quality first, bulky rows last: if a long result is ever pruned head/tail, the caveats survive.
-    data: { feedSummary: feedSummary(feeds), feeds, ...data, evidence: evidenceRows },
-    evidence: evidenceRows,
+    data: { feedSummary: feedSummary(feeds), feeds: modelFeeds, ...data, evidence: allEvidence },
+    evidence: allEvidence,
     feeds,
     count,
   };
@@ -143,7 +159,7 @@ const SIGHTINGS_QUERY = `query AgentSightings($bbox: BBox!, $from: Time!, $to: T
   }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlSighting = {
   id: string;
@@ -172,14 +188,14 @@ const sightingsInput = z.object({
 });
 
 const sightings = {
-  name: "sightings",
+  name: LAYER.sightings,
   description:
     "Invasive species sightings (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags.",
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, 24 * 7);
-    const data = await gql<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
       "AgentSightings",
       SIGHTINGS_QUERY,
       {
@@ -250,7 +266,7 @@ const READINGS_QUERY = `query AgentReadings($bbox: BBox!, $from: Time!, $to: Tim
   }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlReading = {
   station: { id: string; source: string; name: string; lat: number; lon: number; kind: string };
@@ -312,7 +328,7 @@ const conditions = {
   async execute(input: z.infer<typeof conditionsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, 24);
-    const data = await gql<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
       "AgentReadings",
       READINGS_QUERY,
       { bbox, ...window, params: input.params?.map((param) => param.toUpperCase()) ?? null },
@@ -420,7 +436,7 @@ const ALERTS_QUERY = `query AgentAlerts($bbox: BBox!, $at: Time!) {
   alerts(bbox: $bbox, at: $at) { id event severity headline onset expires }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlAlert = {
   id: string;
@@ -434,13 +450,13 @@ type GqlAlert = {
 const alertsInput = z.object({ bbox: bboxSchema.optional(), at: timeSchema.optional() });
 
 const alerts = {
-  name: "alerts",
+  name: LAYER.alerts,
   description: "NWS alerts (freeze, heat, marine, flood) in effect over an area at a time.",
   inputSchema: alertsInput,
   async execute(input: z.infer<typeof alertsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const at = atTime(input.at, ctx);
-    const data = await gql<{ alerts: GqlAlert[]; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ alerts: GqlAlert[]; feeds: GqlFeedState[] }>(
       "AgentAlerts",
       ALERTS_QUERY,
       { bbox, at },
@@ -470,7 +486,7 @@ const HOTSPOTS_QUERY = `query AgentHotspots($species: ID!, $at: Time!, $bbox: BB
   hotspots(species: $species, at: $at, bbox: $bbox, top: $top) { species at cells { cell lat lon score } }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlHotspotGrid = { species: string; at: string; cells: { cell: string; lat: number; lon: number; score: number }[] };
 
@@ -482,14 +498,14 @@ const hotspotsInput = z.object({
 });
 
 const hotspots = {
-  name: "hotspots",
+  name: LAYER.hotspots,
   description:
     "Top-scoring 0.01° cells for a species at a time (explainable heuristic, not a prediction). Use explain_cell for why a cell scores.",
   inputSchema: hotspotsInput,
   async execute(input: z.infer<typeof hotspotsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const at = atTime(input.at, ctx);
-    const data = await gql<{ hotspots: GqlHotspotGrid; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ hotspots: GqlHotspotGrid; feeds: GqlFeedState[] }>(
       "AgentHotspots",
       HOTSPOTS_QUERY,
       { species: input.species, at, bbox, top: input.top ?? 10 },
@@ -520,7 +536,7 @@ const EXPLAIN_QUERY = `query AgentExplainCell($cell: ID!, $species: ID!, $at: Ti
   explainCell(cell: $cell, species: $species, at: $at) { cell species at score terms { name value rationale } }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlExplain = {
   cell: string;
@@ -547,7 +563,7 @@ const explainCell = {
   async execute(input: z.infer<typeof explainInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const cell = input.cell ?? cellFor(input.lat!, input.lon!);
     const at = atTime(input.at, ctx);
-    const data = await gql<{ explainCell: GqlExplain; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ explainCell: GqlExplain; feeds: GqlFeedState[] }>(
       "AgentExplainCell",
       EXPLAIN_QUERY,
       { cell, species: input.species, at },
@@ -574,7 +590,7 @@ const BACKTEST_QUERY = `query AgentBacktest($species: ID!, $days: Int!) {
   backtest(species: $species, days: $days) { species days hitRate baseline perDay { day sightings hits } }
   feeds { ...FeedFields }
 }
-${FEED_FIELDS}`;
+`;
 
 type GqlBacktest = {
   species: string;
@@ -595,7 +611,7 @@ const backtest = {
     "Measured hit rate of past hotspot scores: share of each day's sightings inside the top 10% of cells scored with earlier data, against the 10% baseline.",
   inputSchema: backtestInput,
   async execute(input: z.infer<typeof backtestInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const data = await gql<{ backtest: GqlBacktest; feeds: GqlFeedState[] }>(
+    const data = await gqlWithFeeds<{ backtest: GqlBacktest; feeds: GqlFeedState[] }>(
       "AgentBacktest",
       BACKTEST_QUERY,
       { species: input.species, days: input.days ?? 14 },
@@ -603,14 +619,20 @@ const backtest = {
     );
     const result = data.backtest;
     const scored = result.perDay.reduce((sum, day) => sum + day.sightings, 0);
+    const row = evidence(
+      "backtest",
+      `${result.species}:${result.days}`,
+      `${result.species} backtest ${result.days} d: hit rate ${result.hitRate} vs baseline ${result.baseline}`,
+    );
     return output(
       {
+        evidenceId: row.id,
         ...result,
         lift: result.baseline > 0 ? Number((result.hitRate / result.baseline).toFixed(2)) : null,
         sightingsScored: scored,
         heuristic: true,
       },
-      [],
+      [row],
       feedsFor(data.feeds, [], "all"),
       result.perDay.length,
     );
@@ -619,17 +641,15 @@ const backtest = {
 
 // ---------------------------------------------------------------- feed_state
 
-const FEEDS_ONLY_QUERY = `query AgentFeedState { feeds { ...FeedFields } }
-${FEED_FIELDS}`;
+const FEEDS_ONLY_QUERY = "query AgentFeedState { feeds { ...FeedFields } }";
 
 const feedState = {
   name: "feed_state",
   description: "Freshness of every data feed (nominal, lagging, stale, down), with newest observation and last fetch times.",
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const data = await gql<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx.signal);
-    const feeds = data.feeds.map(toFeedState);
-    return output({ asOf: ctx.now.toISOString() }, [], feeds, feeds.length);
+    const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx.signal);
+    return output({ asOf: ctx.now.toISOString() }, [], data.feeds, data.feeds.length);
   },
 };
 
@@ -651,18 +671,6 @@ const setView = {
     return output({ bbox, time, applied: true }, [], [], 1);
   },
 };
-
-export const AGENT_TOOL_NAMES = [
-  "geocode",
-  "sightings",
-  "conditions",
-  "alerts",
-  "hotspots",
-  "explain_cell",
-  "backtest",
-  "feed_state",
-  "set_view",
-] as const;
 
 export function buildAgentRegistry(): CapabilityRegistry {
   return new CapabilityRegistry()

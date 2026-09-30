@@ -17,6 +17,9 @@ describe("VIEW", () => {
     expect(v.heading).toBe(0);
     expect(v.pitch).toBe(-90);
     expect(v.altitudeM).toBe(altitudeToFit(REGION_BBOX));
+    // Fly-command fields (voice fly_to): no named target yet, nothing flown.
+    expect(v.place).toBeNull();
+    expect(v.seq).toBe(0);
   });
 
   test("altitudeToFit frames the larger side of the box", () => {

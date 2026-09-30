@@ -1,16 +1,16 @@
 {
   "now": "2026-01-15T03:00:00Z",
   "feeds": [
-    { "source": "inat", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:41:00Z", "lastFetchAt": "2026-01-15T02:58:00Z", "lagSeconds": 1140, "note": null },
-    { "source": "nas", "mode": "POLL", "state": "LAGGING", "newestObservedAt": "2025-12-20T15:00:00Z", "lastFetchAt": "2026-01-14T06:00:00Z", "lagSeconds": 2203200, "note": "USGS NAS publishes curated records weeks after the observation" },
-    { "source": "gbif", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-13T23:10:00Z", "lastFetchAt": "2026-01-14T06:05:00Z", "lagSeconds": 100200, "note": null },
-    { "source": "nws", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:55:00Z", "lastFetchAt": "2026-01-15T02:59:00Z", "lagSeconds": 300, "note": "Alerts API poll; NWWS-OI not yet approved" },
-    { "source": "nwws", "mode": "PUSH", "state": "DOWN", "newestObservedAt": null, "lastFetchAt": null, "lagSeconds": null, "note": "NWWS-OI account pending approval" },
-    { "source": "usgs", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:45:00Z", "lastFetchAt": "2026-01-15T02:50:00Z", "lagSeconds": 900, "note": null },
-    { "source": "ndbc", "mode": "POLL", "state": "STALE", "newestObservedAt": "2026-01-14T19:00:00Z", "lastFetchAt": "2026-01-15T02:52:00Z", "lagSeconds": 28800, "note": "NDBC realtime files not updated since 2026-01-14T19:00Z" },
-    { "source": "coops", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:54:00Z", "lastFetchAt": "2026-01-15T02:56:00Z", "lagSeconds": 360, "note": null },
-    { "source": "openmeteo", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:00:00Z", "lastFetchAt": "2026-01-15T02:30:00Z", "lagSeconds": 3600, "note": null },
-    { "source": "goes", "mode": "PUSH", "state": "LAGGING", "newestObservedAt": "2026-01-15T01:30:00Z", "lastFetchAt": "2026-01-15T02:57:00Z", "lagSeconds": 5400, "note": "Cloud mask over the central Everglades; LST gaps" }
+    { "source": "inat", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:41:00Z", "lastFetchAt": "2026-01-15T02:58:00Z", "lagSeconds": 1140, "note": null, "lastFetchRunId": "90412" },
+    { "source": "nas", "mode": "POLL", "state": "LAGGING", "newestObservedAt": "2025-12-20T15:00:00Z", "lastFetchAt": "2026-01-14T06:00:00Z", "lagSeconds": 2203200, "note": "USGS NAS publishes curated records weeks after the observation", "lastFetchRunId": "90377" },
+    { "source": "gbif", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-13T23:10:00Z", "lastFetchAt": "2026-01-14T06:05:00Z", "lagSeconds": 100200, "note": null, "lastFetchRunId": "90381" },
+    { "source": "nws", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:55:00Z", "lastFetchAt": "2026-01-15T02:59:00Z", "lagSeconds": 300, "note": "Alerts API poll; NWWS-OI not yet approved", "lastFetchRunId": "90415" },
+    { "source": "nwws", "mode": "PUSH", "state": "DOWN", "newestObservedAt": null, "lastFetchAt": null, "lagSeconds": null, "note": "NWWS-OI account pending approval", "lastFetchRunId": null },
+    { "source": "usgs", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:45:00Z", "lastFetchAt": "2026-01-15T02:50:00Z", "lagSeconds": 900, "note": null, "lastFetchRunId": "90409" },
+    { "source": "ndbc", "mode": "POLL", "state": "STALE", "newestObservedAt": "2026-01-14T19:00:00Z", "lastFetchAt": "2026-01-15T02:52:00Z", "lagSeconds": 28800, "note": "NDBC realtime files not updated since 2026-01-14T19:00Z", "lastFetchRunId": "90410" },
+    { "source": "coops", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:54:00Z", "lastFetchAt": "2026-01-15T02:56:00Z", "lagSeconds": 360, "note": null, "lastFetchRunId": "90413" },
+    { "source": "openmeteo", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:00:00Z", "lastFetchAt": "2026-01-15T02:30:00Z", "lagSeconds": 3600, "note": null, "lastFetchRunId": "90398" },
+    { "source": "goes", "mode": "PUSH", "state": "LAGGING", "newestObservedAt": "2026-01-15T01:30:00Z", "lastFetchAt": "2026-01-15T02:57:00Z", "lagSeconds": 5400, "note": "Cloud mask over the central Everglades; LST gaps", "lastFetchRunId": "90414" }
   ],
   "taxa": {
     "1": { "id": "1", "scientificName": "Python bivittatus", "commonName": "Burmese python", "focus": true },

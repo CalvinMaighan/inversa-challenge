@@ -1,0 +1,49 @@
+import { describe, expect, test } from "bun:test";
+
+import { agentView, buildAgentRequest, validBBox } from "client/agent/chat/request";
+import { REGION_BBOX } from "client/state/view";
+
+const NOW = Date.parse("2026-09-30T12:00:00Z");
+
+describe("agent request view", () => {
+  test("reads bbox, time, visible layers and the selection", () => {
+    const request = buildAgentRequest(
+      "s1",
+      "  Where should python crews go tonight?  ",
+      {
+        view: { bbox: { west: -81, south: 25, east: -80, north: 26 } },
+        time: { at: "2026-01-15T03:00:00Z" },
+        layers: { visible: { sightings: true, hotspots: true, lst: false, stations: true } },
+        selection: { evidenceId: "hotspot:python:243:145:1768446000000" },
+      },
+      NOW,
+    );
+    expect(request).toEqual({
+      sessionId: "s1",
+      question: "Where should python crews go tonight?",
+      view: {
+        bbox: { west: -81, south: 25, east: -80, north: 26 },
+        time: "2026-01-15T03:00:00.000Z",
+        layers: ["sightings", "hotspots", "stations"],
+        selection: "hotspot:python:243:145:1768446000000",
+      },
+    });
+  });
+
+  test("missing or unusable fields fall back to the region, the wall clock and nothing selected", () => {
+    expect(agentView({}, NOW)).toEqual({ bbox: { ...REGION_BBOX }, time: "2026-09-30T12:00:00.000Z", layers: [], selection: null });
+    // Voice's TIME shape uses at: null for "live".
+    expect(agentView({ time: { at: null }, view: { bbox: { west: -80, south: 25, east: -81, north: 26 } } }, NOW)).toMatchObject({
+      bbox: { ...REGION_BBOX },
+      time: "2026-09-30T12:00:00.000Z",
+    });
+  });
+
+  test("bbox validation", () => {
+    expect(validBBox({ west: -81, south: 25, east: -80, north: 26 })).toBe(true);
+    expect(validBBox({ west: -81, south: 25, east: -80 })).toBe(false);
+    expect(validBBox({ west: -81, south: 26, east: -80, north: 25 })).toBe(false);
+    expect(validBBox({ west: Number.NaN, south: 25, east: -80, north: 26 })).toBe(false);
+    expect(validBBox(null)).toBe(false);
+  });
+});

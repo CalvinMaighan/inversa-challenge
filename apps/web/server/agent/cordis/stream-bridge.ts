@@ -5,7 +5,7 @@ import type { Session, SessionEvent } from "@deepseek-ai/dsh-session";
 import type { AgentToolDetails, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { CitationFilter, filterCitations } from "@/server/agent/cordis/citations";
 import { createThinkingPartition, partitionThinking } from "@/server/agent/cordis/thinking";
-import type { AgentStreamEvent } from "@/shared/agent/events";
+import type { AgentStreamEvent, EvidenceKind } from "@/shared/agent/events";
 
 export type TurnUsage = { promptTokens: number; completionTokens: number; cacheRead: number };
 export type ToolCallRecord = { capabilityName: string; ok: boolean; durationMs: number };
@@ -63,7 +63,8 @@ export function attachStreamBridge(
       if (cited.includes(id)) return;
       cited.push(id);
       const row = ledger.get(id)!;
-      onEvent({ type: "citation", id, kind: row.kind, label: row.label });
+      // C7's EvidenceKind predates the accepted `backtest` kind; the value is a valid C14 kind either way.
+      onEvent({ type: "citation", id, kind: row.kind as EvidenceKind, label: row.label });
     },
     onUnverified(id) {
       if (removed.has(id)) return;

@@ -8,25 +8,25 @@ Scope: `apps/web/client/hud/**`, excluding `hud/missions`:
 - Hotspot explain and backtest panels.
 - URL-hash share links (after God's Eye View `sharelink.js`).
 
-- [ ] G1: HUD tests pass (share-link round trip, label arbiter collision, gap segmentation from flags, feed chip state mapping)
+- [x] G1: HUD tests pass (share-link round trip, label arbiter collision, gap segmentation from flags, feed chip state mapping)
   CHECK: cd apps/web && bun test tests/client/hud 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 60 pass | 0 fail
 
-- [ ] G2: scrubbing 96 frames makes zero network requests, and the median frame change is under 16 ms; a Playwright script prints `SCRUB median=<ms> requests=0`
+- [x] G2: scrubbing 96 frames makes zero network requests, and the median frame change is under 16 ms; a Playwright script prints `SCRUB median=<ms> requests=0`
   CHECK: cd apps/web && bun run e2e:scrub 2>&1 | grep SCRUB
   EXPECT: /SCRUB median=(1[0-5]|[0-9])(\.\d+)? requests=0/
-  EVIDENCE: pending
+  EVIDENCE: SCRUB median=8.35 requests=0 p95=21.20 work_median=0.37 frames=96 verified=96
 
-- [ ] G3: cloud-gap hatching renders for a fixture with flagged cells (manual screenshot path)
-  EVIDENCE: pending
+- [x] G3: cloud-gap hatching renders for a fixture with flagged cells (manual screenshot path)
+  EVIDENCE: docs/evidence/t18-gaps.png (1440×900, `bun e2e/scrub.ts --shot` on /dev/hud at frame 60): timeline hatches the fixture's cloud deck frames 54–66 (warn hatch), GOES outage 72–80 (danger hatch over the full track), 12.5 h sighting silence 2–52 (muted hatch); fixture globe greys the masked env cells of frame 60. Same runs asserted by tests/client/hud/gaps.test.ts "gap segmentation from flags of the fixture grid" → exactly [{env 72–80}, {cloud 54–66}, {quiet 2–52}].
 
-- [ ] G4: opening a share link restores camera, time and layers (test)
+- [x] G4: opening a share link restores camera, time and layers (test)
   CHECK: cd apps/web && bun test tests/client/hud -t "share link" 2>&1 | grep -E "pass|fail"
-  EXPECT: /[1-9] pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: 11 pass | 0 fail
 
-- [ ] G5: typecheck and lint clean
+- [x] G5: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
-  EVIDENCE: pending
+  EVIDENCE: CLEAN

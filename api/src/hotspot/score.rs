@@ -201,17 +201,6 @@ impl CondFrame {
         }
     }
 
-    /// The parameter as a full grid, NaN where there is no data.
-    pub fn grid(&self, p: CondParam, cells: usize) -> Vec<f32> {
-        match self.layers[p as usize].as_ref() {
-            None => vec![f32::NAN; cells],
-            Some(layer) => layer
-                .nearest
-                .iter()
-                .map(|&n| if n == u32::MAX { f32::NAN } else { layer.values[n as usize] })
-                .collect(),
-        }
-    }
 }
 
 type NearestCache = Mutex<HashMap<(CondParam, Vec<u32>), Arc<Vec<u32>>>>;
@@ -1043,9 +1032,8 @@ mod tests {
         assert_eq!(cond.value(CondParam::SstC, G.index(3, 3)), Some(25.5));
         assert_eq!(cond.value(CondParam::SstC, G.index(8, 3)), Some(25.5), "5 cells away still reads the pixel");
         assert_eq!(cond.value(CondParam::SstC, G.index(9, 3)), None, "6 cells is out of reach");
-        let sst = cond.grid(CondParam::SstC, G.cells());
-        assert!(sst[G.index(20, 20)].is_nan());
-        assert_eq!(sst[G.index(3, 3)], 25.5);
+        assert_eq!(cond.value(CondParam::SstC, G.index(20, 20)), None);
+        assert_eq!(cond.value(CondParam::WaveM, G.index(3, 3)), None, "no layer at all");
         assert_eq!(cond.month, 3);
     }
 }

@@ -11,27 +11,27 @@ Scope:
 - `quality_phys::post_write` flags as conflicts: satellite vs buoy SST differing by more than 1.5 C, and LST vs air temperature outside the expected offset.
 - Source registry in poll/physical.rs.
 
-- [ ] G1: api tests pass
+- [x] G1: api tests pass
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep "test result" | grep -v " 0 passed" | head -1
   EXPECT: /test result: ok\. \d+ passed; 0 failed/
-  EVIDENCE: pending
+  EVIDENCE: test result: ok. 200 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 2.70s
 
-- [ ] G2: each adapter has a fixture test on a real recorded payload (5 fixture dirs)
+- [x] G2: each adapter has a fixture test on a real recorded payload (5 fixture dirs)
   CHECK: ls -d api/fixtures/nws api/fixtures/usgs api/fixtures/ndbc api/fixtures/coops api/fixtures/openmeteo 2>/dev/null | wc -l | tr -d ' '
   EXPECT: /^5$/m
-  EVIDENCE: pending
+  EVIDENCE: 5
 
-- [ ] G3: normalizers are idempotent: normalizing and writing the same payload twice adds 0 rows (one test per adapter, so >= 5 tests match "idempotent")
+- [x] G3: normalizers are idempotent: normalizing and writing the same payload twice adds 0 rows (one test per adapter, so >= 5 tests match "idempotent")
   CHECK: cargo test --manifest-path api/Cargo.toml idempotent 2>&1 | grep -E "test result|running"
   EXPECT: /running ([5-9]|[1-9][0-9]) tests[\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 9 tests | test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 193 filtered out; finished in 0.19s
 
-- [ ] G4: conflict detection tests (SST satellite vs buoy, LST vs air) pass
+- [x] G4: conflict detection tests (SST satellite vs buoy, LST vs air) pass
   CHECK: cargo test --manifest-path api/Cargo.toml quality_phys 2>&1 | grep -E "test result|running [1-9]"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 4 tests | test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 198 filtered out; finished in 0.02s
 
-- [ ] G5: the NWWS source is absent without NWWS_USER, and parses a recorded product stanza when present (test)
+- [x] G5: the NWWS source is absent without NWWS_USER, and parses a recorded product stanza when present (test)
   CHECK: cargo test --manifest-path api/Cargo.toml nwws 2>&1 | grep -E "test result|running [1-9]"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 9 tests | test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 193 filtered out; finished in 0.01s

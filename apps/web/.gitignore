@@ -1,2 +1,4 @@
 # Copied from @sqlite.org/sqlite-wasm by scripts/copy-sqlite-wasm.ts (predev / prebuild).
 public/sqlite-wasm/
+# CesiumJS runtime, copied from node_modules by scripts/copy-cesium.ts
+/public/cesium/

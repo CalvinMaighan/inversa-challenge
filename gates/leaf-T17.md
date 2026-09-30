@@ -7,31 +7,33 @@ Scope: `apps/web/client/globe/**`:
 - A render governor using requestRenderMode.
 - The Cesium clock is bound to the TIME key.
 
-- [ ] G1: globe tests pass (layer contract, imagery ladder selection, quota fallback, heatmap color ramp)
+- [x] G1: globe tests pass (layer contract, imagery ladder selection, quota fallback, heatmap color ramp)
   CHECK: cd apps/web && bun test tests/client/globe 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 77 pass | 0 fail
 
-- [ ] G2: the production build includes Cesium assets under public/cesium
+- [x] G2: the production build includes Cesium assets under public/cesium
   CHECK: cd apps/web && bun run build >/dev/null 2>&1 && ls public/cesium/Workers | head -1
-  EXPECT: /\.js$/
-  EVIDENCE: pending
+  EXPECT: /\.js$/m
+  EVIDENCE: chunk-2X5O55FT.js
 
-- [ ] G3: the keyless globe renders under COOP/COEP with no CORP/COEP console errors (manual: the in-app browser against `next start`; quote the console summary and `crossOriginIsolated`)
-  EVIDENCE: pending
+- [x] G3: the keyless globe renders under COOP/COEP with no CORP/COEP console errors (manual: the in-app browser against `next start`; quote the console summary and `crossOriginIsolated`)
+  EVIDENCE: standalone `next start` build on 127.0.0.1:3057, fresh tab on /dev/globe: `crossOriginIsolated: true`; imagery rung `esri` (plan `no-token`, 0 imagery errors), 38 Esri tile requests all 200, /cesium/index.js + 36 /cesium/Workers/* + Assets all 200; console: 4 errors, all `POST /v1/graphql 500` (no Axum running behind the proxy), 0 COEP/CORP/blocked messages. Screenshot showed Esri imagery over South Florida.
 
-- [ ] G4: idle render is paused: requestRenderMode is true and no frames render over 5 s idle (manual, or a Playwright script printing `IDLE-FRAMES 0`)
-  EVIDENCE: pending
+- [x] G4: idle render is paused: requestRenderMode is true and no frames render over 5 s idle (manual, or a Playwright script printing `IDLE-FRAMES 0`)
+  EVIDENCE: same page, counting scene.postRender via GlobeApi.onPostRender for 5 s after load settled: `IDLE-FRAMES 0`, `requestRenderMode: true`, governor `idle`, no holds. Also after a VIEW seq bump fly to Key West (dev server): flight rendered, then `IDLE-FRAMES 0` over the next 5 s with holds [].
 
-- [ ] G5: no Entity API use in layers (primitives only)
+- [x] G5: no Entity API use in layers (primitives only)
   CHECK: grep -rn "viewer.entities\|new Entity(" apps/web/client/globe | wc -l | tr -d ' '
   EXPECT: /^0$/m
-  EVIDENCE: pending
+  EVIDENCE: 0
 
-- [ ] G6: typecheck and lint clean
+- [x] G6: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
-  EVIDENCE: pending
+  EVIDENCE: CLEAN
 
 - [ ] G7: (live, blocked on H7) the ion imagery ladder loads Google 3D over Miami (screenshot path)
   EVIDENCE: pending
+
+ABANDON: G7 blocked on H7: no CESIUM_ION_TOKEN is provisioned, so the ion rung (World Terrain, Bing via ion, Google 3D asset 2275207 over Miami/Keys below 30 km) cannot be screenshotted live. The rung is implemented in client/globe/imagery.ts and its selection, zone gating and quota fallback are unit-tested (tests/client/globe/ladder.test.ts, quota.test.ts); the keyless rung is verified live under G3.

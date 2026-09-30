@@ -5,6 +5,8 @@ import type { EvidenceKind } from "shared/agent/events";
 export type SelectionState = {
   /** Evidence id `<kind>:<key>` (PLAN.md C14), or null when nothing is selected. */
   evidenceId: string | null;
+  /** Evidence drawer open (voice `open_evidence`). */
+  drawerOpen: boolean;
 };
 
 const EVIDENCE_KINDS: readonly EvidenceKind[] = ["sighting", "reading", "alert", "fetch", "hotspot"];
@@ -17,6 +19,6 @@ export function parseEvidenceId(id: string): { kind: EvidenceKind; key: string }
   return EVIDENCE_KINDS.includes(kind) ? { kind, key: id.slice(at + 1) } : null;
 }
 
-const defaults: SelectionState = { evidenceId: null };
+const defaults: SelectionState = { evidenceId: null, drawerOpen: false };
 
 export const SELECTION = key("SELECTION", defaults);

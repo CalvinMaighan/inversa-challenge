@@ -5,7 +5,7 @@
 
 export const EVF_MAGIC = "EVF2";
 export const EVF_HEADER_BYTES = 72;
-export const SIGHTING_RECORD_BYTES = 12;
+export const SIGHTING_RECORD_BYTES = 16;
 /** i16 sentinel for a missing or flagged environment cell. */
 export const ENV_MISSING = -32768;
 
@@ -47,7 +47,7 @@ export type EvfHeader = {
  *   lst i16[envCols * envRows] (centi-degC; ENV_MISSING = missing/flagged)
  *   sst i16[envCols * envRows]
  *   pad to 4 bytes
- *   sightingCount u32, then records: f32 lon, f32 lat, u16 taxon, u8 quality, u8 flags
+ *   sightingCount u32, then records (16 B): u32 sightingId, f32 lon, f32 lat, u16 taxon, u8 quality, u8 flags
  *   (already 4-byte aligned; no trailing pad)
  */
 export function readEvfHeader(view: DataView): EvfHeader {
@@ -66,7 +66,7 @@ export function readEvfHeader(view: DataView): EvfHeader {
     envCols: view.getUint16(56, true),
     envRows: view.getUint16(58, true),
     envCellDeg: Math.round(view.getFloat32(60, true) * 1e6) / 1e6,
-    hotspotScale: view.getFloat32(64, true),
+    hotspotScale: Math.round(view.getFloat32(64, true) * 1e6) / 1e6,
   };
 }
 
@@ -85,4 +85,34 @@ export function evfFrameLayout(h: EvfHeader) {
 /** Total bytes of a frame given its sighting count. */
 export function evfFrameBytes(h: EvfHeader, sightingCount: number): number {
   return evfFrameLayout(h).sightingsOffset + 4 + sightingCount * SIGHTING_RECORD_BYTES;
+}
+
+/** One decoded EVF2 sighting record. `id` is `sightings.id`, citable as `sighting:<id>` (C14). */
+export type SightingRecord = {
+  id: number;
+  lon: number;
+  lat: number;
+  /** `taxa.id`; 1-4 are the focus species in EVF_SPECIES order. */
+  taxon: number;
+  /** Index into QUALITY_CODES. */
+  quality: number;
+  /** SIGHTING_FLAG bits. */
+  flags: number;
+};
+
+/** Decode `count` records starting at `offset` (the byte after the frame's sightingCount). */
+export function readSightingRecords(view: DataView, offset: number, count: number): SightingRecord[] {
+  const out: SightingRecord[] = new Array(count);
+  for (let k = 0; k < count; k++) {
+    const o = offset + k * SIGHTING_RECORD_BYTES;
+    out[k] = {
+      id: view.getUint32(o, true),
+      lon: view.getFloat32(o + 4, true),
+      lat: view.getFloat32(o + 8, true),
+      taxon: view.getUint16(o + 12, true),
+      quality: view.getUint8(o + 14),
+      flags: view.getUint8(o + 15),
+    };
+  }
+  return out;
 }

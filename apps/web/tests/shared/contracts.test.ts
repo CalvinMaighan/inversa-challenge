@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { isAgentStreamEvent } from "shared/agent/events";
-import { worstHealth } from "shared/feed-state";
+import { type FeedState, worstHealth } from "shared/feed-state";
 import { ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, readEvfHeader } from "shared/frames";
 import { isVoiceControlRequest, VOICE_INPUT_SAMPLE_RATE, VOICE_OUTPUT_SAMPLE_RATE } from "shared/voice/protocol";
 import { parseUiCommand, UI_TOOL_NAMES } from "shared/voice/ui-tools";
@@ -13,7 +13,9 @@ describe("shared contracts", () => {
   });
 
   test("feed health ranks worst first", () => {
-    const base = { source: "a", mode: "poll" as const, newestObservedAt: null, lastFetchAt: null, lagSeconds: null, note: null };
+    const base: Omit<FeedState, "state"> = {
+      source: "a", mode: "poll", newestObservedAt: null, lastFetchAt: null, lastFetchRunId: "7", lagSeconds: null, note: null,
+    };
     expect(worstHealth([{ ...base, state: "nominal" }, { ...base, state: "stale" }])).toBe("stale");
     expect(worstHealth([])).toBe("nominal");
   });
