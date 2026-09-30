@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test --tsconfig-override ./tsconfig.json tests",
-    "eval": "bun run eval/run.ts"
+    "eval": "bun run eval/run.ts",
+    "e2e:scrub": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/scrub.ts"
   },
   "dependencies": {
     "@calvinjs/active-state": "workspace:*",
@@ -53,6 +54,7 @@
     "@typescript-eslint/parser": "8.71.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.0-preview.9",
+    "playwright": "1.62.1",
     "typescript": "6.0.2"
   }
 }
