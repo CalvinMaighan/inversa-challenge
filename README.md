@@ -30,7 +30,7 @@ bun run data      # backfill live iNat, NAS and GBIF into ./data, rebuild frames
 bun run dev       # Axum on 127.0.0.1:4041 and Next on http://localhost:3050
 ```
 
-Open http://localhost:3050. Use `localhost`. On `127.0.0.1` the Next dev server answers 403 to its own dev assets, and the page stays blank apart from the orb.
+Open http://localhost:3050 (http://127.0.0.1:3050 works too).
 
 - `bun run data` defaults to 2 days of iNaturalist plus a 5-year NAS and GBIF baseline. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline is about 14,500 records and dominates the run time.
 - `INVERSA_DATA_DIR=/some/dir` moves the databases and the raw archive. Every script defaults it to `./data`, which git ignores.
