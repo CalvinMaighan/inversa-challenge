@@ -52,8 +52,9 @@ impl Default for Supervision {
     }
 }
 
-/// Upsert every known source into `sources`, then (when `config.sources_enabled`) start one
-/// supervised task per push/poll source. Returns immediately; the work runs on the runtime.
+/// Upsert every known source into `sources` (with the reason for each one that will not run),
+/// then (when `config.sources_enabled`) start one supervised task per push/poll source.
+/// Returns immediately; the work runs on the runtime.
 pub fn spawn(state: AppState) {
     tokio::spawn(async move {
         match start(state, Supervision::default()).await {
@@ -68,15 +69,42 @@ pub async fn start(state: AppState, supervision: Supervision) -> anyhow::Result<
     let mut runnable = crate::ingest::push::all(&state.config);
     runnable.extend(crate::ingest::poll::all(&state.config));
 
-    let mut infos: Vec<SourceInfo> = runnable.iter().map(|s| s.info()).collect();
-    infos.extend(crate::ingest::push::hook::sources().iter().map(|s| s.info()));
-    upsert_sources(&state, infos).await?;
+    // (info, why it is not running). Hook sources are fed over HTTP, so only the secret gates them.
+    let hook_reason = state.config.ingest_hook_secret.is_none().then(|| "INGEST_HOOK_SECRET not set".to_string());
+    let fetch_reason = (!state.config.sources_enabled).then(|| "INVERSA_SOURCES=off".to_string());
+    let mut known: Vec<(SourceInfo, Option<String>)> =
+        runnable.iter().map(|s| (s.info(), fetch_reason.clone())).collect();
+    known.extend(crate::ingest::push::disabled(&state.config).into_iter().map(|(info, reason)| (info, Some(reason))));
+    known.extend(crate::ingest::push::hook::sources().iter().map(|s| (s.info(), hook_reason.clone())));
+    for (info, reason) in &known {
+        if let Some(reason) = reason {
+            tracing::info!(source = info.id, "scheduler: source disabled: {reason}");
+        }
+    }
+    upsert_sources(&state, known.iter().map(|(info, _)| info.clone()).collect()).await?;
+    set_disabled(&state, known.into_iter().map(|(info, reason)| (info.id, reason)).collect()).await?;
 
     if !state.config.sources_enabled {
         tracing::info!("scheduler: sources disabled (INVERSA_SOURCES=off)");
         return Ok(Vec::new());
     }
     Ok(spawn_sources(&state, runnable, supervision))
+}
+
+/// Record, per source, why it is not running (`None` clears a reason from an earlier boot).
+pub async fn set_disabled(state: &AppState, reasons: Vec<(&'static str, Option<String>)>) -> anyhow::Result<()> {
+    state
+        .obs
+        .write(move |tx| {
+            let mut st = tx.prepare_cached(
+                "update sources set disabled_reason = ?2 where id = ?1 and disabled_reason is not ?2",
+            )?;
+            for (id, reason) in &reasons {
+                st.execute(params![id, reason])?;
+            }
+            Ok(())
+        })
+        .await
 }
 
 /// One supervised task per source.
@@ -1170,8 +1198,60 @@ mod tests {
         assert!(cadence > 0);
         // Idempotent at the next boot.
         start(state.clone(), Supervision::default()).await.unwrap();
-        assert_eq!(count(&state, "sources").await, 1 + crate::ingest::push::all(&state.config).len() as i64
-            + crate::ingest::poll::all(&state.config).len() as i64);
+        let disabled = crate::ingest::push::disabled(&state.config);
+        assert_eq!(
+            disabled.iter().map(|(i, _)| i.id).collect::<Vec<_>>(),
+            ["goes19", "nwws"],
+            "no GOES or NWWS secrets in tests"
+        );
+        assert_eq!(
+            count(&state, "sources").await,
+            1 + crate::ingest::push::all(&state.config).len() as i64
+                + crate::ingest::poll::all(&state.config).len() as i64
+                + disabled.len() as i64
+        );
+        let reasons: Vec<(String, Option<String>)> = state
+            .obs
+            .read(|c| {
+                c.prepare("select id, disabled_reason from sources order by id")?
+                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                    .collect()
+            })
+            .await
+            .unwrap();
+        for (id, reason) in &reasons {
+            let reason = reason.as_deref().unwrap_or_default();
+            match id.as_str() {
+                "goes19" => assert_eq!(reason, "GOES_SQS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY not set"),
+                "nwws" => assert!(reason.starts_with("NWWS_USER and NWWS_PASS not set"), "{reason}"),
+                // The hook secret is set in tests.
+                "web" => assert_eq!(reason, ""),
+                _ => assert_eq!(reason, "INVERSA_SOURCES=off", "{id}"),
+            }
+        }
+        let feeds = crate::feed_state::compute(&state.obs, now_ms()).await.unwrap();
+        assert_eq!(feeds.len(), reasons.len());
+        let goes = feeds.iter().find(|f| f.source == "goes19").unwrap();
+        assert_eq!(goes.state, crate::feed_state::Health::Down);
+        assert!(goes.note.as_deref().unwrap().starts_with("disabled: GOES_SQS_URL"), "{goes:?}");
+
+        // A boot where a source can run clears its reason (not via `start` here: that would
+        // spawn the network pollers).
+        let runnable: Vec<(&'static str, Option<String>)> = crate::ingest::poll::all(&state.config)
+            .iter()
+            .map(|s| (s.info().id, None))
+            .collect();
+        set_disabled(&state, runnable).await.unwrap();
+        let still: Vec<String> = state
+            .obs
+            .read(|c| {
+                c.prepare("select id from sources where disabled_reason is not null order by id")?
+                    .query_map([], |r| r.get(0))?
+                    .collect()
+            })
+            .await
+            .unwrap();
+        assert_eq!(still, ["goes19", "nwws"]);
     }
 
     /// Readings upsert precedence on the same (station, param, observed_at, origin) key.

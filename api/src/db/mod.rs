@@ -1,5 +1,6 @@
 //! SQLite access (PLAN.md C12). The public surface is the contract: `open`, `memory`, `write`,
-//! `read`, `name`, `migrations`, `configure`, `migrate`. Internally: one writer thread
+//! `read`, `migrations`, `configure`, `migrate`; the database name passed to `open`/`memory`
+//! selects the migration set. Internally: one writer thread
 //! (`writer.rs`) plus a pool of read connections (`pool.rs`).
 
 mod pool;
@@ -13,6 +14,7 @@ use rusqlite::{Connection, OpenFlags, Transaction};
 const OBSERVATIONS: &[(&str, &str)] = &[
     ("0001_init", include_str!("../../migrations/observations/0001_init.sql")),
     ("0002_source_indexes", include_str!("../../migrations/observations/0002_source_indexes.sql")),
+    ("0003_source_disabled", include_str!("../../migrations/observations/0003_source_disabled.sql")),
 ];
 const TEAM: &[(&str, &str)] = &[("0001_init", include_str!("../../migrations/team/0001_init.sql"))];
 
@@ -58,15 +60,10 @@ pub fn migrate(conn: &mut Connection, name: &str) -> rusqlite::Result<()> {
 ///
 /// Writes go to a dedicated writer thread (`writer.rs`); reads go to a pool of read connections
 /// (`pool.rs`). File databases use WAL, so readers never wait for the writer.
-// Wave-0 skeleton: every caller of `Db::write` (ingest T5/T8/T9, applyOps T10) is still a stub,
-// so the binary never writes yet. Each `expect` below turns into an "unfulfilled expectation"
-// warning the moment a real caller lands; delete it then.
 #[derive(Clone)]
-#[cfg_attr(not(test), expect(dead_code, reason = "`writer` and `name` have no non-test reader until ingest lands"))]
 pub struct Db {
     writer: writer::Writer,
     readers: pool::Pool,
-    pub name: &'static str,
 }
 
 fn static_name(name: &str) -> &'static str {
@@ -86,7 +83,6 @@ fn open_flags() -> OpenFlags {
         | OpenFlags::SQLITE_OPEN_NO_MUTEX
 }
 
-#[cfg_attr(not(test), expect(dead_code, reason = "`write` and `memory` have no non-test caller until ingest lands"))]
 impl Db {
     pub fn open(dir: &Path, name: &str) -> anyhow::Result<Self> {
         let name = static_name(name);
@@ -131,7 +127,7 @@ impl Db {
             Ok(reader)
         })?;
         let writer = writer::Writer::spawn(conn, name)?;
-        Ok(Db { writer, readers, name })
+        Ok(Db { writer, readers })
     }
 
     /// Run `f` in a write transaction on the writer thread. Commits on Ok, rolls back on Err.
@@ -379,11 +375,9 @@ mod tests {
     #[tokio::test]
     async fn migrations_apply_and_seed_taxa() {
         let db = Db::memory("observations");
-        assert_eq!(db.name, "observations");
         let n: i64 = db.read(|c| c.query_row("select count(*) from taxa where focus = 1", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 4);
         let team = Db::memory("team");
-        assert_eq!(team.name, "team");
         let n: i64 = team.read(|c| c.query_row("select count(*) from ops", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 0);
     }

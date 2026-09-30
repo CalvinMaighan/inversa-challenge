@@ -126,7 +126,7 @@ impl Governor {
     }
 
     /// Current interval (min interval when healthy, doubled while backing off).
-    #[allow(dead_code)] // tests; feed state reads it through `snapshot`
+    #[cfg(test)]
     pub fn interval(&self) -> Duration {
         self.lock().interval
     }
@@ -199,14 +199,12 @@ pub fn for_source(source_id: &str, min_interval: Duration) -> Arc<Governor> {
 }
 
 /// Snapshot of a registered source's governor.
-#[allow(dead_code)] // read by feed_state (T4)
 pub fn snapshot(source_id: &str) -> Option<Snapshot> {
     let gov = registry().lock().unwrap_or_else(|p| p.into_inner()).get(source_id).cloned()?;
     Some(gov.snapshot(Instant::now()))
 }
 
 /// Feed-state note for a source: `Some` only while it is backing off.
-#[allow(dead_code)] // read by feed_state (T4)
 pub fn note(source_id: &str) -> Option<String> {
     snapshot(source_id).and_then(|s| s.note())
 }
@@ -226,7 +224,6 @@ pub struct HttpStatusError {
 
 /// Pass successful responses through; turn anything else into [`HttpStatusError`].
 /// For poll adapters (T8/T9): `let res = governor::check_response(http.get(url).send().await?)?;`
-#[allow(dead_code)]
 pub fn check_response(res: reqwest::Response) -> Result<reqwest::Response, HttpStatusError> {
     let status = res.status();
     if status.is_success() {

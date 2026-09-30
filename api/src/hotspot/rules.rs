@@ -145,15 +145,6 @@ pub fn access_rules(species: Species) -> &'static [Rule] {
     }
 }
 
-/// Every rule in the table, for audits.
-#[allow(dead_code)]
-pub fn all_rules() -> Vec<(Species, &'static Rule)> {
-    super::SPECIES
-        .iter()
-        .flat_map(|&s| activity_rules(s).iter().chain(access_rules(s)).map(move |r| (s, r)))
-        .collect()
-}
-
 /// Product of the rules' multipliers; a rule without data contributes 1.0.
 pub fn multiplier(rules: &[Rule], c: &Conditions) -> f32 {
     rules.iter().map(|r| (r.applies)(c).unwrap_or(1.0)).product()
@@ -162,6 +153,14 @@ pub fn multiplier(rules: &[Rule], c: &Conditions) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every rule in the table, for the audit below.
+    fn all_rules() -> Vec<(Species, &'static Rule)> {
+        super::super::SPECIES
+            .iter()
+            .flat_map(|&s| activity_rules(s).iter().chain(access_rules(s)).map(move |r| (s, r)))
+            .collect()
+    }
 
     #[test]
     fn rules_have_rationale() {

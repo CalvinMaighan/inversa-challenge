@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-09-30T20:41:40Z",
+  "files": [
+    { "file": "cfwkey.xml", "url": "xmpp:nwws@conference.nwws-oi.weather.gov", "content_type": "application/xml", "http_status": null },
+    { "file": "cfwmfl.xml", "url": "xmpp:nwws@conference.nwws-oi.weather.gov", "content_type": "application/xml", "http_status": null }
+  ]
+}

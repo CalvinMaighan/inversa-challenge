@@ -33,16 +33,57 @@ const WAIT_SECONDS: u32 = 20;
 const MAX_MESSAGES: u32 = 10;
 
 pub fn sources(config: &Config) -> Vec<Arc<dyn Source>> {
-    match (&config.goes_sqs_url, &config.aws_access_key_id, &config.aws_secret_access_key) {
-        (Some(url), Some(key), Some(secret)) => match GoesSqs::new(url, key, secret) {
-            Ok(s) => vec![Arc::new(s)],
-            Err(e) => {
-                tracing::error!("GOES_SQS_URL rejected, GOES source disabled: {e:#}");
-                vec![]
-            }
-        },
-        _ => vec![],
+    match configure(config) {
+        Ok(s) => vec![Arc::new(s)],
+        Err(_) => vec![],
     }
+}
+
+/// The SQS source, or why it cannot run (the reason becomes the feed-state note).
+pub fn configure(config: &Config) -> std::result::Result<GoesSqs, String> {
+    match (&config.goes_sqs_url, &config.aws_access_key_id, &config.aws_secret_access_key) {
+        (Some(url), Some(key), Some(secret)) => {
+            GoesSqs::new(url, key, secret).map_err(|e| format!("GOES_SQS_URL rejected: {e:#}"))
+        }
+        (url, key, secret) => {
+            let missing: Vec<&str> =
+                [("GOES_SQS_URL", url.is_none()), ("AWS_ACCESS_KEY_ID", key.is_none()), ("AWS_SECRET_ACCESS_KEY", secret.is_none())]
+                    .into_iter()
+                    .filter_map(|(k, absent)| absent.then_some(k))
+                    .collect();
+            Err(format!("{} not set", missing.join(", ")))
+        }
+    }
+}
+
+/// Static description, shared by the running source and its disabled registration.
+pub fn info() -> SourceInfo {
+    SourceInfo {
+        id: SOURCE_ID,
+        name: "GOES-19 ABI L2 (NOAA NODD)",
+        homepage: "https://registry.opendata.aws/noaa-goes/",
+        mode: Mode::Push,
+        cadence: Duration::from_secs(3600),
+        max_latency: Duration::from_secs(2 * 3600),
+    }
+}
+
+/// Pure: one ABI L2 object (its bucket URL or key names the product) to rows. Used by the SQS
+/// source and by fixture/archive replay, which has no queue.
+pub fn normalize_object(raw: &RawPayload) -> Result<Vec<Row>> {
+    let key = raw.source_url.strip_prefix(BUCKET_URL).unwrap_or(&raw.source_url);
+    let product = Product::from_key(key).ok_or_else(|| anyhow!("not a GOES product key: {key}"))?;
+    let decoded = decode::decode_bytes(&raw.bytes, product)?;
+    let rows = decode::rows(&decoded);
+    let w = decoded.window;
+    tracing::info!(
+        key = %key,
+        rows_in = rows.len(),
+        observed_at = decoded.observed_at,
+        window = %format!("x {}..{} y {}..{}", w.x0, w.x1, w.y0, w.y1),
+        "goes object decoded"
+    );
+    Ok(rows)
 }
 
 pub struct GoesSqs {
@@ -216,14 +257,7 @@ fn scan_start_minute(key: &str) -> Option<u32> {
 #[async_trait]
 impl Source for GoesSqs {
     fn info(&self) -> SourceInfo {
-        SourceInfo {
-            id: SOURCE_ID,
-            name: "GOES-19 ABI L2 (NOAA NODD)",
-            homepage: "https://registry.opendata.aws/noaa-goes/",
-            mode: Mode::Push,
-            cadence: Duration::from_secs(3600),
-            max_latency: Duration::from_secs(2 * 3600),
-        }
+        info()
     }
 
     fn min_interval(&self) -> Duration {
@@ -258,12 +292,7 @@ impl Source for GoesSqs {
     }
 
     fn normalize(&self, raw: &RawPayload) -> Result<Vec<Row>> {
-        let key = raw.source_url.strip_prefix(BUCKET_URL).unwrap_or(&raw.source_url);
-        let product = Product::from_key(key).ok_or_else(|| anyhow!("not a GOES product key: {key}"))?;
-        let decoded = decode::decode_bytes(&raw.bytes, product)?;
-        let rows = decode::rows(&decoded);
-        tracing::info!(key = %key, rows_in = rows.len(), observed_at = decoded.observed_at, "goes object decoded");
-        Ok(rows)
+        normalize_object(raw)
     }
 
     async fn ack(&self, ctx: &FetchCtx<'_>, raw: &RawPayload) -> Result<()> {

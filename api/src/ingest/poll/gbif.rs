@@ -4,7 +4,7 @@
 //! Query: the bbox as `decimalLatitude`/`decimalLongitude` ranges plus the four taxonKeys
 //! (backbone `species/match`, 2026-09-30): Python bivittatus 4820533, Salvator merianae 5227370,
 //! Iguana iguana 2459658, and the genus Pterois 2334432 (covers P. volitans 2334438 and
-//! P. miles 2334433). Paged by `offset`/`limit` (100 per page: 300-row pages time out under load; GBIF stops at offset 100,000).
+//! P. miles 2334433). Paged by `offset`/`limit` (300 max; GBIF stops at offset 100,000).
 //!
 //! - **Daily poll:** `modified=<from>,*`, where `from` is the last successful poll day minus
 //!   [`MODIFIED_LAG`], since records reach the index days after their `modified` stamp. The
@@ -45,9 +45,11 @@ pub const PTEROIS_GENUS_KEY: i64 = 2334432;
 pub const TAXON_KEYS: [i64; 4] = [PYTHON_KEY, TEGU_KEY, IGUANA_KEY, PTEROIS_GENUS_KEY];
 pub const REQUEST_INTERVAL: Duration = Duration::from_secs(1);
 pub const CADENCE: Duration = Duration::from_secs(24 * 3600);
-pub const PAGE_LIMIT: usize = 100;
-/// GBIF refuses `offset + limit` beyond this.
-pub const MAX_OFFSET: usize = 100_000;
+pub const PAGE_LIMIT: usize = 300;
+/// Deepest usable offset. GBIF documents 100,000, but measured on 2026-09-30 every search page
+/// from offset ~10,000 on stalls mid-body (the 5-year baseline has 14,512 records; offset 9,800
+/// answers in 7 s, 10,100 never finishes). `EventDate` walks are split by year to stay under it.
+pub const MAX_OFFSET: usize = 10_000;
 pub const MODIFIED_LAG: chrono::Duration = chrono::Duration::days(30);
 
 pub struct Gbif {
@@ -99,17 +101,39 @@ pub enum Filter {
 }
 
 pub struct GbifPager {
-    filter: Filter,
+    /// Windows still to walk; the first is current. An `EventDate` range is one window per
+    /// calendar year so each stays under [`MAX_OFFSET`].
+    windows: std::collections::VecDeque<Filter>,
     offset: usize,
     limit: usize,
-    done: bool,
     /// Cursor to hand out with the final page only, so a failed walk does not advance it.
     final_cursor: Option<String>,
 }
 
 impl GbifPager {
     pub fn new(filter: Filter, final_cursor: Option<String>) -> Self {
-        GbifPager { filter, offset: 0, limit: PAGE_LIMIT, done: false, final_cursor }
+        GbifPager { windows: split_by_year(filter).into(), offset: 0, limit: PAGE_LIMIT, final_cursor }
+    }
+
+    /// The current window is exhausted: move to the next one from offset 0.
+    fn next_window(&mut self) {
+        self.windows.pop_front();
+        self.offset = 0;
+    }
+}
+
+/// `EventDate { from, to }` as one window per calendar year (clipped to the range); other
+/// filters unchanged.
+pub fn split_by_year(filter: Filter) -> Vec<Filter> {
+    use chrono::{Datelike, NaiveDate};
+    match filter {
+        Filter::EventDate { from, to } if from.year() < to.year() => (from.year()..=to.year())
+            .map(|y| Filter::EventDate {
+                from: from.max(NaiveDate::from_ymd_opt(y, 1, 1).expect("jan 1")),
+                to: to.min(NaiveDate::from_ymd_opt(y, 12, 31).expect("dec 31")),
+            })
+            .collect(),
+        other => vec![other],
     }
 }
 
@@ -138,23 +162,23 @@ struct PageHead {
 
 impl Pager for GbifPager {
     fn next_url(&self) -> Option<String> {
-        (!self.done).then(|| search_url(self.filter, self.offset, self.limit))
+        self.windows.front().map(|&w| search_url(w, self.offset, self.limit))
     }
 
     fn advance(&mut self, body: &[u8]) -> anyhow::Result<()> {
         let page: PageHead = serde_json::from_slice(body)?;
         self.offset += self.limit;
         if page.end_of_records || page.results.len() < self.limit {
-            self.done = true;
+            self.next_window();
         } else if self.offset + self.limit > MAX_OFFSET {
             tracing::warn!(source = ID, "GBIF paging limit reached at offset {}; narrow the window", self.offset);
-            self.done = true;
+            self.next_window();
         }
         Ok(())
     }
 
     fn cursor(&self) -> Option<String> {
-        if self.done {
+        if self.windows.is_empty() {
             self.final_cursor.clone()
         } else {
             None
@@ -343,12 +367,12 @@ mod tests {
             url,
             "https://api.gbif.org/v1/occurrence/search?decimalLatitude=24.3,27.5&decimalLongitude=-83.2,-79.8\
              &taxonKey=4820533&taxonKey=5227370&taxonKey=2459658&taxonKey=2334432&occurrenceStatus=PRESENT\
-             &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=100&offset=0"
+             &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=300&offset=0"
         );
         let full = serde_json::to_vec(&serde_json::json!({ "endOfRecords": false, "results": vec![serde_json::json!({}); 300] })).unwrap();
         p.advance(&full).unwrap();
         assert_eq!(p.cursor(), None);
-        assert!(p.next_url().unwrap().ends_with("&offset=100"));
+        assert!(p.next_url().unwrap().ends_with("&offset=300"));
         p.advance(br#"{"endOfRecords":true,"results":[{}]}"#).unwrap();
         assert_eq!(p.next_url(), None);
         assert_eq!(p.cursor().as_deref(), Some("2026-09-30"));
@@ -356,5 +380,44 @@ mod tests {
         let to = chrono::NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
         let base = GbifPager::new(Filter::EventDate { from, to }, None);
         assert!(base.next_url().unwrap().contains("&eventDate=2026-08-31,2026-09-30&"));
+    }
+
+    #[test]
+    fn gbif_pager_walks_a_baseline_year_by_year() {
+        let d = |y, m, day| chrono::NaiveDate::from_ymd_opt(y, m, day).unwrap();
+        let mut p = GbifPager::new(Filter::EventDate { from: d(2024, 9, 30), to: d(2026, 9, 30) }, Some("done".into()));
+        let full = serde_json::to_vec(&serde_json::json!({ "endOfRecords": false, "results": vec![serde_json::json!({}); 300] })).unwrap();
+        let last = br#"{"endOfRecords":true,"results":[{}]}"#;
+        let mut seen = Vec::new();
+        // Two pages per year: a full one, then the last.
+        while let Some(url) = p.next_url() {
+            let window = url.split("eventDate=").nth(1).unwrap().split('&').next().unwrap().to_string();
+            let offset = url.rsplit("offset=").next().unwrap().to_string();
+            seen.push(format!("{window}@{offset}"));
+            assert_eq!(p.cursor(), None, "cursor only after the last window");
+            p.advance(if offset == "0" { &full[..] } else { &last[..] }).unwrap();
+        }
+        assert_eq!(
+            seen,
+            [
+                "2024-09-30,2024-12-31@0",
+                "2024-09-30,2024-12-31@300",
+                "2025-01-01,2025-12-31@0",
+                "2025-01-01,2025-12-31@300",
+                "2026-01-01,2026-09-30@0",
+                "2026-01-01,2026-09-30@300",
+            ]
+        );
+        assert_eq!(p.cursor().as_deref(), Some("done"));
+
+        // A window that reaches the offset limit moves on instead of requesting a stalling page.
+        let mut p = GbifPager::new(Filter::EventDate { from: d(2025, 1, 1), to: d(2026, 1, 31) }, None);
+        let mut pages = 0;
+        while p.next_url().is_some_and(|u| u.contains("2025-01-01,2025-12-31")) {
+            p.advance(&full).unwrap();
+            pages += 1;
+        }
+        assert_eq!(pages, MAX_OFFSET / PAGE_LIMIT);
+        assert!(p.next_url().unwrap().contains("eventDate=2026-01-01,2026-01-31&limit=300&offset=0"));
     }
 }

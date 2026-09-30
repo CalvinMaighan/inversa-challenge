@@ -96,7 +96,7 @@ impl Layout {
     };
 
     /// Layout of a smaller scoring grid (tests, golden file); `REGION` is the production one.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn for_grid(grid: Grid) -> anyhow::Result<Layout> {
         let m = HS_FACTOR * ENV_FACTOR;
         anyhow::ensure!(
@@ -163,8 +163,9 @@ pub fn write_header(out: &mut Vec<u8>, layout: &Layout, frame_count: u32, frame0
     out.extend_from_slice(&0u32.to_le_bytes());
 }
 
-/// Decoded header; the reader side of `write_header` for Rust consumers and tests.
-#[allow(dead_code)]
+/// Decoded header; the reader side of `write_header`. Clients decode in TS
+/// (`apps/web/shared/frames.ts`), so in Rust only tests read it.
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Header {
     pub frame_count: u32,
@@ -176,7 +177,7 @@ pub struct Header {
     pub hotspot_scale: f32,
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn read_header(bytes: &[u8]) -> anyhow::Result<Header> {
     anyhow::ensure!(bytes.len() >= HEADER_BYTES, "EVF: short header");
     anyhow::ensure!(&bytes[..4] == MAGIC, "EVF: bad magic");

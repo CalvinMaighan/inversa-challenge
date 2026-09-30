@@ -269,3 +269,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T11 ids merged 8/8. T29 merged (scene cold-snap-2026-02-01). T18 re-adapting to final frame contract; T17 fixing GlobeView. NOTE: scene is outside default 30d window; TIME window must shift via set_time.
 - T17 follow-up merged 6/7 (G7 ABANDON H7). Main web: typecheck/lint clean, 418 tests. page.tsx wired: Globe+Hud+AgentOrb.
 - T19 merged+verified 4/4 (web 516 tests). Fixes: busy_timeout 30s, GBIF 100/page, quiet cargo scripts.
+- T22 data-plane integration: clippy -D warnings clean; migration 0003 (`sources.disabled_reason`, disabled sources listed as down with a note); `backfill --fixtures` covers every fixture source (manifests for physical, GOES, NWWS; NWWS fixtures moved to `api/fixtures/nwws/`) and rebuilds frames; GBIF baseline paged per year (search stalls past offset 10k); e2e_fixture_pipeline; api 204 passed, 2 ignored (live).

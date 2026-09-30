@@ -6,12 +6,8 @@ use tokio::sync::broadcast;
 
 use crate::feed_state::FeedState;
 
-// Wave-0 skeleton: the publishers (scheduler T5, frame builder T11, applyOps T10,
-// feed_state::spawn_publisher once main.rs starts it) are not wired yet. Each `expect` turns
-// into an "unfulfilled expectation" warning when the first one lands; delete it then.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-#[cfg_attr(not(test), expect(dead_code, reason = "no non-test publisher is wired yet"))]
 pub enum Event {
     FeedState(FeedState),
     /// Frames between these unix ms were rebuilt.

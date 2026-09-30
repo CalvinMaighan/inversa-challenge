@@ -61,6 +61,7 @@ impl Config {
         }
     }
 
+    #[cfg(test)]
     pub fn for_tests() -> Self {
         Config {
             bind: "127.0.0.1:0".into(),

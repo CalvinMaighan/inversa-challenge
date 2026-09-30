@@ -17,8 +17,6 @@ use crate::model::Flag;
 
 pub const WEST: f64 = -83.2;
 pub const SOUTH: f64 = 24.3;
-pub const EAST: f64 = -79.8;
-pub const NORTH: f64 = 27.5;
 pub const CELL_DEG: f64 = 0.05;
 pub const COLS: usize = 68;
 pub const ROWS: usize = 64;
@@ -55,34 +53,8 @@ impl Proj {
         Proj { h: perspective_point_height + semi_major_axis, r_eq: semi_major_axis, r_pol: semi_minor_axis, lon0_deg }
     }
 
-    /// GOES-East nominal parameters (PUG table 5.1.2.8). Files carry the same values; tests use this.
-    pub fn goes_east() -> Self {
-        Proj::new(35_786_023.0, 6_378_137.0, 6_356_752.314_14, -75.0)
-    }
-
-    /// Scan angles (radians) to (lat, lon) degrees. `None` when the ray misses the Earth.
-    pub fn to_lat_lon(&self, x: f64, y: f64) -> Option<(f64, f64)> {
-        let (sx, cx) = x.sin_cos();
-        let (sy, cy) = y.sin_cos();
-        let ratio = self.r_eq * self.r_eq / (self.r_pol * self.r_pol);
-        let a = sx * sx + cx * cx * (cy * cy + ratio * sy * sy);
-        let b = -2.0 * self.h * cx * cy;
-        let c = self.h * self.h - self.r_eq * self.r_eq;
-        let disc = b * b - 4.0 * a * c;
-        if disc < 0.0 {
-            return None;
-        }
-        let r_s = (-b - disc.sqrt()) / (2.0 * a);
-        let s_x = r_s * cx * cy;
-        let s_y = -r_s * sx;
-        let s_z = r_s * cx * sy;
-        let lat = (ratio * s_z / ((self.h - s_x).powi(2) + s_y * s_y).sqrt()).atan();
-        let lon = self.lon0_deg.to_radians() - (s_y / (self.h - s_x)).atan();
-        Some((lat.to_degrees(), lon.to_degrees()))
-    }
-
     /// (lat, lon) degrees to scan angles (radians). `None` when the point is behind the limb.
-    pub fn to_scan(&self, lat_deg: f64, lon_deg: f64) -> Option<(f64, f64)> {
+    pub fn to_scan(self, lat_deg: f64, lon_deg: f64) -> Option<(f64, f64)> {
         let e2 = (self.r_eq * self.r_eq - self.r_pol * self.r_pol) / (self.r_eq * self.r_eq);
         let phi_c = ((self.r_pol * self.r_pol) / (self.r_eq * self.r_eq) * lat_deg.to_radians().tan()).atan();
         let r_c = self.r_pol / (1.0 - e2 * phi_c.cos().powi(2)).sqrt();
@@ -152,9 +124,6 @@ pub struct Window {
 impl Window {
     pub fn width(&self) -> usize {
         self.x1 - self.x0
-    }
-    pub fn height(&self) -> usize {
-        self.y1 - self.y0
     }
 }
 
@@ -276,6 +245,41 @@ impl GridMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Test-only inverse projection and window height: the decoder only projects lat/lon to scan angles.
+    impl Proj {
+        /// GOES-East nominal parameters (PUG table 5.1.2.8). Files carry the same values; tests use this.
+        pub fn goes_east() -> Self {
+            Proj::new(35_786_023.0, 6_378_137.0, 6_356_752.314_14, -75.0)
+        }
+
+        /// Scan angles (radians) to (lat, lon) degrees. `None` when the ray misses the Earth.
+        pub fn to_lat_lon(self, x: f64, y: f64) -> Option<(f64, f64)> {
+            let (sx, cx) = x.sin_cos();
+            let (sy, cy) = y.sin_cos();
+            let ratio = self.r_eq * self.r_eq / (self.r_pol * self.r_pol);
+            let a = sx * sx + cx * cx * (cy * cy + ratio * sy * sy);
+            let b = -2.0 * self.h * cx * cy;
+            let c = self.h * self.h - self.r_eq * self.r_eq;
+            let disc = b * b - 4.0 * a * c;
+            if disc < 0.0 {
+                return None;
+            }
+            let r_s = (-b - disc.sqrt()) / (2.0 * a);
+            let s_x = r_s * cx * cy;
+            let s_y = -r_s * sx;
+            let s_z = r_s * cx * sy;
+            let lat = (ratio * s_z / ((self.h - s_x).powi(2) + s_y * s_y).sqrt()).atan();
+            let lon = self.lon0_deg.to_radians() - (s_y / (self.h - s_x)).atan();
+            Some((lat.to_degrees(), lon.to_degrees()))
+        }
+    }
+
+    impl Window {
+        fn height(&self) -> usize {
+            self.y1 - self.y0
+        }
+    }
 
     /// ABI CONUS 2 km grid as written in every GOES-19 CONUS file (x/y scale_factor and add_offset).
     pub fn conus_2km() -> FixedGrid {

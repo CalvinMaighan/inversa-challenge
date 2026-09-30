@@ -2,11 +2,16 @@
 //! `observed_at` each source has contributed.
 //!
 //! Rules, first match wins:
+//! - `down`: the source is registered but not running (`sources.disabled_reason`: a missing
+//!   secret or `INVERSA_SOURCES=off`); the note is `disabled: <reason>`.
 //! - `down`: the last [`DOWN_AFTER_ERRORS`] fetch runs all failed, or there has been no fetch
 //!   within 3 × cadence (including never).
 //! - `stale`: lag (now − newest observed_at) > `max_latency_s`.
 //! - `lagging`: lag > cadence + [`LAGGING_GRACE_S`] (the PRD §13 poll-freshness target).
 //! - `nominal`: otherwise.
+//!
+//! While a source's rate governor is backing off, its state ("backoff 120s after HTTP 503") is
+//! appended to the note.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -15,6 +20,7 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::db::Db;
+use crate::ingest::governor;
 use crate::realtime::{Event, Hub};
 
 /// Consecutive failed fetch runs that mark a feed down.
@@ -55,6 +61,7 @@ struct SourceRow {
     mode: String,
     cadence_s: i64,
     max_latency_s: i64,
+    disabled_reason: Option<String>,
 }
 
 /// One row of `fetch_runs`, newest first.
@@ -75,7 +82,28 @@ struct Inputs {
 /// The state of every registered source at `now_ms` (unix ms), ordered by source id.
 pub async fn compute(db: &Db, now_ms: i64) -> anyhow::Result<Vec<FeedState>> {
     let inputs = db.read(move |conn| load(conn, now_ms)).await?;
-    Ok(inputs.into_iter().map(|i| classify(i, now_ms)).collect())
+    Ok(inputs
+        .into_iter()
+        .map(|i| {
+            let s = classify(i, now_ms);
+            let backoff = governor::note(&s.source);
+            with_backoff(s, backoff)
+        })
+        .collect())
+}
+
+/// Append the source's live rate-governor state ("backoff 120s after HTTP 503 ...") to the note
+/// while it is backing off, unless the note already carries that text (a failed run records the
+/// governor note in its error).
+fn with_backoff(mut s: FeedState, backoff: Option<String>) -> FeedState {
+    if let Some(b) = backoff {
+        s.note = match s.note.take() {
+            Some(n) if n.contains(&b) => Some(n),
+            Some(n) => Some(format!("{n}; {b}")),
+            None => Some(b),
+        };
+    }
+    s
 }
 
 /// Recompute feed state every `period` (15 s suits the fastest 1-minute cadences) and publish `Event::FeedState` for each source whose
@@ -109,9 +137,16 @@ pub fn spawn_publisher(obs: Db, hub: Hub, period: Duration) -> tokio::task::Join
 
 fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
     let sources = {
-        let mut stmt = conn.prepare("select id, mode, cadence_s, max_latency_s from sources order by id")?;
+        let mut stmt =
+            conn.prepare("select id, mode, cadence_s, max_latency_s, disabled_reason from sources order by id")?;
         let rows = stmt.query_map([], |r| {
-            Ok(SourceRow { id: r.get(0)?, mode: r.get(1)?, cadence_s: r.get(2)?, max_latency_s: r.get(3)? })
+            Ok(SourceRow {
+                id: r.get(0)?,
+                mode: r.get(1)?,
+                cadence_s: r.get(2)?,
+                max_latency_s: r.get(3)?,
+                disabled_reason: r.get(4)?,
+            })
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
@@ -178,7 +213,9 @@ fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
     let last_error = runs.first().filter(|r| r.status == "error").map(|r| r.error.as_deref().unwrap_or("no error text"));
     let all_failed = runs.len() >= DOWN_AFTER_ERRORS && runs.iter().all(|r| r.status == "error");
 
-    let (state, note) = if all_failed {
+    let (state, note) = if let Some(reason) = &source.disabled_reason {
+        (Health::Down, Some(format!("disabled: {reason}")))
+    } else if all_failed {
         (Health::Down, Some(format!("last {DOWN_AFTER_ERRORS} fetches failed: {}", last_error.unwrap_or_default())))
     } else if last_fetch_at.is_none() {
         (Health::Down, Some("never fetched".to_string()))
@@ -303,6 +340,46 @@ mod tests {
         assert_eq!(s.last_fetch_run_id.as_deref(), Some("1"));
         assert_eq!(s.lag_seconds, Some(180));
         assert_eq!(s.note, None);
+    }
+
+    #[test]
+    fn backoff_is_appended_once() {
+        let state = |note: Option<&str>| FeedState {
+            source: "usgs".into(),
+            mode: "poll".into(),
+            state: Health::Nominal,
+            newest_observed_at: None,
+            last_fetch_at: None,
+            last_fetch_run_id: None,
+            lag_seconds: None,
+            note: note.map(String::from),
+        };
+        let b = "backoff 120s after HTTP 503 (1 consecutive)".to_string();
+        assert_eq!(with_backoff(state(None), None).note, None);
+        assert_eq!(with_backoff(state(None), Some(b.clone())).note.as_deref(), Some(b.as_str()));
+        assert_eq!(
+            with_backoff(state(Some("fetching; no observations stored yet")), Some(b.clone())).note.unwrap(),
+            format!("fetching; no observations stored yet; {b}")
+        );
+        let failed = format!("last fetch failed: HTTP 503 from x [{b}]");
+        assert_eq!(with_backoff(state(Some(&failed)), Some(b)).note.unwrap(), failed);
+    }
+
+    #[tokio::test]
+    async fn disabled_source_is_down_with_reason_and_keeps_history() {
+        let db = db_with_source("goes19").await;
+        run(&db, "goes19", NOW - MIN, "ok").await;
+        sighting(&db, "goes19", "1", NOW - 3 * MIN).await;
+        db.write(|tx| tx.execute("update sources set disabled_reason = 'GOES_SQS_URL not set' where id = 'goes19'", []))
+            .await
+            .unwrap();
+        let s = only(&db).await;
+        assert_eq!(s.state, Health::Down, "{s:?}");
+        assert_eq!(s.note.as_deref(), Some("disabled: GOES_SQS_URL not set"));
+        // What was fetched before it was disabled is still reported.
+        assert_eq!((s.last_fetch_at, s.newest_observed_at), (Some(NOW - MIN), Some(NOW - 3 * MIN)));
+        db.write(|tx| tx.execute("update sources set disabled_reason = null", [])).await.unwrap();
+        assert_eq!(only(&db).await.state, Health::Nominal);
     }
 
     #[tokio::test]

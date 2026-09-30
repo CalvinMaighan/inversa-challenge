@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-09-30T20:36:40Z",
+  "files": [
+    {
+      "file": "forecast.json",
+      "url": "https://api.open-meteo.com/v1/forecast?latitude=24.925,25.175,25.675,24.425&longitude=-80.575,-80.825,-80.825,-81.825&hourly=temperature_2m,precipitation,wind_speed_10m&wind_speed_unit=ms&timeformat=unixtime&timezone=GMT&past_days=1&forecast_days=2"
+    },
+    {
+      "file": "marine.json",
+      "url": "https://marine-api.open-meteo.com/v1/marine?latitude=24.925,25.175,25.675,24.425&longitude=-80.575,-80.825,-80.825,-81.825&hourly=wave_height,sea_surface_temperature&timeformat=unixtime&timezone=GMT&past_days=1&forecast_days=2&cell_selection=nearest"
+    }
+  ]
+}

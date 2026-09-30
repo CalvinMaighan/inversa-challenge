@@ -80,10 +80,6 @@ impl Hlc {
         }
         Some(Hlc { wall_ms: parse_digits(wall)?, counter: parse_digits(counter)?, node_id: node_id.to_string() })
     }
-
-    pub fn format(&self) -> String {
-        format!("{}:{}:{}", self.wall_ms, self.counter, self.node_id)
-    }
 }
 
 /// Plain decimal digits, at most 15 so the TS side (IEEE doubles) parses the same set.
@@ -193,6 +189,14 @@ struct ValidOp<'a> {
     value_json: String,
 }
 
+impl ValidOp<'_> {
+    /// Order of a stored HLC string relative to this op's (already parsed) HLC. Unparseable
+    /// stored strings sort first, as in [`compare_hlc`].
+    fn cmp_stored(&self, stored: &str) -> Ordering {
+        Hlc::parse(stored).as_ref().cmp(&Some(&self.hlc))
+    }
+}
+
 fn validate_one<'a>(board_id: &str, op: &'a OpIn) -> Result<ValidOp<'a>, CrdtError> {
     let invalid = |reason: String| CrdtError::InvalidOp { id: op.id.clone(), reason };
     if op.id.is_empty() || op.id.len() > MAX_ID_BYTES {
@@ -295,7 +299,7 @@ fn materialize(tx: &Transaction, board_id: &str, v: &ValidOp<'_>) -> rusqlite::R
                     |r| r.get(0),
                 )
                 .optional()?;
-            if existing.as_deref().is_some_and(|cur| compare_hlc(cur, &op.hlc) != Ordering::Less) {
+            if existing.as_deref().is_some_and(|cur| v.cmp_stored(cur) != Ordering::Less) {
                 return Ok(());
             }
             tx.execute(
@@ -308,7 +312,7 @@ fn materialize(tx: &Transaction, board_id: &str, v: &ValidOp<'_>) -> rusqlite::R
             let existing: Option<String> = tx
                 .query_row("select hlc from messages where id = ?1 and board_id = ?2", params![op.entity_id, board_id], |r| r.get(0))
                 .optional()?;
-            if existing.as_deref().is_some_and(|cur| compare_hlc(cur, &op.hlc) != Ordering::Greater) {
+            if existing.as_deref().is_some_and(|cur| v.cmp_stored(cur) != Ordering::Greater) {
                 return Ok(());
             }
             let body = op.value.as_str().unwrap_or_default();
@@ -659,8 +663,7 @@ mod tests {
         assert_eq!(compare_hlc("100:1:node-9", "100:1:node-10"), Ordering::Greater);
         assert_eq!(compare_hlc("1000:0:a", "999:0:a"), Ordering::Greater);
         let h = Hlc::parse("1700000000000:7:node:with:colons").unwrap();
-        assert_eq!(h.node_id, "node:with:colons");
-        assert_eq!(h.format(), "1700000000000:7:node:with:colons");
+        assert_eq!((h.wall_ms, h.counter, h.node_id.as_str()), (1_700_000_000_000, 7, "node:with:colons"));
         assert!(Hlc::parse("+1:0:a").is_none());
         assert!(Hlc::parse("1:0").is_none());
         assert!(Hlc::parse("").is_none());

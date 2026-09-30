@@ -21,7 +21,6 @@ pub const SPECIES: [Species; 4] = [Species::Python, Species::Tegu, Species::Igua
 
 impl Species {
     /// Accepts the name (`python`) or the taxon id (`1`).
-    #[allow(dead_code)] // GraphQL `species: ID!` arguments (T10)
     pub fn parse(s: &str) -> Option<Species> {
         match s.trim().to_ascii_lowercase().as_str() {
             "python" | "1" => Some(Species::Python),
