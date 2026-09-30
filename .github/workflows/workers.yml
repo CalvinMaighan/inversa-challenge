@@ -1,0 +1,36 @@
+name: workers
+
+# Deploy the Cloudflare signaling worker (apps/signal-worker) with wrangler.
+# Secret: CLOUDFLARE_API_TOKEN (Workers Scripts:Edit on the one account that owns the
+# worker; wrangler reads the account from the token or from wrangler config).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/signal-worker/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workers
+  cancel-in-progress: false
+
+jobs:
+  signal-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install --frozen-lockfile
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: apps/signal-worker
+          packageManager: bun
+          command: deploy
