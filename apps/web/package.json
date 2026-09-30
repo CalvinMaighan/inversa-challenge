@@ -8,15 +8,16 @@
     "start": "HOSTNAME=127.0.0.1 PORT=3050 bun .next/standalone/apps/web/server.js",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "bun test tests",
+    "test": "bun test --tsconfig-override ./tsconfig.json tests",
     "eval": "bun run eval/run.ts"
   },
   "dependencies": {
     "@calvinjs/active-state": "workspace:*",
-    "active-theme": "workspace:*",
     "@emotion/cache": "11.14.0",
+    "@emotion/is-prop-valid": "1.4.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
+    "active-theme": "workspace:*",
     "next": "16.3.0-preview.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -29,6 +30,7 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/parser": "8.71.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.0-preview.9",
     "typescript": "6.0.2"
