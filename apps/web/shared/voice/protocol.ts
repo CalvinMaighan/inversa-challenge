@@ -54,6 +54,8 @@ export type VoiceServerEvent =
       origin: VoiceAssistantOrigin;
     }
   | { type: "task.updated"; task: VoiceTaskSnapshot }
+  /** Streamed agent output for a spawned task, so the orb card can render deltas, tools and citations. */
+  | { type: "task.event"; taskId: string; event: import("shared/agent/events").AgentStreamEvent }
   | { type: "tool.call"; name: string; status: "started" | "done" }
   /** Direct UI tool call validated by shared/voice/ui-tools.ts; the client applies it. */
   | { type: "ui.command"; name: string; args: unknown }
