@@ -1,0 +1,2 @@
+# CesiumJS runtime, copied from node_modules by scripts/copy-cesium.ts
+/public/cesium/
