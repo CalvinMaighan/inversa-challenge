@@ -37,3 +37,5 @@ uuid = { version = "1", features = ["v7"] }
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
+# WebSocket client for the graphql-transport-ws end-to-end test; same version axum already pulls in.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }

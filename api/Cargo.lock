@@ -1241,6 +1241,7 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror",
  "tokio",
+ "tokio-tungstenite",
  "tower",
  "tracing",
  "tracing-subscriber",
