@@ -44,9 +44,13 @@ export {
 export {
   allocFrameGrid,
   attachFrameGrid,
+  ENV_MISSING,
   frameGridBytes,
+  frameLayout,
   GRID_HEADER_BYTES,
   GRID_MAGIC,
+  writeFrameFromEvf,
   type FrameGrid,
+  type FrameLayout,
   type GridShape,
 } from "./bulk";

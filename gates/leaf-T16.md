@@ -11,12 +11,12 @@ Scope: `packages/active-state/src/threads/**`, exported as `@calvinjs/active-sta
 - [x] G1: package tests pass, old and new
   CHECK: cd packages/active-state && bun test 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: 94 pass | 0 fail
+  EVIDENCE: 96 pass | 0 fail
 
 - [x] G2: ring tests cover wraparound with the pad marker, a 1 MB value, 10k messages in order, a full ring applying backpressure (no overwrite), and version bumps
   CHECK: cd packages/active-state && bun test tests/threads 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([5-9]|[1-9][0-9]+) pass\s+0 fail/
-  EVIDENCE: 28 pass | 0 fail
+  EVIDENCE: 30 pass | 0 fail
 
 - [x] G3: a real Worker round trip: a Bun Worker with a SAB exchanges 10k messages in order, and the same test passes with the postMessage fallback
   CHECK: cd packages/active-state && bun test tests/threads -t "worker round trip" 2>&1 | grep -E "pass|fail"
@@ -31,4 +31,9 @@ Scope: `packages/active-state/src/threads/**`, exported as `@calvinjs/active-sta
 - [x] G5: the size delta is measured with scripts/size.ts and recorded in the package CHANGELOG or README
   CHECK: grep -iE "threads.*(kb|bytes)" packages/active-state/README.md packages/active-state/CHANGELOG.md 2>/dev/null | head -1
   EXPECT: /[0-9]/
-  EVIDENCE: packages/active-state/README.md:| `@calvinjs/active-state/threads` | ~5.0KB | ~4.4KB | Workers — `hostThread` / `connectThread`, SAB ring, frame grids (+ core) |
+  EVIDENCE: packages/active-state/README.md:| `@calvinjs/active-state/threads` | ~5.4KB | ~4.8KB | Workers — `hostThread` / `connectThread`, SAB ring, EVF2 frame grids (+ core) |
+
+- [x] G6: EVF2 view sizes: FrameGrid exposes u8 hotspot views of 170x160 per species and i16 lst/sst views of 68x64, frame stride padded to 4, with hotspotScale and env dims in the header
+  CHECK: cd packages/active-state && bun test tests/threads/bulk.test.ts -t "EVF2 view sizes" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9] pass[\s\S]*0 fail/
+  EVIDENCE: 1 pass | 0 fail
