@@ -18,7 +18,7 @@ pub fn default_size() -> usize {
 /// writer; `query_only` turns any accidental write into an error instead of a lock fight.
 pub fn configure_reader(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
-        "pragma busy_timeout = 5000;
+        "pragma busy_timeout = 30000;
          pragma foreign_keys = on;
          pragma query_only = on;",
     )

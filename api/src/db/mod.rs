@@ -29,7 +29,7 @@ pub fn configure(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
         "pragma journal_mode = wal;
          pragma synchronous = normal;
-         pragma busy_timeout = 5000;
+         pragma busy_timeout = 30000;
          pragma foreign_keys = on;",
     )
 }

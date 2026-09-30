@@ -4,7 +4,7 @@
 //! Query: the bbox as `decimalLatitude`/`decimalLongitude` ranges plus the four taxonKeys
 //! (backbone `species/match`, 2026-09-30): Python bivittatus 4820533, Salvator merianae 5227370,
 //! Iguana iguana 2459658, and the genus Pterois 2334432 (covers P. volitans 2334438 and
-//! P. miles 2334433). Paged by `offset`/`limit` (300 max; GBIF stops at offset 100,000).
+//! P. miles 2334433). Paged by `offset`/`limit` (100 per page: 300-row pages time out under load; GBIF stops at offset 100,000).
 //!
 //! - **Daily poll:** `modified=<from>,*`, where `from` is the last successful poll day minus
 //!   [`MODIFIED_LAG`], since records reach the index days after their `modified` stamp. The
@@ -45,7 +45,7 @@ pub const PTEROIS_GENUS_KEY: i64 = 2334432;
 pub const TAXON_KEYS: [i64; 4] = [PYTHON_KEY, TEGU_KEY, IGUANA_KEY, PTEROIS_GENUS_KEY];
 pub const REQUEST_INTERVAL: Duration = Duration::from_secs(1);
 pub const CADENCE: Duration = Duration::from_secs(24 * 3600);
-pub const PAGE_LIMIT: usize = 300;
+pub const PAGE_LIMIT: usize = 100;
 /// GBIF refuses `offset + limit` beyond this.
 pub const MAX_OFFSET: usize = 100_000;
 pub const MODIFIED_LAG: chrono::Duration = chrono::Duration::days(30);
@@ -343,12 +343,12 @@ mod tests {
             url,
             "https://api.gbif.org/v1/occurrence/search?decimalLatitude=24.3,27.5&decimalLongitude=-83.2,-79.8\
              &taxonKey=4820533&taxonKey=5227370&taxonKey=2459658&taxonKey=2334432&occurrenceStatus=PRESENT\
-             &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=300&offset=0"
+             &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=100&offset=0"
         );
         let full = serde_json::to_vec(&serde_json::json!({ "endOfRecords": false, "results": vec![serde_json::json!({}); 300] })).unwrap();
         p.advance(&full).unwrap();
         assert_eq!(p.cursor(), None);
-        assert!(p.next_url().unwrap().ends_with("&offset=300"));
+        assert!(p.next_url().unwrap().ends_with("&offset=100"));
         p.advance(br#"{"endOfRecords":true,"results":[{}]}"#).unwrap();
         assert_eq!(p.next_url(), None);
         assert_eq!(p.cursor().as_deref(), Some("2026-09-30"));

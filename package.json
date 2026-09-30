@@ -11,8 +11,8 @@
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "dev:web": "bun run --cwd apps/web dev",
-    "api": "INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run --release --manifest-path api/Cargo.toml",
-    "data": "INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run --release --manifest-path api/Cargo.toml -- backfill --days ${DAYS:-2} && INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run --release --manifest-path api/Cargo.toml -- backfill --scene cold-snap-2026-02-01",
+    "api": "INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run -q --release --manifest-path api/Cargo.toml",
+    "data": "INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run -q --release --manifest-path api/Cargo.toml -- backfill --days ${DAYS:-2} && INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run -q --release --manifest-path api/Cargo.toml -- backfill --scene cold-snap-2026-02-01",
     "build": "bun run --cwd apps/web build && cargo build --release --manifest-path api/Cargo.toml",
     "lint": "bun run --cwd apps/web lint",
     "typecheck": "bun run --filter '*' typecheck",

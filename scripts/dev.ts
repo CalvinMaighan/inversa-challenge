@@ -49,5 +49,5 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${env.AGENT_HARNESS} · web: http://localhost:3050`);
-start("api", "36", ["cargo", "run", "--release", "--manifest-path", "api/Cargo.toml"], root);
+start("api", "36", ["cargo", "run", "-q", "--release", "--manifest-path", "api/Cargo.toml"], root);
 start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
