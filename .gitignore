@@ -1,0 +1,8 @@
+.firecrawl/
+node_modules/
+.next/
+dist/
+.env*
+*.db
+*.db-shm
+*.db-wal
