@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { formatLatLon, unproject } from "client/hud/topbar/coords";
-import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseHotspotId, recordRevisions } from "client/hud/drawer/evidence";
+import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
-import { isDrawerOpen, isEvidenceId, parseBacktestId } from "client/hud/selection";
+import { isDrawerOpen } from "client/hud/selection";
+import { parseEvidenceId } from "client/state/selection";
 import { decodeShareLink, encodeShareLink } from "client/hud/share-link";
 import type { AgentChatState } from "client/state/agent";
 
@@ -137,9 +138,9 @@ describe("targets and selection", () => {
     expect(parseBacktestId("backtest:python:14")).toEqual({ species: "python", days: 14 });
     expect(parseBacktestId("backtest:python:0")).toBeNull();
     expect(parseBacktestId("backtest:python")).toBeNull();
-    expect(isEvidenceId("backtest:iguana:30")).toBe(true);
-    expect(isEvidenceId("sighting:1")).toBe(true);
-    expect(isEvidenceId("mission:1")).toBe(false);
+    expect(parseEvidenceId("backtest:iguana:30")?.kind).toBe("backtest");
+    expect(parseBacktestId("sighting:1")).toBeNull();
+    expect(parseBacktestId("backtest:python:x")).toBeNull();
     expect(decodeShareLink(encodeShareLink({ evidenceId: "backtest:iguana:30" })).evidenceId).toBe("backtest:iguana:30");
   });
 

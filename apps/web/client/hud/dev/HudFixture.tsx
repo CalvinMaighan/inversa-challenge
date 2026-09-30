@@ -13,15 +13,14 @@ import { FEEDS } from "client/state/feeds";
 import { SELECTION } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
-import { publishFrameGrid } from "client/threads/api";
+import { publishFrameGrid, publishFrameSightings } from "client/threads/api";
 import AppShell from "client/ui/AppShell";
 
 import { backtestKey, evidenceKey, explainKey, primeCache, type Backtest, type Evidence, type HotspotExplain } from "../drawer/evidence";
 import Hud from "../index";
 import type { HudSelection } from "../selection";
 import { alertRows } from "../Sync";
-import { evfFrames, publishSightingCounts } from "../timeline/frame-stats";
-import { buildFixtureEvf, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "./fixture";
+import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "./fixture";
 import FixtureGlobe from "./FixtureGlobe";
 
 const STEP_MS = FIXTURE_STEP_MINUTES * 60_000;
@@ -177,7 +176,7 @@ export default function HudFixture() {
     let result: Ready;
     try {
       const fixture = buildFixtureEvf(from);
-      const { header, offsets, counts } = evfFrames(fixture.bytes);
+      const { header, offsets } = evfFrames(fixture.bytes);
       const grid = allocFrameGrid({
         frameCount: header.frameCount,
         hsCols: header.hsCols,
@@ -219,8 +218,8 @@ export default function HudFixture() {
           },
         ],
       });
-      publishFrameGrid(grid);
-      publishSightingCounts(counts);
+      publishFrameGrid(grid, { frame0UnixMs: header.frame0UnixMs, stepMinutes: header.stepMinutes, frameCount: header.frameCount });
+      publishFrameSightings(evfFrameSightings(fixture.bytes));
       result = { grid };
     } catch (err) {
       result = { error: err instanceof Error ? err.message : String(err) };

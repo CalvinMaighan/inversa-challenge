@@ -8,9 +8,21 @@
  * - a two-hour GOES outage (every env cell missing) → `ENV_MISSING`
  * - small scattered clouds elsewhere, under the cloud threshold → not a gap
  */
-import { ENV_MISSING, EVF_HEADER_BYTES, EVF_MAGIC, EVF_SPECIES, evfFrameBytes, evfFrameLayout, SIGHTING_FLAG, type EvfHeader } from "shared/frames";
+import {
+  ENV_MISSING,
+  EVF_HEADER_BYTES,
+  EVF_MAGIC,
+  EVF_SPECIES,
+  evfFrameBytes,
+  evfFrameLayout,
+  readEvfHeader,
+  SIGHTING_FLAG,
+  SIGHTING_RECORD_BYTES,
+  type EvfHeader,
+} from "shared/frames";
 
 import { REGION_BBOX } from "client/state/view";
+import type { FrameSightings } from "client/threads/api";
 
 export const FIXTURE_FRAMES = 96;
 export const FIXTURE_STEP_MINUTES = 15;
@@ -183,4 +195,41 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
     offset = at + 4 + n * 12;
   }
   return { bytes, header, records };
+}
+
+/**
+ * Walk an EVF2 buffer (PLAN.md C4): each frame's byte offset and sighting count. Frames vary in length (the
+ * sighting section), so this is the only way to find frame `i`. Throws on a truncated buffer: a count read
+ * from past the end would be garbage, and a silent zero would draw a false quiet gap.
+ */
+export function evfFrames(bytes: Uint8Array): { header: EvfHeader; offsets: Uint32Array; counts: Uint32Array } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const header = readEvfHeader(view);
+  const { sightingsOffset } = evfFrameLayout(header);
+  const offsets = new Uint32Array(header.frameCount);
+  const counts = new Uint32Array(header.frameCount);
+  let offset = EVF_HEADER_BYTES;
+  for (let f = 0; f < header.frameCount; f++) {
+    offsets[f] = offset;
+    const countAt = offset + sightingsOffset;
+    if (countAt + 4 > bytes.byteLength) throw new RangeError(`EVF: frame ${f} truncated at ${countAt}`);
+    const n = view.getUint32(countAt, true);
+    counts[f] = n;
+    offset = countAt + 4 + n * SIGHTING_RECORD_BYTES;
+    if (offset > bytes.byteLength) throw new RangeError(`EVF: frame ${f} sightings truncated`);
+  }
+  return { header, offsets, counts };
+}
+
+/** The sighting sections of an EVF2 buffer as `FrameSightings` (PLAN.md C16), the way the db worker publishes them. */
+export function evfFrameSightings(bytes: Uint8Array): FrameSightings {
+  const { header, offsets, counts } = evfFrames(bytes);
+  const { sightingsOffset } = evfFrameLayout(header);
+  return {
+    counts,
+    records(i) {
+      if (!Number.isInteger(i) || i < 0 || i >= counts.length) throw new RangeError(`frame ${i} out of range`);
+      return new DataView(bytes.buffer, bytes.byteOffset + offsets[i]! + sightingsOffset + 4, counts[i]! * SIGHTING_RECORD_BYTES);
+    },
+  };
 }
