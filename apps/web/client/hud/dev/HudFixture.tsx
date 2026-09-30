@@ -218,7 +218,12 @@ export default function HudFixture() {
           },
         ],
       });
-      publishFrameGrid(grid, { frame0UnixMs: header.frame0UnixMs, stepMinutes: header.stepMinutes, frameCount: header.frameCount });
+      publishFrameGrid(grid, {
+        frame0UnixMs: header.frame0UnixMs,
+        stepMinutes: header.stepMinutes,
+        frameCount: header.frameCount,
+        geometry: { west: header.west, south: header.south, hsCellDeg: header.hsCellDeg, envCellDeg: header.envCellDeg },
+      });
       publishFrameSightings(evfFrameSightings(fixture.bytes));
       result = { grid };
     } catch (err) {
