@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "bun test --tsconfig-override ./tsconfig.json tests",
     "eval": "bun run eval/run.ts",
-    "e2e:agent": "bun e2e/agent.ts"
+    "e2e:agent": "bun e2e/agent.ts",
+    "e2e:scrub": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/scrub.ts"
   },
   "dependencies": {
     "@calvinjs/active-state": "workspace:*",
