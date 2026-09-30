@@ -33,5 +33,5 @@ Scope:
   EXPECT: CLEAN
   EVIDENCE: pending
 
-- [ ] G6 (live, blocked on H5): a real question against local Axum with fixtures returns a cited answer (quote the transcript lines)
+- [ ] G6: (live, blocked on H5) a real question against local Axum with fixtures returns a cited answer (quote the transcript lines)
   EVIDENCE: pending

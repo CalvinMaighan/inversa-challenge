@@ -38,5 +38,5 @@ Scope:
   EXPECT: CLEAN
   EVIDENCE: pending
 
-- [ ] G7 (live, blocked on H6): spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
+- [ ] G7: (live, blocked on H6) spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
   EVIDENCE: pending

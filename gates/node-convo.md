@@ -17,5 +17,5 @@ Scope: text or voice question leads to a cited answer, the globe flies to it, an
   EXPECT: CONVO-OK
   EVIDENCE: pending
 
-- [ ] N4 (live, blocked on H5 H6): a real voice question gives a spoken answer with a citation (transcript quote)
+- [ ] N4: (live, blocked on H5 H6) a real voice question gives a spoken answer with a citation (transcript quote)
   EVIDENCE: pending

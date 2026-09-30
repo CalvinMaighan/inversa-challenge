@@ -27,7 +27,7 @@ Scope: apps/signal-worker, a Cloudflare Worker implementing PLAN C9 over an R2 b
   EXPECT: /[1-9]/
   EVIDENCE: 9
 
-- [ ] G5 (live, blocked on H3): the deployed worker URL answers GET /rooms/demo/peers with 200 (quote)
+- [ ] G5: (live, blocked on H3) the deployed worker URL answers GET /rooms/demo/peers with 200 (quote)
   EVIDENCE: pending
 
 ABANDON: G5 blocked on H3 (Cloudflare account resources)

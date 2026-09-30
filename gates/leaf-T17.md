@@ -33,5 +33,5 @@ Scope: `apps/web/client/globe/**`:
   EXPECT: CLEAN
   EVIDENCE: pending
 
-- [ ] G7 (live, blocked on H7): the ion imagery ladder loads Google 3D over Miami (screenshot path)
+- [ ] G7: (live, blocked on H7) the ion imagery ladder loads Google 3D over Miami (screenshot path)
   EVIDENCE: pending

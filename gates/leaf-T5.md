@@ -32,7 +32,7 @@ Scope: DirArchive + R2Archive (S3 API, SigV4) behind `ingest::archive::from_conf
   EXPECT: /running [1-9][\s\S]*test result: ok/
   EVIDENCE: running 3 tests | test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 28 filtered out; finished in 1.01s
 
-- [ ] G7 (live, blocked on H3): one real object written to R2 bucket inversa-raw (quote key)
+- [ ] G7: (live, blocked on H3) one real object written to R2 bucket inversa-raw (quote key)
   EVIDENCE: pending
 
 ABANDON: G7 blocked on H3 (R2 bucket/token not provisioned yet)

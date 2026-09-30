@@ -37,5 +37,5 @@ Scope:
   EXPECT: /[1-9]/
   EVIDENCE: pending
 
-- [ ] G7 (live, blocked on H4): one SQS message processed end to end (quote the log line with key and rows_in)
+- [ ] G7: (live, blocked on H4) one SQS message processed end to end (quote the log line with key and rows_in)
   EVIDENCE: pending
