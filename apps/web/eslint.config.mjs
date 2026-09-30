@@ -10,5 +10,5 @@ export default defineConfig([
   ...nextTs,
   ...recommended,
   ...inversa,
-  globalIgnores([".next/**", ".cache/**", "public/cesium/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", ".cache/**", "public/cesium/**", "public/sqlite-wasm/**", "next-env.d.ts"]),
 ]);

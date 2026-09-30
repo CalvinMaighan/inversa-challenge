@@ -9,22 +9,22 @@ Scope: `apps/web/client/threads/{boot.ts,gql.worker.ts,db.worker.ts,db/**,gql/**
 - A Web Locks leader tab owns the db worker; other tabs proxy over BroadcastChannel.
 - boot.ts chooses the SAB or postMessage transport from crossOriginIsolated.
 
-- [ ] G1: worker logic tests pass (cache TTL, SWR, outbox ack, EVF to SAB view mapping, transport selection)
+- [x] G1: worker logic tests pass (cache TTL, SWR, outbox ack, EVF to SAB view mapping, transport selection)
   CHECK: cd apps/web && bun test tests/client/threads 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 109 pass | 0 fail
 
-- [ ] G2: a browser test: a cached query answers in under 20 ms, reload serves from OPFS, and a second tab proxies through the leader; a Playwright script prints `DBWORKER cached=<ms> opfs=1 proxy=1`
+- [x] G2: a browser test: a cached query answers in under 20 ms, reload serves from OPFS, and a second tab proxies through the leader; a Playwright script prints `DBWORKER cached=<ms> opfs=1 proxy=1`
   CHECK: cd apps/web && bun run e2e:dbworker 2>&1 | grep DBWORKER
   EXPECT: /DBWORKER cached=(1[0-9]|[0-9])(\.\d+)? opfs=1 proxy=1/
-  EVIDENCE: pending
+  EVIDENCE: DBWORKER cached=0.4 opfs=1 proxy=1
 
-- [ ] G3: the fallback transport works with isolation disabled (a test flag); the script prints `FALLBACK-OK`
+- [x] G3: the fallback transport works with isolation disabled (a test flag); the script prints `FALLBACK-OK`
   CHECK: cd apps/web && bun run e2e:dbworker -- --no-isolation 2>&1 | tail -1
   EXPECT: FALLBACK-OK
-  EVIDENCE: pending
+  EVIDENCE: FALLBACK-OK
 
-- [ ] G4: typecheck and lint clean
+- [x] G4: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
-  EVIDENCE: pending
+  EVIDENCE: CLEAN
