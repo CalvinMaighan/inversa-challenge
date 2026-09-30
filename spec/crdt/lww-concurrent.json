@@ -1,0 +1,56 @@
+{
+  "name": "lww-concurrent",
+  "ops": [
+    {
+      "id": "op-0001",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Python sweep, Shark Valley",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0002",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Python sweep",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0003",
+      "hlc": "1700000000150:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "status",
+      "value": "active",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0004",
+      "hlc": "1700000000120:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "status",
+      "value": "planned",
+      "nodeId": "b"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "Python sweep, Shark Valley",
+        "status": "active"
+      }
+    },
+    "notes": {},
+    "messages": [],
+    "removals": {}
+  }
+}

@@ -16,7 +16,7 @@ Scope:
 
 - [ ] G2: fixture dirs for inat, nas and gbif hold real recorded payloads
   CHECK: ls -d api/fixtures/inat api/fixtures/nas api/fixtures/gbif 2>/dev/null | wc -l | tr -d ' '
-  EXPECT: /^3$/
+  EXPECT: /^3$/m
   EVIDENCE: pending
 
 - [ ] G3: dedupe tests: the GBIF->iNat link and the NAS spatial-temporal link set canonical_id, and unrelated records are untouched

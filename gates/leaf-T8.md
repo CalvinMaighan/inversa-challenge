@@ -18,7 +18,7 @@ Scope:
 
 - [ ] G2: each adapter has a fixture test on a real recorded payload (5 fixture dirs)
   CHECK: ls -d api/fixtures/nws api/fixtures/usgs api/fixtures/ndbc api/fixtures/coops api/fixtures/openmeteo 2>/dev/null | wc -l | tr -d ' '
-  EXPECT: /^5$/
+  EXPECT: /^5$/m
   EVIDENCE: pending
 
 - [ ] G3: normalizers are idempotent: normalizing and writing the same payload twice adds 0 rows (one test per adapter, so >= 5 tests match "idempotent")

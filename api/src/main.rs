@@ -35,6 +35,7 @@ async fn main() {
 
     ingest::scheduler::spawn(state.clone());
     frames::spawn_builder(state.clone());
+    feed_state::spawn_publisher(state.obs.clone(), state.hub.clone(), std::time::Duration::from_secs(15));
 
     let bind = state.config.bind.clone();
     let listener = TcpListener::bind(&bind).await.unwrap_or_else(|e| panic!("bind {bind}: {e}"));

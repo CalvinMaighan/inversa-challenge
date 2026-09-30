@@ -1,0 +1,26 @@
+name = "inversa-signal"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Secrets, set with `wrangler secret put` (never committed):
+#   CF_TURN_KEY_ID, CF_TURN_KEY_TOKEN
+# Without them GET /turn serves public STUN only.
+
+[vars]
+ALLOWED_ORIGIN = "https://inversa.calvinmaighan.dev"
+
+[[r2_buckets]]
+binding = "SIGNAL"
+bucket_name = "inversa-signal"
+
+# Local development: `wrangler dev --local --env dev` (Miniflare, local R2 under .wrangler/).
+# Bindings are not inherited by environments, so the bucket is declared again.
+[env.dev]
+name = "inversa-signal-dev"
+
+[env.dev.vars]
+ALLOWED_ORIGIN = "https://inversa.calvinmaighan.dev,http://localhost:3050,http://127.0.0.1:3050"
+
+[[env.dev.r2_buckets]]
+binding = "SIGNAL"
+bucket_name = "inversa-signal"

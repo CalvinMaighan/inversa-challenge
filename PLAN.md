@@ -25,6 +25,8 @@ These are decided before fan-out. Leaves must not change them. If a leaf needs a
 - **Dependencies:** a leaf may add dependencies on its own worktree branch. The driver resolves manifest and lockfile conflicts at merge.
 - **Stub files:** a leaf owns only the files in its row. Driver-created stub files that a leaf owns are the leaf's to replace.
 
+Tests mirror their source: `apps/web/tests/<path>` belongs to whichever leaf owns `apps/web/<path>`. The e2e Playwright scripts (`apps/web/e2e/<name>.ts`, npm script `e2e:<name>`) belong to the leaf whose gate names them. Each leaf may add its own `e2e:*` script line to `apps/web/package.json`.
+
 | Task | Owns |
 |---|---|
 | T2 | `packages/active-state/**` (subtree base), `packages/active-theme/**` |
@@ -234,3 +236,10 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 
 - W0 started: brief saved to `docs/BUILD_BRIEF.md`.
 - W0: skeleton compiles (cargo test 2 passed, web 5 pass, next build ok); W1 gates written; W2+ gates pending before their dispatch
+- W0 done: T1 gates ALL MET (6/6). W1 dispatched: T2 T4 T5 T6 T7 T20 (worktrees). T3 waits for T2.
+- W2 early dispatch (contract-only deps): T11 T12 T13 T15. Pending: T3 (after T2), T8 T9 (after T5), T10 (after T4 T11 T12), T16 (after T2)
+- T2 merged+verified 11/11. T20 merged+verified 4/5, G5 ABANDON H3.
+- T5 merged+verified 6/7 (G7 ABANDON H3). Note: pollers use governor::check_response.
+- T6 merged+verified (G7 ABANDON H1-3,H8). Fixed gate id format for (live...) gates.
+- T4 merged+verified 9/9; contract requests applied: publisher at boot, migration 0002
+- T12 merged+verified 5/5 (14 vectors). Contract change for T10: Board gains notes: [Mission!]!

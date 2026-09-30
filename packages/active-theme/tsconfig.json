@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "paths": {
+      "active-theme": ["./src/core/index.ts"],
+      "active-theme/lite": ["./src/lite/index.ts"],
+      "active-theme/react": ["./src/react/index.ts"],
+      "active-theme/state": ["./src/state/index.ts"],
+      "active-theme/emotion": ["./src/emotion/index.ts"],
+      "@calvinjs/active-state": ["../active-state/src/core/index.ts"],
+      "@calvinjs/active-state/dom": ["../active-state/src/dom/index.ts"],
+      "@calvinjs/active-state/react": ["../active-state/src/react/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "tsup.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}

@@ -1,0 +1,104 @@
+{
+  "name": "board-isolation",
+  "board": "b1",
+  "ops": [
+    {
+      "id": "op-0045",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "b1 mission",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0046",
+      "hlc": "1700000000900:0:a",
+      "boardId": "b2",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "b2 mission",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0047",
+      "hlc": "1700000000900:0:a",
+      "boardId": "b2",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "_deleted",
+      "value": true,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0048",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "b1 chat",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0049",
+      "hlc": "1700000000050:0:a",
+      "boardId": "b2",
+      "entity": "message",
+      "entityId": "msg2",
+      "field": "body",
+      "value": "b2 chat",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0050",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 2,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0051",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b2",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 40,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0052",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b2",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "b2 only",
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "b1 mission"
+      }
+    },
+    "notes": {},
+    "messages": [
+      {
+        "id": "msg1",
+        "body": "b1 chat",
+        "hlc": "1700000000100:0:a"
+      }
+    ],
+    "removals": {
+      "python": 2
+    }
+  }
+}

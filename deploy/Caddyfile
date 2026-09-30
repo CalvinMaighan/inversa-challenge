@@ -1,0 +1,55 @@
+# inversa.calvinmaighan.dev on the Hetzner box. Caddy terminates TLS with its own
+# Let's Encrypt cert (HTTP-01 / TLS-ALPN-01), so DNS must point straight at the VM or
+# through a proxy that passes those challenges.
+#
+# Axum (127.0.0.1:4041) owns /v1/* and /health, including graphql-transport-ws
+# upgrades for subscriptions. Next (127.0.0.1:3050) owns everything else.
+# Caddy's reverse_proxy handles Connection: Upgrade on its own; nothing extra is needed
+# for WebSockets beyond keeping them open across config reloads (stream_close_delay).
+
+inversa.calvinmaighan.dev {
+	encode zstd gzip
+
+	header {
+		# Cross-origin isolation for SharedArrayBuffer (PRD section 12). Safari has no
+		# COEP credentialless, so require-corp; every subresource must be same-origin.
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Embedder-Policy require-corp
+		Cross-Origin-Resource-Policy same-origin
+
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		# Microphone is for the voice session; nothing else is requested by the app.
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+		-Server
+		-X-Powered-By
+
+		# Apply after the upstream response so these values win over anything it sent.
+		defer
+	}
+
+	# Access log to stderr, so journald holds and rotates it (journalctl -u caddy).
+	log {
+		format json
+	}
+
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy 127.0.0.1:4041 {
+			# Stream subscriptions and chunked responses without buffering.
+			flush_interval -1
+			# A deploy reloads Caddy; give open sockets time to finish instead of cutting them.
+			stream_close_delay 5m
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3050 {
+			# Agent NDJSON and voice streams go through Next; flush every write.
+			flush_interval -1
+			stream_close_delay 5m
+		}
+	}
+}

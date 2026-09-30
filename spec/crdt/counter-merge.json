@@ -1,0 +1,74 @@
+{
+  "name": "counter-merge",
+  "ops": [
+    {
+      "id": "op-0028",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 3,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0029",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 1,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0030",
+      "hlc": "1700000000200:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 2,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0031",
+      "hlc": "1700000000150:0:b",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 2,
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0032",
+      "hlc": "1700000000400:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 1,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0033",
+      "hlc": "1700000000100:0:c",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "tegu",
+      "field": "count",
+      "value": 7,
+      "nodeId": "c"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [],
+    "removals": {
+      "python": 5,
+      "tegu": 7
+    }
+  }
+}

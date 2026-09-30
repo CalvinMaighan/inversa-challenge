@@ -1,0 +1,72 @@
+{
+  "name": "message-order",
+  "ops": [
+    {
+      "id": "op-0021",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg3",
+      "field": "body",
+      "value": "third",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0022",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "first",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0023",
+      "hlc": "1700000000100:1:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg2",
+      "field": "body",
+      "value": "second",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0024",
+      "hlc": "1700000000300:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg4",
+      "field": "body",
+      "value": "fourth",
+      "nodeId": "b"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [
+      {
+        "id": "msg1",
+        "body": "first",
+        "hlc": "1700000000100:0:a"
+      },
+      {
+        "id": "msg2",
+        "body": "second",
+        "hlc": "1700000000100:1:a"
+      },
+      {
+        "id": "msg3",
+        "body": "third",
+        "hlc": "1700000000300:0:a"
+      },
+      {
+        "id": "msg4",
+        "body": "fourth",
+        "hlc": "1700000000300:0:b"
+      }
+    ],
+    "removals": {}
+  }
+}

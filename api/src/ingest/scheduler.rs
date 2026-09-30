@@ -1,5 +1,1170 @@
-//! Supervised per-source tasks and the ingest pipeline (T5).
+//! Supervised per-source tasks and the ingest pipeline (T5, PRD §6).
+//!
+//! Every payload, polled or pushed, goes through [`ingest_payload`]:
+//! gzip + archive, `raw_objects`, `normalize`, one write transaction (row upserts, `fetch_runs`,
+//! quality post-write hooks), then `ack`, cursor, and `RowsWritten` on the Hub.
 
+use std::collections::HashMap;
+use std::io::Write as _;
+use std::panic::AssertUnwindSafe;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use anyhow::Context;
+use futures_util::FutureExt;
+use rusqlite::{params, OptionalExtension, Transaction};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+use tokio::task::JoinHandle;
+
+use crate::ingest::archive::raw_key;
+use crate::ingest::governor::{self, Attempt, Governor};
+use crate::ingest::source::{FetchCtx, RawPayload, Source, SourceInfo};
+use crate::model::{AlertRow, ReadingRow, RevisionRow, Row, SightingRow, StationRef, TaxonRef};
+use crate::realtime::Event;
 use crate::state::AppState;
 
-pub fn spawn(_state: AppState) {}
+/// Content type archived objects are stored with (payloads are gzipped before `put`).
+pub const ARCHIVE_CONTENT_TYPE: &str = "application/gzip";
+
+fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+// ---------------------------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------------------------
+
+/// Restart policy for a source task.
+#[derive(Debug, Clone, Copy)]
+pub struct Supervision {
+    /// Delay before the first restart.
+    pub initial: Duration,
+    /// Restart delay doubles up to this.
+    pub max: Duration,
+    /// A task that ran at least this long before failing restarts from `initial` again.
+    pub healthy_after: Duration,
+}
+
+impl Default for Supervision {
+    fn default() -> Self {
+        Supervision { initial: Duration::from_secs(1), max: Duration::from_secs(300), healthy_after: Duration::from_secs(60) }
+    }
+}
+
+/// Upsert every known source into `sources`, then (when `config.sources_enabled`) start one
+/// supervised task per push/poll source. Returns immediately; the work runs on the runtime.
+pub fn spawn(state: AppState) {
+    tokio::spawn(async move {
+        match start(state, Supervision::default()).await {
+            Ok(handles) => tracing::info!("scheduler: {} source tasks running", handles.len()),
+            Err(e) => tracing::error!("scheduler: start failed: {e:#}"),
+        }
+    });
+}
+
+/// The body of [`spawn`], returning the task handles so tests can observe and stop them.
+pub async fn start(state: AppState, supervision: Supervision) -> anyhow::Result<Vec<JoinHandle<()>>> {
+    let mut runnable = crate::ingest::push::all(&state.config);
+    runnable.extend(crate::ingest::poll::all(&state.config));
+
+    let mut infos: Vec<SourceInfo> = runnable.iter().map(|s| s.info()).collect();
+    infos.extend(crate::ingest::push::hook::sources().iter().map(|s| s.info()));
+    upsert_sources(&state, infos).await?;
+
+    if !state.config.sources_enabled {
+        tracing::info!("scheduler: sources disabled (INVERSA_SOURCES=off)");
+        return Ok(Vec::new());
+    }
+    Ok(spawn_sources(&state, runnable, supervision))
+}
+
+/// One supervised task per source.
+pub fn spawn_sources(state: &AppState, sources: Vec<Arc<dyn Source>>, supervision: Supervision) -> Vec<JoinHandle<()>> {
+    sources.into_iter().map(|source| tokio::spawn(supervise(state.clone(), source, supervision))).collect()
+}
+
+pub async fn upsert_sources(state: &AppState, infos: Vec<SourceInfo>) -> anyhow::Result<()> {
+    state
+        .obs
+        .write(move |tx| {
+            for info in &infos {
+                upsert_source(tx, info)?;
+            }
+            Ok(())
+        })
+        .await
+}
+
+fn upsert_source(tx: &Transaction, info: &SourceInfo) -> rusqlite::Result<()> {
+    tx.prepare_cached(
+        "insert into sources (id, name, homepage, mode, cadence_s, max_latency_s) values (?1, ?2, ?3, ?4, ?5, ?6)
+         on conflict(id) do update set name = excluded.name, homepage = excluded.homepage, mode = excluded.mode,
+           cadence_s = excluded.cadence_s, max_latency_s = excluded.max_latency_s
+         where sources.name is not excluded.name or sources.homepage is not excluded.homepage
+           or sources.mode is not excluded.mode or sources.cadence_s is not excluded.cadence_s
+           or sources.max_latency_s is not excluded.max_latency_s",
+    )?
+    .execute(params![
+        info.id,
+        info.name,
+        info.homepage,
+        info.mode.as_str(),
+        info.cadence.as_secs() as i64,
+        info.max_latency.as_secs() as i64
+    ])?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Supervision
+// ---------------------------------------------------------------------------------------------
+
+/// Run a source forever. A panic or error restarts it after a doubling delay; other sources are
+/// separate tasks and never notice.
+async fn supervise(state: AppState, source: Arc<dyn Source>, sup: Supervision) {
+    let id = source.info().id;
+    let mut delay = sup.initial;
+    loop {
+        let started = Instant::now();
+        let run = AssertUnwindSafe(run_source(state.clone(), source.clone())).catch_unwind().await;
+        match run {
+            Ok(Ok(())) => {
+                tracing::info!(source = id, "source task finished");
+                return;
+            }
+            Ok(Err(e)) => tracing::warn!(source = id, "source task failed: {e:#}"),
+            Err(panic) => {
+                let msg = panic
+                    .downcast_ref::<&str>()
+                    .map(|s| s.to_string())
+                    .or_else(|| panic.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "non-string panic".into());
+                tracing::error!(source = id, "source task panicked: {msg}");
+            }
+        }
+        if started.elapsed() >= sup.healthy_after {
+            delay = sup.initial;
+        }
+        tracing::info!(source = id, "restarting in {}ms", delay.as_millis());
+        tokio::time::sleep(delay).await;
+        delay = (delay * 2).min(sup.max);
+    }
+}
+
+/// Fetch loop for one source, paced by its governor. Fetch failures are recorded and throttled
+/// here; pipeline failures (archive, database) end the task so the supervisor restarts it.
+async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<()> {
+    let info = source.info();
+    let gov: Arc<Governor> = governor::for_source(info.id, source.min_interval());
+    let mut cursor = load_cursor(&state, info.id).await?;
+    loop {
+        let wait = gov.wait(Instant::now());
+        if !wait.is_zero() {
+            tokio::time::sleep(wait).await;
+        }
+        let fetched_at = now_ms();
+        let result = source.fetch(&FetchCtx { state: &state, cursor: cursor.clone() }).await;
+        match result {
+            Ok(payloads) => {
+                gov.record(Attempt::Success, Instant::now());
+                if payloads.is_empty() {
+                    record_run(&state, &info, fetched_at, RunStatus::Empty, None, None).await?;
+                }
+                for raw in payloads {
+                    let out = ingest_payload(&state, source.as_ref(), raw, cursor.clone()).await?;
+                    if out.cursor.is_some() {
+                        cursor = out.cursor;
+                    }
+                }
+            }
+            Err(e) => {
+                let attempt = governor::classify(&e);
+                gov.record(attempt, Instant::now());
+                let status = match attempt {
+                    Attempt::Throttled { status, .. } => Some(status),
+                    Attempt::Failed { status } => status,
+                    Attempt::Success => None,
+                };
+                let mut message = format!("{e:#}");
+                if let Some(note) = gov.snapshot(Instant::now()).note() {
+                    message.push_str(&format!(" [{note}]"));
+                }
+                tracing::warn!(source = info.id, "fetch failed: {message}");
+                record_run(&state, &info, fetched_at, RunStatus::Error, status, Some(message)).await?;
+            }
+        }
+    }
+}
+
+async fn load_cursor(state: &AppState, source_id: &'static str) -> anyhow::Result<Option<String>> {
+    state
+        .obs
+        .read(move |c| {
+            c.query_row("select cursor from cursors where source_id = ?1", [source_id], |r| r.get(0)).optional()
+        })
+        .await
+}
+
+/// A fetch run with no payload (nothing new, or the fetch failed).
+async fn record_run(
+    state: &AppState,
+    info: &SourceInfo,
+    fetched_at: i64,
+    status: RunStatus,
+    http_status: Option<u16>,
+    error: Option<String>,
+) -> anyhow::Result<i64> {
+    let info = info.clone();
+    state
+        .obs
+        .write(move |tx| {
+            upsert_source(tx, &info)?;
+            insert_fetch_run(tx, info.id, fetched_at, status, http_status, 0, None, error.as_deref())
+        })
+        .await
+}
+
+// ---------------------------------------------------------------------------------------------
+// Pipeline
+// ---------------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RunStatus {
+    Ok,
+    Empty,
+    Error,
+    Partial,
+}
+
+impl RunStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RunStatus::Ok => "ok",
+            RunStatus::Empty => "empty",
+            RunStatus::Error => "error",
+            RunStatus::Partial => "partial",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestOutcome {
+    pub status: RunStatus,
+    pub fetch_run_id: i64,
+    pub raw_object_id: i64,
+    pub r2_key: String,
+    /// Rows `normalize` produced.
+    pub rows_in: usize,
+    /// Rows inserted or changed. Zero when the same payload is ingested again.
+    pub rows_written: usize,
+    /// Rows rejected (invalid coordinates, revision for an unknown sighting, ...).
+    pub rows_skipped: usize,
+    /// observed_at range (unix ms) of the sightings and readings that changed.
+    pub window: Option<(i64, i64)>,
+    /// Cursor persisted for the source, if the payload carried one.
+    pub cursor: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Archive, normalize and write one payload. `cursor` is the source's current committed cursor,
+/// passed to `ack`. Returns `Err` only for infrastructure failures (archive, database); a payload
+/// that fails to normalize is recorded as a `status=error` fetch run and returned as `Ok`.
+pub async fn ingest_payload(
+    state: &AppState,
+    source: &dyn Source,
+    raw: RawPayload,
+    cursor: Option<String>,
+) -> anyhow::Result<IngestOutcome> {
+    let info = source.info();
+    let source_id = info.id;
+
+    // 1. gzip + hash off the async threads (GOES payloads are tens of MB).
+    let (raw, sha256, gz) = tokio::task::spawn_blocking(move || -> anyhow::Result<(RawPayload, String, Vec<u8>)> {
+        let sha = hex::encode(Sha256::digest(&raw.bytes));
+        let mut enc =
+            flate2::write::GzEncoder::new(Vec::with_capacity(raw.bytes.len() / 4 + 64), flate2::Compression::default());
+        enc.write_all(&raw.bytes)?;
+        let gz = enc.finish()?;
+        Ok((raw, sha, gz))
+    })
+    .await??;
+
+    // 2. raw_objects. An identical payload already archived for this source is reused, so a
+    //    re-run adds no object; otherwise put first, then record the key.
+    let (raw_object_id, r2_key) = {
+        let info = info.clone();
+        let sha = sha256.clone();
+        let existing = state
+            .obs
+            .write(move |tx| {
+                upsert_source(tx, &info)?;
+                tx.query_row(
+                    "select id, r2_key from raw_objects where source_id = ?1 and sha256 = ?2 order by id desc limit 1",
+                    params![info.id, sha],
+                    |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)),
+                )
+                .optional()
+            })
+            .await?;
+        match existing {
+            Some(found) => found,
+            None => {
+                let key = raw_key(source_id, raw.fetched_at, &raw.content_type);
+                state.archive.put(&key, gz, ARCHIVE_CONTENT_TYPE).await.with_context(|| format!("archive {key}"))?;
+                let (k, url, at, len) = (key.clone(), raw.source_url.clone(), raw.fetched_at, raw.bytes.len() as i64);
+                let id = state
+                    .obs
+                    .write(move |tx| {
+                        tx.execute(
+                            "insert into raw_objects (r2_key, source_id, source_url, fetched_at, bytes, sha256)
+                             values (?1, ?2, ?3, ?4, ?5, ?6)",
+                            params![k, source_id, url, at, len, sha256],
+                        )?;
+                        Ok(tx.last_insert_rowid())
+                    })
+                    .await?;
+                (id, key)
+            }
+        }
+    };
+
+    let mut outcome = IngestOutcome {
+        status: RunStatus::Ok,
+        fetch_run_id: 0,
+        raw_object_id,
+        r2_key,
+        rows_in: 0,
+        rows_written: 0,
+        rows_skipped: 0,
+        window: None,
+        cursor: None,
+        error: None,
+    };
+
+    // 3. normalize (pure).
+    let rows = match source.normalize(&raw) {
+        Ok(rows) => rows,
+        Err(e) => {
+            let msg = format!("normalize: {e:#}");
+            tracing::warn!(source = source_id, key = %outcome.r2_key, "{msg}");
+            let (at, http) = (raw.fetched_at, raw.http_status);
+            let err = msg.clone();
+            outcome.fetch_run_id = state
+                .obs
+                .write(move |tx| {
+                    insert_fetch_run(tx, source_id, at, RunStatus::Error, http, 0, Some(raw_object_id), Some(&err))
+                })
+                .await?;
+            outcome.status = RunStatus::Error;
+            outcome.error = Some(msg);
+            return Ok(outcome);
+        }
+    };
+    outcome.rows_in = rows.len();
+
+    // 4-7. One transaction: rows, fetch run, quality hooks, commit.
+    let (fetched_at, http_status) = (raw.fetched_at, raw.http_status);
+    let written = state
+        .obs
+        .write(move |tx| {
+            let mut w = RowWriter::new(tx, source_id, raw_object_id);
+            for row in &rows {
+                w.write(row)?;
+            }
+            let (rows_written, rows_skipped, window) = (w.written, w.skipped, w.window);
+            let status = if rows.is_empty() {
+                RunStatus::Empty
+            } else if rows_skipped > 0 {
+                RunStatus::Partial
+            } else {
+                RunStatus::Ok
+            };
+            let note = (rows_skipped > 0).then(|| format!("{rows_skipped} of {} rows skipped", rows.len()));
+            let run_id = insert_fetch_run(
+                tx,
+                source_id,
+                fetched_at,
+                status,
+                http_status,
+                rows.len() as i64,
+                Some(raw_object_id),
+                note.as_deref(),
+            )?;
+            if let Some((from, to)) = window {
+                crate::ingest::quality_phys::post_write(tx, source_id, from, to)?;
+                crate::ingest::quality_bio::post_write(tx, source_id, from, to)?;
+            }
+            Ok((run_id, status, rows_written, rows_skipped, window))
+        })
+        .await?;
+    (outcome.fetch_run_id, outcome.status, outcome.rows_written, outcome.rows_skipped, outcome.window) = written;
+
+    // 8. ack only after the commit.
+    let ack = source.ack(&FetchCtx { state, cursor }, &raw).await;
+
+    // 9. cursor.
+    if let Some(next) = raw.next_cursor.clone() {
+        let c = next.clone();
+        state
+            .obs
+            .write(move |tx| {
+                tx.execute(
+                    "insert into cursors (source_id, cursor, updated_at) values (?1, ?2, ?3)
+                     on conflict(source_id) do update set cursor = excluded.cursor, updated_at = excluded.updated_at",
+                    params![source_id, c, now_ms()],
+                )
+            })
+            .await?;
+        outcome.cursor = Some(next);
+    }
+
+    // 10. tell the frame builder.
+    if let Some((from, to)) = outcome.window {
+        state.hub.publish(Event::RowsWritten { from, to });
+    }
+
+    ack.with_context(|| format!("{source_id}: ack after commit (rows are committed; redelivery is idempotent)"))?;
+    Ok(outcome)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_fetch_run(
+    tx: &Transaction,
+    source_id: &str,
+    fetched_at: i64,
+    status: RunStatus,
+    http_status: Option<u16>,
+    rows_in: i64,
+    raw_object_id: Option<i64>,
+    error: Option<&str>,
+) -> rusqlite::Result<i64> {
+    tx.prepare_cached(
+        "insert into fetch_runs (source_id, fetched_at, received_at, status, http_status, rows_in, raw_object_id, error)
+         values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+    )?
+    .execute(params![source_id, fetched_at, now_ms(), status.as_str(), http_status, rows_in, raw_object_id, error])?;
+    Ok(tx.last_insert_rowid())
+}
+
+fn valid_coord(lat: f64, lon: f64) -> bool {
+    lat.is_finite() && lon.is_finite() && (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)
+}
+
+/// Upserts rows inside one transaction, resolving taxon and station refs with per-transaction
+/// caches. Every upsert only touches the row when a value differs, so `written` counts real
+/// changes and an identical payload writes nothing.
+struct RowWriter<'t, 'c> {
+    tx: &'t Transaction<'c>,
+    source_id: &'static str,
+    raw_object_id: i64,
+    now: i64,
+    taxa: HashMap<String, i64>,
+    /// ext_id to (id, the ref last written), so repeated refs skip the upsert unless they differ.
+    stations: HashMap<String, (i64, StationRef)>,
+    written: usize,
+    skipped: usize,
+    window: Option<(i64, i64)>,
+}
+
+impl<'t, 'c> RowWriter<'t, 'c> {
+    fn new(tx: &'t Transaction<'c>, source_id: &'static str, raw_object_id: i64) -> Self {
+        RowWriter {
+            tx,
+            source_id,
+            raw_object_id,
+            now: now_ms(),
+            taxa: HashMap::new(),
+            stations: HashMap::new(),
+            written: 0,
+            skipped: 0,
+            window: None,
+        }
+    }
+
+    fn widen(&mut self, at: i64) {
+        self.window = Some(match self.window {
+            Some((from, to)) => (from.min(at), to.max(at)),
+            None => (at, at),
+        });
+    }
+
+    fn write(&mut self, row: &Row) -> rusqlite::Result<()> {
+        let changed = match row {
+            Row::Sighting(s) => self.sighting(s)?,
+            Row::Reading(r) => self.reading(r)?,
+            Row::Alert(a) => self.alert(a)?,
+            Row::Station(s) => self.station(s)?.map(|(_, changed)| changed),
+            Row::Revision(r) => self.revision(r)?,
+        };
+        match changed {
+            None => self.skipped += 1,
+            Some(true) => self.written += 1,
+            Some(false) => {}
+        }
+        Ok(())
+    }
+
+    fn taxon(&mut self, t: &TaxonRef) -> rusqlite::Result<Option<i64>> {
+        let name = t.scientific_name.trim();
+        if name.is_empty() {
+            return Ok(None);
+        }
+        if let Some(id) = self.taxa.get(name) {
+            return Ok(Some(*id));
+        }
+        self.tx
+            .prepare_cached("insert into taxa (scientific_name, common_name, focus) values (?1, ?2, 0) on conflict(scientific_name) do nothing")?
+            .execute(params![name, t.common_name.trim()])?;
+        let id: i64 =
+            self.tx.prepare_cached("select id from taxa where scientific_name = ?1")?.query_row([name], |r| r.get(0))?;
+        self.taxa.insert(name.to_string(), id);
+        Ok(Some(id))
+    }
+
+    /// Returns `(station id, changed)`, or `None` when the ref is invalid.
+    fn station(&mut self, s: &StationRef) -> rusqlite::Result<Option<(i64, bool)>> {
+        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) {
+            return Ok(None);
+        }
+        if let Some((id, _)) = self.stations.get(&s.ext_id).filter(|(_, seen)| seen == s) {
+            return Ok(Some((*id, false)));
+        }
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into stations (source_id, ext_id, name, lat, lon, kind) values (?1, ?2, ?3, ?4, ?5, ?6)
+                 on conflict(source_id, ext_id) do update set name = excluded.name, lat = excluded.lat,
+                   lon = excluded.lon, kind = excluded.kind
+                 where stations.name is not excluded.name or stations.lat is not excluded.lat
+                   or stations.lon is not excluded.lon or stations.kind is not excluded.kind",
+            )?
+            .execute(params![self.source_id, s.ext_id, s.name, s.lat, s.lon, s.kind.as_str()])?;
+        let id: i64 = self
+            .tx
+            .prepare_cached("select id from stations where source_id = ?1 and ext_id = ?2")?
+            .query_row(params![self.source_id, s.ext_id], |r| r.get(0))?;
+        self.stations.insert(s.ext_id.clone(), (id, s.clone()));
+        Ok(Some((id, n > 0)))
+    }
+
+    fn sighting(&mut self, s: &SightingRow) -> rusqlite::Result<Option<bool>> {
+        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) {
+            return Ok(None);
+        }
+        let Some(taxon_id) = self.taxon(&s.taxon)? else { return Ok(None) };
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into sightings (source_id, ext_id, taxon_id, lat, lon, accuracy_m, observed_at, quality,
+                   photo_url, raw_object_id, ingested_at)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 on conflict(source_id, ext_id) do update set taxon_id = excluded.taxon_id, lat = excluded.lat,
+                   lon = excluded.lon, accuracy_m = excluded.accuracy_m, observed_at = excluded.observed_at,
+                   quality = excluded.quality, photo_url = excluded.photo_url,
+                   raw_object_id = excluded.raw_object_id, ingested_at = excluded.ingested_at
+                 where sightings.taxon_id is not excluded.taxon_id or sightings.lat is not excluded.lat
+                   or sightings.lon is not excluded.lon or sightings.accuracy_m is not excluded.accuracy_m
+                   or sightings.observed_at is not excluded.observed_at or sightings.quality is not excluded.quality
+                   or sightings.photo_url is not excluded.photo_url",
+            )?
+            .execute(params![
+                self.source_id,
+                s.ext_id,
+                taxon_id,
+                s.lat,
+                s.lon,
+                s.accuracy_m.filter(|a| a.is_finite()),
+                s.observed_at,
+                s.quality.as_str(),
+                s.photo_url,
+                self.raw_object_id,
+                self.now
+            ])?;
+        if n > 0 {
+            self.widen(s.observed_at);
+        }
+        Ok(Some(n > 0))
+    }
+
+    fn reading(&mut self, r: &ReadingRow) -> rusqlite::Result<Option<bool>> {
+        let Some((station_id, station_changed)) = self.station(&r.station)? else { return Ok(None) };
+        if station_changed {
+            self.written += 1;
+        }
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into readings (station_id, param, value, flag, observed_at, origin, raw_object_id)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 on conflict(station_id, param, observed_at, origin) do update set value = excluded.value,
+                   flag = excluded.flag, raw_object_id = excluded.raw_object_id
+                 where readings.value is not excluded.value or readings.flag is not excluded.flag",
+            )?
+            .execute(params![
+                station_id,
+                r.param.as_str(),
+                r.value.filter(|v| v.is_finite()),
+                r.flag.as_str(),
+                r.observed_at,
+                r.origin.as_str(),
+                self.raw_object_id
+            ])?;
+        if n > 0 {
+            self.widen(r.observed_at);
+        }
+        Ok(Some(n > 0))
+    }
+
+    fn alert(&mut self, a: &AlertRow) -> rusqlite::Result<Option<bool>> {
+        if a.ext_id.is_empty() {
+            return Ok(None);
+        }
+        let area = a.area_geojson.as_ref().map(|v| v.to_string());
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into alerts (source_id, ext_id, event, severity, headline, area_geojson, onset, expires, raw_object_id)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 on conflict(ext_id) do update set event = excluded.event, severity = excluded.severity,
+                   headline = excluded.headline, area_geojson = excluded.area_geojson, onset = excluded.onset,
+                   expires = excluded.expires, raw_object_id = excluded.raw_object_id
+                 where alerts.event is not excluded.event or alerts.severity is not excluded.severity
+                   or alerts.headline is not excluded.headline or alerts.area_geojson is not excluded.area_geojson
+                   or alerts.onset is not excluded.onset or alerts.expires is not excluded.expires",
+            )?
+            .execute(params![
+                self.source_id,
+                a.ext_id,
+                a.event,
+                a.severity,
+                a.headline,
+                area,
+                a.onset,
+                a.expires,
+                self.raw_object_id
+            ])?;
+        Ok(Some(n > 0))
+    }
+
+    fn revision(&mut self, r: &RevisionRow) -> rusqlite::Result<Option<bool>> {
+        let sighting_id: Option<i64> = self
+            .tx
+            .prepare_cached("select id from sightings where source_id = ?1 and ext_id = ?2")?
+            .query_row(params![self.source_id, r.sighting_ext_id], |row| row.get(0))
+            .optional()?;
+        let Some(sighting_id) = sighting_id else { return Ok(None) };
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into sighting_revisions (sighting_id, changed_at, field, old, new)
+                 select ?1, ?2, ?3, ?4, ?5
+                 where not exists (select 1 from sighting_revisions
+                   where sighting_id = ?1 and changed_at = ?2 and field = ?3 and old is ?4 and new is ?5)",
+            )?
+            .execute(params![sighting_id, r.changed_at, r.field, r.old, r.new])?;
+        Ok(Some(n > 0))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Read as _;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+
+    use super::*;
+    use crate::app::test_support::test_state;
+    use crate::archive::Archive;
+    use crate::ingest::governor::HttpStatusError;
+    use crate::ingest::source::Mode;
+    use crate::model::*;
+
+    /// Test source: `normalize` parses a JSON array of rows; `ack` records how many sightings
+    /// were visible in the database at ack time, proving it ran after the commit.
+    struct FakeSource {
+        id: &'static str,
+        acks: Mutex<Vec<(Option<String>, i64)>>,
+    }
+
+    impl FakeSource {
+        fn new(id: &'static str) -> Self {
+            FakeSource { id, acks: Mutex::new(Vec::new()) }
+        }
+    }
+
+    #[async_trait]
+    impl Source for FakeSource {
+        fn info(&self) -> SourceInfo {
+            SourceInfo {
+                id: self.id,
+                name: "Fake",
+                homepage: "https://example.test",
+                mode: Mode::Push,
+                cadence: Duration::from_secs(60),
+                max_latency: Duration::from_secs(600),
+            }
+        }
+        async fn fetch(&self, _ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
+            Ok(vec![])
+        }
+        fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
+            Ok(serde_json::from_slice(&raw.bytes)?)
+        }
+        async fn ack(&self, ctx: &FetchCtx<'_>, raw: &RawPayload) -> anyhow::Result<()> {
+            let n: i64 = ctx.state.obs.read(|c| c.query_row("select count(*) from sightings", [], |r| r.get(0))).await?;
+            self.acks.lock().unwrap().push((raw.ack.clone(), n));
+            Ok(())
+        }
+    }
+
+    fn station() -> StationRef {
+        StationRef { ext_id: "VAKF1".into(), name: "Virginia Key".into(), lat: 25.73, lon: -80.16, kind: StationKind::Buoy }
+    }
+
+    fn rows() -> Vec<Row> {
+        vec![
+            Row::Sighting(SightingRow {
+                ext_id: "obs-1".into(),
+                taxon: TaxonRef { scientific_name: "Python bivittatus".into(), common_name: "Burmese python".into() },
+                lat: 25.4,
+                lon: -80.6,
+                accuracy_m: Some(12.0),
+                observed_at: 1_790_000_000_000,
+                quality: Quality::Research,
+                photo_url: Some("https://example.test/p.jpg".into()),
+            }),
+            Row::Sighting(SightingRow {
+                ext_id: "obs-2".into(),
+                taxon: TaxonRef { scientific_name: "Anolis sagrei".into(), common_name: "Brown anole".into() },
+                lat: 25.7,
+                lon: -80.3,
+                accuracy_m: None,
+                observed_at: 1_790_000_600_000,
+                quality: Quality::NeedsId,
+                photo_url: None,
+            }),
+            Row::Station(station()),
+            Row::Reading(ReadingRow {
+                station: station(),
+                param: Param::WaterC,
+                value: Some(29.5),
+                flag: Flag::Ok,
+                observed_at: 1_789_999_000_000,
+                origin: Origin::Measured,
+            }),
+            Row::Reading(ReadingRow {
+                station: station(),
+                param: Param::AirC,
+                value: None,
+                flag: Flag::Missing,
+                observed_at: 1_789_999_000_000,
+                origin: Origin::Measured,
+            }),
+            Row::Alert(AlertRow {
+                ext_id: "urn:oid:2.49.0.1.840.0.abc".into(),
+                event: "Heat Advisory".into(),
+                severity: "Moderate".into(),
+                headline: Some("Heat Advisory until 7 PM".into()),
+                area_geojson: Some(serde_json::json!({"type": "Point", "coordinates": [-80.2, 25.8]})),
+                onset: Some(1_790_000_000_000),
+                expires: Some(1_790_030_000_000),
+            }),
+            Row::Revision(RevisionRow {
+                sighting_ext_id: "obs-1".into(),
+                field: "quality".into(),
+                old: Some("needs_id".into()),
+                new: Some("research".into()),
+                changed_at: 1_790_000_100_000,
+            }),
+        ]
+    }
+
+    fn payload(rows: &[Row], cursor: Option<&str>) -> RawPayload {
+        RawPayload {
+            source_url: "https://example.test/feed".into(),
+            content_type: "application/json".into(),
+            bytes: serde_json::to_vec(rows).unwrap(),
+            http_status: Some(200),
+            fetched_at: 1_790_000_700_000,
+            next_cursor: cursor.map(String::from),
+            ack: Some("receipt-1".into()),
+        }
+    }
+
+    async fn count(state: &AppState, table: &'static str) -> i64 {
+        state.obs.read(move |c| c.query_row(&format!("select count(*) from {table}"), [], |r| r.get(0))).await.unwrap()
+    }
+
+    async fn counts(state: &AppState) -> Vec<i64> {
+        let mut out = Vec::new();
+        for t in ["sightings", "taxa", "stations", "readings", "alerts", "sighting_revisions"] {
+            out.push(count(state, t).await);
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn pipeline_writes_archives_acks_and_is_idempotent() {
+        let state = test_state();
+        let mut events = state.hub.subscribe();
+        let src = FakeSource::new("fake");
+        let rows = rows();
+        let raw = payload(&rows, Some("cursor-1"));
+
+        let out = ingest_payload(&state, &src, raw.clone(), None).await.unwrap();
+        assert_eq!(out.status, RunStatus::Ok, "{out:?}");
+        assert_eq!(out.rows_in, 7);
+        assert_eq!(out.rows_skipped, 0);
+        // 2 sightings + station + 2 readings + alert + revision.
+        assert_eq!(out.rows_written, 7);
+        assert_eq!(out.window, Some((1_789_999_000_000, 1_790_000_600_000)));
+        assert_eq!(out.cursor.as_deref(), Some("cursor-1"));
+        // sightings, taxa (4 seeded + Anolis), stations, readings, alerts, revisions
+        assert_eq!(counts(&state).await, vec![2, 5, 1, 2, 1, 1]);
+
+        // Focus taxon resolves to its seeded id; the non-focus one is inserted with focus = 0.
+        let (python, anole): (i64, (i64, i64)) = state
+            .obs
+            .read(|c| {
+                let p = c.query_row("select taxon_id from sightings where ext_id = 'obs-1'", [], |r| r.get(0))?;
+                let a = c.query_row(
+                    "select t.id, t.focus from sightings s join taxa t on t.id = s.taxon_id where s.ext_id = 'obs-2'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                Ok((p, a))
+            })
+            .await
+            .unwrap();
+        assert_eq!(python, 1);
+        assert!(anole.0 > 4 && anole.1 == 0, "{anole:?}");
+
+        // fetch_run recorded against the raw object.
+        let run: (String, i64, Option<i64>, Option<i64>) = state
+            .obs
+            .read(move |c| {
+                c.query_row(
+                    "select status, rows_in, raw_object_id, http_status from fetch_runs where id = ?1",
+                    [out.fetch_run_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+            })
+            .await
+            .unwrap();
+        assert_eq!(run, ("ok".to_string(), 7, Some(out.raw_object_id), Some(200)));
+
+        // Raw object archived gzip under raw/{source}/{yyyy}/{mm}/{dd}/ (fetched_at 2026-09-21).
+        let (key, bytes_len, sha): (String, i64, String) = state
+            .obs
+            .read(|c| c.query_row("select r2_key, bytes, sha256 from raw_objects", [], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))))
+            .await
+            .unwrap();
+        assert_eq!(key, out.r2_key);
+        assert!(key.starts_with("raw/fake/2026/09/21/") && key.ends_with(".json.gz"), "{key}");
+        let stored = state.archive.get(&key).await.unwrap();
+        assert_eq!(&stored[..2], &[0x1f, 0x8b], "gzip magic");
+        let mut plain = Vec::new();
+        flate2::read::GzDecoder::new(&stored[..]).read_to_end(&mut plain).unwrap();
+        assert_eq!(plain, raw.bytes);
+        assert_eq!(bytes_len, raw.bytes.len() as i64);
+        assert_eq!(sha, hex::encode(Sha256::digest(&raw.bytes)));
+
+        // Ack ran once, after commit (both sightings visible), with the payload's receipt.
+        assert_eq!(*src.acks.lock().unwrap(), vec![(Some("receipt-1".to_string()), 2)]);
+        let cursor: String = state
+            .obs
+            .read(|c| c.query_row("select cursor from cursors where source_id = 'fake'", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(cursor, "cursor-1");
+        match events.try_recv().unwrap() {
+            Event::RowsWritten { from, to } => assert_eq!((from, to), (1_789_999_000_000, 1_790_000_600_000)),
+            other => panic!("unexpected event {other:?}"),
+        }
+
+        // Re-run of the same payload: 0 rows, no new raw object, no RowsWritten.
+        let again = ingest_payload(&state, &src, raw.clone(), Some("cursor-1".into())).await.unwrap();
+        assert_eq!(again.rows_written, 0, "{again:?}");
+        assert_eq!(again.window, None);
+        assert_eq!(again.raw_object_id, out.raw_object_id);
+        assert_eq!(counts(&state).await, vec![2, 5, 1, 2, 1, 1]);
+        assert_eq!(count(&state, "raw_objects").await, 1);
+        assert_eq!(count(&state, "fetch_runs").await, 2);
+        assert!(events.try_recv().is_err());
+        assert_eq!(src.acks.lock().unwrap().len(), 2);
+
+        // A changed value is an update, not a new row, and widens the window to that reading.
+        let mut changed = rows.clone();
+        if let Row::Reading(r) = &mut changed[3] {
+            r.value = Some(30.1);
+        }
+        let third = ingest_payload(&state, &src, payload(&changed, None), None).await.unwrap();
+        assert_eq!(third.rows_written, 1);
+        assert_eq!(third.window, Some((1_789_999_000_000, 1_789_999_000_000)));
+        assert_eq!(count(&state, "readings").await, 2);
+        assert_eq!(count(&state, "raw_objects").await, 2);
+        let v: f64 = state
+            .obs
+            .read(|c| c.query_row("select value from readings where param = 'water_c'", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(v, 30.1);
+    }
+
+    #[tokio::test]
+    async fn pipeline_empty_payload_records_empty() {
+        let state = test_state();
+        let src = FakeSource::new("fake-empty");
+        let out = ingest_payload(&state, &src, payload(&[], None), None).await.unwrap();
+        assert_eq!(out.status, RunStatus::Empty);
+        assert_eq!((out.rows_in, out.rows_written), (0, 0));
+        let status: String = state
+            .obs
+            .read(|c| c.query_row("select status from fetch_runs where source_id = 'fake-empty'", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(status, "empty");
+    }
+
+    #[tokio::test]
+    async fn pipeline_normalize_error_records_error_and_skips_ack() {
+        let state = test_state();
+        let src = FakeSource::new("fake-bad");
+        let mut raw = payload(&[], Some("never"));
+        raw.bytes = b"{not json".to_vec();
+        let out = ingest_payload(&state, &src, raw, None).await.unwrap();
+        assert_eq!(out.status, RunStatus::Error);
+        let (status, error, raw_id): (String, String, Option<i64>) = state
+            .obs
+            .read(|c| {
+                c.query_row("select status, error, raw_object_id from fetch_runs where source_id = 'fake-bad'", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })
+            })
+            .await
+            .unwrap();
+        assert_eq!(status, "error");
+        assert!(error.starts_with("normalize:"), "{error}");
+        assert_eq!(raw_id, Some(out.raw_object_id), "bad payload is still archived for replay");
+        assert!(src.acks.lock().unwrap().is_empty());
+        assert_eq!(count(&state, "cursors").await, 0);
+    }
+
+    #[tokio::test]
+    async fn pipeline_skips_invalid_rows_as_partial() {
+        let state = test_state();
+        let src = FakeSource::new("fake-partial");
+        let mut rows = rows();
+        if let Row::Sighting(s) = &mut rows[1] {
+            s.lat = 123.0;
+        }
+        rows.push(Row::Revision(RevisionRow {
+            sighting_ext_id: "unknown".into(),
+            field: "quality".into(),
+            old: None,
+            new: None,
+            changed_at: 0,
+        }));
+        let out = ingest_payload(&state, &src, payload(&rows, None), None).await.unwrap();
+        assert_eq!(out.status, RunStatus::Partial);
+        assert_eq!(out.rows_skipped, 2);
+        assert_eq!(count(&state, "sightings").await, 1);
+        let error: String = state
+            .obs
+            .read(|c| c.query_row("select error from fetch_runs where status = 'partial'", [], |r| r.get(0)))
+            .await
+            .unwrap();
+        assert_eq!(error, "2 of 8 rows skipped");
+    }
+
+    #[tokio::test]
+    async fn pipeline_station_ref_changes_within_payload_are_written() {
+        let state = test_state();
+        let src = FakeSource::new("fake-station");
+        let mut moved = station();
+        moved.name = "Virginia Key (relocated)".into();
+        moved.lat = 25.74;
+        let out = ingest_payload(&state, &src, payload(&[Row::Station(station()), Row::Station(moved)], None), None)
+            .await
+            .unwrap();
+        assert_eq!(out.rows_written, 2);
+        let (name, lat): (String, f64) = state
+            .obs
+            .read(|c| c.query_row("select name, lat from stations where ext_id = 'VAKF1'", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        assert_eq!((name.as_str(), lat), ("Virginia Key (relocated)", 25.74));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Supervision
+    // ---------------------------------------------------------------------------------------
+
+    struct FailingArchive;
+
+    #[async_trait]
+    impl Archive for FailingArchive {
+        async fn put(&self, key: &str, _bytes: Vec<u8>, _ct: &str) -> anyhow::Result<()> {
+            anyhow::bail!("archive offline: {key}")
+        }
+        async fn get(&self, key: &str) -> anyhow::Result<Vec<u8>> {
+            anyhow::bail!("archive offline: {key}")
+        }
+    }
+
+    enum Behaviour {
+        Panic,
+        /// Returns a payload; the archive fails, so the pipeline errors.
+        PipelineError,
+        Healthy,
+        Http503,
+    }
+
+    struct ScriptedSource {
+        id: &'static str,
+        behaviour: Behaviour,
+        interval: Duration,
+        calls: AtomicUsize,
+        at: Mutex<Vec<Instant>>,
+    }
+
+    impl ScriptedSource {
+        fn new(id: &'static str, behaviour: Behaviour, interval: Duration) -> Arc<Self> {
+            Arc::new(ScriptedSource { id, behaviour, interval, calls: AtomicUsize::new(0), at: Mutex::new(Vec::new()) })
+        }
+        fn calls(&self) -> usize {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait]
+    impl Source for ScriptedSource {
+        fn info(&self) -> SourceInfo {
+            SourceInfo {
+                id: self.id,
+                name: "Scripted",
+                homepage: "https://example.test",
+                mode: Mode::Poll,
+                cadence: self.interval,
+                max_latency: Duration::from_secs(60),
+            }
+        }
+        async fn fetch(&self, _ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.at.lock().unwrap().push(Instant::now());
+            match self.behaviour {
+                Behaviour::Panic => panic!("scripted panic in {}", self.id),
+                Behaviour::PipelineError => Ok(vec![payload(&[], None)]),
+                Behaviour::Healthy => Ok(vec![]),
+                Behaviour::Http503 => Err(HttpStatusError {
+                    status: 503,
+                    retry_after: Some(Duration::from_secs(3600)),
+                    url: "https://example.test/down".into(),
+                }
+                .into()),
+            }
+        }
+        fn normalize(&self, _raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
+            Ok(vec![])
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn supervisor_restarts_failing_sources_with_backoff_and_isolates_them() {
+        let mut state = test_state();
+        state.archive = Arc::new(FailingArchive);
+        let ms = Duration::from_millis;
+        let panicker = ScriptedSource::new("sup-panic", Behaviour::Panic, ms(1));
+        let erroring = ScriptedSource::new("sup-error", Behaviour::PipelineError, ms(1));
+        let healthy = ScriptedSource::new("sup-healthy", Behaviour::Healthy, ms(10));
+        let sup = Supervision { initial: ms(40), max: ms(160), healthy_after: Duration::from_secs(60) };
+        let handles = spawn_sources(
+            &state,
+            vec![panicker.clone() as Arc<dyn Source>, erroring.clone(), healthy.clone()],
+            sup,
+        );
+
+        tokio::time::sleep(ms(500)).await;
+        let healthy_mid = healthy.calls();
+        tokio::time::sleep(ms(500)).await;
+
+        // Failing sources were restarted repeatedly...
+        assert!(panicker.calls() >= 4, "panicker ran {} times", panicker.calls());
+        assert!(erroring.calls() >= 4, "erroring ran {} times", erroring.calls());
+        // ...with a doubling delay, capped.
+        for src in [&panicker, &erroring] {
+            let at = src.at.lock().unwrap().clone();
+            let gaps: Vec<Duration> = at.windows(2).map(|w| w[1] - w[0]).collect();
+            assert!(gaps[0] >= ms(40) && gaps[1] >= ms(80) && gaps[2] >= ms(160), "{}: {gaps:?}", src.id);
+            assert!(gaps.iter().all(|g| *g < ms(400)), "{}: capped at 160ms, got {gaps:?}", src.id);
+            assert!(!handles.iter().any(|h| h.is_finished()), "supervisors keep running");
+        }
+        // ...and the healthy source kept its cadence the whole time.
+        assert!(healthy_mid >= 10, "healthy ran {healthy_mid} times in the first half");
+        assert!(healthy.calls() >= healthy_mid + 10, "healthy stalled: {} -> {}", healthy_mid, healthy.calls());
+        let empties: i64 = state
+            .obs
+            .read(|c| {
+                c.query_row("select count(*) from fetch_runs where source_id = 'sup-healthy' and status = 'empty'", [], |r| {
+                    r.get(0)
+                })
+            })
+            .await
+            .unwrap();
+        assert!(empties >= 20, "healthy empty runs recorded: {empties}");
+
+        for h in handles {
+            h.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn supervisor_fetch_error_is_recorded_and_throttled_by_governor() {
+        let state = test_state();
+        let down = ScriptedSource::new("sup-http503", Behaviour::Http503, Duration::from_millis(1));
+        let handles = spawn_sources(&state, vec![down.clone() as Arc<dyn Source>], Supervision::default());
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Retry-After: 3600 holds the next attempt; one call only, no restart storm.
+        assert_eq!(down.calls(), 1);
+        let (status, http, error): (String, Option<i64>, String) = state
+            .obs
+            .read(|c| {
+                c.query_row("select status, http_status, error from fetch_runs where source_id = 'sup-http503'", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+                })
+            })
+            .await
+            .unwrap();
+        assert_eq!((status.as_str(), http), ("error", Some(503)));
+        assert!(error.contains("HTTP 503"), "{error}");
+        let note = governor::note("sup-http503").unwrap();
+        assert!(note.contains("after HTTP 503") && note.contains("Retry-After until"), "{note}");
+        for h in handles {
+            h.abort();
+        }
+    }
+
+    #[tokio::test]
+    async fn supervisor_start_upserts_sources_without_running_them() {
+        let state = test_state();
+        assert!(!state.config.sources_enabled);
+        let handles = start(state.clone(), Supervision::default()).await.unwrap();
+        assert!(handles.is_empty());
+        let (mode, cadence): (String, i64) = state
+            .obs
+            .read(|c| c.query_row("select mode, cadence_s from sources where id = 'web'", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        assert_eq!(mode, "push");
+        assert!(cadence > 0);
+        // Idempotent at the next boot.
+        start(state.clone(), Supervision::default()).await.unwrap();
+        assert_eq!(count(&state, "sources").await, 1 + crate::ingest::push::all(&state.config).len() as i64
+            + crate::ingest::poll::all(&state.config).len() as i64);
+    }
+}

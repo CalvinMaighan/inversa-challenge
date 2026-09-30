@@ -1,0 +1,31 @@
+# Litestream 0.5: continuous replication of both SQLite databases to Cloudflare R2.
+# Used by inversa-litestream.service (replicate) and deploy/restore.sh (restore).
+# Credentials come from /etc/inversa/env (rendered from Doppler inversa/prd):
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
+# The databases must stay in WAL mode (the API sets journal_mode = wal).
+
+# Replica defaults, inherited by every replica below.
+bucket: inversa-litestream
+endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+region: auto
+force-path-style: true
+access-key-id: ${R2_ACCESS_KEY_ID}
+secret-access-key: ${R2_SECRET_ACCESS_KEY}
+sync-interval: 1s
+
+# In 0.5, retention is a snapshot setting: a daily snapshot, kept for 7 days, bounds
+# the point-in-time restore window. (A per-replica "retention" key is silently ignored.)
+snapshot:
+  interval: 24h
+  retention: 168h
+
+dbs:
+  - path: /var/lib/inversa/observations.db
+    replica:
+      type: s3
+      path: observations
+
+  - path: /var/lib/inversa/team.db
+    replica:
+      type: s3
+      path: team
