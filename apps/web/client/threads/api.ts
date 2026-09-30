@@ -139,8 +139,13 @@ export function frameIndexAt(atMs: number, meta: FrameMeta | null = getFrameMeta
   return i >= 0 && i < meta.frameCount ? i : null;
 }
 
-/** Called by the thread boot code (T19) when a grid is allocated or replaced. */
+/**
+ * Called by the thread boot code (T19) when a grid is allocated or replaced. A grid published before anyone
+ * asked for frames comes from a fixture page (dev routes): that page is the grid's source, so reading it must
+ * not boot the workers, whose frame fetches and socket reconnects would race the fixture.
+ */
 export function publishFrameGrid(grid: FrameGrid, meta: FrameMeta): void {
+  wired = true;
   frameGrid = grid;
   frameMeta = meta;
   for (const cb of gridListeners) cb(grid);

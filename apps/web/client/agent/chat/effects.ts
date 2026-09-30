@@ -2,7 +2,7 @@ import { set } from "@calvinjs/active-state";
 
 import { getGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, type SelectionState, parseEvidenceId } from "client/state/selection";
-import { TIME, clampToWindow, type TimeState } from "client/state/time";
+import { TIME, retime, type TimeState } from "client/state/time";
 import { REGION_BBOX, altitudeToFit } from "client/state/view";
 import type { AgentStreamEvent, BBox } from "shared/agent/events";
 
@@ -45,25 +45,16 @@ export function bboxCamera(bbox: BBox): CameraTarget {
 }
 
 /**
- * Timeline cursor for an agent `view.time`: snapped to the frame grid and clamped into the replay window.
- * A window with unreadable bounds (never set) only snaps.
+ * `view` event: fly the globe to the box and move the timeline to the answer's time. A time outside the replay
+ * window moves the window (`retime`), so an answer about last February shows last February's frames.
  */
-export function timeCursor(prev: Partial<TimeState> | undefined, atIso: string): string | null {
-  const atMs = Date.parse(atIso);
-  if (!Number.isFinite(atMs)) return null;
-  if (prev?.from && prev.to && Number.isFinite(Date.parse(prev.from)) && Number.isFinite(Date.parse(prev.to))) {
-    return clampToWindow(atMs, { from: prev.from, to: prev.to });
-  }
-  return clampToWindow(atMs, { from: new Date(0).toISOString(), to: new Date(8.64e15).toISOString() });
-}
-
-/** `view` event: fly the globe to the box and move the timeline to the answer's time. */
-export function applyViewEvent(event: Extract<AgentStreamEvent, { type: "view" }>): void {
+export function applyViewEvent(event: Extract<AgentStreamEvent, { type: "view" }>, nowMs = Date.now()): void {
   getGlobe()?.flyTo(bboxCamera(event.bbox));
+  const atMs = Date.parse(event.time);
+  if (!Number.isFinite(atMs)) return;
   set<TimeState>(TIME, (prev) => {
     const base = { ...TIME.defaults, ...prev };
-    const at = timeCursor(base, event.time);
-    return at ? { ...base, at, playing: false } : base;
+    return { ...base, ...retime(base, atMs, nowMs), playing: false };
   });
 }
 
@@ -75,6 +66,6 @@ export function openEvidence(id: string): void {
 }
 
 /** Side effects of one streamed event. */
-export function applyAgentSideEffects(event: AgentStreamEvent): void {
-  if (event.type === "view") applyViewEvent(event);
+export function applyAgentSideEffects(event: AgentStreamEvent, nowMs = Date.now()): void {
+  if (event.type === "view") applyViewEvent(event, nowMs);
 }

@@ -66,6 +66,14 @@ export class Store {
     this.db.run("INSERT OR REPLACE INTO cache_queries (hash, json, fetched_at, ttl) VALUES (?, ?, ?, ?)", [hash, body, fetchedAt, ttlMs]);
   }
 
+  /**
+   * New rows landed upstream: every cached body is out of date. TTL 0 makes the next read a miss (network
+   * first) while the row stays as the offline fallback; `putCached` restores the TTL on refetch.
+   */
+  expireCached(): void {
+    this.db.run("UPDATE cache_queries SET ttl = 0");
+  }
+
   cachedCount(): number {
     return num(this.db.all("SELECT COUNT(*) AS n FROM cache_queries")[0]?.n ?? 0);
   }

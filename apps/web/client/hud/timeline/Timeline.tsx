@@ -5,7 +5,7 @@ import { get, set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { THEME } from "client/state/theme";
-import { TIME, type TimeState } from "client/state/time";
+import { retime, TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { frameIndexAt } from "client/threads/api";
 
@@ -89,6 +89,18 @@ const Select = styled.select`
   option {
     background: var(--surface);
   }
+`;
+
+const DateInput = styled.input`
+  height: 28px;
+  margin-left: var(--gap-s);
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text);
+  color-scheme: dark light;
+  font: 600 11px / 1 var(--font-mono);
 `;
 
 const Track = styled.div`
@@ -314,10 +326,43 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   );
 }
 
+/**
+ * Date jump: a UTC day, committed on Enter or blur (not per keystroke, so typing a year does not fetch year 2).
+ * The time of day is kept; a day outside the window moves the window (`retime`) and the db worker fetches it.
+ */
+function DateJump({ at }: { at: string }) {
+  const day = at.slice(0, 10);
+  const commit = (input: HTMLInputElement) => {
+    if (!input.value || input.value === day) return;
+    const ms = Date.parse(`${input.value}T${at.slice(11, 16)}:00Z`);
+    if (!Number.isFinite(ms)) {
+      input.value = day;
+      return;
+    }
+    set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...retime(prev, ms, Date.now()), playing: false }));
+  };
+  return (
+    <DateInput
+      key={day}
+      type="date"
+      defaultValue={day}
+      min="2000-01-01"
+      max={new Date().toISOString().slice(0, 10)}
+      aria-label="Jump to date (UTC)"
+      title="Jump to date (UTC)"
+      data-hud-date-jump=""
+      onBlur={(e) => commit(e.currentTarget)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit(e.currentTarget);
+      }}
+    />
+  );
+}
+
 function PlayControls() {
   const playing = useActiveState<TimeState, boolean>(TIME, (t) => t.playing)[0] ?? false;
   const speed = useActiveState<TimeState, number>(TIME, (t) => t.speed)[0] ?? 8;
-  const live = useActiveState<TimeState, boolean>(TIME, (t) => isLive(t))[0] ?? true;
+  const live = useActiveState<TimeState, boolean>(TIME, (t) => isLive(t, Date.now()))[0] ?? true;
   const at = useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? "";
   usePlayback(playing, speed);
   const c = formatClocks(Date.parse(at));
@@ -347,15 +392,14 @@ function PlayControls() {
         type="button"
         $active={live}
         disabled={live && !playing}
-        onClick={() => set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, at: prev.to, playing: false }))}
+        onClick={() => set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(Date.now()), playing: false }))}
         title="Jump to the live edge"
       >
         <Icon name="live" />
         Live
       </IconButton>
-      <Readout>
-        {c.date} {c.utc}
-      </Readout>
+      <DateJump at={at} />
+      <Readout>{c.utc}</Readout>
       <Legend aria-hidden="true">
         <span>
           <Swatch $color="var(--accent)" />

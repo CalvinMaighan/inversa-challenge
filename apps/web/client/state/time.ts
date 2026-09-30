@@ -35,6 +35,29 @@ export function clampToWindow(atMs: number, time: Pick<TimeState, "from" | "to">
 }
 
 /**
+ * The window that shows `atMs`, with the cursor on it. At or after the start of the live window (the 30 days
+ * ending `nowMs`) that is the live window, cursor clamped to its edge; earlier, a 30-day window centred on
+ * `atMs`. The frame axis follows the window bounds, so moving them makes the db worker fetch that window.
+ */
+export function windowFor(atMs: number, nowMs: number): Pick<TimeState, "at" | "from" | "to"> {
+  const live = timeWindow(nowMs);
+  if (atMs >= Date.parse(live.from)) return { ...live, at: clampToWindow(atMs, live) };
+  const from = Math.round((atMs - WINDOW_MS / 2) / STEP_MS) * STEP_MS;
+  const window = { from: new Date(from).toISOString(), to: new Date(from + WINDOW_MS).toISOString() };
+  return { ...window, at: clampToWindow(atMs, window) };
+}
+
+/** Move the cursor to `atMs`: inside the current window only the cursor moves, outside it the window follows. */
+export function retime(prev: Pick<TimeState, "from" | "to">, atMs: number, nowMs: number): Pick<TimeState, "at" | "from" | "to"> {
+  const from = Date.parse(prev.from);
+  const to = Date.parse(prev.to);
+  if (Number.isFinite(from) && Number.isFinite(to) && atMs >= from && atMs <= to) {
+    return { from: prev.from, to: prev.to, at: clampToWindow(atMs, prev) };
+  }
+  return windowFor(atMs, nowMs);
+}
+
+/**
  * Defaults are taken at module load. Server and browser load at different moments, so SSR must not render
  * text from TIME; the HUD and globe that read it are client-only.
  */

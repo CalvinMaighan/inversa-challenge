@@ -73,12 +73,41 @@ describe("ui command handler", () => {
     set(TIME, { ...time(), playing: true });
     expect(applyUiCommand({ name: "set_time", args: { time: "2026-09-29T22:07:00-04:00" } }, NOW)).toBe(true);
     expect(time()).toMatchObject({ at: "2026-09-30T02:00:00.000Z", playing: false, ...{ from: WINDOW.from, to: WINDOW.to } });
-    expect(applyUiCommand({ name: "set_time", args: { time: "2020-01-01T00:00:00Z" } }, NOW)).toBe(true);
-    expect(time().at).toBe(WINDOW.from);
+    expect(applyUiCommand({ name: "set_time", args: { time: "2027-01-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ at: WINDOW.to, from: WINDOW.from });
     expect(applyUiCommand({ name: "set_time", args: { time: "now" } }, NOW)).toBe(true);
     expect(time().at).toBe(WINDOW.to);
     expect(applyUiCommand({ name: "set_time", args: { time: "yesterday-ish" } }, NOW)).toBe(false);
     expect(time().at).toBe(WINDOW.to);
+  });
+
+  test("set_time before the 30-day window recentres the window on it (cold-snap scene)", () => {
+    expect(applyUiCommand({ name: "set_time", args: { time: "2026-02-01T17:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({
+      at: "2026-02-01T17:00:00.000Z",
+      from: "2026-01-17T17:00:00.000Z",
+      to: "2026-02-16T17:00:00.000Z",
+      playing: false,
+    });
+    // Back into the live window: the live window returns.
+    expect(applyUiCommand({ name: "set_time", args: { time: "2026-09-20T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ at: "2026-09-20T00:00:00.000Z", from: WINDOW.from, to: WINDOW.to });
+  });
+
+  test("play_timeline accepts a window before the live one, capped at 30 days and at now", () => {
+    expect(
+      applyUiCommand({ name: "play_timeline", args: { from: "2026-01-30T00:00:00Z", to: "2026-02-04T00:00:00Z" } }, NOW),
+    ).toBe(true);
+    expect(time()).toMatchObject({ at: "2026-01-30T00:00:00.000Z", from: "2026-01-30T00:00:00.000Z", to: "2026-02-04T00:00:00.000Z", playing: true });
+    // Only from: keeps the current end when that makes a window of at most 30 days.
+    expect(applyUiCommand({ name: "play_timeline", args: { from: "2026-02-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ from: "2026-02-01T00:00:00.000Z", to: "2026-02-04T00:00:00.000Z" });
+    // Only from, far from the current end: the 30 days from it.
+    expect(applyUiCommand({ name: "play_timeline", args: { from: "2025-06-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ from: "2025-06-01T00:00:00.000Z", to: "2025-07-01T00:00:00.000Z" });
+    // A span over 30 days keeps its end; an end in the future stops at now.
+    expect(applyUiCommand({ name: "play_timeline", args: { from: "2026-01-01T00:00:00Z", to: "2027-01-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ from: WINDOW.from, to: WINDOW.to, at: WINDOW.from });
   });
 
   test("play_timeline narrows the window, starts at from, and applies speed defaults", () => {

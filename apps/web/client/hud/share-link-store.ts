@@ -9,10 +9,11 @@ import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 import { onGlobeReady } from "client/globe/api";
 import { LAYERS, type LayersState } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
-import { clampToWindow, TIME, type TimeState } from "client/state/time";
+import { retime, TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
 
 import type { HudSelection } from "./selection";
+import { isLive } from "./topbar/clock";
 import type { ShareState } from "./share-link";
 
 export function readShareState(): ShareState {
@@ -22,7 +23,8 @@ export function readShareState(): ShareState {
   const selection = get<HudSelection>(SELECTION) ?? SELECTION.defaults;
   return {
     camera: { lat: view.lat, lon: view.lon, altitudeM: view.altitudeM, heading: view.heading, pitch: view.pitch },
-    at: time.at ?? time.to,
+    // Live links carry no time: opening one later lands on the live edge of that moment, not in replay.
+    at: isLive(time, Date.now()) && !time.playing ? undefined : (time.at ?? time.to),
     layers: LAYER_IDS.filter((id) => layers.visible[id]),
     species: SPECIES_IDS.filter((id) => layers.species[id]),
     evidenceId: selection.evidenceId,
@@ -46,7 +48,8 @@ export function applyShareState(state: ShareState): () => void {
   }
   if (state.at) {
     const atMs = Date.parse(state.at);
-    set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, at: clampToWindow(atMs, prev), playing: false }));
+    // A link to a time outside the window brings its window along (the db worker fetches those frames).
+    set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...retime(prev, atMs, Date.now()), playing: false }));
   }
   if (state.layers || state.species) {
     const visibleIds = state.layers ? new Set(state.layers) : null;

@@ -106,6 +106,23 @@ describe("query: stale-while-revalidate", () => {
     expect(after).toEqual({ data: { feeds: [{ source: "v2" }] }, source: "cache" });
   });
 
+  test("framesUpdated expires the cache: the next read goes to the network, the old row stays as fallback", async () => {
+    let version = 1;
+    let online = true;
+    const ALERTS = '{ alerts(bbox: {west: 0, south: 0, east: 1, north: 1}, at: "x") { id } }';
+    const gql = fakeGql(() => (online ? { data: { alerts: [{ id: `a${version}` }] } } : { errors: [{ message: "offline", extensions: { network: true } }], status: 0 }));
+    const { engine } = makeEngine({ gql });
+    await engine.query({ query: ALERTS });
+    expect((await engine.query({ query: ALERTS })).source).toBe("cache");
+    version = 2;
+    await engine.framesUpdated("2026-09-30T20:00:00Z", "2026-09-30T21:00:00Z");
+    expect(await engine.query({ query: ALERTS })).toEqual({ data: { alerts: [{ id: "a2" }] }, source: "network" });
+    expect((await engine.query({ query: ALERTS })).source).toBe("cache");
+    await engine.framesUpdated("2026-09-30T20:00:00Z", "2026-09-30T21:00:00Z");
+    online = false;
+    expect(await engine.query({ query: ALERTS })).toEqual({ data: { alerts: [{ id: "a2" }] }, source: "fallback" });
+  });
+
   test("a network failure falls back to an old row; without one the error comes through", async () => {
     let now = 1_000;
     let online = true;

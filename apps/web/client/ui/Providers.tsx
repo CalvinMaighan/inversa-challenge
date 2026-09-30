@@ -5,6 +5,7 @@ import { ThemeProvider } from "@emotion/react";
 import { ActiveState } from "@calvinjs/active-state/react";
 import { ActiveTheme } from "active-theme/state";
 
+import { DEBUG_HOOK, installDebugHook } from "client/debug";
 import { state } from "client/state";
 import { ensureIdentity } from "client/state/me";
 import { STORAGE_PREFIX } from "client/themes/bootstrap";
@@ -29,6 +30,8 @@ function ThemeSync() {
 function Identity() {
   useEffect(() => {
     ensureIdentity();
+    // Dev and e2e builds only (DEBUG_HOOK is false in a plain production build).
+    if (DEBUG_HOOK) installDebugHook();
   }, []);
   return null;
 }

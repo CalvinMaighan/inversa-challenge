@@ -120,7 +120,7 @@ describe("share link store", () => {
     registerGlobe(null);
   });
 
-  test("share link waits for the globe, flies once when it registers, and clamps time into the window", () => {
+  test("share link waits for the globe, flies once when it registers, and brings an old time's window along", () => {
     registerGlobe(null);
     const flights: CameraTarget[] = [];
     const cancel = applyShareState({ camera: sample.camera, at: "1999-01-01T00:00:00.000Z" });
@@ -135,7 +135,8 @@ describe("share link store", () => {
     registerGlobe(globe);
     registerGlobe(globe);
     expect(flights.length).toBe(1);
-    expect(get<TimeState>(TIME)!.at).toBe(get<TimeState>(TIME)!.from);
+    // 1999 is before the live window: the window recentres on it instead of clamping the cursor.
+    expect(get<TimeState>(TIME)).toMatchObject({ at: "1999-01-01T00:00:00.000Z", from: "1998-12-17T00:00:00.000Z", to: "1999-01-16T00:00:00.000Z" });
     cancel();
     registerGlobe(null);
     set(TIME, TIME.defaults);

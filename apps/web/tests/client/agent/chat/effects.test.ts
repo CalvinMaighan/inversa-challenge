@@ -8,7 +8,6 @@ import {
   bboxCamera,
   evidenceCoordinates,
   openEvidence,
-  timeCursor,
 } from "client/agent/chat/effects";
 import { registerGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, TIME, state } from "client/state";
@@ -60,18 +59,36 @@ describe("agent side effects", () => {
 
   test("view event flies to the box centre at a height that fits it and moves TIME", () => {
     const bbox = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
-    applyViewEvent({ type: "view", bbox, time: "2026-01-14T21:07:00Z" });
+    applyViewEvent({ type: "view", bbox, time: "2026-01-14T21:07:00Z" }, FIXTURE_NOW);
     expect(flights).toEqual([{ lon: -80.445, lat: 25.47, altitudeM: altitudeToFit(bbox), heading: 0, pitch: -90 }]);
     // Snapped to the 15-minute frame grid.
     expect(get<TimeState>(TIME)!.at).toBe("2026-01-14T21:00:00.000Z");
     expect(get<TimeState>(TIME)!.playing).toBe(false);
   });
 
-  test("view time outside the replay window clamps to its edge", () => {
-    applyAgentSideEffects({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2027-01-01T00:00:00Z" });
-    expect(get<TimeState>(TIME)!.at).toBe(timeWindow(FIXTURE_NOW).to);
-    expect(timeCursor({}, "2026-01-14T21:07:00Z")).toBe("2026-01-14T21:00:00.000Z");
-    expect(timeCursor({}, "not a date")).toBeNull();
+  test("view time after now lands on the live edge", () => {
+    applyAgentSideEffects({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2027-01-01T00:00:00Z" }, FIXTURE_NOW);
+    expect(get<TimeState>(TIME)).toMatchObject(timeWindow(FIXTURE_NOW));
+  });
+
+  test("view time before the replay window recentres the window on it", () => {
+    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2025-11-01T17:05:00Z" }, FIXTURE_NOW);
+    expect(get<TimeState>(TIME)).toMatchObject({
+      at: "2025-11-01T17:00:00.000Z",
+      from: "2025-10-17T17:00:00.000Z",
+      to: "2025-11-16T17:00:00.000Z",
+      playing: false,
+    });
+    // Back inside the new window only the cursor moves.
+    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2025-11-10T00:00:00Z" }, FIXTURE_NOW);
+    expect(get<TimeState>(TIME)).toMatchObject({ at: "2025-11-10T00:00:00.000Z", from: "2025-10-17T17:00:00.000Z" });
+  });
+
+  test("an unreadable view time moves the camera but not TIME", () => {
+    const before = get<TimeState>(TIME);
+    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "not a date" }, FIXTURE_NOW);
+    expect(flights).toHaveLength(1);
+    expect(get<TimeState>(TIME)).toEqual(before);
   });
 
   test("other events have no side effects", () => {

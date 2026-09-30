@@ -7,6 +7,8 @@
  * not logged in, the children get the plain env with a warning; without OPENROUTER_API_KEY the agent route
  * answers 503 "agent unavailable: OPENROUTER_API_KEY not set".
  */
+import { randomBytes } from "node:crypto";
+
 import type { Subprocess } from "bun";
 
 const root = new URL("..", import.meta.url).pathname;
@@ -42,10 +44,19 @@ if ("error" in doppler) {
   console.warn(`\x1b[33mwarning:\x1b[0m Doppler inversa/dev not loaded (${doppler.error}); using the plain environment.`);
 }
 
+/**
+ * Dev-only hook secret (PLAN.md C18): with it the `web` hook source is on, so rows can be injected with a
+ * signed `POST /v1/ingest/hook/web` (C10) to watch live updates end to end. A fresh random value per start,
+ * printed once below; an `INGEST_HOOK_SECRET` from the shell or Doppler wins and is not printed.
+ */
+const configuredHookSecret = process.env.INGEST_HOOK_SECRET || ("secrets" in doppler ? doppler.secrets.INGEST_HOOK_SECRET : undefined);
+const generatedHookSecret = configuredHookSecret ? null : randomBytes(24).toString("hex");
+
 // Variables already set in the shell win over Doppler, so a one-off override needs no Doppler edit.
 const env: Record<string, string | undefined> = {
   ...("secrets" in doppler ? doppler.secrets : {}),
   ...process.env,
+  INGEST_HOOK_SECRET: configuredHookSecret || generatedHookSecret!,
   INVERSA_DATA_DIR: process.env.INVERSA_DATA_DIR ?? `${root}data`,
   NEXT_PUBLIC_INVERSA_WS_URL: process.env.NEXT_PUBLIC_INVERSA_WS_URL ?? "ws://127.0.0.1:4041/v1/graphql",
 };
@@ -58,7 +69,8 @@ const keySource = !env.OPENROUTER_API_KEY?.trim()
 
 const procs: { name: string; color: string; proc: Subprocess }[] = [];
 
-function start(name: string, color: string, cmd: string[], cwd: string) {
+/** `optional`: the process may exit (e.g. no network for bunx) without taking the others down. */
+function start(name: string, color: string, cmd: string[], cwd: string, optional = false) {
   const proc = Bun.spawn(cmd, { cwd, env, stdout: "pipe", stderr: "pipe" });
   procs.push({ name, color, proc });
   const prefix = `\x1b[${color}m[${name}]\x1b[0m `;
@@ -77,7 +89,7 @@ function start(name: string, color: string, cmd: string[], cwd: string) {
   }
   void proc.exited.then((code) => {
     process.stdout.write(`${prefix}exited with ${code}\n`);
-    shutdown(code ?? 1);
+    if (!optional) shutdown(code ?? 1);
   });
 }
 
@@ -95,7 +107,8 @@ const agent = keySource
   ? `openrouter openai/gpt-6-luna (key from ${keySource})`
   : "unavailable, OPENROUTER_API_KEY not set (/api/agent/stream answers 503)";
 console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${agent} · web: http://localhost:3050 · signal: http://127.0.0.1:8799`);
+if (generatedHookSecret) console.log(`ingest hook (dev only): POST http://127.0.0.1:4041/v1/ingest/hook/web, INGEST_HOOK_SECRET=${generatedHookSecret}`);
 start("api", "36", ["cargo", "run", "-q", "--release", "--manifest-path", "api/Cargo.toml"], root);
 start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
 // Same pinned wrangler as apps/signal-worker (package.json `dev`, scripts/e2e.ts); env dev allows origin localhost:3050.
-start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", "8799", "--env", "dev"], `${root}apps/signal-worker`);
+start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", "8799", "--ip", "127.0.0.1", "--env", "dev"], `${root}apps/signal-worker`, true);

@@ -26,9 +26,9 @@ const UI_TOOL_DESCRIPTIONS: Record<UiToolName, string> = {
   fly_to:
     "Move the globe camera. Pass a place name (park unit, Key, town, marina) or lat and lon in decimal degrees. altitudeM is camera height in meters; omit it for a sensible default. Returns at once.",
   set_time:
-    "Jump the timeline to one moment. time is an RFC 3339 timestamp, or 'now' for live. Resolve relative phrases like 'last night' into a timestamp first. Returns at once.",
+    "Jump the timeline to one moment. time is an RFC 3339 timestamp, or 'now' for live. Resolve relative phrases like 'last night' into a timestamp first. A time older than the last 30 days moves the 30-day window there. Returns at once.",
   play_timeline:
-    "Play or pause the timeline animation over the last 30 days. Optional from and to (RFC 3339) narrow the replayed range; speed is frames per second (one frame is 15 minutes). playing=false pauses. Returns at once.",
+    "Play or pause the timeline animation over the current window (the last 30 days unless moved). Optional from and to (RFC 3339) set the replayed range, up to 30 days, older dates included; speed is frames per second (one frame is 15 minutes). playing=false pauses. Returns at once.",
   toggle_layer:
     "Show or hide one map layer: sightings, hotspots, lst (land surface temperature), sst (sea surface temperature), stations, alerts, missions, peers. With species (python, tegu, iguana, lionfish) it shows or hides that species in the sightings and hotspots filter instead of the whole layer. Returns at once.",
   select:

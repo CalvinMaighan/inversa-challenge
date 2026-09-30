@@ -276,13 +276,17 @@ export class DbEngine {
     return { frameCount: axis.frameCount, cached, fetched, failed };
   }
 
-  /** Refetch the part of the axis a `framesUpdated` range touches. */
+  /**
+   * Axum wrote rows and rebuilt frames: expire the query cache (alerts, sightings, readings ... read after this
+   * must not come from before it) and refetch the part of the axis the range touches.
+   */
   async framesUpdated(from: string, to: string): Promise<void> {
-    const axis = this.axis;
-    if (!axis) return;
     const fromMs = Date.parse(from);
     const toMs = Date.parse(to);
     if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return;
+    this.store.expireCached();
+    const axis = this.axis;
+    if (!axis) return;
     await this.fetchChunks(axis, chunksWithin(axis, fromMs, toMs));
   }
 

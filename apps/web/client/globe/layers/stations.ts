@@ -10,7 +10,7 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
 import { readingEvidenceId } from "../evidence";
-import { createKeyedFetch } from "./keyed-fetch";
+import { bucketOfKey, createKeyedFetch, dataKey } from "./keyed-fetch";
 import { createCanvas } from "./raster-surface";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
 
@@ -112,7 +112,7 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
   const fetcher = createKeyedFetch<StationMark[]>({
     cacheSize: 48,
     load: (key, signal) => {
-      const to = Number(key);
+      const to = bucketOfKey(key);
       return ctx
         .gql<{ readings: GqlReading[] }>(
           READINGS_QUERY,
@@ -123,7 +123,7 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
     },
     onData: (key, stations) => {
       stats.error = null;
-      if (enabled && key === String(stationBucket(ctx.timeMs()))) draw(key, stations);
+      if (enabled && key === dataKey(stationBucket(ctx.timeMs()), ctx)) draw(key, stations);
     },
     onError: (err) => {
       stats.error = err instanceof Error ? err.message : String(err);
@@ -151,7 +151,7 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
     update(frameIndex) {
       lastFrame = frameIndex;
       if (!enabled) return;
-      const key = String(stationBucket(ctx.timeMs()));
+      const key = dataKey(stationBucket(ctx.timeMs()), ctx);
       const stations = fetcher.want(key);
       if (stations) draw(key, stations);
     },

@@ -34,8 +34,16 @@ export function formatClocks(ms: number): { utc: string; local: string; zone: st
   };
 }
 
-/** The TIME cursor is on the live edge when it is at (or past) the window end. `at: null` also means live. */
-export function isLive(time: { at: string | null; to: string }): boolean {
+/** A window whose end is older than this is a historical window (TIME moved back), not the live one. */
+export const LIVE_WINDOW_SLACK_MS = 24 * 3_600_000;
+
+/**
+ * The TIME cursor is on the live edge when it is at (or past) the window end. `at: null` also means live.
+ * With `nowMs`, the window must also end within `LIVE_WINDOW_SLACK_MS` of now: the end of a window moved to
+ * last February is not live.
+ */
+export function isLive(time: { at: string | null; to: string }, nowMs?: number): boolean {
+  if (nowMs !== undefined && Date.parse(time.to) < nowMs - LIVE_WINDOW_SLACK_MS) return false;
   if (!time.at) return true;
   return Date.parse(time.at) >= Date.parse(time.to);
 }

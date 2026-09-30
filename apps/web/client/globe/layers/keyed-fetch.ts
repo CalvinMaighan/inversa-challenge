@@ -4,6 +4,20 @@
  * request is in flight and only the newest wanted bucket is fetched after it.
  */
 
+/**
+ * Cache key for a time bucket at the current data revision. The revision moves when the db worker republishes
+ * the grid (a window load, or new rows upstream: `framesUpdated`), so live data refetches the bucket instead
+ * of serving what the cache held before the rows landed. Scrubbing does not move it.
+ */
+export function dataKey(bucketMs: number, ctx: { revision(): number }): string {
+  return `${bucketMs}|${ctx.revision()}`;
+}
+
+/** The bucket time a `dataKey` was made from. */
+export function bucketOfKey(key: string): number {
+  return Number(key.split("|", 1)[0]);
+}
+
 export type KeyedFetch<T> = {
   /** The cached value for `key` now, or undefined (a fetch is started or queued). */
   want(key: string): T | undefined;

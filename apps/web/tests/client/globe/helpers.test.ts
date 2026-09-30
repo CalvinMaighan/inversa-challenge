@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { evidenceCell, hotspotEvidenceId, readingEvidenceId, sightingEvidenceId } from "client/globe/evidence";
 import { cellAt, gridBounds } from "client/globe/geometry";
 import { polygonsOf } from "client/globe/layers/geojson";
-import { createKeyedFetch } from "client/globe/layers/keyed-fetch";
+import { alertBucket, alertQueryTime } from "client/globe/layers/alerts";
+import { bucketOfKey, createKeyedFetch, dataKey } from "client/globe/layers/keyed-fetch";
 import { colorOfTaxon, enabledSpecies, OTHER_TAXON_COLOR, SPECIES_COLORS, speciesIndexOfTaxon } from "client/globe/species";
 import { parseEvidenceId } from "client/state/selection";
 
@@ -72,6 +73,27 @@ describe("alert GeoJSON", () => {
     expect(polygonsOf({ type: "Point", coordinates: [1, 2] })).toEqual([]);
     expect(polygonsOf({ type: "Polygon", coordinates: [[[-80, 25], [-79, 25], [-80, 25]]] })).toEqual([]);
     expect(polygonsOf({ type: "Polygon", coordinates: [[["x", 1], [-80, 25], [-79, 25], [-79, 26]]] })).toEqual([[[-80, 25, -79, 25, -79, 26]]]);
+  });
+});
+
+describe("live keys (C18)", () => {
+  test("a data key carries the bucket and the data revision; the bucket reads back", () => {
+    let revision = 3;
+    const ctx = { revision: () => revision };
+    const key = dataKey(1_790_805_600_000, ctx);
+    expect(key).toBe("1790805600000|3");
+    expect(bucketOfKey(key)).toBe(1_790_805_600_000);
+    revision = 4;
+    expect(dataKey(1_790_805_600_000, ctx)).not.toBe(key);
+  });
+
+  test("alerts are asked for at the bucket start, or at now on the bucket holding now", () => {
+    const bucket = alertBucket(Date.parse("2026-09-30T22:37:00Z"));
+    expect(new Date(bucket).toISOString()).toBe("2026-09-30T22:00:00.000Z");
+    const now = Date.parse("2026-09-30T22:41:00Z");
+    expect(alertQueryTime(bucket, now)).toBe(now);
+    expect(alertQueryTime(bucket - 3_600_000, now)).toBe(bucket - 3_600_000);
+    expect(alertQueryTime(bucket + 3_600_000, now)).toBe(bucket + 3_600_000);
   });
 });
 

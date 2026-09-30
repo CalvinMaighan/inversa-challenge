@@ -116,7 +116,7 @@ const Segmented = styled.div`
 
 function LiveBadge() {
   const mode = useActiveState<TimeState, "live" | "replay" | "playing">(TIME, (t) =>
-    t.playing ? "playing" : isLive(t) ? "live" : "replay",
+    t.playing ? "playing" : isLive(t, Date.now()) ? "live" : "replay",
   )[0];
   const live = mode === "live";
   return (
@@ -164,7 +164,7 @@ function FeedChips() {
 }
 
 function Clocks() {
-  const replayAt = useActiveState<TimeState, string | null>(TIME, (t) => (isLive(t) && !t.playing ? null : (t.at ?? t.to)))[0];
+  const replayAt = useActiveState<TimeState, string | null>(TIME, (t) => (isLive(t, Date.now()) && !t.playing ? null : (t.at ?? t.to)))[0];
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (replayAt) return;

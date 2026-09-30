@@ -113,4 +113,11 @@ describe("clocks", () => {
     expect(isLive({ at: "2026-09-30T20:15:00Z", to: "2026-09-30T20:30:00Z" })).toBe(false);
     expect(isLive({ at: null, to: "2026-09-30T20:30:00Z" })).toBe(true);
   });
+
+  test("the end of a historical window is not live", () => {
+    const now = Date.parse("2026-09-30T20:40:00Z");
+    expect(isLive({ at: "2026-09-30T20:30:00Z", to: "2026-09-30T20:30:00Z" }, now)).toBe(true);
+    expect(isLive({ at: "2026-02-16T17:00:00Z", to: "2026-02-16T17:00:00Z" }, now)).toBe(false);
+    expect(isLive({ at: null, to: "2026-02-16T17:00:00Z" }, now)).toBe(false);
+  });
 });

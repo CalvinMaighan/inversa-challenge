@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { get } from "@calvinjs/active-state";
 
+import { setDebugGlobe } from "client/debug";
 import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { getFrameGrid, publishFrameGrid, publishFrameSightings } from "client/threads/api";
@@ -84,6 +85,7 @@ export default function GlobeView({ onMount }: GlobeViewProps) {
       .then(() => {
         if (cancelled) return;
         handle = mountGlobe(hostEl, creditsEl);
+        setDebugGlobe(handle);
         onMountRef.current?.(handle);
       })
       .catch((err: unknown) => {
@@ -91,11 +93,14 @@ export default function GlobeView({ onMount }: GlobeViewProps) {
         hostEl.dataset.error = err instanceof Error ? err.message : String(err);
       });
 
-    // Until the db worker (T19) publishes frames, development builds show fixture frames.
-    if (process.env.NODE_ENV !== "production" && !getFrameGrid() && typeof SharedArrayBuffer !== "undefined") {
+    // Fixture frames for the dev scratch routes (or `?fixture`) in development builds. Never on the ops page by
+    // default: there the db worker's real grid is the only source, and fake frames would flash before it lands.
+    const fixture = new URLSearchParams(window.location.search).get("fixture");
+    const wantsFixture = fixture !== null || window.location.pathname.startsWith("/dev/");
+    if (process.env.NODE_ENV !== "production" && wantsFixture && !getFrameGrid() && typeof SharedArrayBuffer !== "undefined") {
       void import("./dev-fixture").then(async ({ loadDevFrames }) => {
         const to = Date.parse((get<TimeState>(TIME) ?? TIME.defaults).to);
-        const force = new URLSearchParams(window.location.search).get("fixture") === "sample";
+        const force = fixture === "sample";
         const { grid, meta, sightings, source, note } = await loadDevFrames({ toMs: to, force });
         if (cancelled || getFrameGrid()) return;
         publishFrameSightings(sightings);
@@ -107,6 +112,7 @@ export default function GlobeView({ onMount }: GlobeViewProps) {
     return () => {
       cancelled = true;
       if (handle) {
+        setDebugGlobe(null);
         onMountRef.current?.(null);
         handle.destroy();
       }

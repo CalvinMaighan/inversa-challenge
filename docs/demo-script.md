@@ -5,7 +5,7 @@ A 6-minute walkthrough, then the reference material for the recorded cold snap: 
 State at commit `81596be`, checked against the code:
 
 - Steps 1 to 4 and 6 work on a local run today.
-- Step 5, the cold-snap replay in the UI, is blocked: every way of moving the timeline clamps the cursor to the 30 days ending now (`clampToWindow` in `apps/web/client/state/time.ts`, used by `set_time`, `play_timeline`, agent `view` events and share links). The API side works. The step below says what to show instead.
+- Step 5, the cold-snap replay in the UI, works since T23: a time before the live 30 days recentres the window on it (`windowFor` / `retime` in `apps/web/client/state/time.ts`), through `set_time`, `play_timeline`, agent `view` events, share links and the timeline's date field. `bun run e2e:client` checks it (`COLDSNAP ... iguana=1.58`, screenshot `docs/evidence/cold-snap.png`).
 - Step 7, missions and the second browser, needs the Missions panel and rtc worker from T21, which has not landed. `Hud` renders no Missions tab until `app/page.tsx` passes it a `missions` prop.
 
 ## Before you start
@@ -67,7 +67,15 @@ What works in the UI today is the live 30-day window:
 3. Point at the hatched stretches. The legend at the end of the controls names them: "no data" where GOES delivered nothing usable, "cloud" where at least half the GOES cells were masked, "quiet" for 12 hours or more with no sighting from any feed. The app never interpolates across them.
 4. Click Live to jump back to the live edge.
 
-The cold snap of 1 February 2026 is outside that window, and the UI cannot move the window yet. Show the scene through the API instead, in a terminal next to the browser:
+The cold snap of 1 February 2026 is outside that window. Any of these moves the window there, 30 days centred on the time, and the db worker fetches its frames (Axum builds the missing ones on first request):
+
+- type `2026-02-01` in the date field next to the Live button and press Enter (the time of day is kept);
+- say or type "show the first of February 2026 at noon Miami time" (`set_time`);
+- open a share link such as `http://localhost:3050/#v=1&c=25.70000,-80.30000,45000,0,-90&t=2026-02-01T17:00Z`.
+
+The badge switches to REPLAY. Press Play and watch the iguana hotspot at cell `292:142` double as the air drops below 10 °C, then fall back on 3 February. Live returns to the current 30 days.
+
+The same numbers come from the API, in a terminal next to the browser:
 
 ```sh
 curl -s localhost:3050/v1/graphql -H 'content-type: application/json' \
@@ -75,8 +83,6 @@ curl -s localhost:3050/v1/graphql -H 'content-type: application/json' \
 ```
 
 On the `bun run data` database this returned score 0.707: density 0.353, `activity.iguana_cold_stun_easy_capture_window` 2.0, `access.land_access` 1.0. The same query at `2026-02-03T19:00:00Z` returned the cold-stun term at 1.0 and a score of 0.385. The numbers in [What to ask the agent](#what-to-ask-the-agent) come from a database with only the scene loaded. There the frame holds fewer other sightings, so the same cell reads density 0.790 and score 1.580.
-
-Once the timeline can take a window outside the last 30 days, this step becomes: say "show the first of February 2026 at 7 AM", press Play, and watch the iguana hotspot double at cell `292:142` as the air drops below 10 °C, then fall back on 3 February.
 
 ### 6. Explain and backtest (4:30–5:30)
 
@@ -186,7 +192,7 @@ The test `scene_cold_snap` (`cargo test --manifest-path api/Cargo.toml scene_col
 
 The scene is months older than the live 30-day window, so the frame builder does not pre-build it. `GET /v1/frames?from=2026-01-30T00:00:00Z&to=2026-02-04T00:00:00Z&step=60` builds them on first request. Measured: 121 hourly frames, both ends included, 15,275,820 bytes raw and 553,336 bytes gzipped.
 
-The UI cannot show these frames yet. `set_time`, `play_timeline`, agent `view` events and share links all clamp the cursor into the 30 days ending now (`clampToWindow` in `apps/web/client/state/time.ts`), so "show the first of February 2026 at 7 AM" lands on the oldest frame of the live window instead.
+In the UI, `set_time`, `play_timeline`, agent `view` events, share links and the timeline's date field move the window to any earlier time; the db worker then fetches that window's frames through the same endpoint. With only the fixtures and the scene loaded, the frame at `2026-02-01T17:00:00Z` reads iguana 1.58 at cell `292:142` (`bun run e2e:client`).
 
 ## Moments to scrub to
 

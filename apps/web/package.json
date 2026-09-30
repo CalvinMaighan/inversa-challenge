@@ -19,6 +19,9 @@
     "e2e:dbworker": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/dbworker.ts",
     "e2e:scrub": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/scrub.ts",
     "e2e:globe": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/globe.ts",
+    "e2e:client": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/client.ts",
+    "e2e:convo": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/convo.ts",
+    "e2e:live": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/live.ts",
     "e2e:team": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/team.ts"
   },
   "dependencies": {
