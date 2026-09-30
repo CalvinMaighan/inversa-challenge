@@ -1,0 +1,93 @@
+{
+  "name": "duplicate-delivery",
+  "ops": [
+    {
+      "id": "op-0034",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Once",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0035",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 4,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0036",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "hi",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0034",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Once",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0035",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 4,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0036",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "hi",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0035",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 4,
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "Once"
+      }
+    },
+    "notes": {},
+    "messages": [
+      {
+        "id": "msg1",
+        "body": "hi",
+        "hlc": "1700000000100:0:a"
+      }
+    ],
+    "removals": {
+      "python": 4
+    }
+  }
+}

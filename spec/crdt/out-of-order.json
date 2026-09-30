@@ -1,0 +1,109 @@
+{
+  "name": "out-of-order",
+  "ops": [
+    {
+      "id": "op-0037",
+      "hlc": "1700000000500:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "status",
+      "value": "done",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0038",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "status",
+      "value": "planned",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0039",
+      "hlc": "1700000000400:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 2,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0040",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "status",
+      "value": "active",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0041",
+      "hlc": "1700000000200:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 1,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0042",
+      "hlc": "1700000000250:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg2",
+      "field": "body",
+      "value": "later",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0043",
+      "hlc": "1700000000150:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "earlier",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0044",
+      "hlc": "1700000000120:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Airboat run",
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "status": "done",
+        "title": "Airboat run"
+      }
+    },
+    "notes": {},
+    "messages": [
+      {
+        "id": "msg1",
+        "body": "earlier",
+        "hlc": "1700000000150:0:a"
+      },
+      {
+        "id": "msg2",
+        "body": "later",
+        "hlc": "1700000000250:0:b"
+      }
+    ],
+    "removals": {
+      "python": 2
+    }
+  }
+}
