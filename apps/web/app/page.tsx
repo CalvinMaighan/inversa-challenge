@@ -1,6 +1,9 @@
+import AgentOrb from "client/agent";
+import Globe from "client/globe";
+import Hud from "client/hud";
 import AppShell from "client/ui/AppShell";
 
-/** Ops view. Slots fill in as the globe (T17), HUD (T18) and agent orb (T14) land. */
+/** Ops view: full-bleed globe, tactical HUD on top, agent orb bottom-right (PLAN.md C16). */
 export default function Page() {
-  return <AppShell />;
+  return <AppShell globe={<Globe />} hud={<Hud />} orb={<AgentOrb />} />;
 }
