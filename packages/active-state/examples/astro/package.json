@@ -1,0 +1,19 @@
+{
+  "name": "active-state-example-astro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "cp ../../dist/active-state.min.js public/active-state.min.js && cp ../html/styles.css public/styles.css",
+    "predev": "bun run sync",
+    "prebuild": "bun run sync",
+    "dev": "astro dev --port 5180",
+    "build": "astro build",
+    "preview": "astro preview --port 5180"
+  },
+  "dependencies": {
+    "astro": "^5.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

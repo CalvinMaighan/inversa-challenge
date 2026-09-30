@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>active-state — HTMX kanban</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="top">
+        <div>
+          <h1>active-state — HTMX</h1>
+          <p class="lede">
+            Same declarative board as the HTML example, plus HTMX
+            <code>hx-get="/api/suggest"</code> to push a card into
+            <code>BOARD</code>.
+          </p>
+        </div>
+        <div class="actions">
+          <button
+            type="button"
+            class="primary"
+            hx-get="/api/suggest"
+            hx-target="#suggest-slot"
+            hx-swap="innerHTML"
+          >
+            Suggest card (HTMX)
+          </button>
+          <button type="button" data-action="reset">Reset</button>
+          <button type="button" active-click="toggle:THEME.dark">
+            Theme
+          </button>
+        </div>
+      </header>
+
+      <div class="board">
+        <template active-each="BOARD.columns" active-as="col">
+          <details class="column" open active-drop="move→col.cards">
+            <summary class="column-head">
+              <h2 active-text="col.title"></h2>
+            </summary>
+            <div class="cards">
+              <template active-each="col.cards" active-as="card">
+                <article class="card" active-drag="card.id">
+                  <p class="card-title" active-text="card.title"></p>
+                </article>
+              </template>
+            </div>
+            <form class="add" active-submit="push:col.cards">
+              <input name="title" placeholder="Add card…" autocomplete="off" required />
+              <button class="primary" type="submit">Add</button>
+            </form>
+          </details>
+        </template>
+      </div>
+
+      <p class="footnote">
+        HTMX fills <code>#suggest-slot</code>; we merge the title into
+        <code>BOARD</code> with <code>ActiveState.set</code>.
+      </p>
+    </div>
+
+    <div hidden>
+      <div id="suggest-slot"></div>
+    </div>
+
+    <script src="/active-state.min.js?v=drag9"></script>
+    <script>
+      var BOARD = ActiveState.key(
+        "BOARD",
+        {
+          columns: [
+            {
+              id: "todo",
+              title: "To do",
+              cards: [
+                { id: "c1", title: "Publish active-state" },
+                { id: "c2", title: "Write CDN docs" },
+              ],
+            },
+            {
+              id: "doing",
+              title: "Doing",
+              cards: [{ id: "c3", title: "Polish examples" }],
+            },
+            {
+              id: "done",
+              title: "Done",
+              cards: [{ id: "c4", title: "Name the package" }],
+            },
+          ],
+        },
+        { persist: true },
+      );
+      var THEME = ActiveState.key("THEME", { dark: true }, { persist: true });
+      ActiveState.init(ActiveState.registeredState());
+
+      ActiveState.subscribe("THEME", function (theme) {
+        var apply = function () {
+          document.documentElement.dataset.theme =
+            theme && theme.dark ? "dark" : "light";
+        };
+        if (document.startViewTransition) document.startViewTransition(apply);
+        else apply();
+      });
+
+      document
+        .querySelector('[data-action="reset"]')
+        .addEventListener("click", function () {
+          ActiveState.set(BOARD, structuredClone(BOARD.defaults));
+          ActiveState.set(THEME, Object.assign({}, THEME.defaults));
+        });
+
+      document.body.addEventListener("htmx:afterSwap", function (event) {
+        if (event.detail.target.id !== "suggest-slot") return;
+        var el = event.detail.target.querySelector("[data-suggest-title]");
+        var title = el && el.getAttribute("data-suggest-title");
+        if (!title) return;
+        ActiveState.set(BOARD, function (board) {
+          var next = structuredClone(board);
+          var todo = next.columns.find(function (c) {
+            return c.id === "todo";
+          });
+          if (!todo) return board;
+          todo.cards.unshift({
+            id: "c_" + Date.now().toString(36),
+            title: title,
+          });
+          return next;
+        });
+      });
+
+      ActiveState.bind();
+    </script>
+  </body>
+</html>

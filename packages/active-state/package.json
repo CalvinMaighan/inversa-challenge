@@ -1,0 +1,79 @@
+{
+  "name": "active-state",
+  "version": "0.1.0",
+  "description": "Tiny keyed pub/sub client store with React and static HTML bindings",
+  "type": "module",
+  "license": "MIT",
+  "author": "Calvin Maighan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CalvinMaighan/active-state.git"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "sideEffects": [
+    "./dist/react/index.js"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.js"
+    },
+    "./dom": {
+      "types": "./dist/dom/index.d.ts",
+      "import": "./dist/dom/index.js"
+    },
+    "./eslint": {
+      "types": "./dist/eslint/index.d.ts",
+      "import": "./dist/eslint/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "unpkg": "./dist/active-state.min.js",
+  "jsdelivr": "./dist/active-state.min.js",
+  "scripts": {
+    "build": "rm -rf dist && tsup",
+    "prepare": "bun run build",
+    "test": "bun test",
+    "size": "bun run build && bun scripts/size.ts",
+    "size:brotli": "bun run build && bun scripts/size.ts --brotli",
+    "examples:html": "bun run build && bun examples/html/serve.ts",
+    "examples:htmx": "bun run build && bun examples/htmx/serve.ts",
+    "examples:react": "bun run build && cd examples/react && bun install && bun run dev",
+    "examples:astro": "bun run build && cd examples/astro && bun install && bun run dev",
+    "prepublishOnly": "bun run build && bun test"
+  },
+  "peerDependencies": {
+    "eslint": ">=9",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "@types/react": "^19.2.17",
+    "eslint": "^9.39.2",
+    "happy-dom": "^20.11.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tsup": "^8.5.1",
+    "typescript": "5.9.3"
+  }
+}
+

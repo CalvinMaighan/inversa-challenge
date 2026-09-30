@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "paths": {
+      "active-state": ["./src/core/index.ts"],
+      "active-state/dom": ["./src/dom/index.ts"],
+      "active-state/react": ["./src/react/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "tsup.config.ts"],
+  "exclude": ["dist", "node_modules"]
+}
+

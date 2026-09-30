@@ -1,0 +1,11 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "active-state": ["../../dist/index.d.ts"],
+      "active-state/react": ["../../dist/react/index.d.ts"],
+      "active-state/dom": ["../../dist/dom/index.d.ts"]
+    }
+  }
+}

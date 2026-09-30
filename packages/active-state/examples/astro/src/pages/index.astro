@@ -1,0 +1,107 @@
+---
+// One readable page: declarative board + tiny init (same shape as examples/html).
+---
+
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>active-state — Astro kanban</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="top">
+        <div>
+          <h1>active-state — Astro</h1>
+          <p class="lede">
+            Astro serves the shell; the board is declarative
+            <code>active-*</code> attrs + a small client init — same as the HTML
+            example.
+          </p>
+        </div>
+        <div class="actions">
+          <button type="button" data-action="reset">Reset</button>
+          <button type="button" active-click="toggle:THEME.dark">
+            Theme
+          </button>
+        </div>
+      </header>
+
+      <div class="board">
+        <template active-each="BOARD.columns" active-as="col">
+          <details class="column" open active-drop="move→col.cards">
+            <summary class="column-head">
+              <h2 active-text="col.title"></h2>
+            </summary>
+            <div class="cards">
+              <template active-each="col.cards" active-as="card">
+                <article class="card" active-drag="card.id">
+                  <p class="card-title" active-text="card.title"></p>
+                </article>
+              </template>
+            </div>
+            <form class="add" active-submit="push:col.cards">
+              <input name="title" placeholder="Add card…" autocomplete="off" required />
+              <button class="primary" type="submit">Add</button>
+            </form>
+          </details>
+        </template>
+      </div>
+
+      <p class="footnote">
+        Init + <code>ActiveState.bind()</code> only — UI is HTML attributes.
+      </p>
+    </div>
+
+    <script is:inline src="/active-state.min.js?v=drag9"></script>
+    <script is:inline>
+      var BOARD = ActiveState.key(
+        "BOARD",
+        {
+          columns: [
+            {
+              id: "todo",
+              title: "To do",
+              cards: [
+                { id: "c1", title: "Publish active-state" },
+                { id: "c2", title: "Write CDN docs" },
+              ],
+            },
+            {
+              id: "doing",
+              title: "Doing",
+              cards: [{ id: "c3", title: "Polish examples" }],
+            },
+            {
+              id: "done",
+              title: "Done",
+              cards: [{ id: "c4", title: "Name the package" }],
+            },
+          ],
+        },
+        { persist: true },
+      );
+      var THEME = ActiveState.key("THEME", { dark: true }, { persist: true });
+      ActiveState.init(ActiveState.registeredState());
+
+      ActiveState.subscribe("THEME", function (theme) {
+        var apply = function () {
+          document.documentElement.dataset.theme =
+            theme && theme.dark ? "dark" : "light";
+        };
+        if (document.startViewTransition) document.startViewTransition(apply);
+        else apply();
+      });
+
+      document
+        .querySelector('[data-action="reset"]')
+        .addEventListener("click", function () {
+          ActiveState.set(BOARD, structuredClone(BOARD.defaults));
+          ActiveState.set(THEME, Object.assign({}, THEME.defaults));
+        });
+
+      ActiveState.bind();
+    </script>
+  </body>
+</html>
