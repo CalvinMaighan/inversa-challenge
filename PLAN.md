@@ -230,6 +230,19 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
   - Sighting sections come through `publishFrameSightings`, `getFrameSightings` and `onFrameSightings`: `counts` plus the raw 12-byte `records(i)`.
   - The HUD owns FEEDS sync (its `feeds` query and subscription). The workers don't write FEEDS.
 
+### C17: agent result views (added at user review)
+
+- `apps/web/shared/agent/results.ts` defines `ToolResultData {result?: ToolResultView, highlight?: string[], bbox?}`, carried in `tool_end.data` for every data tool.
+- View kinds: `table`, `series`, `cells`, `explain`, `backtest` and `feeds`. Rows carry C14 evidence ids.
+- The chat card renders a panel for each view. The globe brackets `highlight` ids. Opening a panel frames `bbox` on the globe.
+
+### C18: live mode (added at user review)
+
+- When `TIME.at` sits at the live edge, the timeline follows now.
+- An Axum write publishes `framesUpdated`. The db worker then refetches the changed hours and republishes the grid and sightings, and the globe and HUD redraw without a reload.
+- New sightings and alerts appear within one pipeline tick plus the 5 s frame debounce.
+- A dev-only `INGEST_HOOK_SECRET` default lets the `web` hook source inject rows, so live updates can be verified end to end.
+
 ## Tree
 
 - 1 Everglades Ops (`GATES.md`)
