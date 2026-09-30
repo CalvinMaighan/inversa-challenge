@@ -8,30 +8,32 @@ Scope:
 - `POST /api/agent/stream` returns NDJSON.
 - `bun run eval` runs about 15 golden questions against a fixture GraphQL stub.
 
-- [ ] G1: harness tests pass with the mock LLM (tool loop, citation stripping, limits, view event, cache hit)
+- [x] G1: harness tests pass with the mock LLM (tool loop, citation stripping, limits, view event, cache hit)
   CHECK: cd apps/web && bun test tests/server/agent 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 50 pass | 0 fail
 
-- [ ] G2: the citation checker strips an id that no tool returned (named test)
+- [x] G2: the citation checker strips an id that no tool returned (named test)
   CHECK: cd apps/web && bun test tests/server/agent -t "strips unverified citation" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 1 pass | 0 fail
 
-- [ ] G3: the eval runs and prints `EVAL passed P/T`; with the mock LLM in replay mode P must equal T
+- [x] G3: the eval runs and prints `EVAL passed P/T`; with the mock LLM in replay mode P must equal T
   CHECK: cd apps/web && AGENT_EVAL_MODE=replay bun run eval 2>&1 | tail -1
   EXPECT: /EVAL passed (\d+)\/\1/
-  EVIDENCE: pending
+  EVIDENCE: EVAL passed 15/15
 
-- [ ] G4: the route streams valid C7 NDJSON: every line parses and satisfies isAgentStreamEvent, and the last event is done (route test with the mock harness)
+- [x] G4: the route streams valid C7 NDJSON: every line parses and satisfies isAgentStreamEvent, and the last event is done (route test with the mock harness)
   CHECK: cd apps/web && bun test tests/server/agent -t "route streams ndjson" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 1 pass | 0 fail
 
-- [ ] G5: typecheck and lint clean
+- [x] G5: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
-  EVIDENCE: pending
+  EVIDENCE: CLEAN
 
 - [ ] G6: (live, blocked on H5) a real question against local Axum with fixtures returns a cited answer (quote the transcript lines)
   EVIDENCE: pending
+
+ABANDON: G6 blocked on H5 (FIREWORKS_API_KEY) and a running Axum with data
