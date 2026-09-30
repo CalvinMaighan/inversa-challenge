@@ -1,0 +1,2 @@
+# Copied from @sqlite.org/sqlite-wasm by scripts/copy-sqlite-wasm.ts (predev / prebuild).
+public/sqlite-wasm/
