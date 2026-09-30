@@ -480,7 +480,7 @@ function PanelBody({ team }: { team: Team }) {
           ))}
         </Row>
       </Section>
-      <Section aria-label="Missions">
+      <Section aria-label="Mission list">
         <SectionTitle>Missions</SectionTitle>
         {model && model.missions.length === 0 && <Hint>No missions yet.</Hint>}
         <List data-testid="mission-list">

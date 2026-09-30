@@ -101,6 +101,21 @@ const DateInput = styled.input`
   color: var(--text);
   color-scheme: dark light;
   font: 600 11px / 1 var(--font-mono);
+  /* Focus sits on the date field's inner segments, so the host never matches :focus-visible. */
+  &:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  ${MOBILE} {
+    margin-left: 0;
+  }
+`;
+
+/** Step buttons: phones drop them (drag the scrubber, or its arrow keys) so the controls fit one row. */
+const StepButton = styled(IconButton)`
+  ${MOBILE} {
+    display: none;
+  }
 `;
 
 const Track = styled.div`
@@ -368,15 +383,15 @@ function PlayControls() {
   const c = formatClocks(Date.parse(at));
   return (
     <Controls>
-      <IconButton type="button" onClick={() => nudge(-1)} aria-label="Step back 15 minutes" title="Step back (15 min)">
+      <StepButton type="button" onClick={() => nudge(-1)} aria-label="Step back 15 minutes" title="Step back (15 min)">
         <Icon name="prev" />
-      </IconButton>
+      </StepButton>
       <IconButton type="button" onClick={togglePlay} $active={playing} aria-label={playing ? "Pause" : "Play"} aria-pressed={playing} data-testid="hud-play">
         <Icon name={playing ? "pause" : "play"} />
       </IconButton>
-      <IconButton type="button" onClick={() => nudge(1)} aria-label="Step forward 15 minutes" title="Step forward (15 min)">
+      <StepButton type="button" onClick={() => nudge(1)} aria-label="Step forward 15 minutes" title="Step forward (15 min)">
         <Icon name="next" />
-      </IconButton>
+      </StepButton>
       <Select
         aria-label="Playback speed, frames per second"
         value={speed}

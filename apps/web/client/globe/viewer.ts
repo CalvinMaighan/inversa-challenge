@@ -16,6 +16,7 @@ import { parseEvidenceId, SELECTION, type SelectionState } from "client/state/se
 import { TIME, type TimeState } from "client/state/time";
 import { VIEW } from "client/state/view";
 import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
+import { prefersReducedMotion } from "client/motion";
 
 import { registerGlobe, type GeoPoint, type GlobeApi } from "./api";
 import { cesium } from "./cesium";
@@ -252,7 +253,8 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     camera.flyTo({
       destination: Cartesian3.fromDegrees(target.lon, target.lat, target.altitudeM ?? pose().altitudeM),
       orientation: { heading: CesiumMath.toRadians(target.heading ?? 0), pitch: CesiumMath.toRadians(target.pitch ?? -90), roll: 0 },
-      duration: target.durationS ?? DEFAULT_FLIGHT_S,
+      // Reduced motion: jump, never fly (Cesium completes a 0 s flight synchronously).
+      duration: prefersReducedMotion() ? 0 : (target.durationS ?? DEFAULT_FLIGHT_S),
       complete: done,
       cancel: done,
     });

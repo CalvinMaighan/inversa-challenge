@@ -23,7 +23,8 @@
     "e2e:convo": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/convo.ts",
     "e2e:live": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/live.ts",
     "e2e:team": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/team.ts",
-    "e2e:panels": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/panels.ts"
+    "e2e:a11y": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/a11y.ts",
+    "e2e:panels":"bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/panels.ts"
   },
   "dependencies": {
     "@calvinjs/active-state": "workspace:*",
@@ -67,6 +68,7 @@
     "@types/react-dom": "19.2.3",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/parser": "8.71.0",
+    "axe-core": "^4.13.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.3.0-preview.9",
     "playwright": "^1.63.0",

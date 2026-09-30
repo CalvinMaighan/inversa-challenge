@@ -84,8 +84,11 @@ const globalCss = css`
     *,
     *::before,
     *::after {
+      /* One near-instant pass, so an endless pulse settles on its end state instead of flickering. */
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
     }
   }
 `;

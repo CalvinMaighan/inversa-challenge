@@ -17,10 +17,7 @@ export function morphTiming(reducedMotion: boolean): MorphTiming {
   return reducedMotion ? INSTANT : FULL;
 }
 
-export function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
+export { prefersReducedMotion } from "client/motion";
 
 /** CSS `transition` value for one beat. */
 export function beat(ms: number): string {

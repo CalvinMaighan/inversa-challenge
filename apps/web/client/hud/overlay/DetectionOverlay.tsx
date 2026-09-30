@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { getGlobe, onGlobeReady, type GlobeApi, type ScreenPoint } from "client/globe/api";
 import styled from "client/styled";
+import { prefersReducedMotion } from "client/motion";
 
 import { CELL_DEG, cellCenter, parseHotspotId } from "../drawer/evidence";
 import { openEvidence } from "../selection";
@@ -151,6 +152,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       const { targets: list, focus: scoped } = live.current;
       const colors = readColors(canvas);
       const now = performance.now();
+      const still = prefersReducedMotion();
       const candidates: LabelCandidate[] = [];
       let selectedPoint: ScreenPoint | null = null;
       let fading = false;
@@ -162,12 +164,13 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
         if (!p || p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) continue;
         if (t.selected) selectedPoint = p;
         if (!firstSeen.has(t.id)) firstSeen.set(t.id, now);
-        const alpha = acquireAlpha(firstSeen.get(t.id)!, now, FADE_MS);
+        const alpha = acquireAlpha(firstSeen.get(t.id)!, now, still ? 0 : FADE_MS);
         if (alpha < 1) fading = true;
         const agent = !t.selected && !t.cited;
-        // A hovered panel row breathes: the bracket swells and shrinks until the pointer leaves.
-        const pulse = t.hovered ? 1 + 0.45 * (0.5 + 0.5 * Math.sin((now / PULSE_MS) * Math.PI * 2)) : 1;
-        if (t.hovered) fading = true;
+        // A hovered panel row breathes: the bracket swells and shrinks until the pointer leaves. Under reduced
+        // motion it holds a swollen size instead.
+        const pulse = !t.hovered ? 1 : still ? 1.3 : 1 + 0.45 * (0.5 + 0.5 * Math.sin((now / PULSE_MS) * Math.PI * 2));
+        if (t.hovered && !still) fading = true;
         const half = (t.selected ? BRACKET_SELECTED : agent ? BRACKET_HIGHLIGHT : BRACKET_CITED) * pulse;
         const color = t.selected ? colors.selected : agent ? colors.highlight : colors.cited;
         ctx.globalAlpha = alpha;

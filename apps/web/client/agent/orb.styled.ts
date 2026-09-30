@@ -140,8 +140,9 @@ export const Spinner = styled.span`
   animation: ${spin} 0.9s linear infinite;
   pointer-events: none;
 
+  /* Reduced motion: a still quarter ring still says "working". */
   @media (prefers-reduced-motion: reduce) {
-    animation-duration: 3s;
+    animation: none;
   }
 `;
 

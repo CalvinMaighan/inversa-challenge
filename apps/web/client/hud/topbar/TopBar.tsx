@@ -14,7 +14,7 @@ import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
-import { Dot, Icon, IconButton, Mono, MOBILE, Pill, Surface } from "../primitives";
+import { Dot, Icon, IconButton, Mono, MOBILE, Pill, Surface, useIsMobile } from "../primitives";
 import { formatClocks, isLive } from "./clock";
 import { formatLatLon, unproject } from "./coords";
 import { feedChip, feedSummary } from "./feed-chips";
@@ -51,15 +51,17 @@ const Brand = styled.div`
   white-space: nowrap;
 `;
 
-const Chips = styled.ul`
+/** The padding (taken back by the margin) leaves room for focus rings inside the scroll box, which clips. */
+const Chips = styled.ul<{ $wrap?: boolean }>`
   display: flex;
+  flex-wrap: ${(p) => (p.$wrap ? "wrap" : "nowrap")};
   gap: 6px;
   flex: 1;
   min-width: 0;
-  margin: 0;
-  padding: 0;
+  margin: -4px;
+  padding: 4px;
   list-style: none;
-  overflow-x: auto;
+  overflow-x: ${(p) => (p.$wrap ? "visible" : "auto")};
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
@@ -71,12 +73,21 @@ const Chips = styled.ul`
   }
 `;
 
+const FeedToggle = styled(Pill.withComponent("button"))`
+  height: 26px;
+  cursor: pointer;
+`;
+
 const ChipIcon = styled.span`
   display: inline-flex;
   color: var(--muted);
   svg {
     width: 11px;
     height: 11px;
+    transition: transform 120ms ease;
+  }
+  &[data-open] svg {
+    transform: rotate(90deg);
   }
 `;
 
@@ -112,6 +123,10 @@ const Segmented = styled.div`
     border-radius: 0;
     height: 26px;
   }
+  /* The group clips to its rounded border: draw the ring inside the button. */
+  button:focus-visible {
+    outline-offset: -2px;
+  }
 `;
 
 function LiveBadge() {
@@ -127,10 +142,61 @@ function LiveBadge() {
   );
 }
 
+/**
+ * Phones: one summary pill (worst state, how many feeds are off nominal) that expands the full chip list,
+ * wrapped, instead of a row that scrolls sideways.
+ */
+function FeedChipsPhone({ list }: { list: FeedState[] }) {
+  const [open, setOpen] = useState(false);
+  const summary = feedSummary(list);
+  return (
+    <>
+      <FeedToggle
+        type="button"
+        $tone={summary.tone}
+        aria-expanded={open}
+        aria-controls="hud-feed-chips"
+        onClick={() => setOpen((v) => !v)}
+        data-testid="hud-feeds-toggle"
+      >
+        <Dot $tone={summary.tone} $pulse={summary.state === "down"} />
+        FEEDS {list.length - summary.degraded}/{list.length} OK
+        <ChipIcon data-open={open ? "" : undefined}>
+          <Icon name="chevron" />
+        </ChipIcon>
+      </FeedToggle>
+      {open && <ChipList list={list} id="hud-feed-chips" wrap />}
+    </>
+  );
+}
+
+function ChipList({ list, id, wrap }: { list: FeedState[]; id?: string; wrap?: boolean }) {
+  const summary = feedSummary(list);
+  return (
+    <Chips id={id} $wrap={wrap} aria-label={`Feeds: ${summary.degraded} of ${list.length} not nominal`}>
+      {list.map((feed) => {
+        const chip = feedChip(feed);
+        return (
+          <li key={chip.source}>
+            <Pill $tone={chip.tone} title={chip.title} data-feed={chip.source} data-state={chip.state} tabIndex={0}>
+              <Dot $tone={chip.tone} $pulse={chip.state === "down"} />
+              {chip.label}
+              <ChipIcon role="img" aria-label={chip.mode}>
+                <Icon name={chip.mode} />
+              </ChipIcon>
+              <span style={{ opacity: 0.75 }}>{chip.lag}</span>
+            </Pill>
+          </li>
+        );
+      })}
+    </Chips>
+  );
+}
+
 function FeedChips() {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
+  const phone = useIsMobile();
   const list = feeds ?? [];
-  const summary = feedSummary(list);
   if (list.length === 0) {
     return (
       <Chips aria-label="Feeds">
@@ -142,25 +208,7 @@ function FeedChips() {
       </Chips>
     );
   }
-  return (
-    <Chips aria-label={`Feeds: ${summary.degraded} of ${list.length} not nominal`}>
-      {list.map((feed) => {
-        const chip = feedChip(feed);
-        return (
-          <li key={chip.source}>
-            <Pill $tone={chip.tone} title={chip.title} data-feed={chip.source} data-state={chip.state} tabIndex={0}>
-              <Dot $tone={chip.tone} $pulse={chip.state === "down"} />
-              {chip.label}
-              <ChipIcon aria-label={chip.mode}>
-                <Icon name={chip.mode} />
-              </ChipIcon>
-              <span style={{ opacity: 0.75 }}>{chip.lag}</span>
-            </Pill>
-          </li>
-        );
-      })}
-    </Chips>
-  );
+  return phone ? <FeedChipsPhone list={list} /> : <ChipList list={list} />;
 }
 
 function Clocks() {
