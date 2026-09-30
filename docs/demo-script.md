@@ -1,6 +1,116 @@
 # Demo script
 
-Skeleton for the demo walkthrough. T32 extends it; this part covers the recorded cold snap scene.
+A 6-minute walkthrough, then the reference material for the recorded cold snap: what is in the scene, how it was converted, where to scrub, what to ask, and what the evidence drawer shows.
+
+State at commit `81596be`, checked against the code:
+
+- Steps 1 to 4 and 6 work on a local run today.
+- Step 5, the cold-snap replay in the UI, is blocked: every way of moving the timeline clamps the cursor to the 30 days ending now (`clampToWindow` in `apps/web/client/state/time.ts`, used by `set_time`, `play_timeline`, agent `view` events and share links). The API side works. The step below says what to show instead.
+- Step 7, missions and the second browser, needs the Missions panel and rtc worker from T21, which has not landed. `Hud` renders no Missions tab until `app/page.tsx` passes it a `missions` prop.
+
+## Before you start
+
+1. Load data and start the app, as in the README:
+   ```sh
+   bun install
+   bun run data
+   bun run dev
+   ```
+2. With no `FIREWORKS_API_KEY`, load the scripted answers once the web server is up:
+   ```sh
+   curl -X POST http://localhost:3050/dev/agent/mock
+   ```
+   Against a local database, 7 of the 15 scripted questions complete. The other 8 look up station names that exist only in the eval's fixture stub, and end with `replay: no matching conditions row` or a similar error. Measured on the `bun run data` database with the questions in `apps/web/eval/golden.ts`. The walkthrough uses only questions that complete. With a Fireworks key, any question works and the answers are the live model's.
+3. Voice needs `XAI_API_KEY`. Without it, skip the voice beat in step 3; text covers the same ground.
+4. Open http://localhost:3050 in Chrome, full screen. For step 7, open a second Chrome window, not a tab, on the same URL.
+
+## Walkthrough
+
+### 1. Open the app (0:00–0:30)
+
+The globe fills the screen over South Florida, with the HUD on top: the top bar, the timeline along the bottom, and the agent orb in the bottom-right corner.
+
+Say: one question, "where are invasive species active right now, and where should crews go next", four species, one map across land and sea. Everything on screen comes from public feeds the API ingested, stored and can trace back to the raw bytes.
+
+### 2. Feed chips and freshness (0:30–1:15)
+
+1. Point at the top bar. The badge on the left reads LIVE with a pulsing dot. Next to it, one chip per source with its lag, 11 in all: CO-OPS, GBIF, GOES, iNat, NAS, NDBC, NWS, NWWS, METEO, USGS and WEB, the webhook. The row scrolls sideways on a narrow window.
+2. Hover the GOES chip. The tooltip reads `goes19 · push · down` and `disabled: GOES_SQS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY not set`. A source without its account shows up as down with the reason. It is never hidden.
+3. Hover the GBIF chip: `gbif · poll · lagging`, `newest observation is 10d 4h old; expected within 1d (cadence + 2m)`. GBIF indexes records days after they happen.
+4. Hover the NAS chip: `nas · poll · stale`, `newest observation is 131d 6h old; max latency is 60d`. The curated record runs months behind.
+5. Hover the iNat chip: `inat · poll · lagging` with a lag in minutes, against an expected 4 (a 2-minute cadence plus 2 minutes of grace).
+
+Those tooltips were read from a local run on 30 Sep 2026 about a minute after `bun run dev` started. Lags change with every poll.
+
+Say: each chip is the same envelope the agent gets with every tool result, so the agent has to say when a source it used is stale.
+
+### 3. Ask by text, then by voice (1:15–2:30)
+
+1. Click the orb once. It morphs into the chat card.
+2. Click the "Ask the field agent…" box, type `Which data feeds are stale or down right now?` and press Enter.
+3. Watch the card: the tool timeline shows `feed_state`, then the answer streams in with numbered source chips under it. Each stale or down source is named with its state, and the chips point at each feed's last fetch run.
+4. Type `Why does the top python cell score so high tonight?` and press Enter. The answer names the cell, calls the score a heuristic, and lists the terms: density, activity, access.
+5. Voice, with `XAI_API_KEY` set: press and hold the orb for about half a second until the pulse ring shows, then say "Take me to Flamingo". The globe flies to Flamingo. Grok answers UI commands like this one itself, without calling the analytic agent. Without the key, type `Take me to Flamingo.` into the card instead: the agent's `set_view` event flies the globe the same way.
+
+### 4. Follow a citation to the raw payload (2:30–3:30)
+
+1. Under the answer to the python question, click source chip `1`, labelled like `python cell 234:149 score 1.11`. The evidence drawer opens on the right, and the globe flies down to the cell and brackets it with a `HOTSPOT python cell …` label.
+2. Close the chat card with its X so it stops covering the drawer. The drawer title reads `EVIDENCE · HOTSPOT`. The id under it has the form `hotspot:python:<col>:<row>:<frame ms>`, and the URL hash now carries it as `e=`, so the link reopens the same view.
+3. Click the orb to reopen the card, scroll up to the feed answer and click one of its chips. The drawer switches to `EVIDENCE · FETCH`: the fetch run behind that feed, with its upstream URL, fetch time, HTTP status, rows in, the raw key under `raw/<source>/<yyyy>/<mm>/<dd>/`, and the raw payload.
+4. For a sighting, click any sighting point on the globe. The drawer shows, top to bottom: any DUPLICATE OF, DUPLICATES or CONFLICTS badges with their links and revisions; the source link, fetch time, ingest lag and feed state; the normalized record; and the raw payload exactly as fetched. The API cuts the inline text at 256 KB (`RAW_TEXT_CAP` in `api/src/evidence.rs`).
+5. Click the source link. It opens the exact upstream URL the API fetched, for example the iNaturalist API query.
+
+Say: every `[e:…]` citation is checked against the ids the tools returned in that turn. A citation the model invents is stripped before it reaches the screen.
+
+### 5. Replay the cold snap (3:30–4:30)
+
+What works in the UI today is the live 30-day window:
+
+1. On the timeline, click Play. The cursor walks the window at 8 frames a second; the speed menu next to it goes from 1× to 32×.
+2. Drag the scrubber. Frames come from a SharedArrayBuffer in the browser, so scrubbing makes no network request. The T18 gate measured a median frame change of 8.71 ms over 96 frames (`gates/leaf-T18.md` G2).
+3. Point at the hatched stretches. The legend at the end of the controls names them: "no data" where GOES delivered nothing usable, "cloud" where at least half the GOES cells were masked, "quiet" for 12 hours or more with no sighting from any feed. The app never interpolates across them.
+4. Click Live to jump back to the live edge.
+
+The cold snap of 1 February 2026 is outside that window, and the UI cannot move the window yet. Show the scene through the API instead, in a terminal next to the browser:
+
+```sh
+curl -s localhost:3050/v1/graphql -H 'content-type: application/json' \
+  -d '{"query":"{ explainCell(cell:\"292:142\", species:\"iguana\", at:\"2026-02-01T17:00:00Z\") { score terms { name value } } }"}'
+```
+
+On the `bun run data` database this returned score 0.707: density 0.353, `activity.iguana_cold_stun_easy_capture_window` 2.0, `access.land_access` 1.0. The same query at `2026-02-03T19:00:00Z` returned the cold-stun term at 1.0 and a score of 0.385. The numbers in [What to ask the agent](#what-to-ask-the-agent) come from a database with only the scene loaded. There the frame holds fewer other sightings, so the same cell reads density 0.790 and score 1.580.
+
+Once the timeline can take a window outside the last 30 days, this step becomes: say "show the first of February 2026 at 7 AM", press Play, and watch the iguana hotspot double at cell `292:142` as the air drops below 10 °C, then fall back on 3 February.
+
+### 6. Explain and backtest (4:30–5:30)
+
+1. Click the brightest heatmap cell on the globe. The drawer opens on that hotspot. Its first section, "Why this cell", shows a HEURISTIC pill, the species and cell, the score, and a table of each term with its value, a bar and the rule's rationale.
+2. Read one rationale aloud, for example the iguana cold-stun rule: "Green iguanas go torpid below about 10 °C air temperature and drop from trees".
+3. Click `Backtest <species>` under the table. The Backtest panel shows HIT and BASELINE pills, the lift over baseline, and a bar per day: sightings in grey, hits in the accent colour.
+4. Change the Days menu from `14 days` to `30 days`. The panel reloads. The baseline is always 10 %. HIT turns from amber to green only when it beats the baseline.
+5. Click `← Explain` to go back.
+
+Say: for each day, the grid is scored using only data from before that day, and a hit is a sighting that lands in the top 10 % of cells. The panel shows the result as measured, weak or not. Ask `How well have the python hotspot scores held up over the last two weeks?` to get the same numbers from the agent, cited as `[e:backtest:python:14]`.
+
+### 7. Mission from a hotspot, seen in a second browser (5:30–6:30)
+
+Not demoable at `81596be`: the Missions panel and the rtc worker are T21. Its gates define the flow:
+
+1. With a hotspot selected, open the Missions tab on the left and create a mission from the cell. It carries the species, window, conditions and evidence.
+2. The mission appears in the first window in the same frame, before any network round trip.
+3. The second window shows it over WebRTC, with the WebSocket path as fallback. T21's gate requires an RTC p50 under 150 ms, and both windows must converge after removal counts are incremented concurrently and after an offline edit syncs.
+
+What exists today and can be shown instead, in a terminal:
+
+```sh
+cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/client/threads/crdt   # prints "CRDT vectors passed: 14/14", 11 pass
+cargo test --manifest-path api/Cargo.toml crdt                                           # 6 passed, same 14 vectors in Rust
+bun run --cwd apps/signal-worker e2e                                                     # two peers over wrangler dev, prints EXCHANGE-OK
+```
+
+### Close (6:30–7:00)
+
+Name what is not live yet: the deploy (H1–H3, H8), GOES push (H4), the real LLM (H5), voice (H6) and ion imagery (H7). Each has a gate with an `ABANDON` line naming the human step, not a silent gap.
 
 ## Scene: South Florida cold snap, 30 Jan – 3 Feb 2026
 
@@ -76,7 +186,11 @@ BACKFILL-DRY-RUN-OK
 
 The test `scene_cold_snap` (`cargo test --manifest-path api/Cargo.toml scene_cold_snap`) loads the scene into memory and checks these counts, the NWS events, and the cold-stun term below.
 
-The scene is months older than the live 30-day window, so the frame builder does not pre-build it. `GET /v1/frames?from=2026-01-30T00:00:00Z&to=2026-02-04T00:00:00Z` builds and stores the 120 hourly frames on first request. In the UI, jump there with `set_time` / `play_timeline`, which accept any RFC 3339 time. By voice: "show the first of February 2026 at 7 AM".
+`bun run data` loads the scene after the live backfill. On that database the scene line read `sightings=254`, not 138, because the GBIF baseline adds its own records in the same five days.
+
+The scene is months older than the live 30-day window, so the frame builder does not pre-build it. `GET /v1/frames?from=2026-01-30T00:00:00Z&to=2026-02-04T00:00:00Z&step=60` builds them on first request. Measured: 121 hourly frames, both ends included, 15,275,820 bytes raw and 553,336 bytes gzipped.
+
+The UI cannot show these frames yet. `set_time`, `play_timeline`, agent `view` events and share links all clamp the cursor into the 30 days ending now (`clampToWindow` in `apps/web/client/state/time.ts`), so "show the first of February 2026 at 7 AM" lands on the oldest frame of the live window instead.
 
 ## Moments to scrub to
 
@@ -90,6 +204,8 @@ Times are UTC, with Miami local time (EST, UTC−5) in brackets.
 6. **3 Feb 19:00 (2 PM).** The rebound: 19.1 °C at the same grid point. The cold-stun term drops back to 1.0 while the 1 Feb reports still carry density.
 
 ## What to ask the agent
+
+These answers need the live agent (H5) and a working cold-snap window in the UI. The explain numbers below were measured on a database with only the scene loaded (`backfill --scene` into an empty data dir). With `bun run data`, the GBIF baseline changes the density normalization, and the same cell reads density 0.353 and score 0.707 at 17:00 on 1 Feb.
 
 - "Did the cold snap change iguana reports?" Expect the daily counts (8, 10, 63, 32, 28), tied to the sub-10 °C hours and the NWS warnings. Citations should include `sighting:`, `reading:` and `alert:` ids.
 - "Why is cell 292:142 hot at noon on 1 February?" Expect `explain_cell` at `2026-02-01T17:00:00Z`. Density 0.79, `activity.iguana_cold_stun_easy_capture_window` 2.0, `access.land_access` 1.0, score 1.58. Conditions: air 7.0 °C, stage 0.9 m, wave 1.3 m, wind 5.4 m/s.
