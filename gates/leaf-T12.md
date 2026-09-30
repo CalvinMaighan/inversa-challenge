@@ -13,7 +13,7 @@ Scope:
 - [x] G2: Rust passes all vectors; the test prints `CRDT vectors passed: N/N`
   CHECK: cargo test --manifest-path api/Cargo.toml crdt -- --nocapture 2>&1 | grep -E "CRDT vectors passed|test result"
   EXPECT: /CRDT vectors passed: (\d+)\/\1[\s\S]*test result: ok/
-  EVIDENCE: CRDT vectors passed: 14/14 | test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 1.87s
+  EVIDENCE: CRDT vectors passed: 14/14 | test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 1.74s
 
 - [x] G3: TS passes all vectors; the test prints `CRDT vectors passed: N/N`
   CHECK: cd apps/web && bun test tests/client/threads/crdt 2>&1 | grep -E "CRDT vectors passed|fail"
@@ -23,9 +23,9 @@ Scope:
 - [x] G4: shuffled-order property test: 200 random permutations of each vector converge to the same state (both languages)
   CHECK: cargo test --manifest-path api/Cargo.toml crdt_permutations 2>&1 | grep "test result" && cd apps/web && bun test tests/client/threads/crdt 2>&1 | grep -c permutation
   EXPECT: /test result: ok[\s\S]*[1-9]/
-  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 1.96s | 1
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 1.71s | 1
 
 - [x] G5: applyOps is idempotent in SQLite: the same batch twice gives applied=0 and duplicates=N on the second call (test)
   CHECK: cargo test --manifest-path api/Cargo.toml apply_ops_idempotent 2>&1 | grep "test result"
   EXPECT: /test result: ok\. [1-9]/
-  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 61 filtered out; finished in 0.00s
