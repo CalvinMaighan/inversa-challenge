@@ -28,9 +28,9 @@ const UI_TOOL_DESCRIPTIONS: Record<UiToolName, string> = {
   set_time:
     "Jump the timeline to one moment. time is an RFC 3339 timestamp, or 'now' for live. Resolve relative phrases like 'last night' into a timestamp first. Returns at once.",
   play_timeline:
-    "Play or pause the timeline animation. Optional from and to are RFC 3339 timestamps; speed is frames per second (one frame is 15 minutes). playing=false pauses. Returns at once.",
+    "Play or pause the timeline animation over the last 30 days. Optional from and to (RFC 3339) narrow the replayed range; speed is frames per second (one frame is 15 minutes). playing=false pauses. Returns at once.",
   toggle_layer:
-    "Show or hide one map layer: sightings, hotspots, lst (land surface temperature), sst (sea surface temperature), stations, alerts, missions, peers. species narrows sightings or hotspots to python, tegu, iguana or lionfish. Returns at once.",
+    "Show or hide one map layer: sightings, hotspots, lst (land surface temperature), sst (sea surface temperature), stations, alerts, missions, peers. With species (python, tegu, iguana, lionfish) it shows or hides that species in the sightings and hotspots filter instead of the whole layer. Returns at once.",
   select:
     "Highlight one piece of evidence on the globe by its evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
   open_evidence:
