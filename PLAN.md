@@ -241,3 +241,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T2 merged+verified 11/11. T20 merged+verified 4/5, G5 ABANDON H3.
 - T5 merged+verified 6/7 (G7 ABANDON H3). Note: pollers use governor::check_response.
 - T6 merged+verified (G7 ABANDON H1-3,H8). Fixed gate id format for (live...) gates.
+- T4 merged+verified 9/9; contract requests applied: publisher at boot, migration 0002
