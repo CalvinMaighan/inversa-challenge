@@ -33,6 +33,19 @@ const COMMAND_MSG =
   'Examples: active-click="toggle:THEME.dark", active-click=\'set:THEME.mode:"dark"\', ' +
   'active-drop="move→col.cards", active-submit="push:col.cards".';
 
+/** JSX nodes are not part of the ESTree typings that `eslint` ships. */
+type JSXAttributeNode = {
+  name: { type: "JSXIdentifier"; name: string } | { type: "JSXNamespacedName" };
+  value:
+    | null
+    | { type: "Literal"; value: unknown }
+    | { type: "JSXExpressionContainer"; expression: { type: string } }
+    | { type: "JSXElement" | "JSXFragment" };
+};
+
+/** `report()` only reads location data, which JSX nodes carry like any other. */
+const asNode = (node: object) => node as unknown as Rule.Node;
+
 const rule: Rule.RuleModule = {
   meta: {
     type: "problem",
@@ -47,7 +60,7 @@ const rule: Rule.RuleModule = {
   },
   create(context) {
     return {
-      JSXAttribute(node) {
+      JSXAttribute(node: JSXAttributeNode) {
         if (node.name.type !== "JSXIdentifier") return;
         const name = node.name.name;
         const isPath = PATH_ATTRS.has(name);
@@ -56,7 +69,7 @@ const rule: Rule.RuleModule = {
 
         if (!node.value) {
           context.report({
-            node,
+            node: asNode(node),
             messageId: isCommand ? "badCommand" : "badPath",
           });
           return;
@@ -66,7 +79,7 @@ const rule: Rule.RuleModule = {
           const v = node.value.value;
           if (typeof v !== "string") {
             context.report({
-              node: node.value,
+              node: asNode(node.value),
               messageId: isCommand ? "badCommand" : "badPath",
             });
             return;
@@ -79,12 +92,12 @@ const rule: Rule.RuleModule = {
               v.startsWith("move→") ||
               v.startsWith("move>");
             if (!ok) {
-              context.report({ node: node.value, messageId: "badCommand" });
+              context.report({ node: asNode(node.value), messageId: "badCommand" });
             }
             return;
           }
           if (!PATH.test(v)) {
-            context.report({ node: node.value, messageId: "badPath" });
+            context.report({ node: asNode(node.value), messageId: "badPath" });
           }
           return;
         }
@@ -97,7 +110,7 @@ const rule: Rule.RuleModule = {
         }
 
         context.report({
-          node: node.value,
+          node: asNode(node.value),
           messageId: isCommand ? "badCommand" : "badPath",
         });
       },

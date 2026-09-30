@@ -73,9 +73,9 @@ describe("commands", () => {
   test("runCommand toggle/set", () => {
     init({ LAYOUT: { nav: false }, THEME: { mode: "light" } });
     runCommand(parseCommand("toggle:LAYOUT.nav"), []);
-    expect(get("LAYOUT")).toEqual({ nav: true });
+    expect(get<unknown>("LAYOUT")).toEqual({ nav: true });
     runCommand(parseCommand("set:THEME.mode:dark"), []);
-    expect(get("THEME")).toEqual({ mode: "dark" });
+    expect(get<unknown>("THEME")).toEqual({ mode: "dark" });
   });
 
   test("moveIdToArray", () => {
@@ -121,6 +121,6 @@ describe("ssr snapshot", () => {
     const { getServerSnapshot, getSsr } = await import("../src/core");
     init({ LAYOUT: { nav: false } }, { ssr: true });
     expect(getSsr()).toBe(true);
-    expect(getServerSnapshot("LAYOUT")).toEqual({ nav: false });
+    expect(getServerSnapshot<unknown>("LAYOUT")).toEqual({ nav: false });
   });
 });

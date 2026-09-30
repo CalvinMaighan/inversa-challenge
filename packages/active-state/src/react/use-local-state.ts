@@ -1,5 +1,5 @@
-import type { AnyKey } from "active-state";
-import { getSsr } from "active-state";
+import type { AnyKey } from "@calvinjs/active-state";
+import { getSsr } from "@calvinjs/active-state";
 import { useActiveState } from "./use-active-state";
 
 export type UseLocalStateOptions = {

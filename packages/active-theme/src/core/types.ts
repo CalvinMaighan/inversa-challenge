@@ -21,7 +21,8 @@ export type ThemeDefinition<C extends string = string> = {
 export type DefineThemeInput<C extends string = string> = {
   modes?: readonly ThemeMode[];
   defaultMode?: ThemeMode;
-  defaultColor: C;
+  /** Infer `C` from `colors` keys only, so the default must be one of them. */
+  defaultColor: NoInfer<C>;
   colors: Record<C, ThemeColorPalette>;
   /** Default true — remember mode/color in localStorage. */
   persist?: boolean;

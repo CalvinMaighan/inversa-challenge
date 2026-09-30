@@ -7,7 +7,7 @@ import {
   set as setState,
   subscribe,
   type AnyKey,
-} from "active-state";
+} from "@calvinjs/active-state";
 
 type Setter<T> = (value: T | ((prev: T | undefined) => T)) => void;
 

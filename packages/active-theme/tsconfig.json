@@ -20,7 +20,9 @@
       "active-theme/react": ["./src/react/index.ts"],
       "active-theme/state": ["./src/state/index.ts"],
       "active-theme/emotion": ["./src/emotion/index.ts"],
-      "active-state": ["../client-state/src/core/index.ts"]
+      "@calvinjs/active-state": ["../active-state/src/core/index.ts"],
+      "@calvinjs/active-state/dom": ["../active-state/src/dom/index.ts"],
+      "@calvinjs/active-state/react": ["../active-state/src/react/index.ts"]
     }
   },
   "include": ["src", "tests", "tsup.config.ts"],

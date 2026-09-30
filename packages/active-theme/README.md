@@ -2,7 +2,7 @@
 
 Mode + color theme engine. Sets `data-theme` / `data-accent` and CSS variables on `:root` so the whole UI updates immediately.
 
-Persist + cross-tab sync are **on by default**. Use [`active-theme/lite`](#lite) when you only want apply. Prefer [`active-theme/state`](#with-active-state) when the app already uses [`active-state`](https://github.com/CalvinMaighan/active-state).
+Persist + cross-tab sync are **on by default**. Use [`active-theme/lite`](#lite) when you only want apply. Prefer [`active-theme/state`](#with-active-state) when the app already uses [`@calvinjs/active-state`](https://github.com/CalvinMaighan/active-state).
 
 ## Install
 
@@ -35,7 +35,7 @@ One store. Bus owns persist; `<ActiveTheme />` only paints `:root`.
 
 ```ts
 // client/theme.ts
-import { catalog } from "active-state";
+import { catalog } from "@calvinjs/active-state";
 import { defineTheme } from "active-theme";
 import { themeKeys } from "active-theme/state";
 
@@ -62,7 +62,7 @@ export const themeState = catalog(THEME, ACCENT_COLOR);
 // app/layout.tsx
 import { state } from "client/state"; // includes theme keys
 import { theme } from "client/theme";
-import { ActiveState } from "active-state/react";
+import { ActiveState } from "@calvinjs/active-state/react";
 import { ActiveTheme } from "active-theme/state";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -79,7 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 ```
 
 ```tsx
-import { useActiveState } from "active-state/react";
+import { useActiveState } from "@calvinjs/active-state/react";
 import { THEME, ACCENT_COLOR } from "client/theme";
 
 const [mode, setMode] = useActiveState(THEME);

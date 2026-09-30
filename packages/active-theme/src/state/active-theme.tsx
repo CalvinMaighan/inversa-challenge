@@ -1,4 +1,4 @@
-import { useActiveState } from "active-state/react";
+import { useActiveState } from "@calvinjs/active-state/react";
 import {
   applyTheme,
   type ThemeDefinition,

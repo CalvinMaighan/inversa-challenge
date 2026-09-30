@@ -7,7 +7,7 @@ No Providers. Theme-agnostic (bring your own keys).
 ## Install
 
 ```bash
-bunx add active-state
+bunx add @calvinjs/active-state
 ```
 
 ## 1. Define keys
@@ -16,7 +16,7 @@ bunx add active-state
 
 ```ts
 // client/state/user.ts
-import { key } from "active-state";
+import { key } from "@calvinjs/active-state";
 
 export const USER = key("USER", {
   id: null as string | null,
@@ -26,14 +26,14 @@ export const USER = key("USER", {
 
 ```ts
 // client/state/layout.ts
-import { key } from "active-state";
+import { key } from "@calvinjs/active-state";
 
 export const LAYOUT = key("LAYOUT", { nav: false });
 ```
 
 ```ts
 // client/state/theme.ts
-import { key } from "active-state";
+import { key } from "@calvinjs/active-state";
 
 // Survives refresh (localStorage). With <ActiveState init={state} ssr />, applies after first paint.
 export const THEME = key("THEME", { dark: false }, { persist: true });
@@ -41,7 +41,7 @@ export const THEME = key("THEME", { dark: false }, { persist: true });
 
 ```ts
 // client/state/index.ts
-import { catalog } from "active-state";
+import { catalog } from "@calvinjs/active-state";
 import { USER } from "./user";
 import { LAYOUT } from "./layout";
 import { THEME } from "./theme";
@@ -95,7 +95,7 @@ Don’t mount `<ActiveState />` from a lazy route that defines keys later — `i
 ```tsx
 // app/layout.tsx
 import { state } from "client/state";
-import { ActiveState } from "active-state/react";
+import { ActiveState } from "@calvinjs/active-state/react";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -132,7 +132,7 @@ import { state } from "client/state";
 
 ```ts
 import { state } from "client/state";
-import { init } from "active-state";
+import { init } from "@calvinjs/active-state";
 
 init(state);
 // init(state, { ssr: true })
@@ -144,7 +144,7 @@ init(state);
 // components/nav-toggle.tsx
 "use client";
 
-import { useActiveState } from "active-state/react";
+import { useActiveState } from "@calvinjs/active-state/react";
 import { LAYOUT } from "client";
 
 
@@ -172,7 +172,7 @@ ActiveState.get(LAYOUT);
 Paths + verbs in HTML — **no JS expressions** (not Alpine). Keep attr strings aligned with your `key()` paths.
 
 ```html
-<script src="https://unpkg.com/active-state/dist/active-state.min.js"></script>
+<script src="https://unpkg.com/@calvinjs/active-state/dist/active-state.min.js"></script>
 <script>
   ActiveState.init({ LAYOUT: { nav: false }, THEME: { dark: false } });
   ActiveState.bind();
@@ -216,8 +216,8 @@ With a bundler:
 
 ```ts
 import "client";
-import { init, registeredState } from "active-state";
-import { bind } from "active-state/dom";
+import { init, registeredState } from "@calvinjs/active-state";
+import { bind } from "@calvinjs/active-state/dom";
 
 init(registeredState());
 bind();
@@ -228,12 +228,12 @@ bind();
 Errors include fix instructions so coding agents self-correct.
 
 ```bash
-bunx add -d eslint active-state
+bunx add -d eslint @calvinjs/active-state
 ```
 
 ```js
 // eslint.config.mjs
-import { recommended, publicPages } from "active-state/eslint";
+import { recommended, publicPages } from "@calvinjs/active-state/eslint";
 
 export default [
   ...recommended,
@@ -268,7 +268,7 @@ export default [
 | `get` / `set` / `subscribe` | Accept string or `key()` slice |
 | `bind()` | Wire path + verb attrs (`text`, `model`, `click`, `each`, drag/drop, …) |
 | `reset()` | Clear store **and** key registry (tests / hot reload) |
-| `recommended` / `publicPages` from `active-state/eslint` | Flat-config guardrails (named exports) |
+| `recommended` / `publicPages` from `@calvinjs/active-state/eslint` | Flat-config guardrails (named exports) |
 
 ## Scope
 
@@ -293,12 +293,12 @@ export default [
 
 | Import | gzip | brotli | Use when |
 | --- | ---: | ---: | --- |
-| `active-state` | ~2.3KB | ~2.0KB | Vanilla JS/TS — `init` / `get` / `set` / `subscribe` / `key()` |
-| `active-state/dom` | ~5.1KB | ~4.6KB | HTML verbs — `each` / `model` / `click` / drag-drop (+ core) |
-| `active-state/react` | ~0.7KB | ~0.6KB | Next.js / React — `<ActiveState init={state} />` + `useActiveState` (+ core) |
+| `@calvinjs/active-state` | ~2.3KB | ~2.0KB | Vanilla JS/TS — `init` / `get` / `set` / `subscribe` / `key()` |
+| `@calvinjs/active-state/dom` | ~5.1KB | ~4.6KB | HTML verbs — `each` / `model` / `click` / drag-drop (+ core) |
+| `@calvinjs/active-state/react` | ~0.7KB | ~0.6KB | Next.js / React — `<ActiveState init={state} />` + `useActiveState` (+ core) |
 | CDN IIFE | ~5.3KB | ~4.8KB | core + dom in one browser build |
 
-Sizes are per entry (gzip level 9 / brotli quality 11). `/react` and `/dom` depend on core (one shared singleton). Importing `ActiveState` from `/react` also pulls `/dom` for `bind`. ESLint (`active-state/eslint`) is opt-in. CDNs typically serve brotli when the browser accepts it.
+Sizes are per entry (gzip level 9 / brotli quality 11). `/react` and `/dom` depend on core (one shared singleton). Importing `ActiveState` from `/react` also pulls `/dom` for `bind`. ESLint (`@calvinjs/active-state/eslint`) is opt-in. CDNs typically serve brotli when the browser accepts it.
 
 ## Examples
 
@@ -325,6 +325,7 @@ bun run size:brotli   # brotli totals + attribution
 ## License
 
 MIT
+
 
 
 

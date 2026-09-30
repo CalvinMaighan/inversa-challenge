@@ -11,8 +11,8 @@ import {
   set,
   subscribe,
   type InitOptions,
-} from "active-state";
-import { bind } from "active-state/dom";
+} from "@calvinjs/active-state";
+import { bind } from "@calvinjs/active-state/dom";
 import { useLayoutEffect } from "react";
 
 export type ActiveStateInit = Record<string, unknown>;

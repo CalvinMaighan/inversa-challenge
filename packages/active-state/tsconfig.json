@@ -15,9 +15,9 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "paths": {
-      "active-state": ["./src/core/index.ts"],
-      "active-state/dom": ["./src/dom/index.ts"],
-      "active-state/react": ["./src/react/index.ts"]
+      "@calvinjs/active-state": ["./src/core/index.ts"],
+      "@calvinjs/active-state/dom": ["./src/dom/index.ts"],
+      "@calvinjs/active-state/react": ["./src/react/index.ts"]
     }
   },
   "include": ["src", "tests", "tsup.config.ts"],

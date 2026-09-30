@@ -1,4 +1,4 @@
-import { set, subscribe } from "active-state";
+import { set, subscribe } from "@calvinjs/active-state";
 import { parseCommand, readAt, runCommand } from "./command";
 import { writePath } from "./path";
 import { resolvePath, type Scope } from "./scope";

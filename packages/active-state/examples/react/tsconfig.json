@@ -10,9 +10,9 @@
     "noEmit": true,
     "isolatedModules": true,
     "paths": {
-      "active-state": ["../../dist/index.d.ts"],
-      "active-state/react": ["../../dist/react/index.d.ts"],
-      "active-state/dom": ["../../dist/dom/index.d.ts"]
+      "@calvinjs/active-state": ["../../dist/index.d.ts"],
+      "@calvinjs/active-state/react": ["../../dist/react/index.d.ts"],
+      "@calvinjs/active-state/dom": ["../../dist/dom/index.d.ts"]
     }
   },
   "include": ["src"]

@@ -1,8 +1,8 @@
 // src/dom/bind.ts
-import { set as set2, subscribe } from "active-state";
+import { set as set2, subscribe } from "@calvinjs/active-state";
 
 // src/dom/command.ts
-import { get, set } from "active-state";
+import { get, set } from "@calvinjs/active-state";
 
 // src/dom/path.ts
 function parsePath(spec) {

@@ -17,7 +17,7 @@ const API = new Set([
   "resolveKey",
 ]);
 
-const PKG = /^(active-state)(\/.*)?$/;
+const PKG = /^(@calvinjs\/active-state)(\/.*)?$/;
 
 function isStringLiteral(node: unknown): boolean {
   return (
@@ -43,7 +43,7 @@ const rule: Rule.RuleModule = {
   create(context) {
     /** local binding → api name */
     const locals = new Map<string, string>();
-    /** namespace import local (import * as AS from 'active-state') */
+    /** namespace import local (import * as AS from '@calvinjs/active-state') */
     const namespaces = new Set<string>();
 
     return {
@@ -104,4 +104,5 @@ const rule: Rule.RuleModule = {
 };
 
 export default rule;
+
 

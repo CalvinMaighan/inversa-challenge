@@ -1,4 +1,4 @@
-import { get, set } from "active-state";
+import { get, set } from "@calvinjs/active-state";
 import { readPath, writePath } from "./path";
 import { resolvePath, type Scope } from "./scope";
 

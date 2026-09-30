@@ -1,6 +1,6 @@
-import { init, get, set, subscribe, reset, clearPersisted, hydratePersisted, key, catalog, resolveKey, AnyKey } from 'active-state';
-export { STORAGE_PREFIX, catalog, clearPersisted as clearLocalStateKey, clearPersisted, key, registeredState, resolveKey, storageKey } from 'active-state';
-import { bind } from 'active-state/dom';
+import { init, get, set, subscribe, reset, clearPersisted, hydratePersisted, key, catalog, resolveKey, AnyKey } from '@calvinjs/active-state';
+export { STORAGE_PREFIX, catalog, clearPersisted as clearLocalStateKey, clearPersisted, key, registeredState, resolveKey, storageKey } from '@calvinjs/active-state';
+import { bind } from '@calvinjs/active-state/dom';
 
 type ActiveStateInit = Record<string, unknown>;
 type ActiveStateProps = {

@@ -89,7 +89,7 @@ describe("key({ persist: true })", () => {
     );
     key("THEME", { dark: false }, { persist: true });
     init(registeredState());
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
   });
 
   test("with ssr, stays at defaults until hydratePersisted", () => {
@@ -99,9 +99,9 @@ describe("key({ persist: true })", () => {
     );
     key("THEME", { dark: false }, { persist: true });
     init(registeredState(), { ssr: true });
-    expect(get("THEME")).toEqual({ dark: false });
+    expect(get<unknown>("THEME")).toEqual({ dark: false });
     hydratePersisted();
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
   });
 
   test("storagePrefix customizes localStorage keys", () => {
@@ -125,7 +125,7 @@ describe("key({ persist: true })", () => {
       localStorage,
     );
 
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
   });
 
   test("persistIds marks host keys without key(persist)", () => {
@@ -144,7 +144,7 @@ describe("key({ persist: true })", () => {
     localStorage.setItem("active-state:THEME", "{not-json");
     init(registeredState());
     expect(localStorage.getItem("active-state:THEME")).toBeNull();
-    expect(get("THEME")).toEqual({ dark: false });
+    expect(get<unknown>("THEME")).toEqual({ dark: false });
   });
 
   test("bus.observables is exposed", () => {
@@ -160,7 +160,7 @@ describe("key({ persist: true })", () => {
       JSON.stringify({ dark: true }),
     );
     hydratePersisted();
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
   });
 
   test("non-persist keys stay out of storage", () => {
@@ -176,7 +176,7 @@ describe("key({ persist: true })", () => {
     set("THEME", { dark: true });
     clearPersisted("THEME");
     expect(localStorage.getItem("active-state:THEME")).toBeNull();
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
   });
 
   test("clearPersisted() clears all persisted keys", () => {
@@ -209,7 +209,7 @@ describe("key({ persist: true })", () => {
       localStorage,
     );
 
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
     expect(seen).toEqual({ dark: true });
   });
 
@@ -223,7 +223,7 @@ describe("key({ persist: true })", () => {
       localStorage,
     );
 
-    expect(get("THEME")).toEqual({ dark: false });
+    expect(get<unknown>("THEME")).toEqual({ dark: false });
   });
 
   test("shared: true alone implies persist", () => {

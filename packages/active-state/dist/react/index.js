@@ -9,7 +9,7 @@ import {
   resolveKey as resolveKey3,
   STORAGE_PREFIX,
   storageKey
-} from "active-state";
+} from "@calvinjs/active-state";
 
 // src/react/active-state.tsx
 import {
@@ -24,8 +24,8 @@ import {
   resolveKey,
   set,
   subscribe
-} from "active-state";
-import { bind } from "active-state/dom";
+} from "@calvinjs/active-state";
+import { bind } from "@calvinjs/active-state/dom";
 import { useLayoutEffect } from "react";
 function ActiveStateRoot({
   init,
@@ -82,7 +82,7 @@ import {
   resolveKey as resolveKey2,
   set as setState,
   subscribe as subscribe2
-} from "active-state";
+} from "@calvinjs/active-state";
 function applySelector(value, selector) {
   if (selector && value !== void 0) return selector(value);
   return value;
@@ -113,7 +113,7 @@ function useActiveState(key3, selector) {
 var useClientState = useActiveState;
 
 // src/react/use-local-state.ts
-import { getSsr as getSsr2 } from "active-state";
+import { getSsr as getSsr2 } from "@calvinjs/active-state";
 function resolveArgs(selectorOrOptions, maybeOptions) {
   if (typeof selectorOrOptions === "function") {
     return { selector: selectorOrOptions, options: maybeOptions };
@@ -142,7 +142,7 @@ function useLocalState(key3, selectorOrOptions, maybeOptions) {
 }
 
 // src/react/index.ts
-import { clearPersisted as clearPersisted3 } from "active-state";
+import { clearPersisted as clearPersisted3 } from "@calvinjs/active-state";
 export {
   ActiveState,
   STORAGE_PREFIX,

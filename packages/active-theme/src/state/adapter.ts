@@ -1,4 +1,4 @@
-import { key } from "active-state";
+import { key } from "@calvinjs/active-state";
 import {
   applyTheme,
   type ThemeDefinition,

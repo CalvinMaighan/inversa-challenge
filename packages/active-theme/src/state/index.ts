@@ -4,8 +4,8 @@
  * @example
  * import { defineTheme } from "active-theme";
  * import { ActiveTheme, themeKeys } from "active-theme/state";
- * import { catalog } from "active-state";
- * import { ActiveState } from "active-state/react";
+ * import { catalog } from "@calvinjs/active-state";
+ * import { ActiveState } from "@calvinjs/active-state/react";
  *
  * export const theme = defineTheme({ defaultColor: "orange", colors: { … }, persist: false });
  * export const { THEME, ACCENT_COLOR } = themeKeys({ defaultColor: "orange" });

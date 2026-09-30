@@ -18,7 +18,7 @@ export default defineConfig([
     dts: true,
     splitting: false,
     clean: false,
-    external: ["active-state"],
+    external: ["@calvinjs/active-state"],
     target: "es2020",
   },
   {
@@ -30,8 +30,8 @@ export default defineConfig([
     external: [
       "react",
       "react/jsx-runtime",
-      "active-state",
-      "active-state/dom",
+      "@calvinjs/active-state",
+      "@calvinjs/active-state/dom",
     ],
     target: "es2020",
     banner: { js: '"use client";' },
@@ -55,7 +55,7 @@ export default defineConfig([
     outExtension: () => ({ js: ".js" }),
     esbuildOptions(options) {
       options.alias = {
-        "active-state": coreEntry,
+        "@calvinjs/active-state": coreEntry,
       };
     },
   },

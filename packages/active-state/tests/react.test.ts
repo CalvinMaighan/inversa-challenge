@@ -146,7 +146,7 @@ describe("ActiveState ssr hydrate", () => {
       root.render(createElement(ActiveState, { init: state, ssr: true }));
     });
 
-    expect(get("THEME")).toEqual({ dark: true });
+    expect(get<unknown>("THEME")).toEqual({ dark: true });
 
     act(() => {
       root!.unmount();

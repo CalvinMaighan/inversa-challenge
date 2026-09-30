@@ -2,7 +2,7 @@ import {
   ActiveState,
   key,
   useActiveState,
-} from "active-state/react";
+} from "@calvinjs/active-state/react";
 import { StrictMode, useEffect, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import "../styles.css";

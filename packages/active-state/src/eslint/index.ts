@@ -11,7 +11,7 @@ const rules = {
 
 const plugin = {
   meta: {
-    name: "active-state",
+    name: "@calvinjs/active-state",
     version: "0.1.0",
   },
   rules,
@@ -57,12 +57,25 @@ function publicPages(options: PublicPagesOptions): Linter.Config[] {
   ];
 }
 
-const configs = {
+// Explicit annotations keep the emitted .d.ts portable: inferred types would
+// reference @eslint/core, which isolated installs do not expose to consumers.
+type Configs = {
+  recommended: Linter.Config[];
+  publicPages: (options: PublicPagesOptions) => Linter.Config[];
+};
+
+const configs: Configs = {
   recommended,
   publicPages,
 };
 
+const pluginWithConfigs: typeof plugin & { configs: Configs } = {
+  ...plugin,
+  configs,
+};
+
 export { configs, plugin, publicPages, recommended, rules };
-export default { ...plugin, configs };
+export default pluginWithConfigs;
 
 export type { PublicPagesOptions };
+

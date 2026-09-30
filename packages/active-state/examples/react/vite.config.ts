@@ -10,9 +10,9 @@ export default defineConfig({
   server: { port: 5179 },
   resolve: {
     alias: {
-      "active-state/react": path.join(lib, "dist/react/index.js"),
-      "active-state/dom": path.join(lib, "dist/dom/index.js"),
-      "active-state": path.join(lib, "dist/index.js"),
+      "@calvinjs/active-state/react": path.join(lib, "dist/react/index.js"),
+      "@calvinjs/active-state/dom": path.join(lib, "dist/dom/index.js"),
+      "@calvinjs/active-state": path.join(lib, "dist/index.js"),
     },
   },
 });

@@ -50,7 +50,7 @@ var API = /* @__PURE__ */ new Set([
   "clearLocalStateKey",
   "resolveKey"
 ]);
-var PKG = /^(active-state)(\/.*)?$/;
+var PKG = /^(@calvinjs\/active-state)(\/.*)?$/;
 function isStringLiteral(node) {
   return !!node && typeof node === "object" && node.type === "Literal" && typeof node.value === "string";
 }
@@ -133,6 +133,7 @@ var COMMAND_ATTRS = /* @__PURE__ */ new Set([
 ]);
 var PATH_MSG = '[active-state] Path must look like KEY.field or each-alias.field (e.g. "LAYOUT.nav" or "card.title").';
 var COMMAND_MSG = `[active-state] Use verb:path (no JS expressions). Examples: active-click="toggle:THEME.dark", active-click='set:THEME.mode:"dark"', active-drop="move\u2192col.cards", active-submit="push:col.cards".`;
+var asNode = (node) => node;
 var rule3 = {
   meta: {
     type: "problem",
@@ -155,7 +156,7 @@ var rule3 = {
         if (!isPath && !isCommand) return;
         if (!node.value) {
           context.report({
-            node,
+            node: asNode(node),
             messageId: isCommand ? "badCommand" : "badPath"
           });
           return;
@@ -164,7 +165,7 @@ var rule3 = {
           const v = node.value.value;
           if (typeof v !== "string") {
             context.report({
-              node: node.value,
+              node: asNode(node.value),
               messageId: isCommand ? "badCommand" : "badPath"
             });
             return;
@@ -172,12 +173,12 @@ var rule3 = {
           if (isCommand) {
             const ok = COMMAND.test(v) || PATH.test(v) || v.startsWith("move\u2192") || v.startsWith("move>");
             if (!ok) {
-              context.report({ node: node.value, messageId: "badCommand" });
+              context.report({ node: asNode(node.value), messageId: "badCommand" });
             }
             return;
           }
           if (!PATH.test(v)) {
-            context.report({ node: node.value, messageId: "badPath" });
+            context.report({ node: asNode(node.value), messageId: "badPath" });
           }
           return;
         }
@@ -185,7 +186,7 @@ var rule3 = {
           return;
         }
         context.report({
-          node: node.value,
+          node: asNode(node.value),
           messageId: isCommand ? "badCommand" : "badPath"
         });
       }
@@ -202,7 +203,7 @@ var rules = {
 };
 var plugin = {
   meta: {
-    name: "active-state",
+    name: "@calvinjs/active-state",
     version: "0.1.0"
   },
   rules
@@ -242,7 +243,11 @@ var configs = {
   recommended,
   publicPages
 };
-var eslint_default = { ...plugin, configs };
+var pluginWithConfigs = {
+  ...plugin,
+  configs
+};
+var eslint_default = pluginWithConfigs;
 export {
   configs,
   eslint_default as default,

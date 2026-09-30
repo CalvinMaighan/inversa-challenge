@@ -33,7 +33,7 @@ describe("eslint plugin configs", () => {
 jsxTester.run("no-hooks-in-files", noHooksInFiles, {
   valid: [
     { code: `export default function Page() { return <main />; }` },
-    { code: `import { ActiveState } from "active-state/react";` },
+    { code: `import { ActiveState } from "@calvinjs/active-state/react";` },
   ],
   invalid: [
     {
@@ -51,14 +51,14 @@ jsxTester.run("no-string-keys", noStringKeys, {
   valid: [
     {
       code: `
-        import { get } from "active-state";
+        import { get } from "@calvinjs/active-state";
         import { LAYOUT } from "./keys";
         get(LAYOUT);
       `,
     },
     {
       code: `
-        import { key } from "active-state";
+        import { key } from "@calvinjs/active-state";
         key("LAYOUT", { nav: false });
       `,
     },
@@ -72,21 +72,21 @@ jsxTester.run("no-string-keys", noStringKeys, {
   invalid: [
     {
       code: `
-        import { get } from "active-state";
+        import { get } from "@calvinjs/active-state";
         get("LAYOUT");
       `,
       errors: [{ messageId: "useKeySlice" }],
     },
     {
       code: `
-        import { ActiveState } from "active-state/react";
+        import { ActiveState } from "@calvinjs/active-state/react";
         ActiveState.set("LAYOUT.nav", true);
       `,
       errors: [{ messageId: "useKeySlice" }],
     },
     {
       code: `
-        import { useActiveState } from "active-state/react";
+        import { useActiveState } from "@calvinjs/active-state/react";
         useActiveState("LAYOUT");
       `,
       errors: [{ messageId: "useKeySlice" }],

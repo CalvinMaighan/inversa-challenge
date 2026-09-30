@@ -46,8 +46,8 @@ export default defineConfig([
     external: [
       "react",
       "react/jsx-runtime",
-      "active-state",
-      "active-state/react",
+      "@calvinjs/active-state",
+      "@calvinjs/active-state/react",
       "active-theme",
     ],
     target: "es2020",

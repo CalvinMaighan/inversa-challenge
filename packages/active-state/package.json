@@ -1,5 +1,5 @@
 {
-  "name": "active-state",
+  "name": "@calvinjs/active-state",
   "version": "0.1.0",
   "description": "Tiny keyed pub/sub client store with React and static HTML bindings",
   "type": "module",
@@ -41,10 +41,14 @@
   },
   "unpkg": "./dist/active-state.min.js",
   "jsdelivr": "./dist/active-state.min.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "rm -rf dist && tsup",
     "prepare": "bun run build",
     "test": "bun test",
+    "typecheck": "tsc -p tsconfig.json",
     "size": "bun run build && bun scripts/size.ts",
     "size:brotli": "bun run build && bun scripts/size.ts --brotli",
     "examples:html": "bun run build && bun examples/html/serve.ts",
@@ -68,6 +72,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.2",
     "happy-dom": "^20.11.1",
     "react": "^19.2.8",
@@ -76,4 +81,5 @@
     "typescript": "5.9.3"
   }
 }
+
 

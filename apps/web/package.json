@@ -12,7 +12,8 @@
     "eval": "bun run eval/run.ts"
   },
   "dependencies": {
-    "@calvinjs/active-state": "0.1.0",
+    "@calvinjs/active-state": "workspace:*",
+    "active-theme": "workspace:*",
     "@emotion/cache": "11.14.0",
     "@emotion/react": "11.14.0",
     "@emotion/styled": "11.14.1",
