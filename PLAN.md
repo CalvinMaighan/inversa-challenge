@@ -25,6 +25,8 @@ These are decided before fan-out. Leaves must not change them. If a leaf needs a
 - **Dependencies:** a leaf may add dependencies on its own worktree branch. The driver resolves manifest and lockfile conflicts at merge.
 - **Stub files:** a leaf owns only the files in its row. Driver-created stub files that a leaf owns are the leaf's to replace.
 
+Tests mirror their source: `apps/web/tests/<path>` belongs to whichever leaf owns `apps/web/<path>`. The e2e Playwright scripts (`apps/web/e2e/<name>.ts`, npm script `e2e:<name>`) belong to the leaf whose gate names them. Each leaf may add its own `e2e:*` script line to `apps/web/package.json`.
+
 | Task | Owns |
 |---|---|
 | T2 | `packages/active-state/**` (subtree base), `packages/active-theme/**` |
@@ -234,3 +236,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 
 - W0 started: brief saved to `docs/BUILD_BRIEF.md`.
 - W0: skeleton compiles (cargo test 2 passed, web 5 pass, next build ok); W1 gates written; W2+ gates pending before their dispatch
+- W0 done: T1 gates ALL MET (6/6). W1 dispatched: T2 T4 T5 T6 T7 T20 (worktrees). T3 waits for T2.

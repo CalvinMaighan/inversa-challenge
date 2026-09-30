@@ -9,7 +9,7 @@ Scope: apps/signal-worker, a Cloudflare Worker implementing PLAN C9 over an R2 b
 
 - [ ] G1: worker unit tests pass (bun test with an in-memory R2 stub)
   CHECK: bun run --cwd apps/signal-worker test 2>&1 | grep -E "[0-9]+ fail" | head -1
-  EXPECT: /^ *0 fail/
+  EXPECT: /^ *0 fail/m
   EVIDENCE: pending
 
 - [ ] G2: typecheck clean

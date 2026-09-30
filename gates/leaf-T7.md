@@ -29,7 +29,7 @@ Scope:
 
 - [ ] G5: the filter policy exists and admits only the four products
   CHECK: grep -oE "ABI-L2-(LSTC|SSTF|FDCC|ACMC)" deploy/aws/goes-filter-policy.json | sort -u | wc -l | tr -d ' '
-  EXPECT: /^4$/
+  EXPECT: /^4$/m
   EVIDENCE: pending
 
 - [ ] G6: the NetCDF/HDF5 build decision (crate + system lib) is recorded in deploy/aws/README.md, and it builds on macOS dev

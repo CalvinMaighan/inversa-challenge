@@ -3,8 +3,8 @@
 Scope: app layout with pre-paint theme bootstrap, active-theme light/dark/tactical from big-value palettes, active-state catalog keys, Providers, COOP/COEP, /v1 rewrite, self-hosted fonts, ported big-value ESLint rules that apply.
 
 - [ ] G1: all state keys from PLAN are registered in the catalog
-  CHECK: for k in TIME VIEW LAYERS SELECTION FEEDS MISSIONS PEERS ME AGENT_CARD AGENT_CHAT VOICE; do grep -rq "\"$k\"" apps/web/client/state || echo "missing $k"; done; echo done
-  EXPECT: /^done$/
+  CHECK: for k in TIME VIEW LAYERS SELECTION FEEDS MISSIONS PEERS ME AGENT_CARD AGENT_CHAT VOICE; do grep -rq "\"$k\"" apps/web/client/state || m=$((m+1)); done; echo "missing=${m:-0}"
+  EXPECT: missing=0
   EVIDENCE: pending
 
 - [ ] G2: three theme modes defined
@@ -32,7 +32,7 @@ Scope: app layout with pre-paint theme bootstrap, active-theme light/dark/tactic
 
 - [ ] G7: fonts are self-hosted (no fonts.googleapis/gstatic references)
   CHECK: grep -rE "fonts\.(googleapis|gstatic)" apps/web/app apps/web/client | wc -l | tr -d ' '
-  EXPECT: /^0$/
+  EXPECT: /^0$/m
   EVIDENCE: pending
 
 - [ ] G8: lint and typecheck clean

@@ -34,5 +34,5 @@ Scope: Db internals = one dedicated writer thread (mpsc commands, batched transa
 
 - [ ] G7: clippy clean for owned files
   CHECK: cargo clippy --manifest-path api/Cargo.toml --all-targets 2>&1 | grep -E "^(warning|error).*" -A3 | grep -E "src/(db|realtime|feed_state|graphql)" | wc -l | tr -d ' '
-  EXPECT: /^0$/
+  EXPECT: /^0$/m
   EVIDENCE: pending

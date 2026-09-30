@@ -14,7 +14,7 @@ Scope: both libraries vendored as git subtrees under packages/, consumed as work
 
 - [ ] G3: no unscoped active-state imports remain in active-theme
   CHECK: grep -rnE "from ['\"]active-state" packages/active-theme/src | wc -l | tr -d ' '
-  EXPECT: /^0$/
+  EXPECT: /^0$/m
   EVIDENCE: pending
 
 - [ ] G4: both packages build
@@ -24,7 +24,7 @@ Scope: both libraries vendored as git subtrees under packages/, consumed as work
 
 - [ ] G5: both existing test suites pass
   CHECK: (cd packages/active-state && bun test 2>&1 | grep -E "^ *[0-9]+ fail"); (cd packages/active-theme && bun test 2>&1 | grep -E "^ *[0-9]+ fail")
-  EXPECT: /^ *0 fail\s+ *0 fail\s*$/
+  EXPECT: /^ *0 fail\s+ *0 fail\s*$/m
   EVIDENCE: pending
 
 - [ ] G6: apps/web resolves both from the workspace (not npm)
