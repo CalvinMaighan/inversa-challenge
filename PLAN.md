@@ -210,6 +210,21 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - Grid: 0.01°, which gives 340 cols × 320 rows = 108,800 cells.
 - Frames: 15-minute steps, 30-day window.
 
+### C16: UI integration surfaces (added after T3)
+
+- **`apps/web/client/globe/api.ts`:** `GlobeApi {flyTo, project, pick, onPostRender, requestRender}`, plus `registerGlobe`, `getGlobe` and `onGlobeReady`. T17 registers the API. The HUD, missions and agent consume it and never import Cesium.
+- **`apps/web/client/threads/api.ts`:** `gqlRequest`, `gqlSubscribe`, `getFrameGrid`, `onFrameGrid` and `publishFrameGrid`.
+  - The driver version runs on the main thread.
+  - T19 moves the internals onto the workers, keeping the signatures.
+  - UI code fetches data only through this module.
+- **Default-export components:**
+  - `client/globe/index.tsx` exports `Globe` (T17).
+  - `client/hud/index.tsx` exports `Hud` (T18). It takes a `missions?: ReactNode` prop.
+  - `client/hud/missions/index.tsx` exports `MissionsPanel` (T21).
+  - `client/agent/index.tsx` exports `AgentOrb` (T14).
+  - The driver composes them in `app/page.tsx` through `AppShell` slots.
+- **Frame grid:** a `FrameGrid` from `@calvinjs/active-state/threads` (EVF2 shape). Layers read `hotspot(i, s)`, `lst(i)` and `sst(i)`. The frame index is derived from TIME.
+
 ## Tree
 
 - 1 Everglades Ops (`GATES.md`)
