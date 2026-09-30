@@ -1,0 +1,314 @@
+{
+  "scene": "cold-snap-2026-02-01",
+  "title": "South Florida cold snap, 30 Jan - 3 Feb 2026",
+  "window": {
+    "from": "2026-01-30T00:00:00Z",
+    "to": "2026-02-04T00:00:00Z"
+  },
+  "recorded_at": "2026-09-30T21:20:04Z",
+  "replay_at": "2026-02-04T00:00:00Z",
+  "files": [
+    {
+      "source": "inat",
+      "file": "inat/focus-p1.json.gz",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252,318758,35342,47284&d1=2026-01-30&d2=2026-02-03&order_by=id&order=asc&per_page=200",
+      "content_type": "application/json"
+    },
+    {
+      "source": "openmeteo",
+      "file": "openmeteo/archive.json.gz",
+      "url": "https://archive-api.open-meteo.com/v1/archive?latitude=24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425&longitude=-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825&hourly=temperature_2m,precipitation,wind_speed_10m&wind_speed_unit=ms&timeformat=unixtime&timezone=GMT&start_date=2026-01-30&end_date=2026-02-03",
+      "content_type": "application/json"
+    },
+    {
+      "source": "openmeteo",
+      "file": "openmeteo/marine.json.gz",
+      "url": "https://marine-api.open-meteo.com/v1/marine?latitude=24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.425,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.675,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,24.925,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.175,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.425,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.675,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,25.925,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.175,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.425,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.675,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,26.925,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.175,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425,27.425&longitude=-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825,-83.075,-82.825,-82.575,-82.325,-82.075,-81.825,-81.575,-81.325,-81.075,-80.825,-80.575,-80.325,-80.075,-79.825&hourly=wave_height,sea_surface_temperature&timeformat=unixtime&timezone=GMT&start_date=2026-01-30&end_date=2026-02-03&cell_selection=nearest",
+      "content_type": "application/json"
+    },
+    {
+      "source": "usgs",
+      "file": "usgs/iv-p1.json.gz",
+      "url": "https://nwis.waterservices.usgs.gov/nwis/iv/?format=json&sites=02281200,02286352,02286366,02287497,02289019,02289035,02289041,02289500,0229070825,0229070834,0229070836,0229070854,02290709,022907647,02290765,02290766,02290767,02290768,02290769,022908205,022908295,02290878,02290888,02290918,02290930,02291001,02291200,250802081035500,251003080435500,251032080473400,251033080440800,251115081075800,251127080382100,251152080370900,251154080471900,251203080480600,251209080350100,251241080385300,251253080320100,251341080291200,251433080265000,251457080395802,251549080251200,251716080342100,251946080254800,252036080324300,252230081021300,252551081050900,252653080273001,252654080220201,252820080505401,253044080555900,253047080555600,253256080205103,253335080213501,253413080225301,253417080224301,253522080225101,253644081013001,253828080391100,254016080170201,254120080170500,254130080380500,254150080215503,254153080213903,254153080213904,254154080213702,254154080213703,254155080243501,254155080243502,254157080213800,254158080212204,254315080331500,254344081095101,254540080325700,254540080361500,254543080405401,254543080491101,254612080365801,254614080375701,254614080385001,254645080394401,254707080370201,254711080392601,254723080380401,254729080393601,254754080344300,254759080483201,254760080395601,254817080394001,254838080155301,254848080432001,254903080385101,254923080384901,254929080170101,254940080384001,255014080355801,255022080370201,255026080231300,255035080365201&parameterCd=00065,62614,62615,00010&startDT=2026-01-30T00:00:00Z&endDT=2026-02-04T00:00:00Z",
+      "content_type": "application/json"
+    },
+    {
+      "source": "usgs",
+      "file": "usgs/iv-p2.json.gz",
+      "url": "https://nwis.waterservices.usgs.gov/nwis/iv/?format=json&sites=255116080120701,255151080371501,255154080371300,255154080371303,255200080405001,255250080335001,255300080370001,255309080354401,255325080355201,255327081275900,255338080353701,255634080450001,255708080295501,255828080401301,260007080464401,260037080303401,260042080351701,260355080541401,260410080452701,260536080302501,260725080451001,260810080222001,261023080443001,261035080221701,261117080315201,261150080270001,261200080275001,261300080280001,261319080353201,261533080571600,261543080495000,261710080190001,261808081042800,262038080584600,262100080190001,262200080210001,262240080258001,262258080273501,262300080220001,262528080202700,262750080175001,263000080120001,263050080145001&parameterCd=00065,62614,62615,00010&startDT=2026-01-30T00:00:00Z&endDT=2026-02-04T00:00:00Z",
+      "content_type": "application/json"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601301138-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301138-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601301745-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301745-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601301831-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301831-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601301914-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301914-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601310631-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601310631-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601311859-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601311859-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601310848-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601310848-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202601312106-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601312106-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602011546-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602011546-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602010354-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602010354-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602010903-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602010903-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602011505-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602011505-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602012057-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602012057-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602020004-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020004-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602020107-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020107-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602021351-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021351-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602021517-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021517-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602021753-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021753-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602020858-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020858-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602021419-KKEY-WWUS72-NPWKEY.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021419-KKEY-WWUS72-NPWKEY",
+      "content_type": "application/xml"
+    },
+    {
+      "source": "nwws",
+      "file": "nws/202602031417-KMFL-WWUS72-NPWMFL.xml",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602031417-KMFL-WWUS72-NPWMFL",
+      "content_type": "application/xml"
+    }
+  ],
+  "originals": [
+    {
+      "source": "usgs",
+      "file": "usgs/sites.rdb",
+      "url": "https://waterservices.usgs.gov/nwis/site/?format=rdb&bBox=-81.5,25.0,-80.2,26.5&parameterCd=00065,62614,62615,00010&siteStatus=active&hasDataTypeCd=iv",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/iem/vtec_events_bywfo-MFL-2026.json.gz",
+      "url": "https://mesonet.agron.iastate.edu/json/vtec_events_bywfo.py?wfo=MFL&year=2026",
+      "content_type": "application/json"
+    },
+    {
+      "source": "nws",
+      "file": "nws/iem/vtec_events_bywfo-KEY-2026.json.gz",
+      "url": "https://mesonet.agron.iastate.edu/json/vtec_events_bywfo.py?wfo=KEY&year=2026",
+      "content_type": "application/json"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601301138-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301138-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601301745-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301745-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601301831-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301831-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601301914-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601301914-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601310631-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601310631-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601311859-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601311859-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601310848-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601310848-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202601312106-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202601312106-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602011546-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602011546-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602010354-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602010354-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602010903-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602010903-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602011505-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602011505-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602012057-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602012057-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602020004-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020004-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602020107-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020107-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602021351-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021351-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602021517-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021517-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602021753-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021753-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602020858-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602020858-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602021419-KKEY-WWUS72-NPWKEY.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602021419-KKEY-WWUS72-NPWKEY",
+      "content_type": "text/plain"
+    },
+    {
+      "source": "nws",
+      "file": "nws/raw/202602031417-KMFL-WWUS72-NPWMFL.txt",
+      "url": "https://mesonet.agron.iastate.edu/api/1/nwstext/202602031417-KMFL-WWUS72-NPWMFL",
+      "content_type": "text/plain"
+    }
+  ]
+}

@@ -1,13 +1,18 @@
 //! `inversa-api backfill` subcommand (T9, PRD §6):
 //!
 //! ```text
-//! inversa-api backfill [--days N] [--baseline-years Y] [--dry-run] [--fixtures]
+//! inversa-api backfill [--days N] [--baseline-years Y] [--dry-run] [--fixtures | --scene NAME]
 //! ```
 //!
 //! - `--days N` (default 30): iNat observations updated in the last N days.
 //! - `--baseline-years Y` (default 5): NAS and GBIF records observed in the last Y years.
 //! - `--fixtures`: instead of the network, feed the recorded payloads in `api/fixtures/{inat,nas,gbif}`
 //!   (listed by each directory's `manifest.json`; `INVERSA_FIXTURES_DIR` overrides the root).
+//! - `--scene NAME`: replay a recorded scene, `<fixtures root>/scenes/NAME/manifest.json`
+//!   ([`SceneManifest`]): payloads from several sources over one time window, fed in manifest
+//!   order through the same pipeline. Files ending `.gz` are inflated first; every payload gets
+//!   the scene's `replay_at` as its fetch time (the true retrieval time is `recorded_at`), so
+//!   adapters that judge staleness against the fetch time see the window as current.
 //! - `--dry-run`: run the whole pipeline against an in-memory database and archive, so nothing
 //!   is persisted; the counts are measured from that database.
 //!
@@ -16,10 +21,12 @@
 //! Network pages are paced by each source's 1 s pacer and a per-source governor that backs off on
 //! 429/5xx and honours `Retry-After`.
 //!
-//! Output: one line per source with measured counts, then `BACKFILL-DRY-RUN-OK` (dry run) or
-//! `BACKFILL-OK`.
+//! Output: one line per source with measured counts (a scene adds one line of sightings,
+//! readings, sub-10 °C air readings and alerts measured in its window), then
+//! `BACKFILL-DRY-RUN-OK` (dry run) or `BACKFILL-OK`.
 
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Context;
@@ -31,6 +38,9 @@ use crate::ingest::poll::bio::{self, Pacer, Pager};
 use crate::ingest::poll::gbif::{self, Gbif, GbifPager};
 use crate::ingest::poll::inat::{self, Inat, InatPager};
 use crate::ingest::poll::nas::{self, Nas, NasPager};
+use crate::ingest::poll::openmeteo::OpenMeteo;
+use crate::ingest::poll::usgs::Usgs;
+use crate::ingest::push::nwws::Nwws;
 use crate::ingest::scheduler::{ingest_payload, RunStatus};
 use crate::ingest::source::{RawPayload, Source};
 use crate::state::AppState;
@@ -44,12 +54,20 @@ pub struct Args {
     pub baseline_years: u32,
     pub dry_run: bool,
     pub fixtures: bool,
+    pub scene: Option<String>,
 }
 
 impl Default for Args {
     fn default() -> Self {
-        Args { days: 30, baseline_years: 5, dry_run: false, fixtures: false }
+        Args { days: 30, baseline_years: 5, dry_run: false, fixtures: false, scene: None }
     }
+}
+
+const USAGE: &str = "usage: backfill [--days N] [--baseline-years Y] [--dry-run] [--fixtures | --scene NAME]";
+
+/// A scene name is one directory under `fixtures/scenes`: lowercase letters, digits and dashes.
+fn valid_scene_name(s: &str) -> bool {
+    !s.is_empty() && !s.starts_with('-') && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 pub fn parse_args(args: &[String]) -> anyhow::Result<Args> {
@@ -71,9 +89,15 @@ pub fn parse_args(args: &[String]) -> anyhow::Result<Args> {
             "--baseline-years" => out.baseline_years = value("--baseline-years")?,
             "--dry-run" if inline.is_none() => out.dry_run = true,
             "--fixtures" if inline.is_none() => out.fixtures = true,
-            _ => anyhow::bail!("unknown argument {a}; usage: backfill [--days N] [--baseline-years Y] [--dry-run] [--fixtures]"),
+            "--scene" => {
+                let v = inline.clone().or_else(|| it.next().cloned()).context("--scene needs a value")?;
+                anyhow::ensure!(valid_scene_name(&v), "--scene: not a scene name: {v:?}");
+                out.scene = Some(v);
+            }
+            _ => anyhow::bail!("unknown argument {a}; {USAGE}"),
         }
     }
+    anyhow::ensure!(!(out.fixtures && out.scene.is_some()), "--fixtures and --scene are exclusive; {USAGE}");
     Ok(out)
 }
 
@@ -127,6 +151,32 @@ pub async fn measure(state: &AppState, source_id: &'static str) -> anyhow::Resul
 pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
     let args = parse_args(args)?;
     let target = if args.dry_run { AppState::memory((*state.config).clone()) } else { state };
+    if let Some(name) = &args.scene {
+        let scene = ingest_scene(&target, &fixtures_root().join("scenes").join(name)).await?;
+        let (from, to) = scene.window;
+        let mut errors = 0;
+        for (id, t) in &scene.tallies {
+            errors += t.errors;
+            println!(
+                "{id}: payloads={} rows_in={} written={} skipped={} errors={}",
+                t.payloads, t.rows_in, t.rows_written, t.rows_skipped, t.errors
+            );
+        }
+        let c = measure_window(&target, from, to).await?;
+        println!(
+            "scene {name} [{}, {}): sightings={} readings={} air_below_10c={} alerts={}",
+            bio::rfc3339_utc(from),
+            bio::rfc3339_utc(to),
+            c.sightings,
+            c.readings,
+            c.air_below_10c,
+            c.alerts
+        );
+        anyhow::ensure!(errors == 0, "{errors} payloads failed to normalize (see fetch_runs)");
+        println!("{}", if args.dry_run { "BACKFILL-DRY-RUN-OK" } else { "BACKFILL-OK" });
+        return Ok(());
+    }
+
     let (inat_src, nas_src, gbif_src) = (Inat::new(), Nas::new(), Gbif::new());
 
     let tallies: Vec<(&'static str, Tally)> = if args.fixtures {
@@ -211,6 +261,147 @@ pub async fn ingest_fixtures(state: &AppState, source: &dyn Source, root: &std::
     Ok(tally)
 }
 
+/// `fixtures/scenes/<name>/manifest.json`, written by the scene's `fetch.sh`. Extra keys
+/// (`title`, `originals`: provenance files that are not ingested) are ignored here.
+#[derive(Deserialize)]
+pub struct SceneManifest {
+    pub scene: String,
+    pub window: SceneWindow,
+    /// When the payloads were retrieved from upstream.
+    pub recorded_at: String,
+    /// The fetch time every payload is replayed with.
+    pub replay_at: String,
+    /// Ingested payloads, in load order.
+    pub files: Vec<SceneFile>,
+}
+
+#[derive(Deserialize)]
+pub struct SceneWindow {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Deserialize)]
+pub struct SceneFile {
+    /// Source id whose `normalize` reads the payload.
+    pub source: String,
+    /// Path relative to the scene directory; `.gz` is inflated before ingest.
+    pub file: String,
+    /// Where the payload came from, stored as the raw object's source URL.
+    pub url: String,
+    pub content_type: String,
+}
+
+pub struct SceneOutcome {
+    /// `[from, to)` in unix ms.
+    pub window: (i64, i64),
+    /// Per source, in order of first appearance in the manifest.
+    pub tallies: Vec<(&'static str, Tally)>,
+}
+
+fn rfc3339_ms(s: &str, what: &str) -> anyhow::Result<i64> {
+    Ok(chrono::DateTime::parse_from_rfc3339(s).with_context(|| format!("{what}: {s:?}"))?.timestamp_millis())
+}
+
+/// The source a scene payload is replayed through. Only `normalize` runs, so no source starts
+/// a connection (the NWWS XMPP session is opened by `fetch`, never called here).
+fn scene_source(id: &str) -> anyhow::Result<Box<dyn Source>> {
+    Ok(match id {
+        inat::ID => Box::new(Inat::new()),
+        nas::ID => Box::new(Nas::new()),
+        gbif::ID => Box::new(Gbif::new()),
+        "openmeteo" => Box::new(OpenMeteo::new()),
+        "usgs" => Box::new(Usgs::new()),
+        "nwws" => Box::new(Nwws::new(String::new(), None)),
+        other => anyhow::bail!("scene: no replay source for {other:?}"),
+    })
+}
+
+fn read_payload(path: &Path) -> anyhow::Result<Vec<u8>> {
+    let bytes = std::fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    if path.extension().is_some_and(|e| e == "gz") {
+        let mut out = Vec::with_capacity(bytes.len() * 8);
+        flate2::read::GzDecoder::new(bytes.as_slice()).read_to_end(&mut out).with_context(|| format!("gunzip {}", path.display()))?;
+        return Ok(out);
+    }
+    Ok(bytes)
+}
+
+/// Replay a scene directory through `ingest_payload`, one manifest file at a time.
+pub async fn ingest_scene(state: &AppState, dir: &Path) -> anyhow::Result<SceneOutcome> {
+    let manifest_path = dir.join("manifest.json");
+    let m: SceneManifest = serde_json::from_slice(
+        &std::fs::read(&manifest_path).with_context(|| format!("read {}", manifest_path.display()))?,
+    )
+    .with_context(|| format!("parse {}", manifest_path.display()))?;
+    let dir_name = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    anyhow::ensure!(m.scene == dir_name, "{}: scene {:?} in directory {dir_name:?}", manifest_path.display(), m.scene);
+    let (from, to) = (rfc3339_ms(&m.window.from, "window.from")?, rfc3339_ms(&m.window.to, "window.to")?);
+    anyhow::ensure!(from < to, "{}: empty window", manifest_path.display());
+    rfc3339_ms(&m.recorded_at, "recorded_at")?;
+    let fetched_at = rfc3339_ms(&m.replay_at, "replay_at")?;
+    anyhow::ensure!(!m.files.is_empty(), "{}: no files", manifest_path.display());
+
+    let mut sources: Vec<(&'static str, Box<dyn Source>, Tally)> = Vec::new();
+    for f in &m.files {
+        let rel = Path::new(&f.file);
+        anyhow::ensure!(
+            rel.components().all(|c| matches!(c, std::path::Component::Normal(_))),
+            "{}: file {:?} leaves the scene directory",
+            manifest_path.display(),
+            f.file
+        );
+        let slot = match sources.iter().position(|(id, _, _)| *id == f.source) {
+            Some(i) => i,
+            None => {
+                let src = scene_source(&f.source)?;
+                sources.push((src.info().id, src, Tally::default()));
+                sources.len() - 1
+            }
+        };
+        let raw = RawPayload {
+            source_url: f.url.clone(),
+            content_type: f.content_type.clone(),
+            bytes: read_payload(&dir.join(rel))?,
+            http_status: Some(200),
+            fetched_at,
+            next_cursor: None,
+            ack: None,
+        };
+        let out = ingest_payload(state, sources[slot].1.as_ref(), raw, None).await?;
+        sources[slot].2.add(&out);
+    }
+    Ok(SceneOutcome { window: (from, to), tallies: sources.into_iter().map(|(id, _, t)| (id, t)).collect() })
+}
+
+/// Rows of every source inside `[from, to)`: sightings and readings observed in it, alerts in
+/// effect during it.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct WindowCounts {
+    pub sightings: i64,
+    pub readings: i64,
+    pub air_below_10c: i64,
+    pub alerts: i64,
+}
+
+pub async fn measure_window(state: &AppState, from: i64, to: i64) -> anyhow::Result<WindowCounts> {
+    state
+        .obs
+        .read(move |c| {
+            c.query_row(
+                "select
+                   (select count(*) from sightings where observed_at >= ?1 and observed_at < ?2),
+                   (select count(*) from readings where observed_at >= ?1 and observed_at < ?2),
+                   (select count(*) from readings where param = 'air_c' and flag = 'ok' and value < 10.0
+                      and observed_at >= ?1 and observed_at < ?2),
+                   (select count(*) from alerts where onset < ?2 and coalesce(expires, onset) >= ?1)",
+                [from, to],
+                |r| Ok(WindowCounts { sightings: r.get(0)?, readings: r.get(1)?, air_below_10c: r.get(2)?, alerts: r.get(3)? }),
+            )
+        })
+        .await
+}
+
 /// Real paginated backfill of one source: each page is fetched (paced, governed, retried) and
 /// committed before the next is requested, so memory stays at one page.
 async fn walk(state: &AppState, source: &dyn Source, pacer: &Pacer, pager: &mut dyn Pager) -> anyhow::Result<Tally> {
@@ -269,8 +460,17 @@ mod tests {
         assert_eq!(parse_args(&[]).unwrap(), Args::default());
         assert_eq!(
             parse_args(&s(&["--days", "7", "--baseline-years=2", "--dry-run", "--fixtures"])).unwrap(),
-            Args { days: 7, baseline_years: 2, dry_run: true, fixtures: true }
+            Args { days: 7, baseline_years: 2, dry_run: true, fixtures: true, scene: None }
         );
+        assert_eq!(
+            parse_args(&s(&["--scene", "cold-snap-2026-02-01", "--dry-run"])).unwrap(),
+            Args { dry_run: true, scene: Some("cold-snap-2026-02-01".into()), ..Args::default() }
+        );
+        assert_eq!(parse_args(&s(&["--scene=a1"])).unwrap().scene.as_deref(), Some("a1"));
+        assert!(parse_args(&s(&["--scene"])).is_err());
+        assert!(parse_args(&s(&["--scene", "../inat"])).is_err());
+        assert!(parse_args(&s(&["--scene", "Cold"])).is_err());
+        assert!(parse_args(&s(&["--scene", "x", "--fixtures"])).is_err());
         assert!(parse_args(&s(&["--days"])).is_err());
         assert!(parse_args(&s(&["--days", "x"])).is_err());
         assert!(parse_args(&s(&["--days", "0"])).is_err());
@@ -299,5 +499,117 @@ mod tests {
             let again = ingest_fixtures(&state, src, &root).await.unwrap();
             assert_eq!(again.rows_written, 0, "{}", src.info().id);
         }
+    }
+
+    /// The recorded cold snap of 30 Jan - 3 Feb 2026 (see the scene's fetch.sh and
+    /// docs/demo-script.md): real iNat, Open-Meteo archive, USGS and NWS Miami/Key West payloads.
+    #[tokio::test]
+    async fn scene_cold_snap() {
+        use crate::hotspot::rules::IGUANA_COLD_STUN_BOOST;
+        use crate::hotspot::score::{explain, testkit::ms, Explain};
+        use crate::hotspot::{Grid, Species};
+
+        let state = test_state();
+        let dir = fixtures_root().join("scenes").join("cold-snap-2026-02-01");
+        let scene = ingest_scene(&state, &dir).await.unwrap();
+        let (from, to) = scene.window;
+        assert_eq!((from, to), (ms(2026, 1, 30, 0), ms(2026, 2, 4, 0)));
+        let ids: Vec<&str> = scene.tallies.iter().map(|(id, _)| *id).collect();
+        assert_eq!(ids, ["inat", "openmeteo", "usgs", "nwws"]);
+        // Measured: 141 iNat observations, all green iguana (one filed as the nominate subspecies);
+        // no python, tegu or lionfish reports in the bbox those days. Open-Meteo 182 grid
+        // points x 3 variables x 120 h plus the marine points; USGS 15-minute series; 21 NPW products.
+        let rows_in: Vec<(&str, usize, usize, usize)> =
+            scene.tallies.iter().map(|(id, t)| (*id, t.payloads, t.rows_in, t.errors)).collect();
+        assert_eq!(rows_in, [("inat", 1, 141, 0), ("openmeteo", 2, 95_520, 0), ("usgs", 2, 71_167, 0), ("nwws", 21, 110, 0)]);
+        let counts = measure_window(&state, from, to).await.unwrap();
+        assert_eq!(counts, WindowCounts { sightings: 138, readings: 165_951, air_below_10c: 5_328, alerts: 42 });
+        assert!(counts.air_below_10c > 0, "no sub-10 °C air readings in the window");
+
+        // The NWS Miami products of the night of 31 Jan - 1 Feb.
+        let events: Vec<String> = state
+            .obs
+            .read(|c| {
+                let mut st = c.prepare("select distinct event from alerts where source_id = 'nwws' order by event")?;
+                let rows = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<String>>>()?;
+                Ok(rows)
+            })
+            .await
+            .unwrap();
+        for e in ["Extreme Cold Warning", "Freeze Warning", "Cold Weather Advisory"] {
+            assert!(events.iter().any(|x| x == e), "{e} missing from {events:?}");
+        }
+
+        // Cell 292:142 (25.725 N, 80.275 W, Coral Gables / South Miami): iguana reports on the
+        // cold morning of 1 Feb, from 15:40 UTC (10:40 EST) on.
+        let cell = "292:142";
+        let idx = Grid::REGION.parse_cell(cell).unwrap();
+        let (lon, lat) = Grid::REGION.center(idx);
+        let (cold, warm) = (ms(2026, 2, 1, 17), ms(2026, 2, 3, 19));
+        let sightings_before_cold: i64 = state
+            .obs
+            .read(move |c| {
+                c.query_row(
+                    "select count(*) from sightings where taxon_id = ?1 and observed_at >= ?2 and observed_at < ?3
+                       and lat >= ?4 and lat < ?5 and lon >= ?6 and lon < ?7",
+                    rusqlite::params![Species::Iguana.taxon_id(), ms(2026, 2, 1, 5), cold, lat - 0.005, lat + 0.005, lon - 0.005, lon + 0.005],
+                    |r| r.get(0),
+                )
+            })
+            .await
+            .unwrap();
+        assert_eq!(sightings_before_cold, 3);
+
+        let term = |ex: &Explain, name: &str| ex.terms.iter().find(|t| t.name == name).cloned().unwrap();
+        let stun = "activity.iguana_cold_stun_easy_capture_window";
+
+        // 12:00 EST on 1 Feb: the nearest Open-Meteo archive point (25.675 N, 80.325 W) reads 7.0 °C.
+        let at_cold = explain(&state.obs, cell, Species::Iguana, cold).await.unwrap();
+        assert!(term(&at_cold, "density").value > 0.0);
+        assert!(term(&at_cold, stun).value > 1.0);
+        assert_eq!(term(&at_cold, stun).value, IGUANA_COLD_STUN_BOOST);
+        assert!(term(&at_cold, "conditions").rationale.starts_with("air_c 7.0,"), "{:?}", term(&at_cold, "conditions"));
+
+        // 14:00 EST on 3 Feb, after the rebound: 19.1 °C, no stun window, same reports.
+        let at_warm = explain(&state.obs, cell, Species::Iguana, warm).await.unwrap();
+        assert!(term(&at_warm, "density").value > 0.0, "the 1 Feb reports still weigh on 3 Feb");
+        assert_eq!(term(&at_warm, stun).value, 1.0);
+        assert!(term(&at_warm, "conditions").rationale.starts_with("air_c 19.1,"), "{:?}", term(&at_warm, "conditions"));
+
+        // Replaying the scene again changes nothing. Sightings and readings are untouched; each
+        // NWS product re-applies its update to the event rows it continues, and the last product
+        // of each event leaves the row where the first replay did.
+        let alerts = |state: AppState| async move {
+            state
+                .obs
+                .read(|c| {
+                    let mut st = c.prepare("select ext_id, event, severity, headline, onset, expires from alerts order by ext_id")?;
+                    let rows = st
+                        .query_map([], |r| {
+                            Ok(format!(
+                                "{}|{}|{}|{:?}|{:?}|{:?}",
+                                r.get::<_, String>(0)?,
+                                r.get::<_, String>(1)?,
+                                r.get::<_, String>(2)?,
+                                r.get::<_, Option<String>>(3)?,
+                                r.get::<_, Option<i64>>(4)?,
+                                r.get::<_, Option<i64>>(5)?
+                            ))
+                        })?
+                        .collect::<rusqlite::Result<Vec<_>>>()?;
+                    Ok(rows)
+                })
+                .await
+                .unwrap()
+        };
+        let before = alerts(state.clone()).await;
+        let again = ingest_scene(&state, &dir).await.unwrap();
+        for (id, t) in &again.tallies {
+            if *id != "nwws" {
+                assert_eq!(t.rows_written, 0, "{id}");
+            }
+        }
+        assert_eq!(alerts(state.clone()).await, before);
+        assert_eq!(measure_window(&state, from, to).await.unwrap(), counts);
     }
 }

@@ -135,6 +135,14 @@ export function parseHotspotId(id: string): HotspotRef | null {
   return { species: m[1]!, cell: `${m[2]}:${m[3]}`, col: Number(m[2]), row: Number(m[3]), at: new Date(ms).toISOString() };
 }
 
+/** `backtest:<species>:<days>` (PLAN.md C14) → parts, or null. */
+export function parseBacktestId(id: string): { species: string; days: number } | null {
+  const parsed = parseEvidenceId(id);
+  if (!parsed || parsed.kind !== "backtest") return null;
+  const m = /^([a-z_]+):(\d{1,3})$/.exec(parsed.key);
+  return m && Number(m[2]) > 0 ? { species: m[1]!, days: Number(m[2]) } : null;
+}
+
 export function cellCenter(col: number, row: number): { lon: number; lat: number } {
   return { lon: REGION_BBOX.west + (col + 0.5) * CELL_DEG, lat: REGION_BBOX.south + (row + 0.5) * CELL_DEG };
 }

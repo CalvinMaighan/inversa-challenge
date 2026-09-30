@@ -46,7 +46,7 @@ describe("shared contracts", () => {
     const layout = evfFrameLayout(h);
     expect(layout.lstOffset % 2).toBe(0);
     expect(layout.sightingsOffset % 4).toBe(0);
-    expect(evfFrameBytes(h, 3)).toBe(layout.sightingsOffset + 4 + 36);
+    expect(evfFrameBytes(h, 3)).toBe(layout.sightingsOffset + 4 + 3 * 16);
     expect(ENV_MISSING).toBe(-32768);
   });
 

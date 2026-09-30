@@ -8,9 +8,8 @@ import type { FrameGrid } from "@calvinjs/active-state/threads";
 import type { LayerId, LayersState } from "client/state/layers";
 import type { MissionsState } from "client/state/missions";
 import type { Peer } from "client/state/peers";
-import type { GqlVariables } from "client/threads/api";
-
-import type { FrameTimeline } from "../api";
+import type { FrameMeta, GqlVariables } from "client/threads/api";
+import type { SightingRecord } from "shared/frames";
 
 /** The slice of a Cesium widget a layer touches. A fake with an array-backed collection passes in tests. */
 export type GlobeViewer = {
@@ -41,8 +40,12 @@ export type LayerContext = {
   /** TIME cursor, unix ms. */
   timeMs(): number;
   playing(): boolean;
-  /** Frame timing and sightings for the published grid, or an assumed timeline. */
-  timeline(): FrameTimeline | null;
+  /** Time axis and placement of the published grid (C16), or null before one is published. */
+  meta(): FrameMeta | null;
+  /** Decoded EVF2 sighting records of frame `i` (C16 FrameSightings); empty when none are published. */
+  sightings(frame: number): readonly SightingRecord[];
+  /** Bumped whenever a grid, meta or sightings set is published, so layers can key redraws on it. */
+  revision(): number;
   layers(): LayersState;
   missions(): MissionsState;
   peers(): readonly Peer[];

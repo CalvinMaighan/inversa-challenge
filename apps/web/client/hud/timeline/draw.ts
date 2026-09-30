@@ -3,9 +3,11 @@
  * Runs when its inputs change (window, grid version, counts, alerts, size, theme), never per scrub step: the
  * scrub cursor is the range input's thumb on top of the canvas.
  */
+import type { FrameMeta } from "client/threads/api";
+
 import type { AlertBand } from "./alerts";
 import { severityToken } from "./alerts";
-import { frameTimeMs } from "./frames";
+import { framesSpanMs } from "./frames";
 import { gapSegments, type GapKind } from "./gaps";
 import { bucketCounts, sparkY } from "./sparkline";
 
@@ -14,7 +16,8 @@ export type TrackColors = Record<"text" | "muted" | "accent" | "warn" | "danger"
 export type TrackData = {
   fromMs: number;
   toMs: number;
-  frameCount: number;
+  /** Time axis of the grid that `flags` and `counts` index; null without a grid. */
+  meta: FrameMeta | null;
   flags: Uint8Array | null;
   counts: ArrayLike<number> | null;
   bands: readonly AlertBand[];
@@ -97,20 +100,26 @@ export function drawTrack(ctx: CanvasRenderingContext2D, width: number, dpr: num
   }
   ctx.globalAlpha = 1;
 
-  // Sighting sparkline.
-  if (data.counts && data.counts.length > 0) {
-    const n = data.counts.length;
-    const buckets = bucketCounts(data.counts, Math.min(n, Math.max(1, Math.floor(width / 2))));
+  // Sighting sparkline, over the part of the window the grid covers. Clipped to the window.
+  const meta = data.meta;
+  if (meta && data.counts && data.counts.length > 0) {
+    const n = Math.min(data.counts.length, meta.frameCount);
+    const [s0, s1] = framesSpanMs(0, n, meta);
+    const gx0 = x(s0);
+    const gw = x(s1) - gx0;
+    const buckets = bucketCounts(n === data.counts.length ? data.counts : Array.from({ length: n }, (_, i) => data.counts![i]!), Math.min(n, Math.max(1, Math.floor(gw / 2))));
     const b = buckets.values.length;
     const top = TRACK.sparkTop;
     const bottom = top + TRACK.sparkHeight;
+    const px = (k: number) => gx0 + ((k + 0.5) / b) * gw;
+    ctx.save();
     ctx.beginPath();
-    ctx.moveTo(0, bottom);
-    for (let k = 0; k < b; k++) {
-      const px = ((k + 0.5) / b) * width;
-      ctx.lineTo(px, top + sparkY(buckets.values[k], buckets.max, TRACK.sparkHeight));
-    }
-    ctx.lineTo(width, bottom);
+    ctx.rect(0, 0, width, h);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.moveTo(gx0, bottom);
+    for (let k = 0; k < b; k++) ctx.lineTo(px(k), top + sparkY(buckets.values[k], buckets.max, TRACK.sparkHeight));
+    ctx.lineTo(gx0 + gw, bottom);
     ctx.closePath();
     ctx.globalAlpha = 0.25;
     ctx.fillStyle = colors.accent;
@@ -120,22 +129,22 @@ export function drawTrack(ctx: CanvasRenderingContext2D, width: number, dpr: num
     ctx.lineWidth = 1.25;
     ctx.beginPath();
     for (let k = 0; k < b; k++) {
-      const px = ((k + 0.5) / b) * width;
       const py = top + sparkY(buckets.values[k], buckets.max, TRACK.sparkHeight);
-      if (k === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
+      if (k === 0) ctx.moveTo(px(k), py);
+      else ctx.lineTo(px(k), py);
     }
     ctx.stroke();
+    ctx.restore();
   }
 
   // Gaps: hatched, never interpolated. Env outages hatch the whole track; the rest their own lane.
-  if (data.flags && data.frameCount > 0) {
-    const n = data.frameCount;
-    const half = n > 1 ? span / (n - 1) / 2 : span / 2;
-    const segX = (start: number, end: number): [number, number] => {
-      const x0 = Math.max(0, x(frameTimeMs(start, data.fromMs, data.toMs, n) - half));
-      const x1 = Math.min(width, x(frameTimeMs(end - 1, data.fromMs, data.toMs, n) + half));
-      return [x0, Math.max(x0 + 1, x1)];
+  if (meta && data.flags && meta.frameCount > 0) {
+    /** Pixel span of frames `[start, end)`, or null when it lies outside the window. */
+    const segX = (start: number, end: number): [number, number] | null => {
+      const [s0, s1] = framesSpanMs(start, end, meta);
+      if (s1 <= data.fromMs || s0 >= data.toMs) return null;
+      const x0 = Math.max(0, x(s0));
+      return [x0, Math.max(x0 + 1, Math.min(width, x(s1)))];
     };
     const patterns: Partial<Record<GapKind, CanvasPattern | null>> = {
       env: hatchPattern(ctx, colors.danger, false, dpr),
@@ -143,7 +152,9 @@ export function drawTrack(ctx: CanvasRenderingContext2D, width: number, dpr: num
       quiet: hatchPattern(ctx, colors.muted, true, dpr),
     };
     for (const seg of gapSegments(data.flags)) {
-      const [x0, x1] = segX(seg.start, seg.end);
+      const range = segX(seg.start, seg.end);
+      if (!range) continue;
+      const [x0, x1] = range;
       if (seg.kind === "unloaded") {
         ctx.globalAlpha = 0.18;
         ctx.fillStyle = colors.muted;

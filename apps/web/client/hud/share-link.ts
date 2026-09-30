@@ -17,7 +17,7 @@
  */
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
-import { isEvidenceId } from "./selection";
+import { parseEvidenceId } from "client/state/selection";
 
 export type LayerId = (typeof LAYER_IDS)[number];
 export type SpeciesId = (typeof SPECIES_IDS)[number];
@@ -76,7 +76,7 @@ export function encodeShareLink(state: ShareState): string {
   if (state.species && state.species.length < SPECIES_IDS.length) {
     params.set("sp", SPECIES_IDS.filter((id) => state.species!.includes(id)).join(","));
   }
-  if (state.evidenceId && isEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
+  if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
   // link stays readable.
   return params.toString().replace(/%2C/g, ",").replace(/%3A/g, ":");
@@ -118,7 +118,7 @@ export function decodeShareLink(hash: string): ShareState {
   const species = decodeList(params.get("sp"), SPECIES_IDS);
   if (species) out.species = species;
   const e = params.get("e");
-  if (e && isEvidenceId(e)) out.evidenceId = e;
+  if (e && parseEvidenceId(e)) out.evidenceId = e;
   return out;
 }
 

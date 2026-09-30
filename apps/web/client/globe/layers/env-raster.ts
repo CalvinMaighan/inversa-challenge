@@ -72,8 +72,8 @@ function createEnvLayer(id: LayerId, ctx: LayerContext, read: (grid: FrameGrid, 
         return;
       }
       const { envCols, envRows } = grid.shape;
-      const bounds = gridBounds(grid.shape, ctx.timeline()?.geometry).env;
-      const key = `${frameIndex}|${grid.version()}|${grid.buffer.byteLength}|${boundsKey(bounds)}`;
+      const bounds = gridBounds(grid.shape, ctx.meta()?.geometry).env;
+      const key = `${frameIndex}|${grid.version()}|${grid.buffer.byteLength}|${boundsKey(bounds)}|${ctx.revision()}`;
       if (key === drawnKey) return;
       const sizeKey = `${envCols}x${envRows}@${boundsKey(bounds)}`;
       if (!surface || surfaceKey !== sizeKey) {

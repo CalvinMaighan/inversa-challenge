@@ -1,20 +1,21 @@
 /**
  * Development frames, so `next dev` shows a populated globe before the db worker (T19) publishes real ones.
- * Loads `spec/frames/sample.evf` through the dev-only `/dev/globe/sample-evf` route when it is EVF2, and
- * otherwise synthesises a day of 15-minute frames: species hotspots with diurnal activity, a cold front that
- * suppresses the reptiles late in the day, LST over land and SST over water with drifting cloud gaps, and a
- * trickle of sightings near the hotspots. Deterministic (seeded) so screenshots compare.
+ * Loads `spec/frames/sample.evf` through the dev-only `/dev/globe/sample-evf` route when it is a full-region
+ * EVF2 grid, and otherwise synthesises a week of hourly frames ending on the live edge: species hotspots with
+ * diurnal activity, a cold front that suppresses the reptiles late in the week, LST over land and SST over
+ * water with drifting cloud gaps, and a trickle of sightings near the hotspots. Deterministic (seeded).
  *
- * The caller gates this behind `process.env.NODE_ENV !== "production"`; nothing here ships in a build.
+ * The result is published through the C16 contract exactly as T19 will: `publishFrameSightings` and
+ * `publishFrameGrid(grid, meta)`. The caller gates this behind `process.env.NODE_ENV !== "production"`.
  */
 import { allocFrameGrid, type FrameGrid } from "@calvinjs/active-state/threads";
 
 import { REGION_BBOX } from "client/state/view";
-import { ENV_MISSING, EVF_SPECIES } from "shared/frames";
+import type { FrameMeta, FrameSightings } from "client/threads/api";
+import { ENV_MISSING, EVF_SPECIES, type SightingRecord } from "shared/frames";
 
-import type { FrameTimeline, SightingRecord } from "./api";
-import { gridFromEvf } from "./evf";
-import { assumedFrame0 } from "./frame-index";
+import { frameSightingsOf, gridFromEvf } from "./evf";
+import { C4_GEOMETRY } from "./geometry";
 
 export const DEV_SAMPLE_URL = "/dev/globe/sample-evf";
 
@@ -98,10 +99,32 @@ const BLOBS: readonly (readonly Blob[])[] = [
 /** Hour of peak activity (local, UTC−5) per species; lionfish do not follow the sun. */
 const PEAK_HOUR = [22, 13, 12, -1];
 
-export type FixtureFrames = { grid: FrameGrid; timeline: FrameTimeline };
+export type FixtureFrames = { grid: FrameGrid; meta: FrameMeta; sightings: FrameSightings };
 
-/** A synthetic day ending at `toMs`, one frame per `stepMs`. */
-export function syntheticFrames({ toMs, stepMs, frameCount, seed = 17 }: { toMs: number; stepMs: number; frameCount: number; seed?: number }): FixtureFrames {
+/** Synthetic sighting ids start here, far above any real `sightings.id` in a dev database. */
+export const SYNTHETIC_ID_BASE = 900_000_000;
+
+/** Start of the frame containing `toMs` minus `n - 1` steps: the window ends on the live edge. */
+export function liveEdgeFrame0(toMs: number, stepMinutes: number, frameCount: number): number {
+  const step = stepMinutes * 60_000;
+  return Math.floor(toMs / step) * step - Math.max(0, frameCount - 1) * step;
+}
+
+/** Wrap `v` into `[lo, lo + span)`, so drifting clouds re-enter the region. */
+const wrap = (v: number, lo: number, span: number) => lo + ((((v - lo) % span) + span) % span);
+
+/** Synthetic frames ending on the frame that contains `toMs`. Defaults: one hourly week. */
+export function syntheticFrames({
+  toMs,
+  stepMinutes = 60,
+  frameCount = 168,
+  seed = 17,
+}: {
+  toMs: number;
+  stepMinutes?: number;
+  frameCount?: number;
+  seed?: number;
+}): FixtureFrames {
   const grid = allocFrameGrid({
     frameCount,
     hsCols: HS_COLS,
@@ -111,7 +134,8 @@ export function syntheticFrames({ toMs, stepMs, frameCount, seed = 17 }: { toMs:
     envRows: ENV_ROWS,
     hotspotScale: 1 / 255,
   });
-  const frame0Ms = assumedFrame0(toMs, stepMs, frameCount);
+  const stepMs = stepMinutes * 60_000;
+  const frame0Ms = liveEdgeFrame0(toMs, stepMinutes, frameCount);
   const random = rng(seed);
   const land = new Uint8Array(ENV_COLS * ENV_ROWS);
   for (let r = 0; r < ENV_ROWS; r += 1) {
@@ -119,19 +143,22 @@ export function syntheticFrames({ toMs, stepMs, frameCount, seed = 17 }: { toMs:
       land[r * ENV_COLS + c] = onMainland(REGION_BBOX.west + (c + 0.5) * ENV_DEG, REGION_BBOX.south + (r + 0.5) * ENV_DEG) ? 1 : 0;
     }
   }
+  const spanLon = REGION_BBOX.east - REGION_BBOX.west;
+  const spanLat = REGION_BBOX.north - REGION_BBOX.south;
   const clouds = [0, 1, 2].map(() => ({
-    lon: REGION_BBOX.west + random() * 3.4,
-    lat: REGION_BBOX.south + random() * 3.2,
+    lon: REGION_BBOX.west + random() * spanLon,
+    lat: REGION_BBOX.south + random() * spanLat,
     dLon: 0.02 + random() * 0.03,
     dLat: -0.01 + random() * 0.02,
     radius: 0.25 + random() * 0.2,
   }));
   const sightings: SightingRecord[][] = [];
+  let nextId = SYNTHETIC_ID_BASE;
 
   for (let f = 0; f < frameCount; f += 1) {
     const t = frame0Ms + f * stepMs;
     const hourLocal = (((t / 3_600_000 - 5) % 24) + 24) % 24;
-    // Cold front sweeps in over the last third of the window, reaching 10 °C below normal.
+    // A cold front sweeps in over the last third of the window, reaching 12 °C below normal inland.
     const front = Math.min(1, Math.max(0, (f / frameCount - 0.62) / 0.3));
 
     for (let s = 0; s < EVF_SPECIES.length; s += 1) {
@@ -166,8 +193,8 @@ export function syntheticFrames({ toMs, stepMs, frameCount, seed = 17 }: { toMs:
         const lon = REGION_BBOX.west + (c + 0.5) * ENV_DEG;
         const i = r * ENV_COLS + c;
         const cloudy = clouds.some((k) => {
-          const dx = lon - (k.lon + k.dLon * f);
-          const dy = lat - (k.lat + k.dLat * f);
+          const dx = lon - wrap(k.lon + k.dLon * f, REGION_BBOX.west, spanLon);
+          const dy = lat - wrap(k.lat + k.dLat * f, REGION_BBOX.south, spanLat);
           return dx * dx + dy * dy < k.radius * k.radius;
         });
         const northFront = front * Math.min(1, Math.max(0, (lat - 24.3) / 1.6 + 0.3));
@@ -190,37 +217,39 @@ export function syntheticFrames({ toMs, stepMs, frameCount, seed = 17 }: { toMs:
         if (random() > blob.peak * 0.35 * (1 - 0.6 * front * (s < 3 ? 1 : 0))) continue;
         const jitter = () => (random() + random() + random() - 1.5) * blob.sigma;
         records.push({
+          id: nextId++,
           lon: blob.lon + jitter(),
           lat: blob.lat + jitter(),
           taxon: s + 1,
           quality: [0, 0, 0, 1, 2][Math.floor(random() * 5)]!,
           flags: random() < 0.04 ? 2 : 0,
-          id: `dev-${f}-${records.length}`,
         });
       }
     }
     sightings.push(records);
   }
   grid.bump();
-  return { grid, timeline: { frame0Ms, stepMs, frameCount, sightings: (i) => sightings[i] ?? [] } };
+  return {
+    grid,
+    meta: { frame0UnixMs: frame0Ms, stepMinutes, frameCount, geometry: { ...C4_GEOMETRY } },
+    sightings: frameSightingsOf(sightings),
+  };
 }
 
 export type DevFrames = FixtureFrames & { source: "sample" | "synthetic"; note: string };
 
 /**
- * The sample file when it is EVF2 over the full C4 grid, re-based so its last frame sits on `toMs` (its own
- * dates are outside the live replay window). The golden sample T11 ships is a 10 × 5-cell, 3-frame patch for
- * unit tests; it loads only with `force` (`/dev/globe?fixture=sample`), otherwise the synthetic day is used
- * so the globe is visibly populated.
+ * The sample file when it is EVF2 over the full C4 grid, re-based so its last frame sits on the live edge (its
+ * own dates are outside the replay window). The golden sample T11 ships is a small patch for unit tests; it
+ * loads only with `force` (`/dev/globe?fixture=sample`), placed by its header geometry. Otherwise the
+ * synthetic week is used so the globe is visibly populated.
  */
 export async function loadDevFrames({
   toMs,
-  stepMs,
   force = false,
   fetchImpl = fetch,
 }: {
   toMs: number;
-  stepMs: number;
   force?: boolean;
   fetchImpl?: typeof fetch;
 }): Promise<DevFrames> {
@@ -228,21 +257,14 @@ export async function loadDevFrames({
   try {
     const res = await fetchImpl(DEV_SAMPLE_URL);
     if (res.ok) {
-      const bytes = new Uint8Array(await res.arrayBuffer());
-      const { grid, index, sightings } = gridFromEvf(bytes);
+      const { grid, meta, sightings, index } = gridFromEvf(new Uint8Array(await res.arrayBuffer()));
       const h = index.header;
       const full = h.hsCols === HS_COLS && h.hsRows === HS_ROWS && h.envCols === ENV_COLS && h.envRows === ENV_ROWS;
       if (full || force) {
-        const step = h.stepMinutes * 60_000 || stepMs;
         return {
           grid,
-          timeline: {
-            frame0Ms: assumedFrame0(toMs, step, h.frameCount),
-            stepMs: step,
-            frameCount: h.frameCount,
-            sightings: (i) => sightings[i] ?? [],
-            geometry: { west: h.west, south: h.south, hsCellDeg: h.hsCellDeg, envCellDeg: h.envCellDeg },
-          },
+          meta: { ...meta, frame0UnixMs: liveEdgeFrame0(toMs, meta.stepMinutes, meta.frameCount) },
+          sightings,
           source: "sample",
           note: `sample.evf ${h.hsCols}×${h.hsRows} cells, ${h.frameCount} frames`,
         };
@@ -252,5 +274,5 @@ export async function loadDevFrames({
   } catch (err) {
     note = `sample.evf unreadable (${err instanceof Error ? err.message : String(err)})`;
   }
-  return { ...syntheticFrames({ toMs, stepMs, frameCount: 96 }), source: "synthetic", note };
+  return { ...syntheticFrames({ toMs }), source: "synthetic", note };
 }

@@ -1,0 +1,80 @@
+180 
+WWUS72 KKEY 010903
+NPWKEY
+
+URGENT - WEATHER MESSAGE
+National Weather Service Key West FL
+403 AM EST Sun Feb 1 2026
+
+FLZ076-011500-
+/O.CON.KKEY.CW.Y.0001.000000T0000Z-260201T1500Z/
+/O.CON.KKEY.WI.Y.0001.000000T0000Z-260201T1500Z/
+Monroe Upper Keys-
+Including the cities of Key Largo
+403 AM EST Sun Feb 1 2026
+
+...COLD WEATHER ADVISORY REMAINS IN EFFECT UNTIL 10 AM EST THIS 
+MORNING...
+...WIND ADVISORY REMAINS IN EFFECT UNTIL 10 AM EST THIS MORNING...
+
+* WHAT...For the Cold Weather Advisory, very cold wind chills as low 
+  as 26. For the Wind Advisory, northwest winds 15 to 25 mph with 
+  gusts up to 30 mph.
+
+* WHERE...Monroe Upper Keys.
+
+* WHEN...Until 10 AM EST this morning.
+
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree 
+  limbs could be blown down and a few power outages may result. Very 
+  cold temperatures can lead to hypothermia with prolonged exposure.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Winds this strong can make driving difficult, especially for high 
+profile vehicles. Use extra caution.
+
+Secure outdoor objects.
+
+Use caution while traveling outside. Wear appropriate clothing, a 
+hat, and gloves.
+
+Keep pets indoors as much as possible.
+
+Make frequent checks on older family, friends, and neighbors. Ensure 
+portable heaters are used correctly. Do not use generators or grills 
+inside.
+
+&&
+
+$$
+
+FLZ077-078-011500-
+/O.CON.KKEY.WI.Y.0001.000000T0000Z-260201T1500Z/
+Monroe Middle Keys-Monroe Lower Keys-
+Including the cities of Key West and Marathon
+403 AM EST Sun Feb 1 2026
+
+...WIND ADVISORY REMAINS IN EFFECT UNTIL 10 AM EST THIS MORNING...
+
+* WHAT...Northwest winds 20 to 30 mph with gusts up to 40 mph.
+
+* WHERE...Monroe Lower Keys and Monroe Middle Keys.
+
+* WHEN...Until 10 AM EST this morning.
+
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree 
+  limbs could be blown down and a few power outages may result.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Winds this strong can make driving difficult, especially for high 
+profile vehicles. Use extra caution.
+
+Secure outdoor objects.
+
+&&
+
+$$
+
+DP
