@@ -131,16 +131,16 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
   - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.calvinmaighan.dev/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).
   - **Runtime LLM.** A cheap model runs the tool loop, with prompt caching on system and tool definitions, a daily spend cap (God's Eye View uses $5), and answer caching keyed by question + data version. A stronger model is used only for final synthesis when needed. Current pricing and model IDs need confirming via the `claude-api` skill before building.
 
-## 6. Decisions needed
+## 6. Decisions (2026-09-30)
 
-1. **Question:** A, B, C, or D.
-2. **Map engine:**
-   - **MapLibre + deck.gl (recommended).** 2.5D pitched, heatmap and trips layers, self-hosted PMTiles, easy COEP.
-   - **CesiumJS.** A 3D globe with the God's Eye View look. Heavier. Photoreal tiles are non-commercial.
-3. **God's Eye View borrow level:**
-   - Patterns only.
-   - Patterns + HUD/look (recommended).
-   - Full tactical look with shaders.
+1. **Question:** A, South Florida Invasives Ops.
+2. **Map engine:** CesiumJS + Cesium ion Community.
+   - CesiumJS is Apache-2.0.
+   - ion Community is free for "non-commercial personal projects" and "exploratory commercial or government development". This demo is a personal take-home.
+   - A paid ion plan ($149/mo individual, $524/mo team) applies once the organization using it has >$50K revenue or has raised >$50K. Internal use counts.
+   - Community quotas: 1,000 Google Photorealistic 3D root tiles/month and 1,000 global imagery sessions/month.
+   - A keyless Esri/OSM imagery fallback kicks in when the quota nears, following God's Eye View's `src/maps/imagery.js` ladder.
+3. **God's Eye View borrow level:** patterns + HUD look. No post-process shaders in the core plan.
 
 ## Sources
 
@@ -156,3 +156,5 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 - [USGS NAS API](https://nas.er.usgs.gov/api/v2/)
 - [iNaturalist API](https://api.inaturalist.org/v1/docs/)
 - [bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view)
+- [Cesium ion pricing + commercial FAQ](https://cesium.com/platform/cesium-ion/pricing/)
+- [Google Map Tiles API usage and billing](https://developers.google.com/maps/documentation/tile/usage-and-billing)
