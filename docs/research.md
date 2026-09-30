@@ -142,6 +142,31 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
    - A keyless Esri/OSM imagery fallback kicks in when the quota nears, following God's Eye View's `src/maps/imagery.js` ladder.
 3. **God's Eye View borrow level:** patterns + HUD look. No post-process shaders in the core plan.
 
+## 7. Push-capable feeds (2026-09-30)
+
+The brief doesn't prescribe push or poll ingest. What exists for this domain:
+
+| Source | Push mechanism | Fit | Catch |
+|---|---|---|---|
+| GOES-19 via NOAA NODD on AWS | SNS topic `arn:aws:sns:us-east-1:123901341784:NewGOES19Object` | LST, SST, fire and cloud mask over the Everglades, every 5–60 min | Only SQS or Lambda subscribers, so we need an AWS account (free tier) with an SQS queue and a payload filter on the key prefix. NetCDF4 decode. |
+| NWS via NWWS-OI | XMPP | Every NWS product within seconds | Account by email to `NWWS.Issue@noaa.gov`, which can take 10+ days. NWS API poll until then. |
+| aisstream.io | WebSocket | Vessel traffic | Weak fit. Skipped. |
+| Firecrawl monitors | Webhook | Web pages with no API (FWC program pages) | Stretch goal |
+| iNaturalist, GBIF, USGS NAS, USGS Water, NDBC, CO-OPS, Open-Meteo | none | Core data | Polled by Axum tokio tasks under a rate governor |
+
+## 8. Reuse from deedee and big-value (2026-09-30)
+
+- **Agent:** deedee `server/agent-platform/cordis/*`, the npm `@deepseek-ai/cordis` + `@deepseek-ai/dsh-*` harness, with `deepseek-v4-flash` on Fireworks. It streams NDJSON through `app/api/deedee-chat/stream/route.ts` using the `DeedeeChatStreamEvent` union.
+- **Voice:**
+  - deedee `client/voice/*`, `server/voice/*` and `shared/voice/protocol.ts`.
+  - The model is xAI `grok-voice-latest`, reached through a server relay.
+  - Audio goes up as 16 kHz PCM16 and comes back as 24 kHz PCM16.
+  - Grok hands work to the agent through `spawn_thinking`.
+- **Morph:** deedee `client/ui/modal/morph/RectMorphPortal.tsx`, `useRectMorph`. There is no orb yet; it is new UI.
+- **Axum:**
+  - big-value `api/`: axum 0.8, async-graphql 7, rusqlite bundled, a broadcast Hub, and oneshot tests.
+  - deedee `crates/deedee-data-plane` adds the `spawn_blocking` pattern, and `phone_api.rs` is a tokio-tungstenite client for xAI realtime.
+
 ## Sources
 
 - [inversa.com](https://inversa.com/)
@@ -158,3 +183,5 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 - [bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view)
 - [Cesium ion pricing + commercial FAQ](https://cesium.com/platform/cesium-ion/pricing/)
 - [Google Map Tiles API usage and billing](https://developers.google.com/maps/documentation/tile/usage-and-billing)
+- [NOAA GOES on AWS open data registry](https://registry.opendata.aws/noaa-goes/)
+- [NWWS-OI request](https://www.weather.gov/nwws/nwws_oi_request)
