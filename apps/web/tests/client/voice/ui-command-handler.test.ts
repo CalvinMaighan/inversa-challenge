@@ -1,105 +1,139 @@
-import { beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { get, set } from "@calvinjs/active-state";
+import { beforeEach, describe, expect, test } from "bun:test";
+import { get, init, set } from "@calvinjs/active-state";
 
+import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
+import type { LayersState } from "client/state/layers";
+import type { SelectionState } from "client/state/selection";
+import { timeWindow, type TimeState } from "client/state/time";
+import type { ViewState } from "client/state/view";
+import type { VoiceState } from "client/state/voice";
 import { resolvePlace } from "client/voice/gazetteer";
 import { bboxAround, readHudState } from "client/voice/hud-state";
-import { ensureVoiceState, LAYERS, SELECTION, TIME, VIEW, VOICE } from "client/voice/state";
 import { applyUiCommand } from "client/voice/ui-command-handler";
 
-beforeAll(() => ensureVoiceState());
+init(state);
+
+const NOW = Date.parse("2026-09-30T20:40:00Z");
+const WINDOW = timeWindow(NOW);
 
 beforeEach(() => {
-  set(VIEW, { ...VIEW.defaults });
-  set(TIME, { ...TIME.defaults });
-  set(LAYERS, { ...LAYERS.defaults, visible: { ...LAYERS.defaults.visible }, species: {} });
-  set(SELECTION, { ...SELECTION.defaults });
-  set(VOICE, { ...VOICE.defaults });
+  set(VIEW, VIEW.defaults);
+  set(TIME, { ...TIME.defaults, ...WINDOW });
+  set(LAYERS, LAYERS.defaults);
+  set(SELECTION, SELECTION.defaults);
+  set(VOICE, VOICE.defaults);
 });
 
-const view = () => get<typeof VIEW.defaults>(VIEW)!;
-const time = () => get<typeof TIME.defaults>(TIME)!;
+const view = () => get<ViewState>(VIEW)!;
+const time = () => get<TimeState>(TIME)!;
+const layers = () => get<LayersState>(LAYERS)!;
+const selection = () => get<SelectionState>(SELECTION)!;
 
 describe("ui command handler", () => {
-  test("fly_to with lat/lon sets VIEW and bumps seq", () => {
-    expect(applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9, altitudeM: 5000 } })).toBe(true);
-    expect(view()).toEqual({ lat: 25.5, lon: -80.9, altitudeM: 5000, place: null, seq: 1 });
-    applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9 } });
+  test("fly_to with lat/lon moves the camera, updates bbox and bumps seq", () => {
+    expect(applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9, altitudeM: 5000 } }, NOW)).toBe(true);
+    expect(view()).toEqual({
+      ...VIEW.defaults,
+      lat: 25.5,
+      lon: -80.9,
+      altitudeM: 5000,
+      bbox: bboxAround(25.5, -80.9, 5000),
+      place: null,
+      seq: 1,
+    });
+    applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9 } }, NOW);
     expect(view().seq).toBe(2);
     expect(view().altitudeM).toBe(25_000);
-    expect(get<typeof VOICE.defaults>(VOICE)!.lastCommand).toBe("fly_to");
+    expect(get<VoiceState>(VOICE)!.lastCommand).toBe("fly_to");
   });
 
   test("fly_to with a place resolves through the gazetteer", () => {
-    expect(applyUiCommand({ name: "fly_to", args: { place: "flamingo" } })).toBe(true);
+    expect(applyUiCommand({ name: "fly_to", args: { place: "flamingo" } }, NOW)).toBe(true);
     const flamingo = resolvePlace("Flamingo")!;
     expect(view()).toMatchObject({ lat: flamingo.lat, lon: flamingo.lon, place: "Flamingo", altitudeM: flamingo.altitudeM });
+    expect(view().heading).toBe(VIEW.defaults.heading);
   });
 
   test("fly_to to an unknown place changes nothing", () => {
-    expect(applyUiCommand({ name: "fly_to", args: { place: "Atlantis" } })).toBe(false);
-    expect(view()).toEqual({ ...VIEW.defaults });
-    expect(get<typeof VOICE.defaults>(VOICE)!.lastCommand).toBeNull();
+    expect(applyUiCommand({ name: "fly_to", args: { place: "Atlantis" } }, NOW)).toBe(false);
+    expect(view()).toEqual(VIEW.defaults);
+    expect(get<VoiceState>(VOICE)!.lastCommand).toBeNull();
   });
 
   test("invalid args are rejected on the client too", () => {
-    expect(applyUiCommand({ name: "fly_to", args: { lat: 200, lon: 0 } })).toBe(false);
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "radar", visible: true } })).toBe(false);
-    expect(applyUiCommand({ name: "rm_rf", args: {} })).toBe(false);
-    expect(view()).toEqual({ ...VIEW.defaults });
+    expect(applyUiCommand({ name: "fly_to", args: { lat: 200, lon: 0 } }, NOW)).toBe(false);
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "radar", visible: true } }, NOW)).toBe(false);
+    expect(applyUiCommand({ name: "select", args: { evidenceId: "mission:12" } }, NOW)).toBe(false);
+    expect(applyUiCommand({ name: "rm_rf", args: {} }, NOW)).toBe(false);
+    expect(view()).toEqual(VIEW.defaults);
+    expect(selection()).toEqual(SELECTION.defaults);
   });
 
-  test("set_time sets an ISO time or live, and pauses", () => {
-    set(TIME, { ...TIME.defaults, playing: true });
-    expect(applyUiCommand({ name: "set_time", args: { time: "2026-09-29T22:00:00-04:00" } })).toBe(true);
-    expect(time()).toMatchObject({ at: "2026-09-30T02:00:00.000Z", playing: false });
-    expect(applyUiCommand({ name: "set_time", args: { time: "now" } })).toBe(true);
-    expect(time().at).toBeNull();
-    expect(applyUiCommand({ name: "set_time", args: { time: "yesterday-ish" } })).toBe(false);
-    expect(time().at).toBeNull();
+  test("set_time snaps into the 30-day window and pauses; now is the live edge", () => {
+    set(TIME, { ...time(), playing: true });
+    expect(applyUiCommand({ name: "set_time", args: { time: "2026-09-29T22:07:00-04:00" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ at: "2026-09-30T02:00:00.000Z", playing: false, ...{ from: WINDOW.from, to: WINDOW.to } });
+    expect(applyUiCommand({ name: "set_time", args: { time: "2020-01-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time().at).toBe(WINDOW.from);
+    expect(applyUiCommand({ name: "set_time", args: { time: "now" } }, NOW)).toBe(true);
+    expect(time().at).toBe(WINDOW.to);
+    expect(applyUiCommand({ name: "set_time", args: { time: "yesterday-ish" } }, NOW)).toBe(false);
+    expect(time().at).toBe(WINDOW.to);
   });
 
-  test("play_timeline applies defaults and the window", () => {
+  test("play_timeline narrows the window, starts at from, and applies speed defaults", () => {
     expect(
-      applyUiCommand({ name: "play_timeline", args: { from: "2026-09-01T00:00:00Z", to: "2026-09-02T00:00:00Z" } }),
+      applyUiCommand({ name: "play_timeline", args: { from: "2026-09-20T00:00:00Z", to: "2026-09-21T00:00:00Z" } }, NOW),
     ).toBe(true);
     expect(time()).toEqual({
-      at: "2026-09-01T00:00:00.000Z",
+      at: "2026-09-20T00:00:00.000Z",
       playing: true,
       speed: 8,
-      from: "2026-09-01T00:00:00.000Z",
-      to: "2026-09-02T00:00:00.000Z",
+      from: "2026-09-20T00:00:00.000Z",
+      to: "2026-09-21T00:00:00.000Z",
     });
-    expect(applyUiCommand({ name: "play_timeline", args: { playing: false } })).toBe(true);
-    expect(time()).toMatchObject({ playing: false, from: "2026-09-01T00:00:00.000Z" });
+    expect(applyUiCommand({ name: "play_timeline", args: { playing: false, speed: 4 } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ playing: false, speed: 4, from: "2026-09-20T00:00:00.000Z" });
+    expect(
+      applyUiCommand({ name: "play_timeline", args: { from: "2026-09-21T00:00:00Z", to: "2026-09-20T00:00:00Z" } }, NOW),
+    ).toBe(false);
   });
 
-  test("toggle_layer sets visibility and the species filter", () => {
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "lst", visible: true } })).toBe(true);
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: true, species: "python" } })).toBe(true);
-    const layers = get<typeof LAYERS.defaults>(LAYERS)!;
-    expect(layers.visible.lst).toBe(true);
-    expect(layers.species).toEqual({ hotspots: "python" });
-    applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: true } });
-    expect(get<typeof LAYERS.defaults>(LAYERS)!.species).toEqual({});
+  test("toggle_layer maps to setLayerVisible and setSpeciesVisible", () => {
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "lst", visible: true } }, NOW)).toBe(true);
+    expect(layers().visible.lst).toBe(true);
+
+    // Hiding a species filters it without hiding the layer.
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: false, species: "tegu" } }, NOW)).toBe(true);
+    expect(layers().species.tegu).toBe(false);
+    expect(layers().visible.hotspots).toBe(true);
+
+    // Showing a species on a hidden layer turns the layer on.
+    applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false } }, NOW);
+    expect(layers().visible.sightings).toBe(false);
+    applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: true, species: "tegu" } }, NOW);
+    expect(layers().visible.sightings).toBe(true);
+    expect(layers().species.tegu).toBe(true);
   });
 
   test("select and open_evidence drive SELECTION", () => {
-    expect(applyUiCommand({ name: "select", args: { evidenceId: "sighting:123" } })).toBe(true);
-    expect(get<typeof SELECTION.defaults>(SELECTION)).toEqual({ evidenceId: "sighting:123", drawerOpen: false });
-    expect(applyUiCommand({ name: "open_evidence", args: { evidenceId: "alert:9" } })).toBe(true);
-    expect(get<typeof SELECTION.defaults>(SELECTION)).toEqual({ evidenceId: "alert:9", drawerOpen: true });
+    expect(applyUiCommand({ name: "select", args: { evidenceId: "sighting:123" } }, NOW)).toBe(true);
+    expect(selection()).toEqual({ evidenceId: "sighting:123", drawerOpen: false });
+    expect(applyUiCommand({ name: "open_evidence", args: { evidenceId: "alert:9" } }, NOW)).toBe(true);
+    expect(selection()).toEqual({ evidenceId: "alert:9", drawerOpen: true });
   });
 
   test("hud state reflects the keys", () => {
-    applyUiCommand({ name: "fly_to", args: { place: "Key West" } });
-    applyUiCommand({ name: "select", args: { evidenceId: "hotspot:python:10:20:1759190400000" } });
-    const hud = readHudState(Date.parse("2026-09-30T12:00:00Z"));
+    applyUiCommand({ name: "fly_to", args: { place: "Key West" } }, NOW);
+    applyUiCommand({ name: "select", args: { evidenceId: "hotspot:python:10:20:1759190400000" } }, NOW);
+    applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: false, species: "iguana" } }, NOW);
+    const hud = readHudState();
     expect(hud.camera.place).toBe("Key West");
-    expect(hud.time).toMatchObject({ live: true, at: "2026-09-30T12:00:00.000Z" });
+    expect(hud.bbox).toEqual(view().bbox);
+    expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
     expect(hud.layers).toEqual(["sightings", "hotspots", "stations", "alerts", "missions", "peers"]);
+    expect(hud.species).toEqual(["python", "tegu", "lionfish"]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");
-    expect(hud.bbox.west).toBeLessThan(hud.camera.lon);
-    expect(hud.bbox.east).toBeGreaterThan(hud.camera.lon);
   });
 
   test("bbox span scales with altitude", () => {

@@ -8,13 +8,16 @@
 
 mod mutation;
 mod query;
+#[cfg(test)]
+mod resolver_tests;
 mod subscription;
 pub mod types;
 
 use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
 use async_graphql::{Context, Data, Schema};
+use async_graphql_axum::rejection::GraphQLRejection;
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
-use axum::extract::{FromRequestParts, Request, State, WebSocketUpgrade};
+use axum::extract::{FromRequest, FromRequestParts, Request, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -41,12 +44,24 @@ pub(crate) fn now_ms() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
-async fn post_graphql(
-    State(state): State<AppState>,
-    Extension(schema): Extension<AppSchema>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
-    schema.execute(req.into_inner().data(state)).await.into()
+/// Largest accepted POST body. async-graphql-axum reads the body as an unbounded stream, so the
+/// cap is applied here before it parses.
+pub const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+async fn post_graphql(State(state): State<AppState>, Extension(schema): Extension<AppSchema>, req: Request) -> Response {
+    let (parts, body) = req.into_parts();
+    let bytes = match axum::body::to_bytes(body, MAX_BODY_BYTES).await {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (StatusCode::PAYLOAD_TOO_LARGE, format!("GraphQL request body exceeds {MAX_BODY_BYTES} bytes"))
+                .into_response()
+        }
+    };
+    let req = Request::from_parts(parts, axum::body::Body::from(bytes));
+    match GraphQLRequest::<GraphQLRejection>::from_request(req, &()).await {
+        Ok(req) => GraphQLResponse::from(schema.execute(req.into_inner().data(state)).await).into_response(),
+        Err(rejection) => rejection.into_response(),
+    }
 }
 
 /// WebSocket upgrade for subscriptions. A plain GET gets a 400 pointing at POST.
@@ -203,7 +218,7 @@ mod tests {
         }
     }
 
-    async fn post(app: axum::Router, body: Value) -> (StatusCode, Value) {
+    pub(super) async fn post(app: axum::Router, body: Value) -> (StatusCode, Value) {
         let res = app
             .oneshot(
                 Request::post("/v1/graphql")
@@ -280,7 +295,7 @@ mod tests {
         )
         .await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["data"]["applyOps"], json!({"applied": 0, "duplicates": 0, "lastSeq": 0}));
+        assert_eq!(body["data"]["applyOps"], json!({"applied": 1, "duplicates": 0, "lastSeq": 1}));
     }
 
     #[tokio::test]
@@ -368,6 +383,7 @@ mod tests {
             state: feed_state::Health::Down,
             newest_observed_at: None,
             last_fetch_at: None,
+            last_fetch_run_id: None,
             lag_seconds: None,
             note: Some("SQS unreachable".into()),
         }));

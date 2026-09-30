@@ -13,6 +13,7 @@ const feed = (source: string, s: FeedState["state"] = "nominal"): FeedState => (
   state: s,
   newestObservedAt: null,
   lastFetchAt: null,
+  lastFetchRunId: null,
   lagSeconds: null,
   note: null,
 });

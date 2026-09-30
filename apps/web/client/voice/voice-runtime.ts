@@ -1,21 +1,22 @@
 "use client";
 
-import { get, set, subscribe } from "@calvinjs/active-state";
+import { get, init, set, subscribe } from "@calvinjs/active-state";
 
+import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
+import type { VoiceState as VoiceKeyState } from "client/state/voice";
+import type { VoiceControlMessage } from "server/voice/view-state-control";
 import {
   VOICE_EVENTS_RESUBSCRIBE_MS,
   VOICE_TOKEN_HEADER,
   type VoiceServerEvent,
   type VoiceSessionOpenResponse,
 } from "shared/voice/protocol";
-import type { VoiceControlMessage } from "server/voice/view-state-control";
 
 import { createAudioUplink } from "./audio-uplink";
 import { createBargeInDetector } from "./barge-in";
 import { readHudState } from "./hud-state";
 import { startMicCapture, type MicCapture } from "./mic-capture";
 import { createPcmPlayback, type PcmPlayback } from "./playback";
-import { ensureVoiceState, LAYERS, SELECTION, TIME, VIEW, VOICE, type VoiceKeyState } from "./state";
 import { emitTaskEvent } from "./task-events";
 import { applyUiCommand } from "./ui-command-handler";
 
@@ -46,13 +47,14 @@ type Runtime = {
 
 let runtime: Runtime | null = null;
 let starting: AbortController | null = null;
+let assistantResponseId: string | null = null;
 
 function readVoice(): VoiceKeyState {
   return { ...VOICE.defaults, ...get<VoiceKeyState>(VOICE) };
 }
 
 function patchVoice(patch: Partial<VoiceKeyState>): void {
-  set(VOICE, { ...readVoice(), ...patch });
+  set<VoiceKeyState>(VOICE, { ...readVoice(), ...patch });
 }
 
 /** Clean session state, keeping the task list so the card can still show finished answers. */
@@ -102,12 +104,16 @@ function handleEvent(event: VoiceServerEvent): void {
       rt.playback.clear();
       return;
     case "transcript.user":
-      if (event.text.trim() || event.final) patchVoice({ userText: event.text });
+      if (event.text.trim() || event.final) patchVoice({ userText: event.text, transcript: event.text });
       return;
-    case "transcript.assistant":
-      if (event.final) patchVoice({ assistantText: event.text });
-      else patchVoice({ assistantText: `${readVoice().assistantText}${event.text}` });
+    case "transcript.assistant": {
+      // Deltas of a new response start a fresh line instead of appending to the previous answer.
+      const prefix = event.responseId === assistantResponseId ? readVoice().assistantText : "";
+      assistantResponseId = event.responseId;
+      const text = event.final ? event.text : `${prefix}${event.text}`;
+      patchVoice({ assistantText: text, transcript: text });
       return;
+    }
     case "task.updated": {
       const tasks = readVoice().tasks.filter((t) => t.id !== event.task.id);
       patchVoice({ tasks: [...tasks, event.task].slice(-20) });
@@ -213,7 +219,9 @@ function watchHud(rt: Runtime): () => void {
 /** Mic permission, then session open, then audio flows. Safe to call twice; the second is a no-op. */
 export async function startVoice(): Promise<void> {
   if (runtime || starting) return;
-  ensureVoiceState();
+  // Idempotent: a no-op once the shell's <ActiveState init={state}> has booted the store.
+  init(state);
+  assistantResponseId = null;
   const abort = new AbortController();
   starting = abort;
   set(VOICE, { ...offState("connecting", null) });

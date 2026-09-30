@@ -11,7 +11,7 @@ Scope:
 - [x] G1: voice tests pass
   CHECK: cd apps/web && bun test tests/server/voice tests/client/voice 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: 62 pass | 0 fail
+  EVIDENCE: 64 pass | 0 fail
 
 - [x] G2: PCM resample produces the expected sample count at 16 kHz from a 48 kHz input, phase-continuous across batches (test)
   CHECK: cd apps/web && bun test tests/client/voice -t "resample" 2>&1 | grep -E "pass|fail"
@@ -42,6 +42,11 @@ Scope:
   CHECK: cd apps/web && bun test tests -t "task events stream to client" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail
+
+- [x] G9: next build succeeds with the voice routes bundled against the real agent runner
+  CHECK: bun run --cwd apps/web build >/dev/null 2>&1 && echo BUILD-OK
+  EXPECT: BUILD-OK
+  EVIDENCE: BUILD-OK
 
 - [ ] G7: (live, blocked on H6) spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
   EVIDENCE: pending

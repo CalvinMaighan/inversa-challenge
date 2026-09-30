@@ -29,7 +29,7 @@ export type AgentStreamEvent =
   | { type: "debug"; text: string };
 
 /** Evidence ids are `<kind>:<key>` (PLAN.md C14). */
-export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot";
+export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest";
 
 export type AgentStreamRequest = {
   sessionId: string;

@@ -8,6 +8,8 @@ export type FeedState = {
   state: FeedHealth;
   newestObservedAt: string | null;
   lastFetchAt: string | null;
+  /** `fetch_runs.id` of the latest run; cite it as `fetch:<id>` (PLAN.md C14). */
+  lastFetchRunId: string | null;
   lagSeconds: number | null;
   note: string | null;
 };

@@ -6,32 +6,49 @@ Scope:
 - `/v1/media/:id` proxies iNat photos. Only hosts on an allowlist are accepted (SSRF guard). Responses are cached in the Archive and served with `Cross-Origin-Resource-Policy: same-origin`.
 - Subscriptions `feeds`, `framesUpdated` and `ops` are backed by the Hub.
 
-- [ ] G1: api tests pass
+- [x] G1: api tests pass
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep "test result" | grep -v " 0 passed" | head -1
   EXPECT: /test result: ok\. \d+ passed; 0 failed/
-  EVIDENCE: pending
+  EVIDENCE: test result: ok. 156 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 2.14s
 
-- [ ] G2: a resolver test per query (feeds, sightings, readings, alerts, frames, hotspots, explainCell, backtest, evidence, board, opsSince) against a seeded memory DB; tests are named `resolver_*`
+- [x] G2: a resolver test per query (feeds, sightings, readings, alerts, frames, hotspots, explainCell, backtest, evidence, board, opsSince) against a seeded memory DB; tests are named `resolver_*`
   CHECK: cargo test --manifest-path api/Cargo.toml resolver_ 2>&1 | grep -E "running|test result"
   EXPECT: /running (1[1-9]|[2-9][0-9]) tests[\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 14 tests | test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 143 filtered out; finished in 0.10s
 
-- [ ] G3: evidence(id) returns the raw payload and links for a sighting that has a GBIF duplicate and a revision
+- [x] G3: evidence(id) returns the raw payload and links for a sighting that has a GBIF duplicate and a revision
   CHECK: cargo test --manifest-path api/Cargo.toml evidence 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 8 tests | test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 149 filtered out; finished in 0.04s
 
-- [ ] G4: media proxy rejects non-allowlisted hosts, private IPs and redirects to them; allowlisted responses carry CORP
+- [x] G4: media proxy rejects non-allowlisted hosts, private IPs and redirects to them; allowlisted responses carry CORP
   CHECK: cargo test --manifest-path api/Cargo.toml media 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 7 tests | test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 150 filtered out; finished in 0.07s
 
-- [ ] G5: a graphql-transport-ws subscription test receives an `ops` event after `applyOps`
+- [x] G5: a graphql-transport-ws subscription test receives an `ops` event after `applyOps`
   CHECK: cargo test --manifest-path api/Cargo.toml subscription_ops 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 156 filtered out; finished in 0.01s
 
-- [ ] G6: the schema contract test still passes
+- [x] G6: the schema contract test still passes
   CHECK: cargo test --manifest-path api/Cargo.toml schema_matches_contract 2>&1 | grep "test result"
   EXPECT: /test result: ok\. [1-9]/
-  EVIDENCE: pending
+  EVIDENCE: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 156 filtered out; finished in 0.00s
+
+Driver additions (T13 request): C14 evidence kind `backtest:<species>:<days>`, and `FeedState.lastFetchRunId` (schema, Rust, TS mirror).
+
+- [x] G7: evidence(`backtest:<species>:<days>`) returns the backtest summary with perDay as the record
+  CHECK: cargo test --manifest-path api/Cargo.toml evidence_backtest 2>&1 | grep -E "running [1-9]|test result"
+  EXPECT: /running [1-9][\s\S]*test result: ok/
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 156 filtered out; finished in 0.01s
+
+- [x] G8: FeedState carries lastFetchRunId (latest fetch_runs id) and evidence can cite it; Rust tests pass
+  CHECK: cargo test --manifest-path api/Cargo.toml last_fetch_run 2>&1 | grep -E "running [1-9]|test result"
+  EXPECT: /running [1-9][\s\S]*test result: ok/
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 156 filtered out; finished in 0.00s
+
+- [x] G9: the TS mirror has lastFetchRunId and the TS contract tests pass
+  CHECK: grep -c "lastFetchRunId: string | null" apps/web/shared/feed-state.ts && cd apps/web && bun test tests/shared 2>&1 | grep -E "pass|fail"
+  EXPECT: /^1\n[\s\S]*\d+ pass\s+0 fail/
+  EVIDENCE: 5 pass | 0 fail

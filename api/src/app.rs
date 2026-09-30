@@ -9,6 +9,7 @@ pub fn app(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .merge(crate::graphql::routes())
         .merge(crate::ingest::push::hook::routes())
+        .merge(crate::frames::routes())
         .merge(crate::media::routes())
         .with_state(state)
 }

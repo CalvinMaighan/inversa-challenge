@@ -4,7 +4,7 @@ import { parseEvidenceId, SELECTION } from "client/state/selection";
 
 describe("SELECTION", () => {
   test("starts empty", () => {
-    expect(SELECTION.defaults).toEqual({ evidenceId: null });
+    expect(SELECTION.defaults).toEqual({ evidenceId: null, drawerOpen: false });
     expect(SELECTION.evidenceId).toBe("SELECTION.evidenceId");
   });
 

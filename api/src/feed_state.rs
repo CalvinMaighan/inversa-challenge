@@ -42,6 +42,9 @@ pub struct FeedState {
     pub state: Health,
     pub newest_observed_at: Option<i64>,
     pub last_fetch_at: Option<i64>,
+    /// `fetch_runs.id` of the latest run, so claims about freshness can cite `fetch:<id>` (C14).
+    /// A string, like every id on the wire (GraphQL `ID`, TS `string | null`).
+    pub last_fetch_run_id: Option<String>,
     pub lag_seconds: Option<i64>,
     pub note: Option<String>,
 }
@@ -56,6 +59,7 @@ struct SourceRow {
 
 /// One row of `fetch_runs`, newest first.
 struct RunRow {
+    id: i64,
     fetched_at: i64,
     status: String,
     error: Option<String>,
@@ -112,14 +116,14 @@ fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
         rows.collect::<rusqlite::Result<Vec<_>>>()?
     };
     let mut runs_stmt = conn.prepare(
-        "select fetched_at, status, error from fetch_runs
+        "select id, fetched_at, status, error from fetch_runs
          where source_id = ?1 order by fetched_at desc, id desc limit ?2",
     )?;
     let mut out = Vec::with_capacity(sources.len());
     for source in sources {
         let runs = runs_stmt
             .query_map(params![source.id, DOWN_AFTER_ERRORS as i64], |r| {
-                Ok(RunRow { fetched_at: r.get(0)?, status: r.get(1)?, error: r.get(2)? })
+                Ok(RunRow { id: r.get(0)?, fetched_at: r.get(1)?, status: r.get(2)?, error: r.get(3)? })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let newest_observed_at = newest_observed_at(conn, &source.id, now_ms)?;
@@ -165,6 +169,7 @@ fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqli
 fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
     let Inputs { source, runs, newest_observed_at } = inputs;
     let last_fetch_at = runs.first().map(|r| r.fetched_at);
+    let last_fetch_run_id = runs.first().map(|r| r.id.to_string());
     let silent_s = last_fetch_at.map(|t| (now_ms - t) / 1000);
     let lag_seconds = newest_observed_at.map(|t| (now_ms - t).max(0) / 1000);
     let down_after_s = DOWN_AFTER_CADENCES * source.cadence_s;
@@ -208,6 +213,7 @@ fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
         state,
         newest_observed_at,
         last_fetch_at,
+        last_fetch_run_id,
         lag_seconds,
         note,
     }
@@ -294,6 +300,7 @@ mod tests {
         assert_eq!(s.mode, "poll");
         assert_eq!(s.newest_observed_at, Some(NOW - 3 * MIN));
         assert_eq!(s.last_fetch_at, Some(NOW - MIN));
+        assert_eq!(s.last_fetch_run_id.as_deref(), Some("1"));
         assert_eq!(s.lag_seconds, Some(180));
         assert_eq!(s.note, None);
     }
@@ -432,13 +439,14 @@ mod tests {
             state: Health::Stale,
             newest_observed_at: Some(1),
             last_fetch_at: None,
+            last_fetch_run_id: Some("7".into()),
             lag_seconds: Some(2),
             note: None,
         };
         assert_eq!(
             serde_json::to_value(&s).unwrap(),
             serde_json::json!({"source":"goes19","mode":"push","state":"stale","newestObservedAt":1,
-                               "lastFetchAt":null,"lagSeconds":2,"note":null})
+                               "lastFetchAt":null,"lastFetchRunId":"7","lagSeconds":2,"note":null})
         );
     }
 }
