@@ -9,9 +9,10 @@
 //! - `lst`, `sst` i16 × 68 × 64 cells (0.05°, the GOES `g5` cells) in centi-°C, sampled at
 //!   each cell's centre from the nearest valid reading; `ENV_MISSING` when none.
 //! - pad to 4 bytes.
-//! - `u32 sightingCount` and 12-byte records (`f32 lon, f32 lat, u16 taxon, u8 quality,
-//!   u8 flags`): the sightings observed in `[frame_at, frame_at + step)`, duplicates included
-//!   and flagged, so a client that plays frames in order sees each sighting exactly once.
+//! - `u32 sightingCount` and 16-byte records (`u32 id, f32 lon, f32 lat, u16 taxon,
+//!   u8 quality, u8 flags`; `id` is `sightings.id`, citable as `sighting:<id>`): the sightings
+//!   observed in `[frame_at, frame_at + step)`, duplicates included and flagged, so a client
+//!   that plays frames in order sees each sighting exactly once.
 //!
 //! Steps: hourly by default; 15-minute frames are allowed for windows of 24 h or less.
 //!
@@ -55,7 +56,7 @@ use crate::state::AppState;
 
 pub const MAGIC: &[u8; 4] = b"EVF2";
 pub const HEADER_BYTES: usize = 72;
-pub const SIGHTING_BYTES: usize = 12;
+pub const SIGHTING_BYTES: usize = 16;
 pub const SPECIES_COUNT: u32 = 4;
 /// `score = u8 × HOTSPOT_SCALE`; scores top out around 2.4 (density 1 × the largest boosts).
 pub const HOTSPOT_SCALE: f32 = 0.01;
@@ -248,6 +249,7 @@ pub fn frame_body(snap: &Snapshot, layout: &Layout, at: i64, step_ms: i64) -> Ve
     out.resize(layout.sightings_offset(), 0);
     out.extend_from_slice(&(records.len() as u32).to_le_bytes());
     for s in records {
+        out.extend_from_slice(&(s.id.clamp(0, u32::MAX as i64) as u32).to_le_bytes());
         out.extend_from_slice(&s.lon.to_le_bytes());
         out.extend_from_slice(&s.lat.to_le_bytes());
         out.extend_from_slice(&(s.taxon_id.clamp(0, u16::MAX as i64) as u16).to_le_bytes());
@@ -646,11 +648,19 @@ mod tests {
         }
         assert_eq!(counts, vec![1, 1, 3], "sightings per hourly window");
         assert_eq!(o, bytes.len());
-        // Frame 1's record is the flagged duplicate.
+        // Frame 0's record is the iguana (id 3); frame 1's is the flagged duplicate (id 6).
+        let rec = &bytes[HEADER_BYTES + layout.sightings_offset() + 4..];
+        assert_eq!(u32_at(rec, 0), 3);
+        assert_eq!(u16::from_le_bytes([rec[12], rec[13]]), 3);
         let rec = &bytes[HEADER_BYTES + layout.body_len(1) + layout.sightings_offset() + 4..];
-        assert_eq!(u16::from_le_bytes([rec[8], rec[9]]), 1);
-        assert_eq!(rec[10], 0);
-        assert_eq!(rec[11], FLAG_DUPLICATE);
+        assert_eq!(u32_at(rec, 0), 6);
+        assert_eq!(f32::from_le_bytes(rec[4..8].try_into().unwrap()), layout.grid.center(layout.grid.index(2, 2)).0 as f32);
+        assert_eq!(u16::from_le_bytes([rec[12], rec[13]]), 1);
+        assert_eq!(rec[14], 0);
+        assert_eq!(rec[15], FLAG_DUPLICATE);
+        // Frame 2's three records, in observation order: ids 7, 8, 9.
+        let recs = &bytes[HEADER_BYTES + layout.body_len(1) * 2 + layout.sightings_offset() + 4..];
+        assert_eq!((0..3).map(|k| u32_at(recs, k * SIGHTING_BYTES)).collect::<Vec<_>>(), vec![7, 8, 9]);
     }
 
     #[test]
