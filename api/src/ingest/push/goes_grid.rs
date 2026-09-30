@@ -1,11 +1,14 @@
-//! GOES-R fixed-grid projection and the map from ABI pixels to the 0.01 deg app grid (T7, PLAN C15).
+//! GOES-R fixed-grid projection and the map from ABI pixels to the 0.05 deg GOES grid (T7).
 //!
 //! Formulas are the GOES-R Product Definition and Users' Guide (PUG) vol. 3, section 5.1.2.8:
 //! scan angles (x, y) in radians to geodetic lat/lon on the GRS80 ellipsoid, and back.
 //! A [`GridMap`] is computed once per distinct ABI grid (CONUS and full disk differ) and cached:
-//! it holds the x/y index window covering the bbox and, for every app cell, the window pixels
-//! sampled at a 2x2 sub-grid of the cell. ABI pixels are ~2 km, app cells ~1.1 km, so each cell
-//! averages one or two pixels.
+//! it holds the x/y index window covering the bbox and, for every GOES cell, the window pixels
+//! sampled at a 4x4 sub-grid of the cell. ABI pixels are ~2 km, GOES cells ~5.5 km, so each cell
+//! averages about eight pixels.
+//!
+//! The GOES grid is the PLAN C15 bbox at 0.05 deg (driver decision on row volume): 68 x 64 cells,
+//! id `g5:<col>:<row>` from the south-west corner, five times coarser than the 0.01 deg app grid.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
@@ -16,18 +19,18 @@ pub const WEST: f64 = -83.2;
 pub const SOUTH: f64 = 24.3;
 pub const EAST: f64 = -79.8;
 pub const NORTH: f64 = 27.5;
-pub const CELL_DEG: f64 = 0.01;
-pub const COLS: usize = 340;
-pub const ROWS: usize = 320;
+pub const CELL_DEG: f64 = 0.05;
+pub const COLS: usize = 68;
+pub const ROWS: usize = 64;
 pub const CELLS: usize = COLS * ROWS;
 
-/// Sub-samples per cell side. 2 gives four samples at the cell quarter points.
-const SUB: usize = 2;
+/// Sub-samples per cell side. 4 gives sixteen samples about 1.4 km apart in a 5.5 km cell.
+const SUB: usize = 4;
 const NONE: u32 = u32::MAX;
 
-/// Cell id `<col>:<row>` from the south-west corner (PLAN C14).
+/// Cell id `g5:<col>:<row>` from the south-west corner.
 pub fn cell_id(idx: usize) -> String {
-    format!("{}:{}", idx % COLS, idx / COLS)
+    format!("g5:{}:{}", idx % COLS, idx / COLS)
 }
 
 /// Cell centre as (lat, lon).
@@ -183,7 +186,7 @@ pub struct Cell {
 }
 
 impl GridMap {
-    /// Cached map for a grid; built on first use (about 435k forward projections, tens of ms).
+    /// Cached map for a grid; built on first use (about 70k forward projections, a few ms).
     pub fn for_grid(grid: &FixedGrid) -> Arc<GridMap> {
         static MAPS: OnceLock<Mutex<HashMap<GridKey, Arc<GridMap>>>> = OnceLock::new();
         let maps = MAPS.get_or_init(|| Mutex::new(HashMap::new()));
@@ -333,7 +336,7 @@ mod tests {
         assert_eq!(cells.len(), CELLS);
         assert!(cells.iter().all(|c| c.flag == Flag::Ok && (10.0..=20.0).contains(&c.value.unwrap())));
         assert!(cells.iter().any(|c| c.value.unwrap() > 10.0 && c.value.unwrap() < 20.0), "some cells straddle two pixels");
-        // One good sample outranks cloudy ones; neighbours sharing that 2 km pixel see it too, far cells do not.
+        // One good sample outranks cloudy ones in its cell; far cells do not see it.
         let w0 = map.samples[0][0] as usize;
         let one_good = map.aggregate(|i| if i == w0 { Pixel::Good(7.0) } else { Pixel::Cloud });
         assert_eq!(one_good[0], Cell { idx: 0, value: Some(7.0), flag: Flag::Ok });
@@ -345,9 +348,11 @@ mod tests {
         assert!(!mixed.is_empty() && mixed.len() < CELLS);
         assert!(mixed.iter().all(|c| c.flag == Flag::BadDqf));
         assert!(map.aggregate(|_| Pixel::Skip).is_empty());
-        assert_eq!(cell_id(0), "0:0");
-        assert_eq!(cell_id(CELLS - 1), "339:319");
+        assert_eq!(cell_id(0), "g5:0:0");
+        assert_eq!(cell_id(CELLS - 1), "g5:67:63");
         let (lat, lon) = cell_center(0);
-        assert!((lat - 24.305).abs() < 1e-9 && (lon + 83.195).abs() < 1e-9);
+        assert!((lat - 24.325).abs() < 1e-9 && (lon + 83.175).abs() < 1e-9);
+        let (lat, lon) = cell_center(CELLS - 1);
+        assert!((lat - 27.475).abs() < 1e-9 && (lon + 79.825).abs() < 1e-9);
     }
 }

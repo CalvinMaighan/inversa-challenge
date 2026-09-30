@@ -597,11 +597,17 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         let n = self
             .tx
             .prepare_cached(
+                // Precedence on the (station, param, observed_at, origin) key: a null never replaces a
+                // value; between nulls cloud beats bad_dqf beats missing; between values the newer wins.
                 "insert into readings (station_id, param, value, flag, observed_at, origin, raw_object_id)
                  values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  on conflict(station_id, param, observed_at, origin) do update set value = excluded.value,
                    flag = excluded.flag, raw_object_id = excluded.raw_object_id
-                 where readings.value is not excluded.value or readings.flag is not excluded.flag",
+                 where (excluded.value is not null
+                        and (readings.value is not excluded.value or readings.flag is not excluded.flag))
+                    or (excluded.value is null and readings.value is null
+                        and (case excluded.flag when 'cloud' then 3 when 'bad_dqf' then 2 when 'missing' then 1 else 0 end)
+                          > (case readings.flag when 'cloud' then 3 when 'bad_dqf' then 2 when 'missing' then 1 else 0 end))",
             )?
             .execute(params![
                 station_id,
@@ -1166,5 +1172,67 @@ mod tests {
         start(state.clone(), Supervision::default()).await.unwrap();
         assert_eq!(count(&state, "sources").await, 1 + crate::ingest::push::all(&state.config).len() as i64
             + crate::ingest::poll::all(&state.config).len() as i64);
+    }
+
+    /// Readings upsert precedence on the same (station, param, observed_at, origin) key.
+    #[tokio::test]
+    async fn readings_upsert_precedence() {
+        let state = test_state();
+        let src = FakeSource::new("prec");
+        let at = 1_790_000_000_000;
+        let reading = |param: Param, value: Option<f64>, flag: Flag| {
+            Row::Reading(ReadingRow { station: station(), param, value, flag, observed_at: at, origin: Origin::Satellite })
+        };
+        let ingest = |rows: Vec<Row>, n: u32| {
+            let state = state.clone();
+            let src = &src;
+            async move {
+                let mut raw = payload(&rows, None);
+                raw.fetched_at += i64::from(n); // distinct raw objects, so nothing is skipped as a replay
+                ingest_payload(&state, src, raw, None).await.unwrap().rows_written
+            }
+        };
+        let read = |param: &'static str| {
+            let state = state.clone();
+            async move {
+                state
+                    .obs
+                    .read(move |c| {
+                        c.query_row(
+                            "select value, flag from readings r join stations s on s.id = r.station_id
+                             where s.ext_id = 'VAKF1' and r.param = ?1",
+                            [param],
+                            |r| Ok((r.get::<_, Option<f64>>(0)?, r.get::<_, String>(1)?)),
+                        )
+                    })
+                    .await
+                    .unwrap()
+            }
+        };
+
+        // 1. A null never overwrites a value, whatever its flag.
+        ingest(vec![reading(Param::LstC, Some(31.5), Flag::Ok)], 1).await;
+        assert_eq!(ingest(vec![reading(Param::LstC, None, Flag::Cloud)], 2).await, 0);
+        assert_eq!(ingest(vec![reading(Param::LstC, None, Flag::BadDqf)], 3).await, 0);
+        assert_eq!(read("lst_c").await, (Some(31.5), "ok".into()));
+
+        // 2. Between nulls: cloud beats bad_dqf beats missing, in either arrival order; equal is a no-op.
+        ingest(vec![reading(Param::SstC, None, Flag::Missing)], 4).await;
+        assert_eq!(ingest(vec![reading(Param::SstC, None, Flag::BadDqf)], 5).await, 1);
+        assert_eq!(read("sst_c").await, (None, "bad_dqf".into()));
+        assert_eq!(ingest(vec![reading(Param::SstC, None, Flag::Cloud)], 6).await, 1);
+        assert_eq!(ingest(vec![reading(Param::SstC, None, Flag::BadDqf)], 7).await, 0);
+        assert_eq!(ingest(vec![reading(Param::SstC, None, Flag::Missing)], 8).await, 0);
+        assert_eq!(ingest(vec![reading(Param::SstC, None, Flag::Cloud)], 9).await, 0);
+        assert_eq!(read("sst_c").await, (None, "cloud".into()));
+        // A value then replaces the flagged null.
+        assert_eq!(ingest(vec![reading(Param::SstC, Some(29.0), Flag::Ok)], 10).await, 1);
+        assert_eq!(read("sst_c").await, (Some(29.0), "ok".into()));
+
+        // 3. Between values the newer write wins; the same value again changes nothing.
+        ingest(vec![reading(Param::FireFrp, Some(12.0), Flag::Ok)], 11).await;
+        assert_eq!(ingest(vec![reading(Param::FireFrp, Some(15.0), Flag::Ok)], 12).await, 1);
+        assert_eq!(ingest(vec![reading(Param::FireFrp, Some(15.0), Flag::Ok)], 13).await, 0);
+        assert_eq!(read("fire_frp").await, (Some(15.0), "ok".into()));
     }
 }

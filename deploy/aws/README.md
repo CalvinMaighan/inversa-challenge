@@ -26,7 +26,8 @@ Replace `YOUR_ACCOUNT_ID` in the two policies with the 12-digit account id befor
 - Parses the SNS envelope (raw message delivery **off**) and the S3 event inside it.
 - Downloads `https://noaa-goes19.s3.amazonaws.com/<key>` for `ABI-L2-LSTC`, `ABI-L2-SSTF`,
   `ABI-L2-FDCC` and the top-of-hour `ABI-L2-ACMC` scan, deletes messages that carry nothing wanted,
-  and deletes a message only after its rows are committed.
+  and deletes a message only after its rows are committed. Decoded rows go to the 0.05 deg GOES
+  grid described below.
 - Reads `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` from the environment
   (PLAN.md C13). With any of the three missing the source is disabled and the API boots normally.
 
@@ -127,6 +128,29 @@ Build prerequisites:
 No `libnetcdf-dev` or `libhdf5-dev` package is needed. If a distro-packaged HDF5 is ever
 preferred, drop the `static` feature and set `HDF5_DIR=/usr` (Ubuntu: `apt install libhdf5-dev`).
 
-Measured on the committed fixtures (2026-09-26 18:01Z scene, bbox 24.3-27.5N, 83.2-79.8W):
-LSTC window 175 x 152 pixels, 108,800 cells, 34,567 with a value, 74,233 flagged bad_dqf
-(water and cloud); ACMC 22,681 cloud cells; FDCC 0 fires; SSTF 51,269 with a value.
+## GOES grid and row volume
+
+GOES readings land on a 0.05 deg grid over the PLAN C15 bbox: 68 x 64 = 4,352 cells, station
+kind `goes_cell`, ext_id `g5:<col>:<row>` from the south-west corner (24.3N, 83.2W), station
+lat/lon at the cell centre. Each cell averages the ABI pixels under a 4 x 4 sub-sample of the cell
+(about eight 2 km pixels).
+
+Rows are written only inside each product's domain, and inside it a cell is never dropped:
+
+| Product | Domain (per pixel, from the file itself) | Row when no value |
+|---|---|---|
+| LSTC | land: `PQI` surface_type bits are land or snow/ice (inland water and the 192 class, which the open sea carries, are skipped) | `cloud` when PQI says probably cloudy or cloudy, else `bad_dqf` |
+| SSTF | water: `DQF` 0, 1 or 2 (3 "unprocessed" is land) | `bad_dqf` (DQF 1 degraded, 2 severely degraded; cloudy water is 2) |
+| FDCC | fire pixels only (`Mask` 10-15, 30-35) | no row |
+| ACMC | cloudy pixels only (`BCM` 1), top-of-hour scan only | `cloud` rows on `lst_c` |
+
+Measured on the fixtures (2026-09-26 18:01Z scene): LSTC window 175 x 152 pixels, 1,613 land
+cells (1,550 with a value, 45 cloud, 18 bad_dqf); ACMC 1,267 cloud cells; FDCC 0 fires;
+SSTF window 175 x 152 pixels, 2,833 water cells (2,267 with a value, 566 bad_dqf).
+Rows per hourly scan set: 5,713, so about 137k rows a day against the 250k budget
+(`goes_fixture_rows_per_scan_under_daily_budget` prints `GOES rows/scan N` and enforces it).
+
+Readings precedence on a repeated key (`api/src/ingest/scheduler.rs`, the readings upsert): a null
+never overwrites a value; between nulls `cloud` beats `bad_dqf` beats `missing`; between values
+the newer write wins. So the LSTC row and the same-scan ACMC cloud row for one cell merge to the
+better of the two whatever the arrival order.

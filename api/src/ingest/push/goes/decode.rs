@@ -1,17 +1,24 @@
-//! Decode one GOES-19 ABI L2 NetCDF4 object (HDF5 on disk) into app-grid rows (T7).
+//! Decode one GOES-19 ABI L2 NetCDF4 object (HDF5 on disk) into GOES-grid rows (T7).
 //!
 //! Only the bbox hyperslab of each variable is read. Product rules, from each file's
 //! `flag_values`/`flag_meanings` (checked against the fixtures in `api/fixtures/goes`):
 //!
-//! - LSTC `LST` (u16, K): DQF 0 high / 1 medium quality -> value in C; 2 low / 3 no retrieval -> bad_dqf.
-//! - SSTF `SST` (u16, K): DQF 0 good -> value; 1 degraded / 2 severely degraded / 3 unprocessed -> bad_dqf.
+//! - LSTC `LST` (u16, K). Domain: land. The LST `DQF` (0 high, 1 medium, 2 low quality, 3 no
+//!   retrieval) cannot tell water from cloud, both are "no retrieval", so the domain comes from
+//!   `PQI` bits 6-7 (`surface_type`: 0 land, 64 snow/ice, 128 inland water, 192 coastal). In the
+//!   fixtures the open sea carries 192, so land = classes 0 and 64; inland water and 192 are skipped.
+//!   Land pixels: DQF 0/1 -> value in C; DQF 2/3 with PQI cloud bits 2-3 >= probably cloudy -> cloud;
+//!   other DQF 2/3 -> bad_dqf. A cell needs one land pixel to produce a row.
+//! - SSTF `SST` (u16, K). Domain: water = DQF 0 good, 1 degraded, 2 severely degraded (cloudy water
+//!   is 2 in the fixtures); DQF 3 "invalid due to unprocessed" is land and skipped. DQF 0 -> value;
+//!   1/2 -> bad_dqf. A cell needs one water pixel to produce a row.
 //! - FDCC `Power` (f32, MW): only pixels whose `Mask` is a fire class (10-15, 30-35) produce a row;
-//!   the absence of fire is the absence of a row, so a 5-minute product does not write 108,800 nulls.
+//!   the absence of fire is the absence of a row, so a 5-minute product does not write nulls.
 //! - ACMC `BCM`: cloudy pixels (BCM 1, DQF good or degraded) produce `lst_c` rows flagged `cloud` with
-//!   a null value at the ACMC scan time; clear pixels produce nothing. LSTC itself cannot tell cloud
-//!   from water (both are "no retrieval"), so this is what marks a land cell as cloud-covered.
+//!   a null value at the ACMC scan time; clear pixels produce nothing.
 //!
-//! A cell whose sampled pixels are all flagged is stored flagged (see `GridMap::aggregate`).
+//! A cell inside a product's domain whose sampled pixels are all flagged is stored flagged
+//! (see `GridMap::aggregate`); dropping applies only to pixels outside the domain.
 
 use std::path::{Path, PathBuf};
 
@@ -24,6 +31,12 @@ use crate::model::{Origin, Param, ReadingRow, Row, StationKind, StationRef};
 
 /// Unix ms of the J2000 epoch (2000-01-01T12:00:00Z), the origin of the files' `t` variable.
 const J2000_UNIX_MS: i64 = 946_728_000_000;
+
+/// LST `PQI` bit fields (flag_masks in the file).
+const PQI_CLOUD_MASK: u32 = 12;
+const PQI_PROBABLY_CLOUDY: u32 = 8;
+const PQI_SURFACE_MASK: u32 = 192;
+const PQI_SURFACE_INLAND_WATER: u32 = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Product {
@@ -95,22 +108,47 @@ pub fn decode_file(path: &Path, product: Product) -> Result<Decoded> {
     let observed_at = J2000_UNIX_MS + (t * 1000.0).round() as i64;
 
     let cells = match product {
-        Product::Lst | Product::Sst => {
-            let name = if product == Product::Lst { "LST" } else { "SST" };
-            let ds = file.dataset(name)?;
+        Product::Lst => {
+            let ds = file.dataset("LST")?;
             let (scale, offset) = (attr_f64(&ds, "scale_factor")?, attr_f64(&ds, "add_offset")?);
             let fill = attr_f64(&ds, "_FillValue")?;
             let valid = attr_vec(&ds, "valid_range")?;
             let dqf = file.dataset("DQF")?;
             let dqf_fill = attr_f64(&dqf, "_FillValue")?;
-            let good_max = if product == Product::Lst { 1.0 } else { 0.0 };
+            let raw = window(&ds, &w)?;
+            let q = window(&dqf, &w)?;
+            let pqi = window(&file.dataset("PQI")?, &w)?;
+            map.aggregate(|i| {
+                let (v, q, p) = (raw[i], q[i], pqi[i] as u32);
+                if q == dqf_fill || p & PQI_SURFACE_MASK >= PQI_SURFACE_INLAND_WATER {
+                    Pixel::Skip
+                } else if q > 1.0 {
+                    if p & PQI_CLOUD_MASK >= PQI_PROBABLY_CLOUDY {
+                        Pixel::Cloud
+                    } else {
+                        Pixel::Bad
+                    }
+                } else if v == fill || v < valid[0] || v > valid[1] {
+                    Pixel::Missing
+                } else {
+                    Pixel::Good(v * scale + offset - 273.15)
+                }
+            })
+        }
+        Product::Sst => {
+            let ds = file.dataset("SST")?;
+            let (scale, offset) = (attr_f64(&ds, "scale_factor")?, attr_f64(&ds, "add_offset")?);
+            let fill = attr_f64(&ds, "_FillValue")?;
+            let valid = attr_vec(&ds, "valid_range")?;
+            let dqf = file.dataset("DQF")?;
+            let dqf_fill = attr_f64(&dqf, "_FillValue")?;
             let raw = window(&ds, &w)?;
             let q = window(&dqf, &w)?;
             map.aggregate(|i| {
                 let (v, q) = (raw[i], q[i]);
-                if q == dqf_fill {
+                if q == dqf_fill || q >= 3.0 {
                     Pixel::Skip
-                } else if q > good_max {
+                } else if q > 0.0 {
                     Pixel::Bad
                 } else if v == fill || v < valid[0] || v > valid[1] {
                     Pixel::Missing
@@ -223,30 +261,37 @@ pub(crate) mod tests {
         chrono::DateTime::parse_from_rfc3339("2026-09-26T18:02:35.4Z").unwrap().timestamp_millis()
     }
 
-    #[test]
-    fn goes_fixture_lst_has_values_and_flags_in_bbox() {
-        let path = fixture(Product::Lst).expect("LSTC fixture present (api/fixtures/goes/fetch.sh)");
-        let d = decode_file(&path, Product::Lst).unwrap();
-        let (ok, bad, missing) = (count(&d, Flag::Ok), count(&d, Flag::BadDqf), count(&d, Flag::Missing));
-        eprintln!("LSTC window {:?} cells {} ok {ok} bad_dqf {bad} missing {missing}", d.window, d.cells.len());
-        assert!((d.observed_at - conus_scan_ms()).abs() < 2_000, "observed_at {}", d.observed_at);
-        assert_eq!(d.cells.len(), CELLS, "every bbox cell is sampled by the CONUS grid");
-        assert!(ok > 0, "some clear land cells");
-        assert!(bad > 0, "water and cloud cells are flagged, not dropped");
-        assert!(d.cells.iter().filter(|c| c.flag == Flag::Ok).all(|c| (0.0..60.0).contains(&c.value.unwrap())));
-        let rows = rows(&d);
-        assert_eq!(rows.len(), d.cells.len());
-        match &rows[0] {
+    fn check_station(r: &Row, param: Param) {
+        match r {
             Row::Reading(r) => {
-                assert_eq!(r.station.ext_id, "0:0");
-                assert_eq!(r.station.name, "GOES cell 0:0");
+                assert!(r.station.ext_id.starts_with("g5:"), "{}", r.station.ext_id);
+                assert_eq!(r.station.name, format!("GOES cell {}", r.station.ext_id));
                 assert_eq!(r.station.kind, StationKind::GoesCell);
-                assert_eq!(r.param, Param::LstC);
+                assert_eq!(r.param, param);
                 assert_eq!(r.origin, Origin::Satellite);
-                assert!((r.station.lat - 24.305).abs() < 1e-9 && (r.station.lon + 83.195).abs() < 1e-9);
+                assert!((24.3..27.5).contains(&r.station.lat) && (-83.2..-79.8).contains(&r.station.lon));
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn goes_fixture_lst_land_cells_have_values_and_flags() {
+        let path = fixture(Product::Lst).expect("LSTC fixture present (api/fixtures/goes/fetch.sh)");
+        let d = decode_file(&path, Product::Lst).unwrap();
+        let (ok, cloud, bad, missing) =
+            (count(&d, Flag::Ok), count(&d, Flag::Cloud), count(&d, Flag::BadDqf), count(&d, Flag::Missing));
+        eprintln!("LSTC window {:?} land cells {} ok {ok} cloud {cloud} bad_dqf {bad} missing {missing}", d.window, d.cells.len());
+        assert!((d.observed_at - conus_scan_ms()).abs() < 2_000, "observed_at {}", d.observed_at);
+        assert!(d.cells.len() > CELLS / 5 && d.cells.len() < CELLS * 3 / 4, "land cells only, not the sea");
+        assert!(ok > 0, "some clear land cells");
+        assert!(cloud > 0, "cloudy land cells are flagged, not dropped");
+        assert!(d.cells.iter().filter(|c| c.flag == Flag::Ok).all(|c| (0.0..60.0).contains(&c.value.unwrap())));
+        let rows = rows(&d);
+        assert_eq!(rows.len(), d.cells.len());
+        rows.iter().for_each(|r| check_station(r, Param::LstC));
+        // The south-west corner cell (Gulf of Mexico) is outside the land domain.
+        assert!(rows.iter().all(|r| !matches!(r, Row::Reading(r) if r.station.ext_id == "g5:0:0")));
     }
 
     #[test]
@@ -258,7 +303,8 @@ pub(crate) mod tests {
         assert!(!d.cells.is_empty() && d.cells.len() < CELLS, "cloudy cells only");
         assert!(d.cells.iter().all(|c| c.flag == Flag::Cloud && c.value.is_none()));
         let rows = rows(&d);
-        assert!(matches!(&rows[0], Row::Reading(r) if r.param == Param::LstC && r.flag == Flag::Cloud && r.value.is_none()));
+        rows.iter().for_each(|r| check_station(r, Param::LstC));
+        assert!(rows.iter().all(|r| matches!(r, Row::Reading(r) if r.flag == Flag::Cloud && r.value.is_none())));
     }
 
     #[test]
@@ -268,22 +314,44 @@ pub(crate) mod tests {
         eprintln!("FDCC window {:?} fire cells {}", d.window, d.cells.len());
         assert!(d.cells.len() < CELLS / 10, "fires are sparse");
         assert!(d.cells.iter().all(|c| c.flag == Flag::Ok && c.value.unwrap() > 0.0));
-        assert!(rows(&d).iter().all(|r| matches!(r, Row::Reading(r) if r.param == Param::FireFrp)));
+        rows(&d).iter().for_each(|r| check_station(r, Param::FireFrp));
     }
 
     #[test]
-    fn goes_fixture_sst_full_disk_window() {
+    fn goes_fixture_sst_water_cells_full_disk_window() {
         let Some(path) = fixture(Product::Sst) else {
             eprintln!("SSTF fixture absent (run api/fixtures/goes/fetch.sh); skipping");
             return;
         };
         let d = decode_file(&path, Product::Sst).unwrap();
         let (ok, bad) = (count(&d, Flag::Ok), count(&d, Flag::BadDqf));
-        eprintln!("SSTF window {:?} cells {} ok {ok} bad_dqf {bad}", d.window, d.cells.len());
-        assert_eq!(d.cells.len(), CELLS);
+        eprintln!("SSTF window {:?} water cells {} ok {ok} bad_dqf {bad}", d.window, d.cells.len());
+        assert!(d.cells.len() > CELLS / 3 && d.cells.len() < CELLS, "water cells only, not the land");
         assert!(ok > 0 && bad > 0);
         assert!(d.cells.iter().filter(|c| c.flag == Flag::Ok).all(|c| (15.0..40.0).contains(&c.value.unwrap())));
-        assert!(rows(&d).iter().all(|r| matches!(r, Row::Reading(r) if r.param == Param::SstC)));
+        let rows = rows(&d);
+        rows.iter().for_each(|r| check_station(r, Param::SstC));
+        assert!(rows.iter().any(|r| matches!(r, Row::Reading(r) if r.station.ext_id == "g5:0:0")), "Gulf corner is water");
+    }
+
+    /// Driver target: under 250k GOES rows a day. Every consumed product is hourly (ACMC only the
+    /// top-of-hour scan), so rows/day = rows per hourly scan set x 24.
+    #[test]
+    fn goes_fixture_rows_per_scan_under_daily_budget() {
+        let mut per_scan = 0;
+        for p in Product::ALL {
+            let Some(path) = fixture(p) else {
+                assert_eq!(p, Product::Sst, "{p:?} fixture is committed");
+                // SSTF is fetched on demand; without it count every water cell, the worst case.
+                per_scan += CELLS;
+                continue;
+            };
+            let n = rows(&decode_file(&path, p).unwrap()).len();
+            eprintln!("GOES rows/scan {:?} {n}", p);
+            per_scan += n;
+        }
+        eprintln!("GOES rows/scan {per_scan} (rows/day {})", per_scan * 24);
+        assert!(per_scan * 24 < 250_000, "{per_scan} rows per scan hour");
     }
 
     #[test]
