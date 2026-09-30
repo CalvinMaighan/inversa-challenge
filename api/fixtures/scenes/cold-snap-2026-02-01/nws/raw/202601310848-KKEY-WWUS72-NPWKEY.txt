@@ -1,0 +1,85 @@
+614 
+WWUS72 KKEY 310848
+NPWKEY
+
+URGENT - WEATHER MESSAGE
+National Weather Service Key West FL
+348 AM EST Sat Jan 31 2026
+
+FLZ076-311800-
+/O.NEW.KKEY.WI.Y.0001.260201T0000Z-260201T1500Z/
+/O.NEW.KKEY.CW.Y.0001.260201T0300Z-260201T1500Z/
+Monroe Upper Keys-
+Including the cities of Key Largo
+348 AM EST Sat Jan 31 2026
+
+...WIND ADVISORY IN EFFECT FROM 7 PM THIS EVENING TO 10 AM EST 
+SUNDAY...
+...COLD WEATHER ADVISORY IN EFFECT FROM 10 PM THIS EVENING TO 10 AM 
+EST SUNDAY...
+
+* WHAT...For the Wind Advisory, northwest winds 25 to 30 mph with 
+  gusts up to 40 mph expected. For the Cold Weather Advisory, very 
+  cold wind chills as low as 27 expected.
+
+* WHERE...Monroe Upper Keys.
+
+* WHEN...For the Wind Advisory, from 7 PM this evening to 10 AM EST 
+  Sunday. For the Cold Weather Advisory, from 10 PM this evening to 
+  10 AM EST Sunday.
+
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree 
+  limbs could be blown down and a few power outages may result. Very 
+  cold temperatures can lead to hypothermia with prolonged exposure.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Winds this strong can make driving difficult, especially for high 
+profile vehicles. Use extra caution.
+
+Secure outdoor objects.
+
+Use caution while traveling outside. Wear appropriate clothing, a 
+hat, and gloves.
+
+Keep pets indoors as much as possible.
+
+Make frequent checks on older family, friends, and neighbors. Ensure 
+portable heaters are used correctly. Do not use generators or grills 
+inside.
+
+&&
+
+$$
+
+FLZ077-078-311800-
+/O.NEW.KKEY.WI.Y.0001.260201T0000Z-260201T1500Z/
+Monroe Middle Keys-Monroe Lower Keys-
+Including the cities of Marathon and Key West
+348 AM EST Sat Jan 31 2026
+
+...WIND ADVISORY IN EFFECT FROM 7 PM THIS EVENING TO 10 AM EST 
+SUNDAY...
+
+* WHAT...Northwest winds near 30 mph with gusts up to 45 mph 
+  expected.
+
+* WHERE...Monroe Lower Keys and Monroe Middle Keys.
+
+* WHEN...From 7 PM this evening to 10 AM EST Sunday.
+
+* IMPACTS...Gusty winds will blow around unsecured objects. Tree 
+  limbs could be blown down and a few power outages may result.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Winds this strong can make driving difficult, especially for high 
+profile vehicles. Use extra caution.
+
+Secure outdoor objects.
+
+&&
+
+$$
+
+DP
