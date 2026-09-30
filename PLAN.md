@@ -259,3 +259,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T9 merged+verified 6/6 (api 123 tests). T13 lint follow-up merged+verified 5/5+1 abandoned. EvidenceKind += backtest. 1 web test fail pending T15 key reconcile.
 - T15 reconcile merged (web 225/0, build ok). T11 EVF2 merged 8/8. hotspotScale rounded in frames.ts.
 - T10 merged+verified 9/9 (api 156). C14 backtest kind listed.
+- T8 merged+verified 5/5 (api 200 tests). Cargo.lock regenerated.
