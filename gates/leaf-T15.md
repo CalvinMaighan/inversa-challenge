@@ -8,35 +8,37 @@ Scope:
 - Caps: VOICE_MAX_SESSION_MS per session and VOICE_DAILY_MINUTES per day.
 - Auth is replaced by a per-session token only (no Supabase).
 
-- [ ] G1: voice tests pass
+- [x] G1: voice tests pass
   CHECK: cd apps/web && bun test tests/server/voice tests/client/voice 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 61 pass | 0 fail
 
-- [ ] G2: PCM resample produces the expected sample count at 16 kHz from a 48 kHz input, phase-continuous across batches (test)
+- [x] G2: PCM resample produces the expected sample count at 16 kHz from a 48 kHz input, phase-continuous across batches (test)
   CHECK: cd apps/web && bun test tests/client/voice -t "resample" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9] pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 4 pass | 0 fail
 
-- [ ] G3: a mocked xAI socket session: the model calls fly_to, the relay emits ui.command, and the client handler sets the VIEW key (test)
+- [x] G3: a mocked xAI socket session: the model calls fly_to, the relay emits ui.command, and the client handler sets the VIEW key (test)
   CHECK: cd apps/web && bun test tests -t "fly_to reaches VIEW" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 1 pass | 0 fail
 
-- [ ] G4: invalid UI tool args are rejected and reported back to the model as a tool error, never forwarded (test)
+- [x] G4: invalid UI tool args are rejected and reported back to the model as a tool error, never forwarded (test)
   CHECK: cd apps/web && bun test tests -t "rejects invalid ui tool" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 1 pass | 0 fail
 
-- [ ] G5: the daily minute cap refuses a new session with 429 once exceeded (test)
+- [x] G5: the daily minute cap refuses a new session with 429 once exceeded (test)
   CHECK: cd apps/web && bun test tests -t "daily voice cap" 2>&1 | grep -E "pass|fail"
   EXPECT: /1 pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: 1 pass | 0 fail
 
-- [ ] G6: typecheck and lint clean
+- [x] G6: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
-  EVIDENCE: pending
+  EVIDENCE: CLEAN
 
 - [ ] G7: (live, blocked on H6) spoken "fly to Flamingo" moves the globe; measured end-of-speech-to-camera-move latency is under 800 ms (quote the measurement)
   EVIDENCE: pending
+
+ABANDON: G7 blocked on H6 (XAI_API_KEY) and T14/T17 UI
