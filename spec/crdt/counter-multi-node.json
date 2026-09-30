@@ -1,0 +1,85 @@
+{
+  "name": "counter-multi-node",
+  "ops": [
+    {
+      "id": "op-0064",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 10,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0065",
+      "hlc": "1700000000100:0:b",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 0,
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0066",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 5,
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0067",
+      "hlc": "1700000000100:0:c",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "python",
+      "field": "count",
+      "value": 5,
+      "nodeId": "c"
+    },
+    {
+      "id": "op-0068",
+      "hlc": "1700000000300:0:c",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "iguana",
+      "field": "count",
+      "value": 12,
+      "nodeId": "c"
+    },
+    {
+      "id": "op-0069",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "iguana",
+      "field": "count",
+      "value": 1,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0070",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "removal",
+      "entityId": "lionfish",
+      "field": "count",
+      "value": 0,
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [],
+    "removals": {
+      "python": 20,
+      "iguana": 13,
+      "lionfish": 0
+    }
+  }
+}

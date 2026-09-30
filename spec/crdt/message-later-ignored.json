@@ -1,0 +1,47 @@
+{
+  "name": "message-later-ignored",
+  "ops": [
+    {
+      "id": "op-0025",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "edited",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0026",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "original",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0027",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "msg1",
+      "field": "body",
+      "value": "edited again",
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [
+      {
+        "id": "msg1",
+        "body": "original",
+        "hlc": "1700000000100:0:a"
+      }
+    ],
+    "removals": {}
+  }
+}

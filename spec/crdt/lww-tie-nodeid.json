@@ -1,0 +1,59 @@
+{
+  "name": "lww-tie-nodeid",
+  "ops": [
+    {
+      "id": "op-0005",
+      "hlc": "1700000000100:3:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "from b",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0006",
+      "hlc": "1700000000100:3:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "from a",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0007",
+      "hlc": "1700000000100:3:node-9",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "from node-9",
+      "nodeId": "node-9"
+    },
+    {
+      "id": "op-0008",
+      "hlc": "1700000000100:3:node-10",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "from node-10",
+      "nodeId": "node-10"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "from b"
+      }
+    },
+    "notes": {
+      "n1": {
+        "body": "from node-9"
+      }
+    },
+    "messages": [],
+    "removals": {}
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "name": "tombstone-undelete",
+  "ops": [
+    {
+      "id": "op-0015",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Lionfish derby",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0016",
+      "hlc": "1700000000200:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "_deleted",
+      "value": true,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0017",
+      "hlc": "1700000000300:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "_deleted",
+      "value": false,
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0018",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "stays deleted",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0019",
+      "hlc": "1700000000400:0:a",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "_deleted",
+      "value": false,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0020",
+      "hlc": "1700000000500:0:b",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "_deleted",
+      "value": true,
+      "nodeId": "b"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "Lionfish derby"
+      }
+    },
+    "notes": {},
+    "messages": [],
+    "removals": {}
+  }
+}
