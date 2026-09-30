@@ -268,3 +268,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T17 merged (6/7, G7 ABANDON H7). Contract: EVF2 sighting record 16B with u32 id; SightingRecord+readSightingRecords in shared/frames.ts; FrameMeta.geometry; FrameSightings decoded; GlobeApi.onCursor optional. T17 to drop FrameTimeline; T11 to write ids.
 - T11 ids merged 8/8. T29 merged (scene cold-snap-2026-02-01). T18 re-adapting to final frame contract; T17 fixing GlobeView. NOTE: scene is outside default 30d window; TIME window must shift via set_time.
 - T17 follow-up merged 6/7 (G7 ABANDON H7). Main web: typecheck/lint clean, 418 tests. page.tsx wired: Globe+Hud+AgentOrb.
+- T19 merged+verified 4/4 (web 516 tests). Fixes: busy_timeout 30s, GBIF 100/page, quiet cargo scripts.
