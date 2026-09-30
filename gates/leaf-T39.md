@@ -33,7 +33,7 @@ Scope:
 - [x] G6: live eval passes at least 13 of 15 golden questions and at least 4 of 5 quality questions
   CHECK: bun run eval 2>&1 | grep -E "^EVAL (quality )?passed" | tr '\n' ' '
   EXPECT: /EVAL quality passed [45]\/5 EVAL passed 1[3-5]\/15/
-  EVIDENCE: EVAL quality passed 5/5 EVAL passed 14/15
+  EVIDENCE: EVAL quality passed 4/5 EVAL passed 14/15
 
 - [x] G7: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
@@ -49,7 +49,7 @@ Scope:
   EVIDENCE: OpenRouter docs (openrouter.ai/docs/use-cases/reasoning-tokens): `"reasoning": {"effort": ...}` with efforts none..xhigh; reasoning streams as `delta.reasoning` or `delta.reasoning_details`. Live probe 2026-09-30 (curl, doppler key, headers `HTTP-Referer: https://inversa.calvinmaighan.dev`, `X-Title: Everglades Ops`, body `"reasoning":{"effort":"low"}`, one tool): `"model":"openai/gpt-6-luna","provider":"OpenAI"`, `tool_calls ... "name":"get_weather"`, args streamed `{"city":"Miami"}`, `"finish_reason":"tool_calls"`, final chunk `"usage":{"prompt_tokens":52,"completion_tokens":18,...,"cost":0.0000142}`. Unit tests `tests/server/agent/openrouter-adapter.test.ts` assert `body.reasoning == {effort}`, no `reasoning_effort`, no default temperature, the headers and base URL, and map that recorded chunk sequence.
 
 - [x] G10: `bun run dev` loads Doppler inversa/dev into the children without printing it, falls back to the plain env with a warning, and runs api, web and the signal Worker; Ctrl-C stops all three
-  EVIDENCE: 2026-09-30 smoke run: first line `agent: openrouter openai/gpt-6-luna (key from doppler inversa/dev) · web: http://localhost:3050 · signal: http://127.0.0.1:8799`; `lsof` showed `inversa-a 127.0.0.1:4041`, `node *:3050`, `workerd 127.0.0.1:8799`; `[signal] ⛅️ wrangler 4.145.0`; `grep -ci sk-or` on the log: 0. SIGINT to `bun scripts/dev.ts`: `[api] exited with 143`, `[signal] exited with 143`, `[web] exited with 0`, then 0 listeners on 3050/4041/8799. Fallback run with `DOPPLER_TOKEN=dp.st.invalid`: `warning: Doppler inversa/dev not loaded (Doppler Error: Invalid Auth token); using the plain environment.` then `agent: unavailable, OPENROUTER_API_KEY not set (/api/agent/stream answers 503)`.
+  EVIDENCE: 2026-09-30 smoke run: first line `agent: openrouter openai/gpt-6-luna (key from doppler inversa/dev) · web: http://localhost:3050 · signal: http://127.0.0.1:8799`; `lsof` showed `inversa-a 127.0.0.1:4041`, `node *:3050`, `workerd 127.0.0.1:8799`; `[signal] ⛅️ wrangler 4.145.0`; `grep -ci sk-or` on the log: 0. SIGINT to `bun scripts/dev.ts`: `[api] exited with 143`, `[signal] exited with 143`, `[web] exited with 0`, then 0 listeners on 3050/4041/8799. Fallback run with `DOPPLER_TOKEN=dp.st.invalid`: `warning: Doppler inversa/dev not loaded (Doppler Error: Invalid Auth token); using the plain environment.` then `agent: unavailable, OPENROUTER_API_KEY not set (/api/agent/stream answers 503)`. Driver re-verified 2026-09-30 23:12Z on main: 3 listeners up, /health ok, live agent answered with 4 tools, 7 citations and a view event; no key in the log.
 
 - [x] G11: the agent e2e runs the live model: open the card, ask, tool rows, globe flies, citation opens the drawer; FLOW-OK
   CHECK: bun run --cwd apps/web e2e:agent 2>&1 | tail -1

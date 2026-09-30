@@ -186,7 +186,7 @@ Root `package.json`: `dev`, `api`, `build`, `lint`, `typecheck`, `test`, `test:a
 | Data dir | `INVERSA_DATA_DIR` (default `./data`) |
 | API origin for Next | `INVERSA_API_ORIGIN` |
 
-Secrets (never committed): `FIREWORKS_API_KEY`, `XAI_API_KEY`, `CESIUM_ION_TOKEN` (exposed to the client as `NEXT_PUBLIC_CESIUM_ION_TOKEN`), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RAW`, `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NWWS_USER`, `NWWS_PASS`, `INGEST_HOOK_SECRET`, `CF_TURN_KEY_ID`, `CF_TURN_KEY_TOKEN`.
+Secrets (never committed): `OPENROUTER_API_KEY`, `XAI_API_KEY`, `CESIUM_ION_TOKEN` (exposed to the client as `NEXT_PUBLIC_CESIUM_ION_TOKEN`), `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RAW`, `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NWWS_USER`, `NWWS_PASS`, `INGEST_HOOK_SECRET`, `CF_TURN_KEY_ID`, `CF_TURN_KEY_TOKEN`.
 
 ### C14: evidence ids
 
@@ -286,3 +286,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T22 merged; node-data 8/8. NWS freshness fix (alert-only feeds).
 - T32 merged 4/4 (README, demo, interview notes, brief-compliance 37 rows). Fixed: allowedDevOrigins 127.0.0.1, GOES doc volumes. Time clamp -> T23/24.
 - T21 merged+verified 4/4 (rtc p50 18ms, ws p50 86ms). Web 542 tests.
+- T39 merged+verified 11/11 (live eval 14/15). Prompt: disabled feeds need no citation. Driver smoke of bun run dev: api+web+signal, live agent 4 tools/7 citations/view.
