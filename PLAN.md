@@ -255,3 +255,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T11 merged (EVF1) -> rework to EVF2. T16 merged+verified 5/5 -> FrameGrid rework to EVF2.
 - T3 merged (8/8 on branch). Accepted: test tsconfig flag; build copies static+public; slots via default exports client/globe, client/hud, client/agent wired by driver. T15 reconciling voice keys with catalog.
 - T13 merged (lint fixes pending on T13 branch). Contract: C14 backtest kind + FeedState.lastFetchRunId (T10). next.config traces cordis.yml.
+- T9 merged+verified 6/6 (api 123 tests). T13 lint follow-up merged+verified 5/5+1 abandoned. EvidenceKind += backtest. 1 web test fail pending T15 key reconcile.
