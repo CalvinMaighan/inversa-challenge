@@ -45,9 +45,43 @@ export async function gql<T>(
   return body.data;
 }
 
-export const FEED_FIELDS = `fragment FeedFields on FeedState {
-  source mode state newestObservedAt lastFetchAt lagSeconds note
-}`;
+const FEED_BASE_FIELDS = "source mode state newestObservedAt lastFetchAt lagSeconds note";
+
+/**
+ * `FeedState.lastFetchRunId` (accepted into C3/C14 with T10) makes staleness
+ * citable as `fetch:<id>`. An API that predates it rejects the field; the
+ * first such rejection drops it for the rest of the process.
+ */
+let feedRunIds = true;
+
+function feedFragment(): string {
+  return `fragment FeedFields on FeedState { ${FEED_BASE_FIELDS}${feedRunIds ? " lastFetchRunId" : ""} }`;
+}
+
+/**
+ * Query that selects `...FeedFields`; the fragment is appended here. Still one
+ * POST per call, except the single retry when the API lacks `lastFetchRunId`.
+ */
+export async function gqlWithFeeds<T>(
+  operationName: string,
+  query: string,
+  variables: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const withRunIds = feedRunIds;
+  try {
+    return await gql<T>(operationName, `${query}\n${feedFragment()}`, variables, signal);
+  } catch (error) {
+    if (!withRunIds || !(error instanceof GraphqlError) || !error.message.includes("lastFetchRunId")) throw error;
+    feedRunIds = false;
+    return gql<T>(operationName, `${query}\n${feedFragment()}`, variables, signal);
+  }
+}
+
+/** Test-only: assume the API has `lastFetchRunId` again. */
+export function resetFeedFieldProbe(): void {
+  feedRunIds = true;
+}
 
 export type GqlFeedState = {
   source: string;
@@ -57,6 +91,7 @@ export type GqlFeedState = {
   lastFetchAt: string | null;
   lagSeconds: number | null;
   note: string | null;
+  lastFetchRunId?: string | null;
 };
 
 const HEALTH = new Set<FeedHealth>(["nominal", "lagging", "stale", "down"]);
@@ -85,10 +120,12 @@ export function dataVersion(feeds: readonly FeedState[]): string | null {
   return best === null ? null : new Date(best).toISOString();
 }
 
-export const FEEDS_QUERY = `query AgentFeeds { feeds { ...FeedFields } }
-${FEED_FIELDS}`;
-
 export async function fetchFeeds(signal?: AbortSignal): Promise<FeedState[]> {
-  const data = await gql<{ feeds: GqlFeedState[] }>("AgentFeeds", FEEDS_QUERY, {}, signal);
+  const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>(
+    "AgentFeeds",
+    "query AgentFeeds { feeds { ...FeedFields } }",
+    {},
+    signal,
+  );
   return data.feeds.map(toFeedState);
 }

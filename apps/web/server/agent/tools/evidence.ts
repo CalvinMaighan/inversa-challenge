@@ -1,36 +1,38 @@
 /** Evidence ids (PLAN.md C14), grid cells and species keys shared by the tools. */
 
 import { CELL_DEG, REGION_BBOX } from "@/server/agent/config";
-import type { Evidence } from "@/server/agent/runtime/registry";
-import type { EvidenceKind } from "@/shared/agent/events";
+import type { CitableKind, Evidence } from "@/server/agent/runtime/registry";
+import { SPECIES_IDS } from "@/shared/voice/ui-tools";
 
-/** Species order and `taxa.id` 1–4 (PLAN.md C4). */
-export const SPECIES = [
-  { key: "python", taxonId: "1", common: "Burmese python", scientific: "Python bivittatus" },
-  { key: "tegu", taxonId: "2", common: "Argentine black and white tegu", scientific: "Salvator merianae" },
-  { key: "iguana", taxonId: "3", common: "Green iguana", scientific: "Iguana iguana" },
-  { key: "lionfish", taxonId: "4", common: "Red lionfish", scientific: "Pterois volitans" },
-] as const;
+export type SpeciesKey = (typeof SPECIES_IDS)[number];
+export const SPECIES_KEYS = SPECIES_IDS;
 
-export type SpeciesKey = (typeof SPECIES)[number]["key"];
-export const SPECIES_KEYS = SPECIES.map((species) => species.key) as [SpeciesKey, ...SpeciesKey[]];
+const SPECIES_NAMES: Record<SpeciesKey, { common: string; scientific: string }> = {
+  python: { common: "Burmese python", scientific: "Python bivittatus" },
+  tegu: { common: "Argentine black and white tegu", scientific: "Salvator merianae" },
+  iguana: { common: "Green iguana", scientific: "Iguana iguana" },
+  lionfish: { common: "Red lionfish", scientific: "Pterois volitans" },
+};
+
+/** SPECIES_IDS order is the EVF species order, so `taxa.id` is position + 1 (PLAN.md C4). */
+export const SPECIES = SPECIES_IDS.map((key, index) => ({ key, taxonId: String(index + 1), ...SPECIES_NAMES[key] }));
 
 export function speciesByKey(key: SpeciesKey) {
   return SPECIES.find((species) => species.key === key)!;
 }
 
-const EVIDENCE_KINDS = new Set<EvidenceKind>(["sighting", "reading", "alert", "fetch", "hotspot"]);
+const EVIDENCE_KINDS = new Set<CitableKind>(["sighting", "reading", "alert", "fetch", "hotspot", "backtest"]);
 
 /** `<kind>:<key>` with a known kind and a non-empty key. */
-export function parseEvidenceId(id: string): { kind: EvidenceKind; key: string } | null {
+export function parseEvidenceId(id: string): { kind: CitableKind; key: string } | null {
   const colon = id.indexOf(":");
   if (colon <= 0) return null;
-  const kind = id.slice(0, colon) as EvidenceKind;
+  const kind = id.slice(0, colon) as CitableKind;
   const key = id.slice(colon + 1);
   return EVIDENCE_KINDS.has(kind) && key.length > 0 ? { kind, key } : null;
 }
 
-export function evidence(kind: EvidenceKind, key: string, label: string): Evidence {
+export function evidence(kind: CitableKind, key: string, label: string): Evidence {
   return { id: `${kind}:${key}`, kind, label };
 }
 

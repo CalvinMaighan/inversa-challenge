@@ -54,7 +54,12 @@ export class Results {
   /** Feeds a tool result reported as not nominal, e.g. "ndbc (stale)". */
   unhealthy(name: string): string {
     const feeds = (this.last(name).feeds as Json[]).filter((feed) => feed.state !== "nominal");
-    return feeds.map((feed) => `${String(feed.source).toUpperCase()} is ${String(feed.state)}`).join("; ");
+    return feeds
+      .map((feed) => {
+        const cite = feed.evidenceId ? ` [e:${String(feed.evidenceId)}]` : "";
+        return `${String(feed.source).toUpperCase()} is ${String(feed.state)}${cite}`;
+      })
+      .join("; ");
   }
 }
 
@@ -196,11 +201,11 @@ export const GOLDEN: Golden[] = [
     id: "python-backtest",
     question: "How well have the python hotspot scores held up over the last two weeks?",
     quality: false,
-    expect: { tools: ["backtest"], phrases: [/baseline/i, /heuristic/i], minCitations: 0 },
+    expect: { tools: ["backtest"], phrases: [/baseline/i, /heuristic/i], minCitations: 1 },
     steps: [() => [{ name: "backtest", args: { species: "python", days: 14 } }]],
     answer(r) {
       const result = r.last("backtest");
-      return `Over ${String(result.days)} days, ${Math.round(Number(result.hitRate) * 100)}% of python sightings fell in the top 10% of cells, against a ${Math.round(Number(result.baseline) * 100)}% baseline (${String(result.lift)}× lift, ${String(result.sightingsScored)} sightings scored). Useful, but it is a heuristic and the sample is small.`;
+      return `Over ${String(result.days)} days, ${Math.round(Number(result.hitRate) * 100)}% of python sightings fell in the top 10% of cells, against a ${Math.round(Number(result.baseline) * 100)}% baseline (${String(result.lift)}× lift, ${String(result.sightingsScored)} sightings scored) ${e(result)}. Useful, but it is a heuristic and the sample is small.`;
     },
   },
   {
@@ -287,12 +292,12 @@ export const GOLDEN: Golden[] = [
     id: "quality-stale-feeds",
     question: "Which data feeds are stale or down right now?",
     quality: true,
-    expect: { tools: ["feed_state"], phrases: [/stale/i, /ndbc/i, /down/i], minCitations: 0 },
+    expect: { tools: ["feed_state"], phrases: [/stale/i, /ndbc/i, /down/i], minCitations: 3 },
     steps: [() => [{ name: "feed_state" }]],
     answer(r) {
       const ndbc = r.feed("ndbc");
       const nwws = r.feed("nwws");
-      return `NDBC is stale: newest observation ${String(ndbc.newestObservedAt)}, ${Math.round(Number(ndbc.lagSeconds) / 3600)} h behind (${String(ndbc.note)}). NWWS is down (${String(nwws.note)}). ${r.unhealthy("feed_state")}. Everything else is nominal.`;
+      return `NDBC is stale ${e(ndbc)}: newest observation ${String(ndbc.newestObservedAt)}, ${Math.round(Number(ndbc.lagSeconds) / 3600)} h behind (${String(ndbc.note)}). NWWS is down and has never fetched (${String(nwws.note)}). ${r.unhealthy("feed_state")}. Everything else is nominal.`;
     },
   },
   {
