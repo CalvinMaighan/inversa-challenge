@@ -45,7 +45,6 @@ pub fn top_threshold(scores: &[f32]) -> f32 {
 }
 
 /// The last `days` full UTC days before now.
-#[allow(dead_code)] // consumed by the GraphQL resolvers (T10)
 pub async fn backtest(db: &Db, species: Species, days: u32) -> anyhow::Result<Backtest> {
     backtest_until(db, species, days, chrono::Utc::now().timestamp_millis()).await
 }

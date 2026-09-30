@@ -676,7 +676,6 @@ pub struct BBox {
 pub const DEFAULT_TOP: usize = 100;
 
 /// Ranked cells of `species` at `at` inside `bbox` (GraphQL `hotspots`).
-#[allow(dead_code)] // consumed by the GraphQL resolvers (T10)
 pub async fn hotspots(db: &Db, species: Species, at: i64, bbox: BBox, top: Option<usize>) -> anyhow::Result<Vec<Cell>> {
     let snap = Snapshot::load(db, Grid::REGION, at, at + 1).await?;
     let top = top.unwrap_or(DEFAULT_TOP);
@@ -688,7 +687,6 @@ pub async fn hotspots(db: &Db, species: Species, at: i64, bbox: BBox, top: Optio
 }
 
 /// Each term of the score at one cell (GraphQL `explainCell`).
-#[allow(dead_code)] // consumed by the GraphQL resolvers (T10)
 pub async fn explain(db: &Db, cell: &str, species: Species, at: i64) -> anyhow::Result<Explain> {
     let grid = Grid::REGION;
     let idx = grid.parse_cell(cell).ok_or_else(|| anyhow::anyhow!("bad cell id {cell:?}"))?;

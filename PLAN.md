@@ -260,3 +260,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T15 reconcile merged (web 225/0, build ok). T11 EVF2 merged 8/8. hotspotScale rounded in frames.ts.
 - T10 merged+verified 9/9 (api 156). C14 backtest kind listed.
 - T8 merged+verified 5/5 (api 200 tests). Cargo.lock regenerated.
+- T22 data-plane integration: clippy -D warnings clean; migration 0003 (`sources.disabled_reason`, disabled sources listed as down with a note); `backfill --fixtures` covers every fixture source (manifests for physical, GOES, NWWS; NWWS fixtures moved to `api/fixtures/nwws/`) and rebuilds frames; GBIF baseline paged per year (search stalls past offset 10k); e2e_fixture_pipeline; api 204 passed, 2 ignored (live).

@@ -80,6 +80,27 @@ pub fn sources(config: &Config) -> Vec<Arc<dyn Source>> {
     }
 }
 
+/// Why the source is not running, if it is not (the reason becomes the feed-state note).
+pub fn disabled_reason(config: &Config) -> Option<String> {
+    config.nwws_user.is_none().then(|| "NWWS_USER and NWWS_PASS not set; alerts come from the nws poller".to_string())
+}
+
+/// Static description, shared by the running source and its disabled registration.
+///
+/// `cadence` is the fetch loop's heartbeat: while connected, `fetch` returns at least every
+/// [`WAIT`] (an empty run when no product arrived), so three missed heartbeats mean the
+/// connection task is stuck and the feed shows down.
+pub fn info() -> SourceInfo {
+    SourceInfo {
+        id: "nwws",
+        name: "NOAA Weather Wire Service (NWWS-OI)",
+        homepage: "https://www.weather.gov/nwws/",
+        mode: Mode::Push,
+        cadence: WAIT,
+        max_latency: Duration::from_secs(6 * 3600),
+    }
+}
+
 #[derive(Default)]
 struct Status {
     online: AtomicBool,
@@ -126,14 +147,7 @@ impl Nwws {
 #[async_trait]
 impl Source for Nwws {
     fn info(&self) -> SourceInfo {
-        SourceInfo {
-            id: "nwws",
-            name: "NOAA Weather Wire Service (NWWS-OI)",
-            homepage: "https://www.weather.gov/nwws/",
-            mode: Mode::Push,
-            cadence: Duration::ZERO,
-            max_latency: Duration::from_secs(6 * 3600),
-        }
+        info()
     }
 
     fn min_interval(&self) -> Duration {
@@ -392,7 +406,7 @@ mod tests {
     use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, FakeFetch};
 
     fn stanza(name: &str) -> RawPayload {
-        RawPayload { fetched_at: 1_790_800_900_000, ..stanza_payload(fixture(&format!("nws/{name}"))) }
+        RawPayload { fetched_at: 1_790_800_900_000, ..stanza_payload(fixture(&format!("nwws/{name}"))) }
     }
 
     fn alerts(name: &str) -> Vec<AlertRow> {
@@ -445,7 +459,7 @@ mod tests {
 
     #[test]
     fn nwws_fixture_key_coastal_flood_matches_api_row() {
-        let rows = alerts("nwws_cfwkey.xml");
+        let rows = alerts("cfwkey.xml");
         assert_eq!(rows.len(), 1);
         let a = &rows[0];
         assert_eq!(a.ext_id, "vtec:KKEY.CF.Y.0003.2026:FLZ076,FLZ077,FLZ078");
@@ -470,7 +484,7 @@ mod tests {
 
     #[test]
     fn nwws_fixture_miami_multi_segment_with_expiry() {
-        let rows = alerts("nwws_cfwmfl.xml");
+        let rows = alerts("cfwmfl.xml");
         let keys: Vec<&str> = rows.iter().map(|a| a.ext_id.as_str()).collect();
         assert_eq!(
             keys,
@@ -494,7 +508,7 @@ mod tests {
 
     #[test]
     fn nwws_other_office_stanza_gives_no_rows() {
-        let xml = String::from_utf8(fixture("nws/nwws_cfwkey.xml")).unwrap().replace("cccc=\"KKEY\"", "cccc=\"KMLB\"").replace("awipsid=\"CFWKEY\"", "awipsid=\"CFWMLB\"");
+        let xml = String::from_utf8(fixture("nwws/cfwkey.xml")).unwrap().replace("cccc=\"KKEY\"", "cccc=\"KMLB\"").replace("awipsid=\"CFWKEY\"", "awipsid=\"CFWMLB\"");
         assert!(normalize_stanza(xml.as_bytes(), 0).unwrap().is_empty());
     }
 
@@ -519,7 +533,7 @@ mod tests {
 
     #[test]
     fn nwws_stanza_serialization_roundtrip() {
-        let el: Element = String::from_utf8(fixture("nws/nwws_cfwkey.xml")).unwrap().parse().unwrap();
+        let el: Element = String::from_utf8(fixture("nwws/cfwkey.xml")).unwrap().parse().unwrap();
         let m = Message::try_from(el).unwrap();
         let bytes = relevant_product(m).expect("relevant");
         assert_eq!(normalize_stanza(&bytes, 0).unwrap().len(), 1, "re-serialized stanza still parses");
@@ -529,7 +543,7 @@ mod tests {
     async fn nwws_idempotent() {
         let src = Nwws::new("someone".into(), Some("unused".into()));
         let (state, first) =
-            assert_idempotent(FakeFetch { inner: src, payloads: vec![stanza("nwws_cfwkey.xml"), stanza("nwws_cfwmfl.xml")] }).await;
+            assert_idempotent(FakeFetch { inner: src, payloads: vec![stanza("cfwkey.xml"), stanza("cfwmfl.xml")] }).await;
         assert_eq!(first.iter().map(|o| o.rows_written).sum::<usize>(), 4);
         let n: i64 = state.obs.read(|c| c.query_row("select count(*) from alerts where source_id = 'nwws'", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 4);

@@ -3,6 +3,8 @@ mod archive;
 mod backfill;
 mod crdt;
 mod db;
+#[cfg(test)]
+mod e2e_tests;
 mod evidence;
 mod feed_state;
 mod frames;

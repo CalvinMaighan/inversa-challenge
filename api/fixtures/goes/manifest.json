@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-09-26T18:06:00Z",
+  "files": [
+    {
+      "file": "OR_ABI-L2-LSTC-M6_G19_s20262691801167_e20262691803541_c20262691805379.nc",
+      "url": "https://noaa-goes19.s3.amazonaws.com/ABI-L2-LSTC/2026/269/18/OR_ABI-L2-LSTC-M6_G19_s20262691801167_e20262691803541_c20262691805379.nc",
+      "content_type": "application/x-netcdf"
+    },
+    {
+      "file": "OR_ABI-L2-ACMC-M6_G19_s20262691801167_e20262691803541_c20262691804271.nc",
+      "url": "https://noaa-goes19.s3.amazonaws.com/ABI-L2-ACMC/2026/269/18/OR_ABI-L2-ACMC-M6_G19_s20262691801167_e20262691803541_c20262691804271.nc",
+      "content_type": "application/x-netcdf"
+    },
+    {
+      "file": "OR_ABI-L2-FDCC-M6_G19_s20262691801167_e20262691803541_c20262691804055.nc",
+      "url": "https://noaa-goes19.s3.amazonaws.com/ABI-L2-FDCC/2026/269/18/OR_ABI-L2-FDCC-M6_G19_s20262691801167_e20262691803541_c20262691804055.nc",
+      "content_type": "application/x-netcdf"
+    }
+  ]
+}
