@@ -23,6 +23,8 @@ type FeedState {
   state: FeedHealth!
   newestObservedAt: Time
   lastFetchAt: Time
+  """`fetch_runs.id` of the latest run; cite it as `fetch:<id>`."""
+  lastFetchRunId: ID
   lagSeconds: Int
   note: String
 }
@@ -190,6 +192,7 @@ type Board {
   id: ID!
   lastSeq: Int!
   missions: [Mission!]!
+  notes: [Mission!]!
   messages: [Message!]!
   removals: JSON!
 }

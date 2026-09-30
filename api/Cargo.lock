@@ -1310,6 +1310,7 @@ dependencies = [
  "aws-credential-types",
  "aws-sigv4",
  "axum",
+ "base64 0.22.1",
  "chrono",
  "flate2",
  "futures-util",

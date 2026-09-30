@@ -42,19 +42,51 @@ pub struct BBox {
 }
 
 impl BBox {
-    /// Rejects NaN, out-of-range and inverted boxes. Boxes crossing the antimeridian are not
-    /// supported (the app region is Florida).
+    /// The app region (PLAN.md C15).
+    pub const REGION: BBox = BBox { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
+
+    /// Rejects NaN, inverted boxes and boxes reaching outside [`BBox::REGION`] (1e-9 degrees of
+    /// slack for decimal round-off).
     pub fn validate(&self) -> async_graphql::Result<()> {
+        const EPS: f64 = 1e-9;
         let BBox { west, south, east, north } = *self;
-        let lon_ok = (-180.0..=180.0).contains(&west) && (-180.0..=180.0).contains(&east);
-        let lat_ok = (-90.0..=90.0).contains(&south) && (-90.0..=90.0).contains(&north);
-        if lon_ok && lat_ok && west < east && south < north {
-            Ok(())
-        } else {
-            Err(format!("invalid bbox {self:?}: need -180<=west<east<=180 and -90<=south<north<=90").into())
+        let r = BBox::REGION;
+        if !(west < east && south < north) {
+            return Err(format!("invalid bbox {self:?}: need west < east and south < north").into());
         }
+        if west < r.west - EPS || south < r.south - EPS || east > r.east + EPS || north > r.north + EPS {
+            return Err(format!(
+                "invalid bbox {self:?}: must lie inside the region (west {}, south {}, east {}, north {})",
+                r.west, r.south, r.east, r.north
+            )
+            .into());
+        }
+        Ok(())
     }
 }
+
+/// SQL text of the enums stored in `observations.db` (lowercase snake_case, as in the migration
+/// `check` constraints), both ways.
+macro_rules! db_text {
+    ($ty:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+        impl $ty {
+            pub fn db(self) -> &'static str {
+                match self { $($ty::$variant => $text),+ }
+            }
+            pub fn from_db(s: &str) -> Option<$ty> {
+                match s { $($text => Some($ty::$variant),)+ _ => None }
+            }
+        }
+    };
+}
+
+db_text!(Quality { Research => "research", NeedsId => "needs_id", Casual => "casual", Curated => "curated" });
+db_text!(Param {
+    LstC => "lst_c", AirC => "air_c", WaterC => "water_c", SstC => "sst_c", RainMm => "rain_mm",
+    StageM => "stage_m", WaveM => "wave_m", WindMs => "wind_ms", FireFrp => "fire_frp",
+});
+db_text!(ReadingOrigin { Measured => "measured", Satellite => "satellite", Modeled => "modeled" });
+db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missing => "missing" });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
 pub enum FeedMode {
@@ -124,6 +156,7 @@ pub struct FeedState {
     pub state: FeedHealth,
     pub newest_observed_at: Option<Time>,
     pub last_fetch_at: Option<Time>,
+    pub last_fetch_run_id: Option<ID>,
     pub lag_seconds: Option<i64>,
     pub note: Option<String>,
 }
@@ -137,6 +170,7 @@ impl From<feed_state::FeedState> for FeedState {
             state: s.state.into(),
             newest_observed_at: s.newest_observed_at.map(Time),
             last_fetch_at: s.last_fetch_at.map(Time),
+            last_fetch_run_id: s.last_fetch_run_id.map(ID),
             lag_seconds: s.lag_seconds,
             note: s.note,
         }
@@ -204,7 +238,7 @@ pub struct FrameChunk {
     pub to: Time,
     pub step_minutes: i32,
     pub frame_count: i32,
-    /// Base64 of the EVF1 binary format (PLAN.md C4).
+    /// Base64 of the EVF2 binary format (PLAN.md C4), at most 24 frames.
     pub data: String,
 }
 
@@ -347,6 +381,7 @@ pub struct Board {
     pub id: ID,
     pub last_seq: i64,
     pub missions: Vec<Mission>,
+    pub notes: Vec<Mission>,
     pub messages: Vec<Message>,
     pub removals: serde_json::Value,
 }
