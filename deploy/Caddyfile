@@ -20,6 +20,10 @@ inversa.calvinmaighan.dev {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options nosniff
 		X-Frame-Options DENY
+		# The directives that cannot break the app: no framing, no plugins, no <base> or form retargeting.
+		# script-src / connect-src are not pinned yet (Next's inline bootstrap scripts need nonces, and the
+		# imagery ladder spans ion, Google, Bing, Esri and OSM hosts); see docs/security.md.
+		Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
 		Referrer-Policy strict-origin-when-cross-origin
 		# Microphone is for the voice session; nothing else is requested by the app.
 		Permissions-Policy "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"

@@ -2,9 +2,10 @@
 
 /**
  * Dev-only harness for the thread boot (T19). Boots the workers on mount and exposes `window.__threads`
- * for `e2e/dbworker.ts`; renders a status line for a human. 404 in production builds.
+ * for `e2e/dbworker.ts`; renders a status line for a human. app/dev/layout.tsx 404s it in production builds
+ * unless INVERSA_DEV_ROUTES=1.
  */
-import { notFound } from "next/navigation";
+
 import { useEffect, useState } from "react";
 
 import { getFrameGrid, getFrameMeta, getFrameSightings, gqlRequest, type FrameMeta } from "client/threads/api";
@@ -104,7 +105,6 @@ function install(setLine: (s: string) => void): () => void {
 }
 
 export default function ThreadsDevPage() {
-  if (process.env.NODE_ENV === "production") notFound();
   const [line, setLine] = useState("booting");
   useEffect(() => install(setLine), []);
   return (

@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { devRoutesEnabled } from "server/dev-routes";
+
 import DevAgent from "./DevAgent";
 
 /** The env check below must run per request, not once at build time. */
@@ -11,7 +13,7 @@ export const dynamic = "force-dynamic";
  * Dev server only.
  */
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if (process.env.NODE_ENV === "production") notFound();
+  if (!devRoutesEnabled()) notFound();
   const { at } = await searchParams;
   return <DevAgent at={typeof at === "string" ? at : null} />;
 }

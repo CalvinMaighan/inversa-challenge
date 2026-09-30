@@ -17,3 +17,8 @@ Scope:
 
 - [ ] G3: 375 px screenshots show no horizontal scroll and panels as sheets (manual: paths)
   EVIDENCE: pending
+
+- [ ] G4: under `prefers-reduced-motion: reduce` the card opens without its morph beats, the agent's camera move does not fly, and no endless CSS animation runs (orb pulse, live pulses, working rows)
+  CHECK: cd apps/web && E2E_SKIP_BUILD=1 bun run e2e:a11y 2>&1 | grep REDUCED-MOTION
+  EXPECT: REDUCED-MOTION-OK
+  EVIDENCE: pending

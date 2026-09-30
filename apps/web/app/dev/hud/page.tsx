@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { devRoutesEnabled } from "server/dev-routes";
+
 import HudFixture from "client/hud/dev/HudFixture";
 
 /** Read the flag per request, not at build: the same build serves production (off) and e2e (on). */
@@ -10,6 +12,6 @@ export const dynamic = "force-dynamic";
  * Used by `bun run e2e:scrub` and for the gap-hatching screenshot. Off unless `INVERSA_DEV_ROUTES=1`.
  */
 export default function HudDevPage() {
-  if (process.env.INVERSA_DEV_ROUTES !== "1") notFound();
+  if (!devRoutesEnabled()) notFound();
   return <HudFixture />;
 }
