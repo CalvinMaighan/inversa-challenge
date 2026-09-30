@@ -28,7 +28,7 @@ Scope:
   EXPECT: /1 pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail
 
-- [x] G5: typecheck and lint clean
+- [ ] G5: typecheck and lint clean
   CHECK: bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: CLEAN
   EVIDENCE: CLEAN
