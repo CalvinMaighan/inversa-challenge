@@ -239,3 +239,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - W0 done: T1 gates ALL MET (6/6). W1 dispatched: T2 T4 T5 T6 T7 T20 (worktrees). T3 waits for T2.
 - W2 early dispatch (contract-only deps): T11 T12 T13 T15. Pending: T3 (after T2), T8 T9 (after T5), T10 (after T4 T11 T12), T16 (after T2)
 - T2 merged+verified 11/11. T20 merged+verified 4/5, G5 ABANDON H3.
+- T5 merged+verified 6/7 (G7 ABANDON H3). Note: pollers use governor::check_response.

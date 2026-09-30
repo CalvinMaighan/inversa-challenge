@@ -25,7 +25,7 @@ Scope: DirArchive + R2Archive (S3 API, SigV4) behind `ingest::archive::from_conf
 - [x] G5: archive round-trip for DirArchive; R2Archive request signing unit-tested against a known SigV4 vector
   CHECK: cargo test --manifest-path api/Cargo.toml archive 2>&1 | grep -E "test result|running [1-9]"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: running 7 tests | test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+  EVIDENCE: running 7 tests | test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.01s
 
 - [x] G6: a panicking/erroring source is restarted with backoff and does not stop other sources (test)
   CHECK: cargo test --manifest-path api/Cargo.toml supervis 2>&1 | grep -E "test result|running [1-9]"
