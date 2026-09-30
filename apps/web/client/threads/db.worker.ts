@@ -16,6 +16,7 @@ import { MISSIONS, type MissionsState } from "client/state/missions";
 
 import { DbEngine, type EngineGql } from "./db/engine";
 import { isToDb, type FromDb } from "./db/rpc";
+import { packTransfer, type SightingsPack } from "./db/sightings";
 import { Store, type SqlDb, type SqlValue } from "./db/store";
 import { GqlRpcClient } from "./gql/protocol";
 
@@ -114,9 +115,13 @@ scope.addEventListener("message", (ev: MessageEvent) => {
   void ready
     .then((e) => e.call(m.method, m.params as never))
     .then((value) => {
-      // `framesSnapshot` moves its copy instead of cloning 36 MB twice.
-      const buf = (value as { buffer?: unknown } | null)?.buffer;
-      const transfer = buf instanceof ArrayBuffer ? [buf] : [];
+      // `framesSnapshot` moves its copies instead of cloning ~36 MB twice.
+      const transfer: Transferable[] = [];
+      if (m.method === "framesSnapshot") {
+        const snap = value as { buffer: ArrayBuffer | null; sightings: SightingsPack | null };
+        if (snap.buffer) transfer.push(snap.buffer);
+        if (snap.sightings) transfer.push(...packTransfer(snap.sightings));
+      }
       post({ t: "db:ret", id: m.id, ok: true, value }, transfer);
     })
     .catch((err: unknown) => post({ t: "db:ret", id: m.id, ok: false, error: err instanceof Error ? err.message : String(err) }));

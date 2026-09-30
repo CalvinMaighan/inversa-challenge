@@ -133,7 +133,7 @@ function fakeChannels(n: number): ChannelLike[] {
 describe("db call router", () => {
   test("the leader answers locally, followers proxy through it", async () => {
     const [chA, chB] = fakeChannels(2);
-    const leader = "a";
+    const leader: string = "a";
     const calls: string[] = [];
     const a = createRouter({ channel: chA!, tabId: "a", isLeader: () => leader === "a", local: async (m, p) => (calls.push(`a:${m}`), { m, p, by: "a" }) });
     const b = createRouter({ channel: chB!, tabId: "b", isLeader: () => leader === "b", local: async (m) => (calls.push(`b:${m}`), { by: "b" }) });

@@ -1,9 +1,9 @@
 /**
- * Frame window and EVF2 -> FrameGrid mapping for the db worker (PLAN.md C4, C16). Pure.
+ * Frame axis and EVF2 -> FrameGrid mapping for the db worker (PLAN.md C4, C16). Pure.
  *
- * The resident grid covers the TIME window with two densities: hourly frames from `from` up to 24 h before
- * `to`, then 15-minute frames to `to`. Frame `i` is `frameAtIndex(w, i)`; the globe maps TIME to an index
- * with `frameIndexAt`. Both are total over the window, so a scrub never reads outside the buffer.
+ * One hourly grid spans the TIME window: frame `i` is at `frame0UnixMs + i * 60 min`. The axis is the
+ * time part of `FrameMeta`; the geometry part comes from the first EVF2 header seen (`frameMetaFor`).
+ * Everyone maps time to frames with `frameIndexAt` from `client/threads/api.ts`.
  */
 import {
   attachFrameGrid,
@@ -15,72 +15,54 @@ import {
   type GridShape,
 } from "@calvinjs/active-state/threads";
 
-import { EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, readEvfHeader, type EvfHeader } from "shared/frames";
+import type { FrameMeta } from "client/threads/api";
+import { EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, readEvfHeader, readSightingRecords, type EvfHeader, type SightingRecord } from "shared/frames";
 
-export const COARSE_STEP_MINUTES = 60;
-export const FINE_STEP_MINUTES = 15;
-/** The trailing span held at the fine step. */
-export const FINE_SPAN_MS = 24 * 60 * 60_000;
+export const STEP_MINUTES = 60;
+const STEP_MS = STEP_MINUTES * 60_000;
 
-const COARSE_MS = COARSE_STEP_MINUTES * 60_000;
-const FINE_MS = FINE_STEP_MINUTES * 60_000;
-
-export type FrameWindow = {
-  fromMs: number;
-  toMs: number;
-  /** First hourly frame (the first hour boundary at or after `fromMs`). */
-  coarseStartMs: number;
-  /** Where the fine part starts: `toMs - FINE_SPAN_MS`, or `fromMs` for short windows. */
-  splitMs: number;
-  coarseCount: number;
-  fineCount: number;
-  frameCount: number;
-};
+/** The time part of `FrameMeta`. */
+export type FrameAxis = { frame0UnixMs: number; stepMinutes: number; frameCount: number };
 
 const toMs = (t: string | number): number => (typeof t === "number" ? t : Date.parse(t));
 
-/** Window for a TIME `{from, to}` pair; `to` should sit on a 15-minute step. */
-export function frameWindow(from: string | number, to: string | number): FrameWindow {
+/** Hourly frames from the first hour boundary at or after `from` through the last at or before `to`. */
+export function frameAxis(from: string | number, to: string | number): FrameAxis {
   const fromMs = toMs(from);
   const endMs = toMs(to);
-  if (!Number.isFinite(fromMs) || !Number.isFinite(endMs)) throw new Error(`frameWindow: bad bounds ${String(from)}..${String(to)}`);
-  if (endMs < fromMs) throw new Error("frameWindow: to before from");
-  const splitMs = Math.max(fromMs, endMs - FINE_SPAN_MS);
-  const coarseStartMs = Math.ceil(fromMs / COARSE_MS) * COARSE_MS;
-  const coarseCount = Math.max(0, Math.ceil((splitMs - coarseStartMs) / COARSE_MS));
-  const fineCount = Math.floor((endMs - splitMs) / FINE_MS) + 1;
-  return { fromMs, toMs: endMs, coarseStartMs, splitMs, coarseCount, fineCount, frameCount: coarseCount + fineCount };
+  if (!Number.isFinite(fromMs) || !Number.isFinite(endMs)) throw new Error(`frameAxis: bad bounds ${String(from)}..${String(to)}`);
+  if (endMs < fromMs) throw new Error("frameAxis: to before from");
+  const frame0UnixMs = Math.ceil(fromMs / STEP_MS) * STEP_MS;
+  const frameCount = Math.max(0, Math.floor((endMs - frame0UnixMs) / STEP_MS) + 1);
+  return { frame0UnixMs, stepMinutes: STEP_MINUTES, frameCount };
 }
 
-export function frameAtIndex(w: FrameWindow, index: number): number {
-  if (!Number.isInteger(index) || index < 0 || index >= w.frameCount) throw new RangeError(`frame index ${index} outside [0, ${w.frameCount})`);
-  return index < w.coarseCount ? w.coarseStartMs + index * COARSE_MS : w.splitMs + (index - w.coarseCount) * FINE_MS;
+export function sameAxis(a: FrameAxis, b: FrameAxis): boolean {
+  return a.frame0UnixMs === b.frame0UnixMs && a.stepMinutes === b.stepMinutes && a.frameCount === b.frameCount;
 }
 
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
-
-/** Index of the frame at or before `atMs`, clamped into the window. */
-export function frameIndexAt(w: FrameWindow, atMs: number): number {
-  if (w.frameCount === 0) return -1;
-  if (atMs >= w.splitMs || w.coarseCount === 0) {
-    return clamp(w.coarseCount + Math.floor((atMs - w.splitMs) / FINE_MS), w.coarseCount, w.frameCount - 1);
-  }
-  return clamp(Math.floor((atMs - w.coarseStartMs) / COARSE_MS), 0, w.coarseCount - 1);
+export function frameAtIndex(axis: FrameAxis, index: number): number {
+  if (!Number.isInteger(index) || index < 0 || index >= axis.frameCount) throw new RangeError(`frame index ${index} outside [0, ${axis.frameCount})`);
+  return axis.frame0UnixMs + index * axis.stepMinutes * 60_000;
 }
 
-/** Index of a frame whose timestamp lands exactly on the grid, else -1. */
-export function frameIndexExact(w: FrameWindow, atMs: number): number {
-  if (atMs >= w.splitMs) {
-    if (atMs > w.toMs || (atMs - w.splitMs) % FINE_MS !== 0) return -1;
-    return w.coarseCount + (atMs - w.splitMs) / FINE_MS;
-  }
-  if (atMs < w.coarseStartMs || (atMs - w.coarseStartMs) % COARSE_MS !== 0) return -1;
-  const i = (atMs - w.coarseStartMs) / COARSE_MS;
-  return i < w.coarseCount ? i : -1;
+/** Index of a frame whose timestamp lands exactly on the axis, else -1. */
+export function frameIndexExact(axis: FrameAxis, atMs: number): number {
+  const stepMs = axis.stepMinutes * 60_000;
+  const rel = atMs - axis.frame0UnixMs;
+  if (rel < 0 || rel % stepMs !== 0) return -1;
+  const i = rel / stepMs;
+  return i < axis.frameCount ? i : -1;
 }
 
-export function frameStepMinutes(w: FrameWindow, index: number): number {
-  return index < w.coarseCount ? COARSE_STEP_MINUTES : FINE_STEP_MINUTES;
+/** Last frame time of the axis, or null when empty. */
+export function axisEndMs(axis: FrameAxis): number | null {
+  return axis.frameCount === 0 ? null : frameAtIndex(axis, axis.frameCount - 1);
+}
+
+/** `FrameMeta` for the axis, with the grid placement taken from an EVF2 header. */
+export function frameMetaFor(axis: FrameAxis, h: EvfHeader): FrameMeta {
+  return { ...axis, geometry: { west: h.west, south: h.south, hsCellDeg: h.hsCellDeg, envCellDeg: h.envCellDeg } };
 }
 
 export type ChunkRequest = { fromMs: number; toMs: number; stepMinutes: number };
@@ -89,48 +71,44 @@ export type ChunkRequest = { fromMs: number; toMs: number; stepMinutes: number }
 export const MAX_CHUNK_FRAMES = 744;
 
 /**
- * Requests that fill every frame in `w` not in `present` (a set of frame timestamps), as few contiguous
+ * Requests that fill every frame of `axis` not in `present` (a set of frame timestamps), as few contiguous
  * ranges as possible, each within the REST cap.
  */
-export function missingChunks(w: FrameWindow, present: ReadonlySet<number>): ChunkRequest[] {
+export function missingChunks(axis: FrameAxis, present: ReadonlySet<number>): ChunkRequest[] {
   const out: ChunkRequest[] = [];
+  const stepMs = axis.stepMinutes * 60_000;
   let run: ChunkRequest | null = null;
-  const flush = () => {
-    if (run) out.push(run);
-    run = null;
-  };
-  for (let i = 0; i < w.frameCount; i++) {
-    const at = frameAtIndex(w, i);
-    const step = frameStepMinutes(w, i);
+  for (let i = 0; i < axis.frameCount; i++) {
+    const at = frameAtIndex(axis, i);
     if (present.has(at)) {
-      flush();
+      if (run) out.push(run);
+      run = null;
       continue;
     }
-    const stepMs = step * 60_000;
-    if (run && run.stepMinutes === step && run.toMs + stepMs === at && (run.toMs - run.fromMs) / stepMs + 1 < MAX_CHUNK_FRAMES) {
+    if (run && run.toMs + stepMs === at && (run.toMs - run.fromMs) / stepMs + 1 < MAX_CHUNK_FRAMES) {
       run.toMs = at;
     } else {
-      flush();
-      run = { fromMs: at, toMs: at, stepMinutes: step };
+      if (run) out.push(run);
+      run = { fromMs: at, toMs: at, stepMinutes: axis.stepMinutes };
     }
   }
-  flush();
+  if (run) out.push(run);
   return out;
 }
 
-/** Every frame of `w` at its own step: what a full refetch asks for. */
-export function allChunks(w: FrameWindow): ChunkRequest[] {
-  return missingChunks(w, new Set());
+/** Every frame of the axis: what a full refetch asks for. */
+export function allChunks(axis: FrameAxis): ChunkRequest[] {
+  return missingChunks(axis, new Set());
 }
 
-/** Restrict a refetch to the frames of `w` inside `[fromMs, toMs]` (a `framesUpdated` range). */
-export function chunksWithin(w: FrameWindow, fromMs: number, toMs: number): ChunkRequest[] {
+/** Restrict a refetch to the frames of `axis` inside `[fromMs, toMs]` (a `framesUpdated` range). */
+export function chunksWithin(axis: FrameAxis, fromMs: number, toMs: number): ChunkRequest[] {
   const present = new Set<number>();
-  for (let i = 0; i < w.frameCount; i++) {
-    const at = frameAtIndex(w, i);
+  for (let i = 0; i < axis.frameCount; i++) {
+    const at = frameAtIndex(axis, i);
     if (at < fromMs || at > toMs) present.add(at);
   }
-  return missingChunks(w, present);
+  return missingChunks(axis, present);
 }
 
 export function chunkUrl(base: string, c: ChunkRequest): string {
@@ -229,20 +207,20 @@ export function copyGridBytes(grid: FrameGrid): ArrayBuffer {
 }
 
 /**
- * Copy every frame of `evf` that lands on the window into `grid`. Frames off the grid (a different step, or
- * outside the window) are skipped. Returns the indices written; the caller bumps the grid once per batch.
+ * Copy every frame of `evf` that lands on the axis into `grid`. Frames off the axis (a different step, or
+ * outside the window) are skipped. Returns `[index, frame]` pairs written; the caller bumps the grid once.
  */
-export function fillGrid(grid: FrameGrid, w: FrameWindow, evf: ParsedEvf, bytes: Uint8Array): number[] {
+export function fillGrid(grid: FrameGrid, axis: FrameAxis, evf: ParsedEvf, bytes: Uint8Array): [number, EvfFrame][] {
   const want = gridShapeFor(evf.header, grid.shape.frameCount);
   if (!sameGridShape(grid.shape, want)) {
     throw new Error(`EVF grid ${evf.header.hsCols}x${evf.header.hsRows}/${evf.header.envCols}x${evf.header.envRows} does not match the resident grid`);
   }
-  const written: number[] = [];
+  const written: [number, EvfFrame][] = [];
   for (const f of evf.frames) {
-    const index = frameIndexExact(w, f.atMs);
+    const index = frameIndexExact(axis, f.atMs);
     if (index < 0) continue;
     writeFrameFromEvf(grid, index, bytes, f.offset);
-    written.push(index);
+    written.push([index, f]);
   }
   return written;
 }
@@ -250,6 +228,20 @@ export function fillGrid(grid: FrameGrid, w: FrameWindow, evf: ParsedEvf, bytes:
 /** Bytes of one frame as stored in `cache_frames`: the full EVF2 frame body, sightings included. */
 export function frameBody(bytes: Uint8Array, f: EvfFrame): Uint8Array {
   return bytes.subarray(f.offset, f.offset + f.byteLength);
+}
+
+/** The raw sighting records of a frame (after its u32 count), for `sightings.ts`. */
+export function sightingBytes(h: EvfHeader, body: Uint8Array): Uint8Array {
+  const start = evfFrameLayout(h).sightingsOffset + 4;
+  return body.subarray(start);
+}
+
+/** Decoded sightings of one frame body (C4 record layout via shared/frames.ts). */
+export function readSightings(h: EvfHeader, body: Uint8Array): SightingRecord[] {
+  const layout = evfFrameLayout(h);
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
+  const count = view.getUint32(layout.sightingsOffset, true);
+  return readSightingRecords(view, layout.sightingsOffset + 4, count);
 }
 
 /** Header for a single-frame EVF2 body, so a cached frame round-trips through `parseEvf`. */
@@ -272,26 +264,5 @@ export function singleFrameEvf(h: EvfHeader, atMs: number, body: Uint8Array): Ui
   view.setFloat32(64, h.hotspotScale, true);
   view.setUint32(68, 0, true);
   out.set(body, EVF_HEADER_BYTES);
-  return out;
-}
-
-/** Sightings of one frame, decoded from its body (C4 record layout). */
-export type Sighting = { lon: number; lat: number; taxon: number; quality: number; flags: number };
-
-export function readSightings(h: EvfHeader, body: Uint8Array): Sighting[] {
-  const layout = evfFrameLayout(h);
-  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
-  const count = view.getUint32(layout.sightingsOffset, true);
-  const out: Sighting[] = [];
-  let p = layout.sightingsOffset + 4;
-  for (let i = 0; i < count; i++, p += 12) {
-    out.push({
-      lon: view.getFloat32(p, true),
-      lat: view.getFloat32(p + 4, true),
-      taxon: view.getUint16(p + 8, true),
-      quality: view.getUint8(p + 10),
-      flags: view.getUint8(p + 11),
-    });
-  }
   return out;
 }

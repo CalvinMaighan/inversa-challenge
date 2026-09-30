@@ -7,10 +7,7 @@
 import { notFound } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { get } from "@calvinjs/active-state";
-
-import { FEEDS } from "client/state/feeds";
-import { getFrameGrid, getFrameWindow, gqlRequest } from "client/threads/api";
+import { getFrameGrid, getFrameMeta, getFrameSightings, gqlRequest, type FrameMeta } from "client/threads/api";
 import { bootThreads, type Threads } from "client/threads/boot";
 import { CHANNEL_NAME } from "client/threads/db/proxy";
 import type { DbStats } from "client/threads/db/rpc";
@@ -21,8 +18,9 @@ type Info = {
   leader: boolean;
   leaderState: string;
   grid: { frameCount: number; version: number; shared: boolean } | null;
-  window: { fromMs: number; toMs: number; frameCount: number } | null;
-  feeds: number;
+  meta: FrameMeta | null;
+  /** Total sighting records published on this tab, or -1 before any. */
+  sightings: number;
   /** Follower calls this tab answered over BroadcastChannel (leader only). */
   proxied: number;
 };
@@ -52,15 +50,20 @@ function install(setLine: (s: string) => void): () => void {
   });
   const info = (): Info => {
     const grid = getFrameGrid();
-    const w = getFrameWindow();
+    const s = getFrameSightings();
+    let sightings = -1;
+    if (s) {
+      sightings = 0;
+      for (const n of s.counts) sightings += n;
+    }
     return {
       transport: threads.transport,
       isolated: threads.isolated,
       leader: threads.isLeader(),
       leaderState: threads.leaderState(),
       grid: grid ? { frameCount: grid.shape.frameCount, version: grid.version(), shared: typeof SharedArrayBuffer === "function" && grid.buffer instanceof SharedArrayBuffer } : null,
-      window: w ? { fromMs: w.fromMs, toMs: w.toMs, frameCount: w.frameCount } : null,
-      feeds: (get<unknown[]>(FEEDS) ?? []).length,
+      meta: getFrameMeta(),
+      sightings,
       proxied,
     };
   };
@@ -74,7 +77,7 @@ function install(setLine: (s: string) => void): () => void {
   window.__threads = harness;
   const render = () => {
     const i = info();
-    setLine(`${harness.status} · ${i.transport} · isolated=${i.isolated} · ${i.leaderState} · grid=${i.grid ? `${i.grid.frameCount}f v${i.grid.version}` : "none"} · feeds=${i.feeds}`);
+    setLine(`${harness.status} · ${i.transport} · isolated=${i.isolated} · ${i.leaderState} · grid=${i.grid ? `${i.grid.frameCount}f v${i.grid.version}` : "none"} · sightings=${i.sightings}`);
   };
   threads.ready.then(
     () => {
@@ -88,11 +91,13 @@ function install(setLine: (s: string) => void): () => void {
     },
   );
   const offGrid = threads.onGrid(render);
+  const offSightings = threads.onSightings(render);
   const timer = setInterval(render, 1000);
   render();
   return () => {
     clearInterval(timer);
     offGrid();
+    offSightings();
     bc.close();
     delete window.__threads;
   };

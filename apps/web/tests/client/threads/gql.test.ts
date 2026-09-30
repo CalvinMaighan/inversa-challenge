@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 
 import { backoffMs } from "client/threads/gql/backoff";
 import { DEV_WS_URL, postGraphql, resolveWsUrl, SubscriptionClient, type WsLike } from "client/threads/gql/client";
-import { normalizeFeed } from "client/threads/gql/feeds";
 import { GqlRpcClient, serveGqlRpc, type GqlHandlers } from "client/threads/gql/protocol";
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -24,18 +23,6 @@ describe("backoff and urls", () => {
     expect(resolveWsUrl({ dev: false, location: { protocol: "http:", host: "localhost:3050" } })).toBe("ws://localhost:3050/v1/graphql");
   });
 
-  test("normalizeFeed lowercases the API enums and fills nulls", () => {
-    expect(normalizeFeed({ source: "nws", mode: "PUSH", state: "LAGGING", lagSeconds: 12 })).toEqual({
-      source: "nws",
-      mode: "push",
-      state: "lagging",
-      newestObservedAt: null,
-      lastFetchAt: null,
-      lagSeconds: 12,
-      note: null,
-    });
-    expect(normalizeFeed({ source: "x", mode: "POLL", state: "WHATEVER" }).state).toBe("down");
-  });
 });
 
 describe("postGraphql", () => {

@@ -9,8 +9,11 @@ import type { MessagePortLike } from "@calvinjs/active-state/threads";
 
 import type { Op, StoredOp } from "client/threads/crdt/types";
 
-import type { FrameWindow, Sighting } from "./frames";
+import type { FrameMeta } from "client/threads/api";
+import type { SightingRecord } from "shared/frames";
+
 import type { OutboxStatus } from "./outbox";
+import type { SightingsPack } from "./sightings";
 import type { ApplyOutcome, BoardRead } from "./store";
 import type { GqlResult, GqlVariables, SocketStatus } from "../gql/protocol";
 
@@ -23,7 +26,8 @@ export type DbStats = {
   cachedQueries: number;
   outbox: Record<OutboxStatus, number>;
   grid: { frameCount: number; version: number; shared: boolean } | null;
-  window: FrameWindow | null;
+  meta: FrameMeta | null;
+  sightings: number;
   socket: SocketStatus | "unlinked";
   /** Source of the last `query` call, for diagnostics. */
   lastQuerySource: QuerySource | null;
@@ -37,8 +41,8 @@ export type DbMethods = {
   applyRemoteOps: { params: { boardId: string; ops: (Op | StoredOp)[] }; result: ApplyOutcome & { lastSeq: number } };
   syncBoard: { params: { boardId: string }; result: { lastSeq: number; pulled: number; subscribed: boolean } };
   framesRefresh: { params: { from: string; to: string; force?: boolean }; result: { frameCount: number; cached: number; fetched: number; failed: number } };
-  framesSnapshot: { params: Record<string, never>; result: { buffer: ArrayBuffer | null; window: FrameWindow | null } };
-  frameSightings: { params: { atMs: number }; result: Sighting[] };
+  framesSnapshot: { params: Record<string, never>; result: { buffer: ArrayBuffer | null; meta: FrameMeta | null; sightings: SightingsPack | null } };
+  frameSightings: { params: { atMs: number }; result: SightingRecord[] };
   stats: { params: Record<string, never>; result: DbStats };
 };
 
@@ -53,8 +57,9 @@ export type FromDb =
   | { t: "db:ret"; id: number; ok: false; error: string }
   | { t: "db:ready"; opfs: boolean }
   | { t: "db:error"; message: string }
-  | { t: "db:grid"; buffer: SharedArrayBuffer | ArrayBuffer; window: FrameWindow }
+  | { t: "db:grid"; buffer: SharedArrayBuffer | ArrayBuffer; meta: FrameMeta }
   | { t: "db:grid-bumped"; version: number }
+  | { t: "db:sightings"; pack: SightingsPack }
   | { t: "db:board"; boardId: string };
 
 export type DbEvent = Exclude<FromDb, { t: "db:ret" }>;

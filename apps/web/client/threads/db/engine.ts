@@ -5,6 +5,7 @@
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 
+import type { FrameMeta } from "client/threads/api";
 import type { Op, StoredOp } from "client/threads/crdt/types";
 import type { EvfHeader } from "shared/frames";
 
@@ -12,26 +13,30 @@ import { MAX_STALE_MS, queryHash, ttlForQuery } from "./cache";
 import {
   allChunks,
   allocGrid,
+  axisEndMs,
   chunksWithin,
   chunkUrl,
   copyGridBytes,
   fillGrid,
+  frameAxis,
   frameBody,
   frameIndexExact,
-  frameWindow,
+  frameMetaFor,
   gridShapeFor,
   missingChunks,
   parseEvf,
   readSightings,
+  sameAxis,
   sameGridShape,
+  sightingBytes,
   singleFrameEvf,
-  COARSE_STEP_MINUTES,
-  FINE_STEP_MINUTES,
+  STEP_MINUTES,
   type ChunkRequest,
-  type FrameWindow,
+  type FrameAxis,
 } from "./frames";
 import { ackByIds, dueEntries, markInflight, reconcileFlush, type ApplyResult } from "./outbox";
 import type { DbEvent, DbMethod, DbMethods, DbParams, DbResult, DbStats, QuerySource } from "./rpc";
+import { clonePack, packSightings, packTransfer, totalSightings, type SightingsPack } from "./sightings";
 import type { BoardSummary, FrameRow, Store } from "./store";
 import type { GqlResult, GqlVariables, Sink, SocketStatus } from "../gql/protocol";
 
@@ -72,7 +77,10 @@ const MAX_FLUSH_ROUNDS = 20;
 
 export class DbEngine {
   private grid: FrameGrid | null = null;
-  private window: FrameWindow | null = null;
+  private axis: FrameAxis | null = null;
+  private meta: FrameMeta | null = null;
+  /** Raw sighting records per frame index; null until that frame has been filled. */
+  private sightings: (Uint8Array | null)[] = [];
   private gridPublished = false;
   private lastQuerySource: QuerySource | null = null;
   private readonly boardSubs = new Map<string, () => void>();
@@ -253,46 +261,46 @@ export class DbEngine {
   }
 
   private async refreshWindow({ from, to, force }: DbParams<"framesRefresh">): Promise<DbResult<"framesRefresh">> {
-    const w = frameWindow(from, to);
-    const sameWindow = this.window !== null && this.window.fromMs === w.fromMs && this.window.toMs === w.toMs;
-    if (!sameWindow) {
-      this.window = w;
+    const axis = frameAxis(from, to);
+    if (!this.axis || !sameAxis(this.axis, axis)) {
+      this.axis = axis;
       this.grid = null;
+      this.meta = null;
+      this.sightings = new Array<Uint8Array | null>(axis.frameCount).fill(null);
       this.gridPublished = false;
     }
-    const cached = this.loadCached(w);
-    const chunks = force ? allChunks(w) : missingChunks(w, this.presentTimes(w));
-    const { fetched, failed } = await this.fetchChunks(w, chunks);
-    this.store.pruneFrames(w.fromMs);
-    return { frameCount: w.frameCount, cached, fetched, failed };
+    const cached = this.loadCached(axis);
+    const chunks = force ? allChunks(axis) : missingChunks(axis, this.presentTimes(axis));
+    const { fetched, failed } = await this.fetchChunks(axis, chunks);
+    this.store.pruneFrames(axis.frame0UnixMs);
+    return { frameCount: axis.frameCount, cached, fetched, failed };
   }
 
-  /** Refetch the part of the window a `framesUpdated` range touches. */
+  /** Refetch the part of the axis a `framesUpdated` range touches. */
   async framesUpdated(from: string, to: string): Promise<void> {
-    const w = this.window;
-    if (!w) return;
+    const axis = this.axis;
+    if (!axis) return;
     const fromMs = Date.parse(from);
     const toMs = Date.parse(to);
     if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return;
-    await this.fetchChunks(w, chunksWithin(w, fromMs, toMs));
+    await this.fetchChunks(axis, chunksWithin(axis, fromMs, toMs));
   }
 
-  private presentTimes(w: FrameWindow): Set<number> {
-    const present = this.store.frameTimes(w.coarseStartMs, w.splitMs - 1, COARSE_STEP_MINUTES);
-    for (const t of this.store.frameTimes(w.splitMs, w.toMs, FINE_STEP_MINUTES)) present.add(t);
-    return present;
+  private presentTimes(axis: FrameAxis): Set<number> {
+    const end = axisEndMs(axis);
+    return end === null ? new Set() : this.store.frameTimes(axis.frame0UnixMs, end, STEP_MINUTES);
   }
 
   /** Fill the grid from `cache_frames`; returns the number of frames placed. */
-  private loadCached(w: FrameWindow): number {
-    const rows = [...this.store.getFrames(w.coarseStartMs, w.splitMs - 1, COARSE_STEP_MINUTES), ...this.store.getFrames(w.splitMs, w.toMs, FINE_STEP_MINUTES)];
+  private loadCached(axis: FrameAxis): number {
+    const end = axisEndMs(axis);
+    if (end === null) return 0;
     let placed = 0;
-    for (const r of rows) {
-      if (frameIndexExact(w, r.frameAt) < 0) continue;
+    for (const r of this.store.getFrames(axis.frame0UnixMs, end, STEP_MINUTES)) {
+      if (frameIndexExact(axis, r.frameAt) < 0) continue;
       try {
         const evf = parseEvf(r.body);
-        const grid = this.ensureGrid(w, evf.header);
-        placed += fillGrid(grid, w, evf, r.body).length;
+        placed += this.place(axis, evf, r.body).length;
       } catch (err) {
         console.warn("[threads/db] dropping unreadable cached frame", r.frameAt, err);
       }
@@ -301,37 +309,50 @@ export class DbEngine {
     return placed;
   }
 
-  private ensureGrid(w: FrameWindow, header: EvfHeader): FrameGrid {
-    const shape = gridShapeFor(header, w.frameCount);
+  /** Write a parsed body's frames into the grid and keep their sighting bytes. */
+  private place(axis: FrameAxis, evf: ReturnType<typeof parseEvf>, bytes: Uint8Array): number[] {
+    const grid = this.ensureGrid(axis, evf.header);
+    const written = fillGrid(grid, axis, evf, bytes);
+    for (const [index, f] of written) this.sightings[index] = sightingBytes(evf.header, frameBody(bytes, f)).slice();
+    return written.map(([index]) => index);
+  }
+
+  private ensureGrid(axis: FrameAxis, header: EvfHeader): FrameGrid {
+    const shape = gridShapeFor(header, axis.frameCount);
     if (this.grid && sameGridShape(this.grid.shape, shape)) return this.grid;
     this.grid = allocGrid(shape, this.o.shared);
+    this.meta = frameMetaFor(axis, header);
     this.gridPublished = false;
     return this.grid;
   }
 
-  /** Post the grid to main: the SAB once (bumps thereafter), or a fresh copy each time when not shared. */
+  /**
+   * Post the grid and its sightings to main: the SAB once (bumps thereafter), or a fresh copy each time
+   * when not shared. Sightings are small, so a new pack goes out with every publish.
+   */
   private publishGrid(): void {
     const grid = this.grid;
-    const w = this.window;
-    if (!grid || !w) return;
+    const meta = this.meta;
+    if (!grid || !meta) return;
     const version = grid.bump();
     if (this.o.shared) {
       if (this.gridPublished) this.o.post({ t: "db:grid-bumped", version });
-      else this.o.post({ t: "db:grid", buffer: grid.buffer, window: w });
-      this.gridPublished = true;
-      return;
+      else this.o.post({ t: "db:grid", buffer: grid.buffer, meta });
+    } else {
+      const copy = copyGridBytes(grid);
+      this.o.post({ t: "db:grid", buffer: copy, meta }, [copy]);
     }
-    const copy = copyGridBytes(grid);
-    this.o.post({ t: "db:grid", buffer: copy, window: w }, [copy]);
     this.gridPublished = true;
+    const pack = packSightings(this.sightings);
+    this.o.post({ t: "db:sightings", pack }, packTransfer(pack));
   }
 
-  private async fetchChunks(w: FrameWindow, chunks: ChunkRequest[]): Promise<{ fetched: number; failed: number }> {
+  private async fetchChunks(axis: FrameAxis, chunks: ChunkRequest[]): Promise<{ fetched: number; failed: number }> {
     let fetched = 0;
     let failed = 0;
     for (const c of chunks) {
       try {
-        fetched += await this.fetchChunk(w, c);
+        fetched += await this.fetchChunk(axis, c);
       } catch (err) {
         failed += 1;
         console.warn("[threads/db] frames chunk failed", chunkUrl(this.o.framesUrl, c), err);
@@ -340,15 +361,14 @@ export class DbEngine {
     return { fetched, failed };
   }
 
-  private async fetchChunk(w: FrameWindow, c: ChunkRequest): Promise<number> {
+  private async fetchChunk(axis: FrameAxis, c: ChunkRequest): Promise<number> {
     const etag = this.store.rangeEtag(c.fromMs, c.toMs, c.stepMinutes);
     const res = await this.o.fetchImpl(chunkUrl(this.o.framesUrl, c), { headers: etag ? { "if-none-match": etag } : {} });
     if (res.status === 304) return 0;
     if (!res.ok) throw new Error(`frames http ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     const evf = parseEvf(bytes);
-    const grid = this.ensureGrid(w, evf.header);
-    const written = fillGrid(grid, w, evf, bytes);
+    const written = this.place(axis, evf, bytes);
     const now = this.now();
     const newEtag = res.headers.get("etag");
     const rows: FrameRow[] = evf.frames.map((f) => ({
@@ -364,19 +384,21 @@ export class DbEngine {
   }
 
   framesSnapshot(): DbResult<"framesSnapshot"> {
-    if (!this.grid || !this.window) return { buffer: null, window: null };
-    return { buffer: copyGridBytes(this.grid), window: this.window };
+    if (!this.grid || !this.meta) return { buffer: null, meta: null, sightings: null };
+    return { buffer: copyGridBytes(this.grid), meta: this.meta, sightings: clonePack(packSightings(this.sightings)) };
   }
 
   frameSightings({ atMs }: DbParams<"frameSightings">): DbResult<"frameSightings"> {
-    const w = this.window;
-    if (!w) return [];
-    const step = atMs >= w.splitMs ? FINE_STEP_MINUTES : COARSE_STEP_MINUTES;
-    const row = this.store.getFrames(atMs, atMs, step)[0];
+    const row = this.store.getFrames(atMs, atMs, STEP_MINUTES)[0];
     if (!row) return [];
     const evf = parseEvf(row.body);
     const f = evf.frames[0];
     return f ? readSightings(evf.header, frameBody(row.body, f)) : [];
+  }
+
+  /** The current sightings pack (tests). */
+  sightingsPack(): SightingsPack {
+    return packSightings(this.sightings);
   }
 
   // ---- stats -------------------------------------------------------------------------------
@@ -388,7 +410,8 @@ export class DbEngine {
       cachedQueries: this.store.cachedCount(),
       outbox: this.store.outboxCounts(),
       grid: this.grid ? { frameCount: this.grid.shape.frameCount, version: this.grid.version(), shared: typeof SharedArrayBuffer === "function" && this.grid.buffer instanceof SharedArrayBuffer } : null,
-      window: this.window,
+      meta: this.meta,
+      sightings: totalSightings(packSightings(this.sightings)),
       socket: this.gql?.socket ?? "unlinked",
       lastQuerySource: this.lastQuerySource,
     };

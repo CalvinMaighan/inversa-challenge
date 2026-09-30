@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import type { Op, StoredOp } from "client/threads/crdt/types";
 import { DbEngine, type EngineGql } from "client/threads/db/engine";
-import { frameWindow } from "client/threads/db/frames";
+import { attachGrid, frameAxis } from "client/threads/db/frames";
 import type { DbEvent } from "client/threads/db/rpc";
+import { totalSightings, unpackSightings } from "client/threads/db/sightings";
 import type { GqlResult, GqlVariables, Sink } from "client/threads/gql/protocol";
 
-import { encodeEvf2, hotspotValue } from "./evf-fixture";
+import { encodeEvf2, hotspotValue, sightingId } from "./evf-fixture";
 import { openTestStore } from "./sqlite-fixture";
 
 type Call = { query: string; variables: GqlVariables };
@@ -31,7 +32,6 @@ function fakeGql(answer: (c: Call) => GqlResult | Promise<GqlResult>): EngineGql
 }
 
 const H = 3_600_000;
-const Q = 900_000;
 const T0 = Date.parse("2026-09-01T00:00:00Z");
 
 function makeEngine(over: { gql?: EngineGql | null; fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>; shared?: boolean; now?: () => number } = {}) {
@@ -57,10 +57,17 @@ function makeEngine(over: { gql?: EngineGql | null; fetchImpl?: (url: string, in
       return timers.length;
     },
   });
-  return { engine, events, transfers, summaries, timers, runTimers: async () => {
-    const t = timers.splice(0);
-    for (const fn of t) await fn();
-  } };
+  return {
+    engine,
+    events,
+    transfers,
+    summaries,
+    timers,
+    runTimers: async () => {
+      const t = timers.splice(0);
+      for (const fn of t) await fn();
+    },
+  };
 }
 
 const op = (id: string, over: Partial<Op> = {}): Op => ({ id, hlc: `1700000000000:0:me`, boardId: "b1", entity: "mission", entityId: "m1", field: "title", value: "x", nodeId: "me", ...over });
@@ -109,7 +116,7 @@ describe("query: stale-while-revalidate", () => {
     now += 25 * H; // past MAX_STALE_MS: a miss, network first
     const fallback = await engine.query({ query: FEEDS });
     expect(fallback).toEqual({ data: { feeds: [] }, source: "fallback" });
-    const none = await engine.query({ query: "{ alerts(bbox: {west: 0, south: 0, east: 1, north: 1}, at: \"x\") { id } }" });
+    const none = await engine.query({ query: '{ alerts(bbox: {west: 0, south: 0, east: 1, north: 1}, at: "x") { id } }' });
     expect(none.source).toBe("network");
     expect(none.errors?.[0]?.message).toBe("offline");
   });
@@ -117,7 +124,7 @@ describe("query: stale-while-revalidate", () => {
   test("mutations and uncacheable roots bypass the cache; an unlinked gql worker reports it", async () => {
     const gql = fakeGql(() => ({ data: { applyOps: { applied: 1, duplicates: 0, lastSeq: 1 } } }));
     const { engine } = makeEngine({ gql });
-    const m = "mutation { applyOps(boardId: \"b\", ops: []) { applied } }";
+    const m = 'mutation { applyOps(boardId: "b", ops: []) { applied } }';
     await engine.query({ query: m });
     await engine.query({ query: m });
     expect(gql.calls).toHaveLength(2);
@@ -204,7 +211,8 @@ describe("frames", () => {
   const to = T0 + 2 * 24 * H;
   const from = new Date(T0).toISOString();
   const toIso = new Date(to).toISOString();
-  const w = frameWindow(from, toIso);
+  const axis = frameAxis(from, toIso);
+  const geometry = { west: -83.2, south: 24.3, hsCellDeg: 0.02, envCellDeg: 0.05 };
 
   /** Serves any requested range from the fixture encoder, with an etag per range. */
   function framesServer(salt = 0) {
@@ -229,34 +237,38 @@ describe("frames", () => {
     return { fetchImpl, requests, notModified: () => notModified };
   }
 
-  test("refresh fetches hourly and fine chunks, fills a shared grid, publishes it once, and caches frames", async () => {
+  test("refresh fetches the hourly window, fills a shared grid, publishes it once with meta and sightings, and caches frames", async () => {
     const server = framesServer();
     const { engine, events } = makeEngine({ fetchImpl: server.fetchImpl, shared: true });
     const res = await engine.framesRefresh({ from, to: toIso });
-    expect(res).toEqual({ frameCount: w.frameCount, cached: 0, fetched: w.frameCount, failed: 0 });
-    expect(server.requests).toHaveLength(2);
-    const grids = events.filter((e) => e.t === "db:grid");
+    expect(res).toEqual({ frameCount: 49, cached: 0, fetched: 49, failed: 0 });
+    expect(server.requests).toHaveLength(1);
+    expect(server.requests[0]).toContain("step=60");
+    const grids = events.filter((e) => e.t === "db:grid") as Extract<DbEvent, { t: "db:grid" }>[];
     expect(grids).toHaveLength(1);
-    const bumps = events.filter((e) => e.t === "db:grid-bumped");
-    expect(bumps).toHaveLength(1);
-    const g = grids[0] as Extract<DbEvent, { t: "db:grid" }>;
-    expect(g.buffer).toBeInstanceOf(SharedArrayBuffer);
-    expect(g.window).toEqual(w);
-    expect(engine.store.frameCount()).toBe(w.frameCount);
-    // Hourly frame 3 was frame index 3 of the hourly chunk; fine frame 2 was index 2 of the fine chunk.
+    expect(events.filter((e) => e.t === "db:grid-bumped")).toHaveLength(0);
+    expect(grids[0]!.buffer).toBeInstanceOf(SharedArrayBuffer);
+    expect(grids[0]!.meta).toEqual({ ...axis, geometry });
+    const packs = events.filter((e) => e.t === "db:sightings") as Extract<DbEvent, { t: "db:sightings" }>[];
+    expect(packs).toHaveLength(1);
+    const s = unpackSightings(packs[0]!.pack);
+    expect(s.counts.length).toBe(49);
+    expect(s.records(3)[1]!.id).toBe(sightingId(3, 1));
+    expect(engine.store.frameCount()).toBe(49);
     const snap = engine.framesSnapshot();
-    const { attachGrid } = await import("client/threads/db/frames");
     const grid = attachGrid(snap.buffer!);
     expect(grid.hotspot(3, 1)[7]).toBe(hotspotValue(3, 1, 7));
-    expect(grid.hotspot(w.coarseCount + 2, 0)[0]).toBe(hotspotValue(2, 0, 0));
-    expect(engine.frameSightings({ atMs: w.splitMs + 2 * Q })).toHaveLength(2);
-    expect(engine.stats().grid).toEqual({ frameCount: w.frameCount, version: 2, shared: true });
+    expect(snap.meta).toEqual({ ...axis, geometry });
+    expect(totalSightings(snap.sightings!)).toBe(98);
+    expect(engine.frameSightings({ atMs: T0 + 2 * H })).toHaveLength(2);
+    expect(engine.stats()).toMatchObject({ grid: { frameCount: 49, version: 1, shared: true }, sightings: 98, frames: 49 });
   });
 
   test("a second engine over the same rows serves the window from cache and sends etags", async () => {
     const server = framesServer();
     const first = makeEngine({ fetchImpl: server.fetchImpl });
     await first.engine.framesRefresh({ from, to: toIso });
+    const events: DbEvent[] = [];
     const again = new DbEngine({
       store: first.engine.store,
       gql: null,
@@ -264,51 +276,76 @@ describe("frames", () => {
       framesUrl: "/v1/frames",
       shared: true,
       opfs: false,
-      post: (e) => first.events.push(e),
+      post: (e) => events.push(e),
     });
     const res = await again.framesRefresh({ from, to: toIso });
-    expect(res).toEqual({ frameCount: w.frameCount, cached: w.frameCount, fetched: 0, failed: 0 });
-    expect(server.requests).toHaveLength(2);
-    // A forced refetch presents the stored etag and gets 304s.
+    expect(res).toEqual({ frameCount: 49, cached: 49, fetched: 0, failed: 0 });
+    expect(server.requests).toHaveLength(1);
+    expect(events.map((e) => e.t)).toEqual(["db:grid", "db:sightings"]);
+    expect(totalSightings(again.sightingsPack())).toBe(98);
+    // A forced refetch presents the stored etag and gets a 304.
     const forced = await again.framesRefresh({ from, to: toIso, force: true });
     expect(forced.fetched).toBe(0);
-    expect(server.notModified()).toBe(2);
+    expect(server.notModified()).toBe(1);
   });
 
-  test("framesUpdated refetches only the touched range and bumps the grid", async () => {
+  test("framesUpdated refetches only the touched hours, bumps the grid and re-sends sightings", async () => {
     const server = framesServer();
     const { engine, events } = makeEngine({ fetchImpl: server.fetchImpl });
     await engine.framesRefresh({ from, to: toIso });
     const before = events.length;
-    await engine.framesUpdated(new Date(to - Q).toISOString(), toIso);
-    expect(server.requests).toHaveLength(3);
-    expect(server.requests[2]).toContain("step=15");
-    expect(events.slice(before)).toEqual([{ t: "db:grid-bumped", version: 3 }]);
+    await engine.framesUpdated(new Date(to - H - 1).toISOString(), toIso);
+    expect(server.requests).toHaveLength(2);
+    expect(server.requests[1]).toContain(`from=${encodeURIComponent(new Date(to - H).toISOString())}`);
+    expect(events.slice(before).map((e) => e.t)).toEqual(["db:grid-bumped", "db:sightings"]);
+    expect((events[before] as Extract<DbEvent, { t: "db:grid-bumped" }>).version).toBe(2);
+  });
+
+  test("a moved window reallocates: cached hours come back at their new index, the rest is fetched", async () => {
+    const server = framesServer();
+    const { engine, events } = makeEngine({ fetchImpl: server.fetchImpl });
+    await engine.framesRefresh({ from, to: toIso });
+    const res = await engine.framesRefresh({ from: new Date(T0 + 2 * H).toISOString(), to: new Date(to + 2 * H).toISOString() });
+    expect(res).toEqual({ frameCount: 49, cached: 47, fetched: 2, failed: 0 });
+    expect(server.requests[1]).toContain(`from=${encodeURIComponent(new Date(to + H).toISOString())}`);
+    const grids = events.filter((e) => e.t === "db:grid") as Extract<DbEvent, { t: "db:grid" }>[];
+    expect(grids).toHaveLength(2);
+    expect(grids[1]!.meta.frame0UnixMs).toBe(T0 + 2 * H);
+    const grid = attachGrid(engine.framesSnapshot().buffer!);
+    // Hour T0+5h was fixture frame 5 in the first fetch; it now sits at index 3.
+    expect(grid.hotspot(3, 2)[9]).toBe(hotspotValue(5, 2, 9));
+    expect(engine.store.frameCount()).toBe(49); // pruned below the new window
   });
 
   test("without SharedArrayBuffer the grid is transferred as a fresh ArrayBuffer on every publish", async () => {
     const server = framesServer();
     const { engine, events, transfers } = makeEngine({ fetchImpl: server.fetchImpl, shared: false });
     await engine.framesRefresh({ from, to: toIso });
+    await engine.framesUpdated(toIso, toIso);
     const grids = events.filter((e) => e.t === "db:grid") as Extract<DbEvent, { t: "db:grid" }>[];
     expect(grids).toHaveLength(2);
-    for (const [i, g] of grids.entries()) {
+    for (const g of grids) {
       expect(g.buffer).toBeInstanceOf(ArrayBuffer);
       expect(g.buffer).not.toBeInstanceOf(SharedArrayBuffer);
-      expect(transfers[events.indexOf(g)]).toEqual([grids[i]!.buffer]);
+      expect(transfers[events.indexOf(g)]).toEqual([g.buffer]);
     }
+    const pack = events.find((e) => e.t === "db:sightings") as Extract<DbEvent, { t: "db:sightings" }>;
+    expect(transfers[events.indexOf(pack)]).toHaveLength(3);
     expect(engine.stats().grid?.shared).toBe(false);
   });
 
   test("a failing chunk is counted, the rest still lands", async () => {
     const server = framesServer();
-    const fetchImpl = (url: string, init?: RequestInit) => (url.includes("step=60") ? Promise.resolve(new Response("nope", { status: 500 })) : server.fetchImpl(url, init));
+    let calls = 0;
+    const fetchImpl = (url: string, init?: RequestInit) => (++calls === 1 ? Promise.resolve(new Response("nope", { status: 500 })) : server.fetchImpl(url, init));
     const orig = console.warn;
     console.warn = () => {};
     try {
       const { engine } = makeEngine({ fetchImpl });
       const res = await engine.framesRefresh({ from, to: toIso });
-      expect(res).toEqual({ frameCount: w.frameCount, cached: 0, fetched: w.fineCount, failed: 1 });
+      expect(res).toEqual({ frameCount: 49, cached: 0, fetched: 0, failed: 1 });
+      const again = await engine.framesRefresh({ from, to: toIso });
+      expect(again).toEqual({ frameCount: 49, cached: 0, fetched: 49, failed: 0 });
     } finally {
       console.warn = orig;
     }

@@ -5,8 +5,8 @@
  * 2. Spawns the gql worker and links the active-state catalog to it with `hostThread`.
  * 3. Runs the Web Locks election. The leader spawns the db worker, links it, and wires a MessageChannel
  *    between the two workers. Followers route db calls to the leader over BroadcastChannel.
- * 4. Publishes the frame grid: the leader attaches the SAB (or the transferred ArrayBuffer) from its worker;
- *    followers copy a snapshot from the leader.
+ * 4. Surfaces the frame grid and sightings: the leader attaches the SAB (or the transferred ArrayBuffer)
+ *    from its worker; followers copy a snapshot from the leader. `api.ts` publishes them to UI code.
  *
  * Workers are spawned with `new Worker(new URL("./x.worker.ts", import.meta.url), { type: "module" })`,
  * which Next 16 / Turbopack bundles as a separate entry (the e2e script drives `next dev` and proves it).
@@ -14,15 +14,17 @@
  * `bun build --target browser` step and `new Worker("/workers/gql.worker.js", { type: "module" })`.
  */
 import { get, subscribe } from "@calvinjs/active-state";
-import { hostThread, type ChannelKind, type ThreadLink } from "@calvinjs/active-state/threads";
+import { hostThread, type ChannelKind, type FrameGrid, type ThreadLink } from "@calvinjs/active-state/threads";
 
 import { state } from "client/state";
 import { TIME, type TimeState } from "client/state/time";
+import type { FrameMeta, FrameSightings } from "client/threads/api";
 
-import { attachGrid, type FrameWindow } from "./db/frames";
+import { attachGrid } from "./db/frames";
 import { createElection, locksAvailable, type Election, type LeaderState } from "./db/leader";
 import { CHANNEL_NAME, createRouter, type Router } from "./db/proxy";
 import { DbWorkerClient, type DbMethod, type DbParams, type DbResult } from "./db/rpc";
+import { unpackSightings } from "./db/sightings";
 import { GqlRpcClient, type ToGql } from "./gql/protocol";
 
 export type ThreadsTransport = ChannelKind;
@@ -47,7 +49,7 @@ export function detectTransport(): ThreadsTransport {
   });
 }
 
-export type GridPublication = { grid: ReturnType<typeof attachGrid>; window: FrameWindow };
+export type GridPublication = { grid: FrameGrid; meta: FrameMeta };
 
 export type Threads = {
   readonly transport: ThreadsTransport;
@@ -61,8 +63,10 @@ export type Threads = {
   db<M extends DbMethod>(method: M, params: DbParams<M>): Promise<DbResult<M>>;
   /** Fires when the leader (this tab or another) reports that board rows changed. */
   onBoardChanged(cb: (boardId: string) => void): () => void;
-  /** Fires with each grid attached on this tab. */
+  /** Fires with each grid attached on this tab, and again when its contents were bumped. */
   onGrid(cb: (pub: GridPublication) => void): () => void;
+  /** Fires with each sightings pack received on this tab. */
+  onSightings(cb: (s: FrameSightings) => void): () => void;
   close(): void;
 };
 
@@ -86,7 +90,9 @@ function createThreads(): Threads {
   const tabId = crypto.randomUUID();
   const boardListeners = new Set<(boardId: string) => void>();
   const gridListeners = new Set<(pub: GridPublication) => void>();
-  let current: GridPublication | null = null;
+  const sightingListeners = new Set<(s: FrameSightings) => void>();
+  let currentGrid: GridPublication | null = null;
+  let currentSightings: FrameSightings | null = null;
 
   const gqlWorker = new Worker(new URL("./gql.worker.ts", import.meta.url), { type: "module", name: "inversa-gql" });
   gqlWorker.addEventListener("error", (ev) => console.error("[threads] gql worker error", ev.message || ev));
@@ -99,23 +105,27 @@ function createThreads(): Threads {
   let dbReady: Promise<void> = Promise.resolve();
   let offTime: (() => void) | null = null;
 
-  const publish = (buffer: SharedArrayBuffer | ArrayBuffer, window: FrameWindow) => {
-    current = { grid: attachGrid(buffer), window };
-    for (const cb of gridListeners) cb(current);
+  const publishGrid = (buffer: SharedArrayBuffer | ArrayBuffer, meta: FrameMeta) => {
+    currentGrid = { grid: attachGrid(buffer), meta };
+    for (const cb of gridListeners) cb(currentGrid);
+  };
+  const publishSightings = (s: FrameSightings) => {
+    currentSightings = s;
+    for (const cb of sightingListeners) cb(s);
   };
 
   /** Followers copy the leader's grid: into a SAB when the page may share one, else as the plain buffer. */
   const pullSnapshot = async () => {
-    const snap = await router.call("framesSnapshot", {});
-    const s = snap as DbResult<"framesSnapshot">;
-    if (!s.buffer || !s.window) return;
+    const s = (await router.call("framesSnapshot", {})) as DbResult<"framesSnapshot">;
+    if (!s.buffer || !s.meta) return;
     if (transport === "sab") {
       const sab = new SharedArrayBuffer(s.buffer.byteLength);
       new Uint8Array(sab).set(new Uint8Array(s.buffer));
-      publish(sab, s.window);
+      publishGrid(sab, s.meta);
     } else {
-      publish(s.buffer, s.window);
+      publishGrid(s.buffer, s.meta);
     }
+    if (s.sightings) publishSightings(unpackSightings(s.sightings));
   };
 
   const currentWindow = (): { from: string; to: string } | null => {
@@ -124,16 +134,17 @@ function createThreads(): Threads {
   };
 
   const spawnDb = (): Promise<void> => {
-    dbWorker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module", name: "inversa-db" });
-    dbLink = hostThread(dbWorker, state, { transport });
-    const client = new DbWorkerClient(dbWorker);
+    const worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module", name: "inversa-db" });
+    dbWorker = worker;
+    dbLink = hostThread(worker, state, { transport });
+    const client = new DbWorkerClient(worker);
     dbClient = client;
     const channel = new MessageChannel();
     gqlWorker.postMessage({ t: "gql:link-db", port: channel.port1 } satisfies ToGql, [channel.port1]);
-    dbWorker.postMessage({ t: "db:link-gql", port: channel.port2 }, [channel.port2]);
+    worker.postMessage({ t: "db:link-gql", port: channel.port2 }, [channel.port2]);
 
     const ready = new Promise<void>((resolve, reject) => {
-      dbWorker!.addEventListener("error", (ev) => reject(new Error(`db worker failed to start: ${ev.message || "script error"}`)));
+      worker.addEventListener("error", (ev) => reject(new Error(`db worker failed to start: ${ev.message || "script error"}`)));
       client.on((e) => {
         switch (e.t) {
           case "db:ready":
@@ -143,12 +154,15 @@ function createThreads(): Threads {
             reject(new Error(e.message));
             return;
           case "db:grid":
-            publish(e.buffer, e.window);
+            publishGrid(e.buffer, e.meta);
             router.broadcast("frames");
             return;
           case "db:grid-bumped":
-            if (current) for (const cb of gridListeners) cb(current);
+            if (currentGrid) for (const cb of gridListeners) cb(currentGrid);
             router.broadcast("frames");
+            return;
+          case "db:sightings":
+            publishSightings(unpackSightings(e.pack));
             return;
           case "db:board":
             for (const cb of boardListeners) cb(e.boardId);
@@ -158,7 +172,7 @@ function createThreads(): Threads {
       });
     });
 
-    // The frame window follows TIME's bounds; refetch when they move.
+    // The frame axis follows TIME's bounds; refetch when they move.
     let last: string | null = null;
     const refresh = () => {
       const w = currentWindow();
@@ -224,9 +238,16 @@ function createThreads(): Threads {
     },
     onGrid(cb) {
       gridListeners.add(cb);
-      if (current) cb(current);
+      if (currentGrid) cb(currentGrid);
       return () => {
         gridListeners.delete(cb);
+      };
+    },
+    onSightings(cb) {
+      sightingListeners.add(cb);
+      if (currentSightings) cb(currentSightings);
+      return () => {
+        sightingListeners.delete(cb);
       };
     },
     close() {

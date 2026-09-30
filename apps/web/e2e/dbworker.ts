@@ -60,12 +60,13 @@ function framesResponse(url: URL): Response {
   const step = Number(url.searchParams.get("step") ?? "60");
   if (!Number.isFinite(from) || !Number.isFinite(to) || !(step > 0)) return new Response("bad range", { status: 400 });
   const frameCount = Math.min(744, Math.floor((to - from) / (step * 60_000)) + 1);
-  const body = encodeEvf2({ frame0UnixMs: from, stepMinutes: step, frameCount, hsCols: 170, hsRows: 160, envCols: 68, envRows: 64, sightingsPerFrame: 3 });
+  // A quarter of the production grid (170x160 / 68x64): ~5 KB per frame, ~4 MB for 30 days, same code paths.
+  const body = encodeEvf2({ frame0UnixMs: from, stepMinutes: step, frameCount, hsCols: 34, hsRows: 32, envCols: 17, envRows: 16, sightingsPerFrame: 3 });
   const gz = Bun.gzipSync(body.slice().buffer as ArrayBuffer);
   return new Response(gz, { status: 200, headers: { "content-type": "application/x-evf", "content-encoding": "gzip", etag: `"${from}-${to}-${step}"`, "cache-control": "no-store" } });
 }
 
-type WsData = { subs: Map<string, string> };
+type WsData = { kind: "gql"; subs: Map<string, string> } | { kind: "relay"; upstream: WebSocket; queue: (string | Uint8Array)[] };
 
 export const startStub = () =>
   Bun.serve<WsData>({
@@ -73,11 +74,19 @@ export const startStub = () =>
   hostname: "127.0.0.1",
   async fetch(req, server) {
     const url = new URL(req.url);
-    if (url.pathname === "/v1/graphql") {
-      if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        const ok = server.upgrade(req, { data: { subs: new Map() }, headers: { "sec-websocket-protocol": "graphql-transport-ws" } });
+    if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      if (url.pathname === "/v1/graphql") {
+        const ok = server.upgrade(req, { data: { kind: "gql", subs: new Map() }, headers: { "sec-websocket-protocol": "graphql-transport-ws" } });
         return ok ? undefined : new Response("upgrade failed", { status: 400 });
       }
+      // Next's HMR socket. Turbopack's dev client loads lazy chunks (the workers) only once it is connected,
+      // so the proxy relays it instead of letting it fail.
+      const upstream = new WebSocket(`ws://127.0.0.1:${NEXT_PORT}${url.pathname}${url.search}`);
+      const ok = server.upgrade(req, { data: { kind: "relay", upstream, queue: [] } });
+      if (!ok) upstream.close();
+      return ok ? undefined : new Response("upgrade failed", { status: 400 });
+    }
+    if (url.pathname === "/v1/graphql") {
       if (req.method !== "POST") return new Response("POST only", { status: 405 });
       const body = (await req.json()) as { query: string; variables?: Record<string, unknown> };
       return Response.json(graphql(body));
@@ -105,7 +114,27 @@ export const startStub = () =>
     return new Response(upstream.body, { status: upstream.status, headers: out });
   },
   websocket: {
+    open(ws) {
+      if (ws.data.kind !== "relay") return;
+      const { upstream, queue } = ws.data;
+      upstream.onopen = () => {
+        for (const m of queue) upstream.send(m);
+        queue.length = 0;
+      };
+      upstream.onmessage = (ev) => ws.send(ev.data as string | ArrayBuffer);
+      upstream.onclose = () => ws.close();
+      upstream.onerror = () => ws.close();
+    },
+    close(ws) {
+      if (ws.data.kind === "relay") ws.data.upstream.close();
+    },
     message(ws, raw) {
+      if (ws.data.kind === "relay") {
+        const data = typeof raw === "string" ? raw : new Uint8Array(raw);
+        if (ws.data.upstream.readyState === WebSocket.OPEN) ws.data.upstream.send(data);
+        else ws.data.queue.push(data);
+        return;
+      }
       const msg = JSON.parse(String(raw)) as { id?: string; type: string; payload?: { query?: string } };
       if (msg.type === "connection_init") ws.send(JSON.stringify({ type: "connection_ack" }));
       else if (msg.type === "ping") ws.send(JSON.stringify({ type: "pong" }));
@@ -176,7 +205,16 @@ export async function stopNext(child: ChildProcess | null = next): Promise<void>
 
 // ---- browser ----------------------------------------------------------------------------------
 
-type Info = { transport: string; isolated: boolean; leader: boolean; leaderState: string; grid: { frameCount: number; version: number; shared: boolean } | null; feeds: number; proxied: number };
+type Info = {
+  transport: string;
+  isolated: boolean;
+  leader: boolean;
+  leaderState: string;
+  grid: { frameCount: number; version: number; shared: boolean } | null;
+  meta: { frame0UnixMs: number; stepMinutes: number; frameCount: number; geometry: { west: number; south: number; hsCellDeg: number; envCellDeg: number } } | null;
+  sightings: number;
+  proxied: number;
+};
 
 const pageErrors: string[] = [];
 const consoleLog: string[] = [];
@@ -261,7 +299,10 @@ async function run(): Promise<string> {
     const s0 = await stats(page);
     if (!s0.opfs) fail("db worker is not on OPFS (opfs-sahpool failed to install)");
     if (s0.frames < 700) fail(`only ${s0.frames} frames cached`);
-    await waitInfo(page, (i) => i.feeds >= 3, "FEEDS through the thread link");
+    const m = withGrid.meta;
+    if (!m || m.stepMinutes !== 60 || m.frameCount !== withGrid.grid!.frameCount || m.geometry.west !== -83.2) fail(`bad frame meta ${JSON.stringify(m)}`);
+    const withSightings = await waitInfo(page, (i) => i.sightings > 0, "frame sightings");
+    if (withSightings.sightings !== 3 * m.frameCount) fail(`expected ${3 * m.frameCount} sightings, got ${withSightings.sightings}`);
 
     // 1. Cached round trip.
     const cachedMs = await timedCached(page);
@@ -289,7 +330,7 @@ async function run(): Promise<string> {
     const leaderInfo = await waitInfo(page, (i) => i.proxied > 0, "a proxied call at the leader");
     const s3 = await stats(page2);
     if (!s3.opfs) fail("follower stats did not come from the leader's OPFS worker");
-    await waitInfo(page2, (i) => i.grid !== null && i.grid.frameCount === withGrid.grid!.frameCount, "follower grid snapshot");
+    await waitInfo(page2, (i) => i.grid !== null && i.grid.frameCount === withGrid.grid!.frameCount && i.sightings === withSightings.sightings, "follower grid and sightings snapshot");
     if (feedsHits() !== 1) fail(`feeds query hit the stub ${feedsHits()} times via the follower, expected 1`);
 
     // 4. Failover: the leader closes, the follower takes the lock and its own worker.
@@ -303,7 +344,7 @@ async function run(): Promise<string> {
     const fatal = pageErrors.filter((e) => !/Failed to load resource|webpack-hmr|HMR|hot-reloader|WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/_next/.test(e));
     if (fatal.length) fail(`page errors:\n${fatal.join("\n")}`);
 
-    console.log(`  ok  transport=${first.transport} isolated=${first.isolated} frames=${s0.frames} proxied=${leaderInfo.proxied} failover=1`);
+    console.log(`  ok  transport=${first.transport} isolated=${first.isolated} frames=${s0.frames} sightings=${withSightings.sightings} proxied=${leaderInfo.proxied} failover=1`);
     return NO_ISOLATION ? "FALLBACK-OK" : `DBWORKER cached=${cachedMs.toFixed(1)} opfs=1 proxy=1`;
   } finally {
     await browser.close();

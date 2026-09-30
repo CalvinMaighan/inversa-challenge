@@ -19,7 +19,7 @@ export type FixtureOptions = {
   salt?: number;
 };
 
-export const FIXTURE_DEFAULTS = { hsCols: 8, hsRows: 6, envCols: 4, envRows: 3, speciesCount: 4, hotspotScale: 1 / 255, sightingsPerFrame: 2, salt: 0 } as const;
+export const FIXTURE_DEFAULTS = { hsCols: 8, hsRows: 6, envCols: 4, envRows: 3, speciesCount: 4, hotspotScale: 1 / 256, sightingsPerFrame: 2, salt: 0 } as const;
 
 export function fixtureHeader(o: FixtureOptions): EvfHeader {
   const d = { ...FIXTURE_DEFAULTS, ...o };
@@ -43,6 +43,8 @@ export function fixtureHeader(o: FixtureOptions): EvfHeader {
 export const hotspotValue = (frame: number, species: number, cell: number, salt = 0): number => (frame * 13 + species * 7 + cell + salt) % 256;
 export const lstValue = (frame: number, cell: number, salt = 0): number => (cell % 5 === 4 ? ENV_MISSING : 2000 + frame * 10 + cell + salt);
 export const sstValue = (frame: number, cell: number, salt = 0): number => 2500 + frame * 3 + cell * 2 + salt;
+/** Sighting id of record `i` in frame `f`: unique across a fixture. */
+export const sightingId = (frame: number, i: number): number => 100_000 + frame * 1_000 + i;
 
 export function encodeEvf2(o: FixtureOptions): Uint8Array {
   const h = fixtureHeader(o);
@@ -80,11 +82,12 @@ export function encodeEvf2(o: FixtureOptions): Uint8Array {
     view.setUint32(base + layout.sightingsOffset, d.sightingsPerFrame, true);
     for (let i = 0; i < d.sightingsPerFrame; i++) {
       const p = base + layout.sightingsOffset + 4 + i * SIGHTING_RECORD_BYTES;
-      view.setFloat32(p, -80.5 + i * 0.1, true);
-      view.setFloat32(p + 4, 25.2 + f * 0.01, true);
-      view.setUint16(p + 8, (i % h.speciesCount) + 1, true);
-      out[p + 10] = i % 4;
-      out[p + 11] = f % 2 === 0 ? 0 : 4;
+      view.setUint32(p, sightingId(f, i), true);
+      view.setFloat32(p + 4, -80.5 + i * 0.1, true);
+      view.setFloat32(p + 8, 25.2 + f * 0.01, true);
+      view.setUint16(p + 12, (i % h.speciesCount) + 1, true);
+      out[p + 14] = i % 4;
+      out[p + 15] = f % 2 === 0 ? 0 : 4;
     }
   }
   return out;
