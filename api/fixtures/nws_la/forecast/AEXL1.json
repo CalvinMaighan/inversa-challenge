@@ -40,9 +40,9 @@
     "properties": {
         "units": "us",
         "forecastGenerator": "BaselineForecastGenerator",
-        "generatedAt": "2026-10-01T07:01:34+00:00",
-        "updateTime": "2026-10-01T06:50:35+00:00",
-        "validTimes": "2026-10-01T00:00:00+00:00/P8DT1H",
+        "generatedAt": "2026-10-01T14:45:33+00:00",
+        "updateTime": "2026-10-01T12:46:24+00:00",
+        "validTimes": "2026-10-01T06:00:00+00:00/P7DT19H",
         "elevation": {
             "unitCode": "wmoUnit:m",
             "value": 17.9832
@@ -50,27 +50,8 @@
         "periods": [
             {
                 "number": 1,
-                "name": "Overnight",
-                "startTime": "2026-10-01T02:00:00-05:00",
-                "endTime": "2026-10-01T06:00:00-05:00",
-                "isDaytime": false,
-                "temperature": 72,
-                "temperatureUnit": "F",
-                "temperatureTrend": null,
-                "probabilityOfPrecipitation": {
-                    "unitCode": "wmoUnit:percent",
-                    "value": 0
-                },
-                "windSpeed": "5 mph",
-                "windDirection": "SE",
-                "icon": "https://api.weather.gov/icons/land/night/sct?size=medium",
-                "shortForecast": "Partly Cloudy",
-                "detailedForecast": "Partly cloudy, with a low around 72. Southeast wind around 5 mph."
-            },
-            {
-                "number": 2,
-                "name": "Thursday",
-                "startTime": "2026-10-01T06:00:00-05:00",
+                "name": "Today",
+                "startTime": "2026-10-01T09:00:00-05:00",
                 "endTime": "2026-10-01T18:00:00-05:00",
                 "isDaytime": true,
                 "temperature": 95,
@@ -80,15 +61,15 @@
                     "unitCode": "wmoUnit:percent",
                     "value": 32
                 },
-                "windSpeed": "5 to 10 mph",
+                "windSpeed": "10 mph",
                 "windDirection": "SE",
                 "icon": "https://api.weather.gov/icons/land/day/sct/tsra_hi,30?size=medium",
                 "shortForecast": "Mostly Sunny then Chance Showers And Thunderstorms",
-                "detailedForecast": "A chance of rain showers between 1pm and 4pm, then a chance of showers and thunderstorms. Mostly sunny. High near 95, with temperatures falling to around 91 in the afternoon. Heat index values as high as 101. Southeast wind 5 to 10 mph. Chance of precipitation is 30%."
+                "detailedForecast": "A chance of rain showers between 1pm and 4pm, then a chance of showers and thunderstorms. Mostly sunny. High near 95, with temperatures falling to around 91 in the afternoon. Heat index values as high as 101. Southeast wind around 10 mph. Chance of precipitation is 30%."
             },
             {
-                "number": 3,
-                "name": "Thursday Night",
+                "number": 2,
+                "name": "Tonight",
                 "startTime": "2026-10-01T18:00:00-05:00",
                 "endTime": "2026-10-02T06:00:00-05:00",
                 "isDaytime": false,
@@ -106,7 +87,7 @@
                 "detailedForecast": "A chance of showers and thunderstorms before 7pm, then patchy fog. Partly cloudy, with a low around 71. Heat index values as high as 97. Southeast wind 0 to 10 mph. Chance of precipitation is 30%."
             },
             {
-                "number": 4,
+                "number": 3,
                 "name": "Friday",
                 "startTime": "2026-10-02T06:00:00-05:00",
                 "endTime": "2026-10-02T18:00:00-05:00",
@@ -122,10 +103,10 @@
                 "windDirection": "SE",
                 "icon": "https://api.weather.gov/icons/land/day/fog/tsra_hi,50?size=medium",
                 "shortForecast": "Patchy Fog then Chance Showers And Thunderstorms",
-                "detailedForecast": "Patchy fog before 7am, then a chance of showers and thunderstorms between 1pm and 4pm, then a chance of showers and thunderstorms. Partly sunny, with a high near 94. Heat index values as high as 101. Southeast wind 0 to 5 mph. Chance of precipitation is 50%."
+                "detailedForecast": "Patchy fog before 7am, then a chance of showers and thunderstorms between 1pm and 4pm, then a chance of showers and thunderstorms. Partly sunny. High near 94, with temperatures falling to around 90 in the afternoon. Heat index values as high as 101. Southeast wind 0 to 5 mph. Chance of precipitation is 50%. New rainfall amounts less than a tenth of an inch possible."
             },
             {
-                "number": 5,
+                "number": 4,
                 "name": "Friday Night",
                 "startTime": "2026-10-02T18:00:00-05:00",
                 "endTime": "2026-10-03T06:00:00-05:00",
@@ -144,7 +125,7 @@
                 "detailedForecast": "A chance of showers and thunderstorms before 7pm, then a chance of showers and thunderstorms between 7pm and 1am. Mostly cloudy, with a low around 70. Northeast wind 0 to 5 mph. Chance of precipitation is 40%."
             },
             {
-                "number": 6,
+                "number": 5,
                 "name": "Saturday",
                 "startTime": "2026-10-03T06:00:00-05:00",
                 "endTime": "2026-10-03T18:00:00-05:00",
@@ -163,7 +144,7 @@
                 "detailedForecast": "A slight chance of rain showers between 7am and 1pm, then showers and thunderstorms likely. Mostly cloudy, with a high near 89. Northeast wind 5 to 10 mph. Chance of precipitation is 60%."
             },
             {
-                "number": 7,
+                "number": 6,
                 "name": "Saturday Night",
                 "startTime": "2026-10-03T18:00:00-05:00",
                 "endTime": "2026-10-04T06:00:00-05:00",
@@ -182,7 +163,7 @@
                 "detailedForecast": "Showers and thunderstorms likely before 11pm, then rain showers likely and patchy fog. Mostly cloudy, with a low around 67. Northeast wind 0 to 5 mph. Chance of precipitation is 60%."
             },
             {
-                "number": 8,
+                "number": 7,
                 "name": "Sunday",
                 "startTime": "2026-10-04T06:00:00-05:00",
                 "endTime": "2026-10-04T18:00:00-05:00",
@@ -201,7 +182,7 @@
                 "detailedForecast": "Rain showers likely before 1pm, then a chance of showers and thunderstorms. Mostly cloudy, with a high near 83. Northeast wind 5 to 10 mph. Chance of precipitation is 60%."
             },
             {
-                "number": 9,
+                "number": 8,
                 "name": "Sunday Night",
                 "startTime": "2026-10-04T18:00:00-05:00",
                 "endTime": "2026-10-05T06:00:00-05:00",
@@ -220,7 +201,7 @@
                 "detailedForecast": "A chance of showers and thunderstorms. Mostly cloudy, with a low around 65. Northeast wind 5 to 10 mph. Chance of precipitation is 50%."
             },
             {
-                "number": 10,
+                "number": 9,
                 "name": "Monday",
                 "startTime": "2026-10-05T06:00:00-05:00",
                 "endTime": "2026-10-05T18:00:00-05:00",
@@ -236,10 +217,10 @@
                 "windDirection": "NE",
                 "icon": "https://api.weather.gov/icons/land/day/rain_showers,20/rain_showers,30?size=medium",
                 "shortForecast": "Chance Rain Showers",
-                "detailedForecast": "A chance of rain showers. Partly sunny, with a high near 83. Chance of precipitation is 30%."
+                "detailedForecast": "A chance of rain showers. Partly sunny, with a high near 83. Northeast wind 10 to 15 mph. Chance of precipitation is 30%."
             },
             {
-                "number": 11,
+                "number": 10,
                 "name": "Monday Night",
                 "startTime": "2026-10-05T18:00:00-05:00",
                 "endTime": "2026-10-06T06:00:00-05:00",
@@ -258,7 +239,7 @@
                 "detailedForecast": "A chance of rain showers before 7pm. Partly cloudy, with a low around 62. Chance of precipitation is 30%."
             },
             {
-                "number": 12,
+                "number": 11,
                 "name": "Tuesday",
                 "startTime": "2026-10-06T06:00:00-05:00",
                 "endTime": "2026-10-06T18:00:00-05:00",
@@ -277,7 +258,7 @@
                 "detailedForecast": "Sunny, with a high near 86."
             },
             {
-                "number": 13,
+                "number": 12,
                 "name": "Tuesday Night",
                 "startTime": "2026-10-06T18:00:00-05:00",
                 "endTime": "2026-10-07T06:00:00-05:00",
@@ -296,7 +277,7 @@
                 "detailedForecast": "Mostly clear, with a low around 62."
             },
             {
-                "number": 14,
+                "number": 13,
                 "name": "Wednesday",
                 "startTime": "2026-10-07T06:00:00-05:00",
                 "endTime": "2026-10-07T18:00:00-05:00",
@@ -313,6 +294,25 @@
                 "icon": "https://api.weather.gov/icons/land/day/few?size=medium",
                 "shortForecast": "Sunny",
                 "detailedForecast": "Sunny, with a high near 86."
+            },
+            {
+                "number": 14,
+                "name": "Wednesday Night",
+                "startTime": "2026-10-07T18:00:00-05:00",
+                "endTime": "2026-10-08T06:00:00-05:00",
+                "isDaytime": false,
+                "temperature": 62,
+                "temperatureUnit": "F",
+                "temperatureTrend": null,
+                "probabilityOfPrecipitation": {
+                    "unitCode": "wmoUnit:percent",
+                    "value": 14
+                },
+                "windSpeed": "0 to 5 mph",
+                "windDirection": "NE",
+                "icon": "https://api.weather.gov/icons/land/night/few?size=medium",
+                "shortForecast": "Mostly Clear",
+                "detailedForecast": "Mostly clear, with a low around 62."
             }
         ]
     }

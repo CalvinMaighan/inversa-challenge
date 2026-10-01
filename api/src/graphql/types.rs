@@ -89,7 +89,7 @@ db_text!(Param {
     StageM => "stage_m", WaveM => "wave_m", WindMs => "wind_ms", FireFrp => "fire_frp",
     Sst => "sst", SstAnomaly => "sst_anomaly", Dhw => "dhw", Baa => "baa",
     WavePeriodS => "wave_period_s", CurrentMs => "current_ms", CurrentDirDeg => "current_dir_deg",
-    DischargeCfs => "discharge_cfs",
+    DischargeCfs => "discharge_cfs", PopPct => "pop_pct", WindGustMs => "wind_gust_ms",
 });
 db_text!(ReadingOrigin { Measured => "measured", Satellite => "satellite", Modeled => "modeled" });
 db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missing => "missing" });
@@ -160,6 +160,10 @@ pub enum Param {
     CurrentDirDeg,
     /// USGS discharge, ft^3/s (carp gauges). NWPS flow (kcfs) is in the forecast store, apart.
     DischargeCfs,
+    /// NWS gridpoint probability of precipitation, percent, per 12 h period (modeled).
+    PopPct,
+    /// NWS gridpoint wind gust, m/s, per hour (modeled).
+    WindGustMs,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

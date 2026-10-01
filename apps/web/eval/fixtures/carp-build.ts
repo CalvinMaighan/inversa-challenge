@@ -192,18 +192,44 @@ function backstory(lid: string, issuances: Snap[], firstRealMs: number, firstRea
 // ---------------------------------------------------------------- NWS gridpoint forecasts
 
 type Period = { name: string; start: string; end: string; temperatureF: number; windSpeed: string; windDirection: string; precipProbability: number | null; shortForecast: string; detailedForecast: string };
-function nwsForecast(lid: string): { office: string; grid: string; updateTime: string; periods: Period[] } {
+/** A raw grid value: `start` and `hours` from its `validTime` (`2026-10-01T06:00:00+00:00/PT6H`). */
+type GridValue = { start: string; hours: number; value: number | null };
+const isoHours = (dur: string) => {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(dur);
+  if (!m) throw new Error(`unsupported duration ${dur}`);
+  return Number(m[1] ?? 0) * 24 + Number(m[2] ?? 0) + Number(m[3] ?? 0) / 60;
+};
+/**
+ * The recorded office run (2026-10-01T15:06Z, runs of 10:37Z to 14:20Z) is later than the scene's reference time,
+ * so the recording is shifted back whole days: period boundaries (06:00 and 18:00 local) and the 6 h QPF windows
+ * keep their clock times, and the run precedes NOW as a stored run would. The real update time is kept beside it.
+ */
+const WEATHER_SHIFT_DAYS = -1;
+function nwsForecast(lid: string): { office: string; grid: string; updateTime: string; recordedUpdateTime: string; shiftedDays: number; periods: Period[]; qpf: GridValue[]; gusts: GridValue[] } {
   const doc = JSON.parse(readFileSync(join(ROOT, `nws_la/forecast/${lid}.json`), "utf8")) as { properties: Record<string, any> };
+  const grid = JSON.parse(readFileSync(join(ROOT, `nws_la/forecast/${lid}.grid.json`), "utf8")) as { properties: Record<string, any> };
   const p = doc.properties;
   const site = byLid[lid]!;
+  const shift = (t: string) => iso(Date.parse(t) + WEATHER_SHIFT_DAYS * DAY);
+  const layer = (name: string, uom: string): GridValue[] => {
+    const l = grid.properties[name];
+    if (l?.uom !== uom) throw new Error(`${lid}: ${name} in ${l?.uom}, expected ${uom}`);
+    return (l.values as any[]).map((v) => {
+      const [start, dur] = String(v.validTime).split("/");
+      return { start: shift(start!), hours: isoHours(dur!), value: typeof v.value === "number" ? v.value : null };
+    });
+  };
+  if (grid.properties.updateTime !== p.updateTime) throw new Error(`${lid}: periods and grid are from different runs`);
   return {
     office: site.nwsGrid.office,
     grid: `${site.nwsGrid.x},${site.nwsGrid.y}`,
-    updateTime: iso(Date.parse(p.updateTime)),
+    updateTime: shift(p.updateTime),
+    recordedUpdateTime: iso(Date.parse(p.updateTime)),
+    shiftedDays: WEATHER_SHIFT_DAYS,
     periods: (p.periods as any[]).map((per) => ({
       name: per.name,
-      start: iso(Date.parse(per.startTime)),
-      end: iso(Date.parse(per.endTime)),
+      start: shift(per.startTime),
+      end: shift(per.endTime),
       temperatureF: per.temperature,
       windSpeed: per.windSpeed,
       windDirection: per.windDirection,
@@ -211,6 +237,9 @@ function nwsForecast(lid: string): { office: string; grid: string; updateTime: s
       shortForecast: per.shortForecast,
       detailedForecast: per.detailedForecast,
     })),
+    // QPF in mm per window (6 h, the run's first can be shorter); gusts in km/h, run-length encoded over hours.
+    qpf: layer("quantitativePrecipitation", "wmoUnit:mm"),
+    gusts: layer("windGust", "wmoUnit:km_h-1"),
   };
 }
 
@@ -280,13 +309,14 @@ function build() {
       [s.nwps!, { id: s.nwps!, source: "nws-forecast", name: `NWS forecast, ${s.name}`, lat: s.lat, lon: s.lon, kind: "grid" }],
     ]),
   );
+  const newestWeather = iso(Object.values(weather).reduce((m, w) => Math.max(m, Date.parse(w.updateTime)), 0));
   const newestUsgs = readings.reduce((m, r) => Math.max(m, Date.parse(r.observedAt)), 0);
   const newestNwps = observations.reduce((m, o) => Math.max(m, Date.parse(o.observedAt)), 0);
   const feeds = [
     { source: "usgs", mode: "POLL", state: "NOMINAL", newestObservedAt: iso(newestUsgs), lastFetchAt: "2026-10-01T06:46:00Z", lagSeconds: Math.round((NOW_MS - newestUsgs) / 1000), note: null, lastFetchRunId: "c-usgs-4412" },
     { source: "nwps", mode: "POLL", state: "NOMINAL", newestObservedAt: iso(newestNwps), lastFetchAt: "2026-10-01T06:41:00Z", lagSeconds: Math.round((NOW_MS - newestNwps) / 1000), note: "forecast issuances once a day, 13Z-16Z; observed hourly", lastFetchRunId: "c-nwps-4409" },
     { source: "nws-alerts", mode: "POLL", state: "NOMINAL", newestObservedAt: "2026-10-01T06:58:00Z", lastFetchAt: "2026-10-01T06:58:00Z", lagSeconds: 120, note: "alerts/active?area=LA every 2 min; newestObservedAt is the last check (no active Louisiana alert at it)", lastFetchRunId: "c-nwsa-4418" },
-    { source: "nws-forecast", mode: "POLL", state: "NOMINAL", newestObservedAt: "2026-10-01T06:50:35Z", lastFetchAt: "2026-10-01T06:55:00Z", lagSeconds: 565, note: "gridpoint forecast hourly; newestObservedAt is the office updateTime", lastFetchRunId: "c-nwsf-4416" },
+    { source: "nws-forecast", mode: "POLL", state: "NOMINAL", newestObservedAt: newestWeather, lastFetchAt: "2026-10-01T06:55:00Z", lagSeconds: Math.round((NOW_MS - Date.parse(newestWeather)) / 1000), note: "gridpoint forecast hourly; newestObservedAt is the office updateTime", lastFetchRunId: "c-nwsf-4416" },
     { source: "iem", mode: "POLL", state: "NOMINAL", newestObservedAt: "2026-09-30T15:32:00Z", lastFetchAt: "2026-10-01T06:02:00Z", lagSeconds: Math.round((NOW_MS - Date.parse("2026-09-30T15:32:00Z")) / 1000), note: "IEM HML archive (Iowa State), daily backfill of past NWS river forecast issuances; archive rows are known from their issuance time", lastFetchRunId: "c-iem-4401" },
     { source: "nwws", mode: "PUSH", state: "DOWN", newestObservedAt: null, lastFetchAt: null, lagSeconds: null, note: "disabled: NWWS-OI application not submitted; alerts arrive by poll", lastFetchRunId: null },
   ];
