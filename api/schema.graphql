@@ -113,17 +113,121 @@ type FrameChunk {
   data: String!
 }
 
+# ---------------------------------------------------------------------------------------------
+# Survey priority components (L5, PLAN.md P3). A component app (Lionfish Watch: `score.components`
+# recentReports, idQuality, heatStress, completeness) returns each component separately in [0, 1]
+# with its own state and inputs; `rankScore` is a configurable weighted mean of the first three
+# that only orders cells. There is no risk, probability or percent field anywhere here.
+# ---------------------------------------------------------------------------------------------
+
+"""UNKNOWN and STALE carry a null value: unknown is not zero."""
+enum ComponentState { OK UNKNOWN STALE }
+"""What a frame at `at` knew: SUBMITTED (default; iNat created_at, else ingest time) or OBSERVED."""
+enum HotspotBasis { SUBMITTED OBSERVED }
+
+"""Per-query rank weight overrides; each finite and >= 0, not all 0. Missing ones keep the config."""
+input HotspotWeightsInput {
+  recentReports: Float
+  idQuality: Float
+  heatStress: Float
+}
+
+"""The rank weights in force. completeness never has one."""
+type HotspotWeights {
+  recentReports: Float!
+  idQuality: Float!
+  heatStress: Float!
+}
+
+"""One input of a component: a C14 record id with its dates and how it counted."""
+type HotspotEvidence {
+  id: ID!
+  kind: String!
+  observedAt: Time
+  submittedAt: Time
+  ingestedAt: Time
+  """Weight in the component; null when the record did not count (duplicate, out of window)."""
+  weight: Float
+  detail: String!
+  """Photo (sightings) or product DOI (CRW)."""
+  url: String
+}
+
+"""One of the four priority components of a cell, in [0, 1] with its own state and inputs."""
+type HotspotComponent {
+  id: ID!
+  """Null when the state is UNKNOWN or STALE."""
+  value: Float
+  state: ComponentState!
+  """Weight in rankScore (0 for completeness, which never ranks)."""
+  weight: Float!
+  rationale: String!
+  """C14 ids of the records that counted (sighting:<id>, reading:<station>:<param>:<ms>:satellite), or notes."""
+  inputs: [String!]!
+  """Every record in reach with dates and weights; filled by explainCell, empty in hotspots."""
+  evidence: [HotspotEvidence!]!
+}
+
+type HotspotComponents {
+  recentReports: HotspotComponent!
+  idQuality: HotspotComponent!
+  heatStress: HotspotComponent!
+  completeness: HotspotComponent!
+}
+
+"""NOAA Coral Reef Watch values at the cell's 5 km pixel. DHW (accumulated) and BAA (current alert level) can disagree and are both shown."""
+type HeatStress {
+  """Degree heating weeks, °C-weeks."""
+  dhw: Float
+  """Bleaching alert area level 0-4."""
+  baa: Float
+  sst: Float
+  anomaly: Float
+  """Product day (12:00Z)."""
+  observedAt: Time!
+  ingestedAt: Time!
+  """stations.id of the pixel; cite reading:<station>:<param>:<observedAt ms>:satellite."""
+  station: ID!
+  credit: String!
+}
+
+"""Field conditions over the next 72 h from the nearest Open-Meteo Marine point (newest run issued by `at`). Planning context; never part of rankScore."""
+type FieldWindow {
+  state: ComponentState!
+  issuedAt: Time
+  waveMaxM: Float
+  waveMinM: Float
+  """Forecast hours with waves under 1.2 m."""
+  calmHours: Int
+  horizonHours: Int!
+  currentMaxMs: Float
+  station: ID!
+}
+
 type HotspotCell {
   cell: ID!
   lat: Float!
   lon: Float!
+  """density × activity × access (python), or rankScore for a component app."""
   score: Float!
+  """Component apps only; null for python."""
+  regionId: ID
+  """Weighted mean of recentReports, idQuality and heatStress: orders cells, nothing more. recentReports is normalised per region, so pass `region` to rank within one."""
+  rankScore: Float
+  """Too few recent independent reports (or configured thin): low confidence."""
+  thin: Boolean
+  components: HotspotComponents
+  heat: HeatStress
+  fieldWindow: FieldWindow
 }
 
 type HotspotGrid {
   species: ID!
   at: Time!
   cells: [HotspotCell!]!
+  """Component apps only."""
+  weights: HotspotWeights
+  basis: HotspotBasis
 }
 
 type HotspotTerm {
@@ -137,7 +241,20 @@ type HotspotExplain {
   species: ID!
   at: Time!
   score: Float!
+  """Python's multiplicative terms; empty for a component app."""
   terms: [HotspotTerm!]!
+  """Component apps only: every component with its records, the CRW values, the field window."""
+  regionId: ID
+  rankScore: Float
+  thin: Boolean
+  components: HotspotComponents
+  heat: HeatStress
+  fieldWindow: FieldWindow
+  weights: HotspotWeights
+  basis: HotspotBasis
+  """Honesty caveats the answer must carry (sightings are not abundance; heat stress is context; no causal claim)."""
+  caveats: [String!]!
+  credit: String
 }
 
 type BacktestDay {
@@ -152,6 +269,13 @@ type Backtest {
   hitRate: Float!
   baseline: Float!
   perDay: [BacktestDay!]!
+  """Days after each evaluation day in which a report counts (1 for python, 7 for lionfish)."""
+  horizonDays: Int!
+  evaluated: Int!
+  hits: Int!
+  """Regions with too little data to score (thin): reported, not scored."""
+  insufficientRegions: [ID!]!
+  note: String
 }
 
 type EvidenceLink {
@@ -490,8 +614,9 @@ type Query {
   readings(bbox: BBox!, from: Time!, to: Time!, params: [Param!]): [Reading!]!
   alerts(bbox: BBox!, at: Time!): [Alert!]!
   frames(from: Time!, to: Time!, stepMinutes: Int!): FrameChunk!
-  hotspots(species: ID!, at: Time!, bbox: BBox!, top: Int): HotspotGrid!
-  explainCell(cell: ID!, species: ID!, at: Time!): HotspotExplain!
+  """Top cells by score. Component apps: `region` limits to one region id, `weights` overrides the rank weights, `basis` picks what the frame knew (default SUBMITTED)."""
+  hotspots(species: ID!, at: Time!, bbox: BBox!, top: Int, region: ID, weights: HotspotWeightsInput, basis: HotspotBasis): HotspotGrid!
+  explainCell(cell: ID!, species: ID!, at: Time!, weights: HotspotWeightsInput, basis: HotspotBasis): HotspotExplain!
   backtest(species: ID!, days: Int!): Backtest!
   evidence(id: ID!): Evidence!
   board(id: ID!): Board!

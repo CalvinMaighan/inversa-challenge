@@ -336,8 +336,12 @@ async fn resolver_hotspots_multi_region() {
     let cells = body["data"]["hotspots"]["cells"].as_array().unwrap();
     assert_eq!(cells[0]["cell"], "fl-keys:10:10", "{body}");
     assert!(cells.iter().any(|c| c["cell"] == "mx-caribbean:20:30"), "{body}");
-    let body = gql(&state, &format!("{{ explainCell(cell: \"mx-caribbean:20:30\", species: \"lionfish\", at: \"{}\") {{ cell score }} }}", iso(t)), json!({})).await;
-    assert_eq!(body["data"]["explainCell"]["score"], 1.0, "{body}");
+    let body = gql(&state, &format!("{{ explainCell(cell: \"mx-caribbean:20:30\", species: \"lionfish\", at: \"{}\") {{ cell score rankScore regionId components {{ recentReports {{ value }} }} }} }}", iso(t)), json!({})).await;
+    let ex = &body["data"]["explainCell"];
+    // Component scoring: recentReports 1 (the region's only report), idQuality 0 (no accuracy), heat unknown.
+    assert!((ex["rankScore"].as_f64().unwrap() - 1.0 / 3.0).abs() < 1e-6, "{body}");
+    assert_eq!((ex["score"].as_f64(), ex["regionId"].as_str()), (ex["rankScore"].as_f64(), Some("mx-caribbean")));
+    assert_eq!(ex["components"]["recentReports"]["value"], 1.0);
     let body = gql(&state, &format!("{{ explainCell(cell: \"20:30\", species: \"lionfish\", at: \"{}\") {{ score }} }}", iso(t)), json!({})).await;
     assert!(error_message(&body).contains("<region>:<col>:<row>"), "{body}");
     let body = gql(&state, &format!("{{ hotspots(species: \"python\", at: \"{}\", bbox: {region}) {{ species }} }}", iso(t)), json!({})).await;
@@ -1096,4 +1100,304 @@ async fn forecast_graphql_species_apps_get_typed_error() {
             assert_eq!(body["data"], Value::Null, "{body}");
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// L5: Lionfish Watch component scoring over GraphQL (gates/leaf-L5.md G2, G3, G5).
+// ---------------------------------------------------------------------------------------------
+
+/// A lionfish state with the physical sources seeded and one report at `fl-keys:100:100`
+/// (research grade, 30 m accuracy, observed `t - 10 d`, submitted `t - 1 d`) and a CRW pixel on
+/// that cell (DHW 13.65, BAA 1, product `t - 2 d`, ingested `t - 1 d`). Returns the state, the
+/// sighting id and the station id.
+async fn lionfish_seeded(t: i64) -> (AppState, i64, i64) {
+    let state = crate::app::test_support::test_state_for("lionfish");
+    seed_sources(&state.obs).await;
+    state
+        .obs
+        .write(|tx| {
+            for id in ["crw", "openmeteo-marine"] {
+                tx.execute(
+                    "insert or ignore into sources (id, name, homepage, mode, cadence_s, max_latency_s) values (?1, ?1, 'https://example.test', 'poll', 3600, 7200)",
+                    [id],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let fl = state.app.region("fl-keys").unwrap();
+    let (lon, lat) = fl.grid.center(fl.grid.index(100, 100));
+    let sighting = insert_sighting(&state.obs, "inat", 4, lat, lon, t - 10 * DAY, "research", None).await;
+    let photo = "https://static.inaturalist.org/photos/9/medium.jpg";
+    state
+        .obs
+        .write(move |tx| {
+            tx.execute(
+                "update sightings set accuracy_m = 30, submitted_at = ?2, ingested_at = ?2, photo_url = ?3 where id = ?1",
+                params![sighting, t - DAY, photo],
+            )
+        })
+        .await
+        .unwrap();
+    let station = insert_station(&state.obs, "crw", "24.525,-81.375", lat, lon, "grid").await;
+    let product = t - 2 * DAY;
+    state
+        .obs
+        .write(move |tx| {
+            tx.execute(
+                "insert into raw_objects (r2_key, source_id, source_url, fetched_at, bytes, sha256) values ('crw/x', 'crw', 'https://example.test/crw', ?1, 1, 'x')",
+                [t - DAY],
+            )?;
+            let raw = tx.last_insert_rowid();
+            for (p, v) in [("dhw", 13.65), ("baa", 1.0), ("sst", 30.2), ("sst_anomaly", 1.1)] {
+                tx.execute(
+                    "insert into readings (station_id, param, value, flag, observed_at, origin, raw_object_id) values (?1, ?2, ?3, 'ok', ?4, 'satellite', ?5)",
+                    params![station, p, v, product, raw],
+                )?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+    (state, sighting, station)
+}
+
+fn hull_json(state: &AppState) -> Value {
+    let b = state.app.hull();
+    json!({"west": b.west, "south": b.south, "east": b.east, "north": b.north})
+}
+
+/// Every hotspot type's field names: nothing is called risk, probability or percent.
+#[test]
+fn lionfish_hotspots_graphql_schema_has_no_risk_probability_or_percent_field() {
+    use async_graphql::parser::types::{TypeKind, TypeSystemDefinition};
+    let sdl = crate::graphql::schema().sdl();
+    let doc = async_graphql::parser::parse_schema(&sdl).unwrap();
+    let mut checked = 0;
+    for def in doc.definitions {
+        let TypeSystemDefinition::Type(t) = def else { continue };
+        let name = t.node.name.node.to_string();
+        if !(name.starts_with("Hotspot") || name == "HeatStress" || name == "FieldWindow" || name == "Backtest") {
+            continue;
+        }
+        let fields: Vec<String> = match &t.node.kind {
+            TypeKind::Object(o) => o.fields.iter().map(|f| f.node.name.node.to_string()).collect(),
+            TypeKind::InputObject(i) => i.fields.iter().map(|f| f.node.name.node.to_string()).collect(),
+            _ => continue,
+        };
+        for f in fields {
+            let lower = f.to_ascii_lowercase();
+            assert!(!lower.contains("risk") && !lower.contains("probab") && !lower.contains("percent"), "{name}.{f}");
+            checked += 1;
+        }
+    }
+    assert!(checked >= 40, "only {checked} fields checked");
+}
+
+#[tokio::test]
+async fn lionfish_hotspots_graphql_components_region_and_weights() {
+    let t = ms(2026, 9, 30, 12);
+    let (state, sighting, station) = lionfish_seeded(t).await;
+    const Q: &str = "query($at: Time!, $bbox: BBox!, $region: ID, $weights: HotspotWeightsInput, $basis: HotspotBasis) {
+        hotspots(species: \"lionfish\", at: $at, bbox: $bbox, top: 50, region: $region, weights: $weights, basis: $basis) {
+          species at basis weights { recentReports idQuality heatStress }
+          cells { cell regionId score rankScore thin
+            components {
+              recentReports { id value state weight inputs }
+              idQuality { value state inputs }
+              heatStress { value state weight inputs }
+              completeness { value state weight inputs } }
+            heat { dhw baa sst anomaly observedAt ingestedAt station credit }
+            fieldWindow { state } } } }";
+    let bbox = hull_json(&state);
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox})).await;
+    let grid = &body["data"]["hotspots"];
+    assert_eq!(grid["basis"], "SUBMITTED", "{body}");
+    assert_eq!(grid["weights"], json!({"recentReports": 1.0, "idQuality": 1.0, "heatStress": 1.0}));
+    let cell = &grid["cells"][0];
+    assert_eq!(cell["cell"], "fl-keys:100:100");
+    assert_eq!(cell["regionId"], "fl-keys");
+    assert_eq!(cell["rankScore"], 1.0);
+    assert_eq!(cell["score"], 1.0);
+    assert_eq!(cell["thin"], true, "one report in 90 d");
+    let c = &cell["components"];
+    assert_eq!(c["recentReports"]["value"], 1.0);
+    assert_eq!(c["recentReports"]["state"], "OK");
+    assert_eq!(c["recentReports"]["inputs"], json!([format!("sighting:{sighting}")]));
+    assert_eq!(c["idQuality"]["value"], 1.0);
+    assert_eq!(c["heatStress"]["value"], 1.0);
+    assert_eq!(c["heatStress"]["inputs"][0], format!("reading:{station}:dhw:{}:satellite", t - 2 * DAY));
+    assert_eq!(c["completeness"]["weight"], 0.0);
+    assert!(c["completeness"]["value"].as_f64().unwrap() < 0.5);
+    assert_eq!((cell["heat"]["dhw"].as_f64(), cell["heat"]["baa"].as_f64()), (Some(13.65), Some(1.0)), "both shown");
+    assert_eq!(cell["heat"]["observedAt"], iso(t - 2 * DAY));
+    assert!(cell["heat"]["credit"].as_str().unwrap().contains("NOAA Coral Reef Watch"));
+    assert_eq!(cell["fieldWindow"], Value::Null, "no marine forecast stored");
+    // Region filter and per-query weights.
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox, "region": "mx-caribbean"})).await;
+    assert_eq!(body["data"]["hotspots"]["cells"], json!([]), "{body}");
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox, "weights": {"recentReports": 0, "idQuality": 0, "heatStress": 2}})).await;
+    let grid = &body["data"]["hotspots"];
+    assert_eq!(grid["weights"]["heatStress"], 2.0, "{body}");
+    for c in grid["cells"].as_array().unwrap() {
+        assert_eq!((c["rankScore"].as_f64(), c["components"]["heatStress"]["weight"].as_f64()), (Some(1.0), Some(2.0)), "{c}");
+    }
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox, "weights": {"recentReports": 0, "idQuality": 0, "heatStress": 0}})).await;
+    assert!(error_message(&body).contains("weights must not all be 0"), "{body}");
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox, "region": "atlantis"})).await;
+    assert!(error_message(&body).contains("unknown region") && error_message(&body).contains("fl-keys"), "{body}");
+    // Python keeps its product score and rejects the component arguments.
+    let python = seeded().await;
+    let pr = region(&python);
+    let body = gql(&python, &format!("{{ hotspots(species: \"python\", at: \"{}\", bbox: {pr}, region: \"x\") {{ species }} }}", iso(t)), json!({})).await;
+    assert!(error_message(&body).contains("component apps only"), "{body}");
+    let body = gql(&python, &format!("{{ hotspots(species: \"python\", at: \"{}\", bbox: {pr}) {{ weights {{ heatStress }} cells {{ cell }} }} }}", iso(t)), json!({})).await;
+    assert_eq!(body["data"]["hotspots"]["weights"], Value::Null, "{body}");
+}
+
+#[tokio::test]
+async fn lionfish_explain_graphql_lists_records_dates_and_caveats() {
+    let t = ms(2026, 9, 30, 12);
+    let (state, sighting, station) = lionfish_seeded(t).await;
+    // A GBIF copy of the iNat record: listed as not counted.
+    let fl = state.app.region("fl-keys").unwrap();
+    let (lon, lat) = fl.grid.center(fl.grid.index(100, 100));
+    state
+        .obs
+        .write(move |tx| {
+            tx.execute(
+                "insert into sightings (source_id, ext_id, taxon_id, lat, lon, observed_at, quality, canonical_id, ingested_at) values ('gbif', '50c9509d-22c7-4a22-a47d-8c48425ef4a7:1:1', 4, ?1, ?2, ?3, 'research', ?4, ?3)",
+                params![lat, lon, t - 10 * DAY, sighting],
+            )
+        })
+        .await
+        .unwrap();
+    const Q: &str = "query($cell: ID!, $at: Time!) { explainCell(cell: $cell, species: \"lionfish\", at: $at) {
+        cell regionId rankScore thin basis credit caveats weights { recentReports }
+        components { recentReports { value inputs evidence { id kind observedAt submittedAt ingestedAt weight detail url } }
+                     heatStress { value state evidence { id observedAt ingestedAt detail url } }
+                     completeness { inputs } }
+        heat { dhw baa observedAt ingestedAt station } } }";
+    let body = gql(&state, Q, json!({"cell": "fl-keys:100:100", "at": iso(t)})).await;
+    let ex = &body["data"]["explainCell"];
+    assert_eq!(ex["cell"], "fl-keys:100:100", "{body}");
+    assert_eq!(ex["rankScore"], 1.0);
+    let reports = ex["components"]["recentReports"]["evidence"].as_array().unwrap();
+    assert_eq!(reports.len(), 2, "{body}");
+    let mine = reports.iter().find(|e| e["id"] == format!("sighting:{sighting}")).unwrap();
+    assert_eq!((mine["observedAt"].as_str(), mine["submittedAt"].as_str()), (Some(iso(t - 10 * DAY).as_str()), Some(iso(t - DAY).as_str())));
+    assert_eq!(mine["url"], "https://static.inaturalist.org/photos/9/medium.jpg");
+    assert!(mine["weight"].as_f64().unwrap() > 0.8);
+    let copy = reports.iter().find(|e| e["id"] != format!("sighting:{sighting}")).unwrap();
+    assert_eq!(copy["weight"], Value::Null);
+    assert!(copy["detail"].as_str().unwrap().contains("not counted"), "{copy}");
+    assert_eq!(ex["components"]["recentReports"]["inputs"], json!([format!("sighting:{sighting}")]), "the copy never double-counts");
+    let heat = ex["components"]["heatStress"]["evidence"].as_array().unwrap();
+    assert_eq!(heat[0]["id"], format!("reading:{station}:dhw:{}:satellite", t - 2 * DAY));
+    assert_eq!((heat[0]["observedAt"].as_str(), heat[0]["ingestedAt"].as_str()), (Some(iso(t - 2 * DAY).as_str()), Some(iso(t - DAY).as_str())));
+    assert!(heat[0]["detail"].as_str().unwrap().contains("13.65"));
+    assert_eq!(heat[0]["url"], crate::source_pages::CRW_DOI);
+    assert_eq!(ex["heat"]["station"], station.to_string());
+    assert!(ex["credit"].as_str().unwrap().contains("NOAA Coral Reef Watch"));
+    let caveats: Vec<&str> = ex["caveats"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
+    assert!(
+        caveats.iter().any(|c| c.contains("not abundance")) && caveats.iter().any(|c| c.contains("context")) && caveats.iter().any(|c| c.contains("No causal claim")),
+        "{caveats:?}"
+    );
+    assert!(ex["components"]["completeness"]["inputs"].as_array().unwrap().iter().any(|i| i.as_str().unwrap().starts_with("crw: ok")));
+    // Evidence ids keep the shape and carry the same components.
+    let body = gql(&state, "query($id: ID!) { evidence(id: $id) { id kind record } }", json!({"id": format!("hotspot:lionfish:fl-keys:100:100:{t}")})).await;
+    let rec = &body["data"]["evidence"]["record"];
+    assert_eq!(rec["cell"], "fl-keys:100:100", "{body}");
+    assert_eq!(rec["rankScore"], 1.0);
+    assert_eq!(rec["components"]["recentReports"]["inputs"], json!([format!("sighting:{sighting}")]));
+    assert_eq!(rec["components"]["heatStress"]["state"], "ok");
+    assert_eq!(rec["heat"]["dhw"], 13.65);
+    assert_eq!(rec["caveats"].as_array().unwrap().len(), 4);
+    let body = gql(&state, Q, json!({"cell": "fl-keys:999:0", "at": iso(t)})).await;
+    assert!(error_message(&body).contains("bad cell id"), "{body}");
+}
+
+/// The frame at `t` knows only what was submitted by `t` (observed-date basis on request); the
+/// CRW product counts from its ingest time; two times give two grids, in `hotspots` and in frames.
+#[tokio::test]
+async fn lionfish_asof_submitted_basis_and_frames() {
+    let t = ms(2026, 9, 30, 12);
+    let (state, _, _) = lionfish_seeded(t).await;
+    let bbox = hull_json(&state);
+    const Q: &str = "query($at: Time!, $bbox: BBox!, $basis: HotspotBasis) {
+        hotspots(species: \"lionfish\", at: $at, bbox: $bbox, top: 1, basis: $basis) { basis cells { cell rankScore
+          components { recentReports { value state } heatStress { value state } } } } }";
+    // t - 5 d: the report (submitted t - 1 d) and the product (ingested t - 1 d) are not known yet.
+    let body = gql(&state, Q, json!({"at": iso(t - 5 * DAY), "bbox": bbox})).await;
+    assert_eq!(body["data"]["hotspots"]["cells"], json!([]), "{body}");
+    // Observed-date basis: the report counts from its observed date, the product still does not.
+    let body = gql(&state, Q, json!({"at": iso(t - 5 * DAY), "bbox": bbox, "basis": "OBSERVED"})).await;
+    let cell = &body["data"]["hotspots"]["cells"][0];
+    assert_eq!(body["data"]["hotspots"]["basis"], "OBSERVED", "{body}");
+    assert_eq!(cell["cell"], "fl-keys:100:100");
+    assert_eq!(cell["components"]["recentReports"]["value"], 1.0);
+    assert_eq!(cell["components"]["heatStress"]["state"], "UNKNOWN");
+    assert!((cell["rankScore"].as_f64().unwrap() - 2.0 / 3.0).abs() < 1e-6);
+    // t - 36 h: the product day (t - 2 d) is past but its ingest (t - 1 d) is not: still unknown.
+    let body = gql(&state, Q, json!({"at": iso(t - 36 * HOUR), "bbox": bbox, "basis": "OBSERVED"})).await;
+    assert_eq!(body["data"]["hotspots"]["cells"][0]["components"]["heatStress"]["state"], "UNKNOWN", "{body}");
+    // t: everything known; the grid differs from t - 5 d.
+    let body = gql(&state, Q, json!({"at": iso(t), "bbox": bbox})).await;
+    let cell = &body["data"]["hotspots"]["cells"][0];
+    assert_eq!((cell["cell"].as_str(), cell["rankScore"].as_f64()), (Some("fl-keys:100:100"), Some(1.0)), "{body}");
+
+    // Frames carry the ranked grid per region: the fl-keys hotspot byte of cell (100,100) is 0 at
+    // t - 5 d and 100 at t, and the mx-caribbean section stays empty.
+    let hs = |bytes: &[u8], region_idx: usize, col: u32, row: u32| -> u8 {
+        let h = crate::frames::read_header(bytes).unwrap();
+        let mut offset = h.len();
+        for r in &state.app.regions[..region_idx] {
+            offset += r.layout.body_len(1, 0);
+        }
+        let layout = state.app.regions[region_idx].layout;
+        bytes[offset + (row / 2 * layout.hs.cols + col / 2) as usize]
+    };
+    let mut grids = Vec::new();
+    for at in [t - 5 * DAY, t] {
+        let body = gql(&state, &format!("{{ frames(from: \"{}\", to: \"{}\", stepMinutes: 60) {{ frameCount data }} }}", iso(at), iso(at)), json!({})).await;
+        assert_eq!(body["data"]["frames"]["frameCount"], 1, "{body}");
+        let bytes = base64::engine::general_purpose::STANDARD.decode(body["data"]["frames"]["data"].as_str().unwrap()).unwrap();
+        grids.push((hs(&bytes, 0, 100, 100), hs(&bytes, 1, 20, 30)));
+    }
+    assert_eq!(grids, [(0, 0), (100, 0)]);
+}
+
+#[tokio::test]
+async fn lionfish_backtest_graphql_reports_horizon_and_thin_regions() {
+    let state = crate::app::test_support::test_state_for("lionfish");
+    seed_sources(&state.obs).await;
+    let today = crate::hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
+    let fl = state.app.region("fl-keys").unwrap();
+    let (lon, lat) = fl.grid.center(fl.grid.index(100, 100));
+    // Four reports at A over the month before the window, then three more at A in the week after
+    // the single evaluation day (all hits) and one far away (a miss).
+    for d in [40, 35, 30, 25] {
+        insert_sighting(&state.obs, "inat", 4, lat, lon, today - d * DAY, "research", None).await;
+    }
+    for d in [7, 5, 3] {
+        insert_sighting(&state.obs, "inat", 4, lat, lon, today - d * DAY + HOUR, "research", None).await;
+    }
+    let (lon_b, lat_b) = fl.grid.center(fl.grid.index(300, 300));
+    insert_sighting(&state.obs, "inat", 4, lat_b, lon_b, today - 6 * DAY, "research", None).await;
+    let body = gql(
+        &state,
+        "{ backtest(species: \"lionfish\", days: 1) { species days horizonDays evaluated hits hitRate baseline insufficientRegions note perDay { day sightings hits } } }",
+        json!({}),
+    )
+    .await;
+    let bt = &body["data"]["backtest"];
+    assert_eq!(bt["horizonDays"], 7, "{body}");
+    assert_eq!((bt["evaluated"].as_i64(), bt["hits"].as_i64()), (Some(4), Some(3)));
+    assert_eq!(bt["hitRate"], 0.75);
+    assert_eq!(bt["baseline"], 0.1);
+    assert_eq!(bt["insufficientRegions"], json!(["mx-caribbean", "belize", "co-caribbean"]));
+    assert!(bt["note"].as_str().unwrap().contains("observer effort"), "{body}");
+    assert_eq!(bt["perDay"], json!([{"day": iso(today - 8 * DAY), "sightings": 4, "hits": 3}]));
 }

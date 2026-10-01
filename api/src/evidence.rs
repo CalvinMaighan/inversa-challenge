@@ -695,8 +695,49 @@ async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
     let cell = cell_parts.join(":");
     let (region, idx) = app.parse_cell(&cell).ok_or_else(|| bad_id(id, &shape))?;
     let at: i64 = at.parse().map_err(|_| bad_id(id, &shape))?;
-    let ex = hotspot::score::explain(&state.obs, app, &cell, sp, at).await?;
     let (lon, lat) = region.grid.center(idx);
+    if hotspot::lionfish::enabled(app) {
+        let weights = hotspot::lionfish::Weights::from_app(app);
+        let basis = crate::ingest::quality_bio::DateBasis::Submitted;
+        let ex = hotspot::lionfish::explain(&state.obs, app, &cell, sp, at, weights, basis).await?;
+        let out = crate::graphql::types::HotspotExplain::from_lionfish(ID(sp.id().into()), crate::graphql::types::Time(at), ex);
+        let components = out.components.as_ref().expect("component app");
+        let component = |c: &crate::graphql::types::HotspotComponent| {
+            json!({
+                "id": c.id.as_str(), "value": c.value, "state": format!("{:?}", c.state).to_lowercase(), "weight": c.weight,
+                "rationale": c.rationale, "inputs": c.inputs,
+                "evidence": c.evidence.iter().map(|e| json!({
+                    "id": e.id.as_str(), "kind": e.kind, "observedAt": iso_opt(e.observed_at.map(|t| t.0)),
+                    "submittedAt": iso_opt(e.submitted_at.map(|t| t.0)), "ingestedAt": iso_opt(e.ingested_at.map(|t| t.0)),
+                    "weight": e.weight, "detail": e.detail, "url": e.url,
+                })).collect::<Vec<_>>(),
+            })
+        };
+        let record = json!({
+            "cell": cell,
+            "region": region.id(),
+            "species": sp.id(),
+            "at": iso(at),
+            "lat": lat,
+            "lon": lon,
+            "rankScore": out.rank_score,
+            "thin": out.thin,
+            "weights": out.weights.map(|w| json!({"recentReports": w.recent_reports, "idQuality": w.id_quality, "heatStress": w.heat_stress})),
+            "basis": format!("{:?}", out.basis.expect("component app")).to_lowercase(),
+            "components": {
+                "recentReports": component(&components.recent_reports),
+                "idQuality": component(&components.id_quality),
+                "heatStress": component(&components.heat_stress),
+                "completeness": component(&components.completeness),
+            },
+            "heat": out.heat.map(|h| json!({"dhw": h.dhw, "baa": h.baa, "sst": h.sst, "anomaly": h.anomaly, "observedAt": iso(h.observed_at.0), "ingestedAt": iso(h.ingested_at.0), "station": h.station.as_str(), "credit": h.credit})),
+            "fieldWindow": out.field_window.map(|f| json!({"state": format!("{:?}", f.state).to_lowercase(), "issuedAt": iso_opt(f.issued_at.map(|t| t.0)), "waveMaxM": f.wave_max_m, "waveMinM": f.wave_min_m, "calmHours": f.calm_hours, "horizonHours": f.horizon_hours, "currentMaxMs": f.current_max_ms, "station": f.station.as_str()})),
+            "caveats": out.caveats,
+            "credit": out.credit,
+        });
+        return Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None });
+    }
+    let ex = hotspot::score::explain(&state.obs, app, &cell, sp, at).await?;
     let record = json!({
         "cell": cell,
         "region": region.id(),

@@ -31,6 +31,13 @@ pub struct Backtest {
     pub hit_rate: f64,
     pub baseline: f64,
     pub per_day: Vec<BacktestDay>,
+    /// Days after each evaluation day in which a report counts (1 here; 7 for lionfish).
+    pub horizon_days: u32,
+    pub evaluated: u32,
+    pub hits: u32,
+    /// Regions with too little data to score (lionfish thin regions).
+    pub insufficient_regions: Vec<String>,
+    pub note: Option<String>,
 }
 
 pub fn floor_day(t: i64) -> i64 {
@@ -53,6 +60,9 @@ pub async fn backtest(db: &Db, app: &App, taxon: &Taxon, days: u32) -> anyhow::R
 
 /// The last `days` full UTC days before `end_ms`.
 pub async fn backtest_until(db: &Db, app: &App, taxon: &Taxon, days: u32, end_ms: i64) -> anyhow::Result<Backtest> {
+    if super::lionfish::enabled(app) {
+        return super::lionfish::backtest_until(db, app, taxon, days, end_ms).await;
+    }
     anyhow::ensure!((1..=366).contains(&days), "days must be 1..=366, got {days}");
     let end_day = floor_day(end_ms);
     let from = end_day - days as i64 * DAY_MS;
@@ -90,7 +100,18 @@ pub async fn backtest_until(db: &Db, app: &App, taxon: &Taxon, days: u32, end_ms
     let total: u32 = per_day.iter().map(|d| d.sightings).sum();
     let hits: u32 = per_day.iter().map(|d| d.hits).sum();
     let hit_rate = if total == 0 { 0.0 } else { hits as f64 / total as f64 };
-    Ok(Backtest { species: taxon.id().to_string(), days, hit_rate, baseline: BASELINE, per_day })
+    Ok(Backtest {
+        species: taxon.id().to_string(),
+        days,
+        hit_rate,
+        baseline: BASELINE,
+        per_day,
+        horizon_days: 1,
+        evaluated: total,
+        hits,
+        insufficient_regions: Vec::new(),
+        note: None,
+    })
 }
 
 #[cfg(test)]
@@ -163,6 +184,7 @@ mod tests {
         assert_eq!(bt.per_day[1], BacktestDay { day: d0 + DAY, sightings: 1, hits: 1 });
         assert_eq!(bt.per_day[2], BacktestDay { day: d0 + 2 * DAY, sightings: 0, hits: 0 });
         assert!((bt.hit_rate - 2.0 / 3.0).abs() < 1e-9);
+        assert_eq!((bt.horizon_days, bt.evaluated, bt.hits, bt.insufficient_regions.len(), bt.note), (1, 3, 2, 0, None));
         // No sightings at all: a measured zero, not an error.
         let empty = backtest_until(&db, &app, app.taxon("lionfish").unwrap(), 2, d0 + 3 * DAY).await.unwrap();
         assert_eq!(empty.hit_rate, 0.0);

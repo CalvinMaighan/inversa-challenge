@@ -9,6 +9,8 @@ use chrono::{DateTime, SecondsFormat};
 use crate::app::config::App;
 use crate::feed_state;
 use crate::forecast;
+use crate::hotspot::lionfish;
+use crate::ingest::quality_bio::DateBasis;
 use crate::review;
 
 /// RFC 3339 timestamp, carried as unix milliseconds (the storage format of every time column).
@@ -312,12 +314,248 @@ pub struct FrameChunk {
     pub data: String,
 }
 
+/// State of one priority component (L5). UNKNOWN carries a null value: unknown is not zero.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum ComponentState {
+    Ok,
+    Unknown,
+    Stale,
+}
+
+impl From<lionfish::State> for ComponentState {
+    fn from(s: lionfish::State) -> Self {
+        match s {
+            lionfish::State::Ok => ComponentState::Ok,
+            lionfish::State::Unknown => ComponentState::Unknown,
+            lionfish::State::Stale => ComponentState::Stale,
+        }
+    }
+}
+
+/// Which date decides what a frame at `at` knew: SUBMITTED (default; iNat `created_at`, else
+/// ingest time) or OBSERVED.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum HotspotBasis {
+    Submitted,
+    Observed,
+}
+
+impl From<HotspotBasis> for DateBasis {
+    fn from(b: HotspotBasis) -> Self {
+        match b {
+            HotspotBasis::Submitted => DateBasis::Submitted,
+            HotspotBasis::Observed => DateBasis::Observed,
+        }
+    }
+}
+
+impl From<DateBasis> for HotspotBasis {
+    fn from(b: DateBasis) -> Self {
+        match b {
+            DateBasis::Submitted => HotspotBasis::Submitted,
+            DateBasis::Observed => HotspotBasis::Observed,
+        }
+    }
+}
+
+/// Per-query rank weight overrides; each finite and >= 0, not all 0. Missing ones keep the config.
+#[derive(Debug, Clone, Copy, PartialEq, InputObject)]
+pub struct HotspotWeightsInput {
+    pub recent_reports: Option<f64>,
+    pub id_quality: Option<f64>,
+    pub heat_stress: Option<f64>,
+}
+
+/// The rank weights in force. `completeness` never has one.
+#[derive(Debug, Clone, Copy, PartialEq, SimpleObject)]
+pub struct HotspotWeights {
+    pub recent_reports: f64,
+    pub id_quality: f64,
+    pub heat_stress: f64,
+}
+
+impl From<lionfish::Weights> for HotspotWeights {
+    fn from(w: lionfish::Weights) -> Self {
+        HotspotWeights { recent_reports: w.recent_reports as f64, id_quality: w.id_quality as f64, heat_stress: w.heat_stress as f64 }
+    }
+}
+
+/// One input of a component: a C14 record id with its dates and how it counted.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct HotspotEvidence {
+    pub id: ID,
+    pub kind: String,
+    pub observed_at: Option<Time>,
+    pub submitted_at: Option<Time>,
+    pub ingested_at: Option<Time>,
+    /// Weight in the component; null when the record did not count (duplicate, out of window).
+    pub weight: Option<f64>,
+    pub detail: String,
+    /// Photo (sightings) or product DOI (CRW).
+    pub url: Option<String>,
+}
+
+impl From<lionfish::EvidenceItem> for HotspotEvidence {
+    fn from(e: lionfish::EvidenceItem) -> Self {
+        HotspotEvidence {
+            id: ID(e.id),
+            kind: e.kind.to_string(),
+            observed_at: e.observed_at.map(Time),
+            submitted_at: e.submitted_at.map(Time),
+            ingested_at: e.ingested_at.map(Time),
+            weight: e.weight.map(f64::from),
+            detail: e.detail,
+            url: e.url,
+        }
+    }
+}
+
+/// One of the four priority components of a cell, in [0, 1] with its own state and inputs.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct HotspotComponent {
+    pub id: ID,
+    /// Null when the state is UNKNOWN or STALE.
+    pub value: Option<f64>,
+    pub state: ComponentState,
+    /// Weight in rankScore (0 for completeness, which never ranks).
+    pub weight: f64,
+    pub rationale: String,
+    /// C14 ids of the records that counted (`sighting:<id>`, `reading:<station>:<param>:<ms>:satellite`), or notes.
+    pub inputs: Vec<String>,
+    /// Every record in reach with dates and weights; filled by `explainCell`, empty in `hotspots`.
+    pub evidence: Vec<HotspotEvidence>,
+}
+
+impl From<lionfish::Component> for HotspotComponent {
+    fn from(c: lionfish::Component) -> Self {
+        HotspotComponent {
+            id: ID(c.id.to_string()),
+            value: c.value.map(f64::from),
+            state: c.state.into(),
+            weight: c.weight as f64,
+            rationale: c.rationale,
+            inputs: c.inputs,
+            evidence: c.evidence.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct HotspotComponents {
+    pub recent_reports: HotspotComponent,
+    pub id_quality: HotspotComponent,
+    pub heat_stress: HotspotComponent,
+    pub completeness: HotspotComponent,
+}
+
+impl From<lionfish::Components> for HotspotComponents {
+    fn from(c: lionfish::Components) -> Self {
+        HotspotComponents {
+            recent_reports: c.recent_reports.into(),
+            id_quality: c.id_quality.into(),
+            heat_stress: c.heat_stress.into(),
+            completeness: c.completeness.into(),
+        }
+    }
+}
+
+/// NOAA Coral Reef Watch values at the cell's 5 km pixel. DHW (accumulated) and BAA (current alert
+/// level) can disagree and are both shown.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct HeatStress {
+    /// Degree heating weeks, °C-weeks.
+    pub dhw: Option<f64>,
+    /// Bleaching alert area level 0-4.
+    pub baa: Option<f64>,
+    pub sst: Option<f64>,
+    pub anomaly: Option<f64>,
+    /// Product day (12:00Z).
+    pub observed_at: Time,
+    pub ingested_at: Time,
+    /// `stations.id` of the pixel; readings cite `reading:<station>:<param>:<observedAt ms>:satellite`.
+    pub station: ID,
+    pub credit: String,
+}
+
+impl From<lionfish::Heat> for HeatStress {
+    fn from(h: lionfish::Heat) -> Self {
+        HeatStress {
+            dhw: h.dhw,
+            baa: h.baa,
+            sst: h.sst,
+            anomaly: h.anomaly,
+            observed_at: Time(h.observed_at),
+            ingested_at: Time(h.ingested_at),
+            station: ID(h.station.to_string()),
+            credit: crate::source_pages::CRW_CREDIT.to_string(),
+        }
+    }
+}
+
+/// Field conditions over the next 72 h from the nearest Open-Meteo Marine point (the newest run
+/// issued by `at`). Planning context only; never part of rankScore.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct FieldWindow {
+    pub state: ComponentState,
+    pub issued_at: Option<Time>,
+    pub wave_max_m: Option<f64>,
+    pub wave_min_m: Option<f64>,
+    /// Forecast hours with waves under 1.2 m.
+    pub calm_hours: Option<i32>,
+    pub horizon_hours: i32,
+    pub current_max_ms: Option<f64>,
+    pub station: ID,
+}
+
+impl From<lionfish::FieldWindow> for FieldWindow {
+    fn from(f: lionfish::FieldWindow) -> Self {
+        FieldWindow {
+            state: f.state.into(),
+            issued_at: f.issued_at.map(Time),
+            wave_max_m: f.wave_max_m.map(f64::from),
+            wave_min_m: f.wave_min_m.map(f64::from),
+            calm_hours: f.calm_hours.map(|h| h as i32),
+            horizon_hours: f.horizon_hours as i32,
+            current_max_ms: f.current_max_ms.map(f64::from),
+            station: ID(f.station.to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, SimpleObject)]
 pub struct HotspotCell {
     pub cell: ID,
     pub lat: f64,
     pub lon: f64,
+    /// density × activity × access (python), or `rankScore` for a component app.
     pub score: f64,
+    /// Component apps (Lionfish Watch) only; null for python.
+    pub region_id: Option<ID>,
+    /// Weighted mean of recentReports, idQuality and heatStress: orders cells, nothing more.
+    /// recentReports is normalised per region, so pass `region` to rank within one.
+    pub rank_score: Option<f64>,
+    /// Too few recent independent reports (or configured thin): the rank is shown with low confidence.
+    pub thin: Option<bool>,
+    pub components: Option<HotspotComponents>,
+    pub heat: Option<HeatStress>,
+    pub field_window: Option<FieldWindow>,
+}
+
+impl HotspotCell {
+    pub fn from_lionfish(c: lionfish::CellScore) -> HotspotCell {
+        HotspotCell {
+            cell: ID(c.cell),
+            lat: c.lat,
+            lon: c.lon,
+            score: c.rank_score as f64,
+            region_id: Some(ID(c.region)),
+            rank_score: Some(c.rank_score as f64),
+            thin: Some(c.thin),
+            components: Some(c.components.into()),
+            heat: c.heat.map(Into::into),
+            field_window: c.field_window.map(Into::into),
+        }
+    }
 }
 
 #[derive(Debug, Clone, SimpleObject)]
@@ -325,6 +563,9 @@ pub struct HotspotGrid {
     pub species: ID,
     pub at: Time,
     pub cells: Vec<HotspotCell>,
+    /// Component apps only.
+    pub weights: Option<HotspotWeights>,
+    pub basis: Option<HotspotBasis>,
 }
 
 #[derive(Debug, Clone, SimpleObject)]
@@ -340,7 +581,43 @@ pub struct HotspotExplain {
     pub species: ID,
     pub at: Time,
     pub score: f64,
+    /// Python's multiplicative terms; empty for a component app.
     pub terms: Vec<HotspotTerm>,
+    /// Component apps only: the four components with every input, the CRW values, the field window.
+    pub region_id: Option<ID>,
+    pub rank_score: Option<f64>,
+    pub thin: Option<bool>,
+    pub components: Option<HotspotComponents>,
+    pub heat: Option<HeatStress>,
+    pub field_window: Option<FieldWindow>,
+    pub weights: Option<HotspotWeights>,
+    pub basis: Option<HotspotBasis>,
+    /// Honesty caveats the answer must carry (sightings are not abundance; heat stress is context; no causal claim).
+    pub caveats: Vec<String>,
+    pub credit: Option<String>,
+}
+
+impl HotspotExplain {
+    pub fn from_lionfish(species: ID, at: Time, ex: lionfish::CellExplain) -> HotspotExplain {
+        let c = ex.cell;
+        HotspotExplain {
+            cell: ID(c.cell),
+            species,
+            at,
+            score: c.rank_score as f64,
+            terms: Vec::new(),
+            region_id: Some(ID(c.region)),
+            rank_score: Some(c.rank_score as f64),
+            thin: Some(c.thin),
+            components: Some(c.components.into()),
+            heat: c.heat.map(Into::into),
+            field_window: c.field_window.map(Into::into),
+            weights: Some(ex.weights.into()),
+            basis: Some(ex.basis.into()),
+            caveats: ex.caveats.into_iter().map(str::to_string).collect(),
+            credit: Some(ex.credit.to_string()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, SimpleObject)]
@@ -357,6 +634,13 @@ pub struct Backtest {
     pub hit_rate: f64,
     pub baseline: f64,
     pub per_day: Vec<BacktestDay>,
+    /// Days after each evaluation day in which a report counts (1 for python, 7 for lionfish).
+    pub horizon_days: i32,
+    pub evaluated: i32,
+    pub hits: i32,
+    /// Regions with too little data to score at all (thin): reported, not scored.
+    pub insufficient_regions: Vec<ID>,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, SimpleObject)]

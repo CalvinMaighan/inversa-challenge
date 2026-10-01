@@ -10,7 +10,8 @@
 //! Each frame is the concatenation of one body per region, in region order. A region body:
 //! - `hotspot` u8 × taxa × hs cells (taxon-major in `taxa[]` order, row-major from the
 //!   south-west corner, 2 × cellDeg). Each cell is the max of its 2 × 2 children on the scoring
-//!   grid, quantized as `round(score / HOTSPOT_SCALE)` and clamped to 255.
+//!   grid, quantized as `round(score / HOTSPOT_SCALE)` and clamped to 255. For a component app
+//!   (`hotspot::lionfish::enabled`) the score is `rankScore` (0..1, submitted-date basis).
 //! - pad to 2 bytes.
 //! - `lst`, `sst` i16 × env cells (5 × cellDeg, the GOES `g5` cells) in centi-°C: the latest
 //!   valid reading of a station inside the cell; `ENV_FLAGGED` (-32767) when a station inside
@@ -277,7 +278,7 @@ pub fn region_body(snap: &Snapshot, layout: &Layout, at: i64, step_ms: i64) -> V
     let records = &snap.sightings[lo..hi];
     let mut out = Vec::with_capacity(layout.body_len(taxa, records.len()));
     for taxon in &snap.taxa {
-        let scores = snap.apply_rules(taxon, snap.density(taxon, at), &cond);
+        let scores = snap.score_at(taxon, at, &cond);
         for hr in 0..layout.hs.rows {
             for hc in 0..layout.hs.cols {
                 let mut best = 0f32;
@@ -432,7 +433,7 @@ pub fn body_matches(body: &[u8], layouts: &[Layout], taxa: usize) -> bool {
 async fn snapshots(db: &Db, app: &App, from: i64, to: i64) -> anyhow::Result<Vec<Snapshot>> {
     let mut out = Vec::with_capacity(app.regions.len());
     for r in &app.regions {
-        out.push(Snapshot::load(db, &app.taxa, r.grid, from, to).await?);
+        out.push(Snapshot::load_app(db, app, r, from, to).await?);
     }
     Ok(out)
 }
@@ -935,7 +936,9 @@ mod tests {
         assert_eq!(u32_at(f0_east, le.sightings_offset(1)), 1, "east carries the record");
         let f1 = &bytes[h.len() + lw.body_len(1, 0) + le.body_len(1, 1)..];
         assert_eq!(hs_at(&lw, f1, &app.taxa[0], 5, 5), 0);
-        assert_eq!(hs_at(&le, &f1[lw.body_len(1, 0)..], &app.taxa[0], 5, 5), 100);
+        // A component app (lionfish config): rankScore = (recentReports 1 + idQuality 0 (no accuracy)
+        // + heatStress unknown) / 3, quantized.
+        assert_eq!(hs_at(&le, &f1[lw.body_len(1, 0)..], &app.taxa[0], 5, 5), 33);
         assert_eq!(bytes.len(), h.len() + 2 * (lw.body_len(1, 0) + le.body_len(1, 0)) + SIGHTING_BYTES);
         let stored: i64 = db.read(|c| c.query_row("select count(*) from frames", [], |r| r.get(0))).await.unwrap();
         assert_eq!(stored, 2);
