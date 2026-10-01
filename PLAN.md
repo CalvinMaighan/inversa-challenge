@@ -384,3 +384,4 @@ Wave 0: C1 (carp proof, running), F1 (ingest modes), Q1 (questions), A0 (this co
 - C5 merged 5/5 (driver re-ran on merged tree): api 329 pass; review engine siteReview/reviewHistory/reviewBoard. Gaps -> E1: flow conflict input (discharge_cfs now stored by C4), evidence kinds forecast/reading/alert/review/source/note/mission/message, empty-poll records, low-water flag.
 - L5 merged 7/7 (driver re-ran): lionfish components + rankScore, no risk percent; api 344 tests (after golden regen).
 - UC merged 8/8 (driver re-ran incl. e2e:carp): carp board/timeline/as-of/drawer, web 886 pass. View event contract: {site?, asOf?, replay?} handled by applyCarpViewEvent; AG1 emits.
+- E1 merged 6/6 (driver re-ran): evidence kinds, sources/sourceInfo, review follow-ups (flow conflict, lowWater, alert check), signed hook + nudges, INVERSA_FAKE_NOW clock. Merge fixes: FeedState mode webhook in web, water.noaa.gov publisher both sides (api 368 pass, web 886 pass).
