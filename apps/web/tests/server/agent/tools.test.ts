@@ -325,6 +325,7 @@ describe("capability tools", () => {
       id: "fetch:90410",
       kind: "fetch",
       label: "ndbc stale · last fetch 2026-01-15T02:52:00Z",
+      feed: "ndbc",
     });
     const modelFeeds = feeds.data.feeds as { source: string; evidenceId: string | null }[];
     expect(modelFeeds.find((feed) => feed.source === "nwws")?.evidenceId).toBeNull();

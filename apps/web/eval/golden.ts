@@ -4,18 +4,33 @@
  * phrases the answer must contain, and how many verified citations it needs.
  */
 
+import { supportedQuestions, type QuestionFile } from "@/shared/apps/questions";
+
 export type Golden = {
   id: string;
   question: string;
   /** One of the 5 data-quality questions. */
   quality: boolean;
+  /** Question category (spec/apps/questions/*.json); python's hand-written set has none. */
+  category?: string;
+  /** answer, caveat (answer plus a stated limit) or refuse. */
+  mode?: "answer" | "caveat" | "refuse";
+  /** `feed:<source>` and `kind:<evidence kind>` the citations must cover. */
+  mustCite?: string[];
+  /** Injected into the view: `selectedSite` (an NWPS lid), `asOf` (RFC 3339), `replay`. */
+  context?: Record<string, string>;
   expect: {
     tools: string[];
     phrases: RegExp[];
+    forbid?: RegExp[];
     minCitations: number;
     /** Citations of these evidence kinds the answer needs, e.g. `{ sighting: 2 }`: fetch-run citations alone do not answer a count. */
     cites?: Record<string, number>;
     view?: boolean;
+    /** Every number in the answer must trace to a tool output (default true for file-loaded sets). */
+    groundedNumbers?: boolean;
+    /** The answer must say how fresh its data is. */
+    feedState?: boolean;
   };
 };
 
@@ -124,8 +139,36 @@ export const GOLDEN: Golden[] = [
   },
 ];
 
+export type { QuestionFile };
+
+/** A question file as goldens: `pass` regexes compiled case-insensitively, `view` meaning a view event is required. */
+export function goldenFromFile(file: QuestionFile): Golden[] {
+  return file.questions.map((q) => ({
+    id: q.id,
+    question: q.question,
+    quality: q.category === "quality",
+    category: q.category,
+    mode: q.pass.mode,
+    mustCite: q.mustCite,
+    context: q.context,
+    expect: {
+      tools: q.expectedTools,
+      phrases: q.pass.phrases.map((p) => new RegExp(p, "i")),
+      forbid: q.pass.forbid.map((p) => new RegExp(p, "i")),
+      minCitations: q.pass.minCitations,
+      cites: q.pass.cites,
+      view: Boolean(q.view?.map) && q.expectedTools.includes("set_view"),
+      groundedNumbers: q.pass.groundedNumbers,
+      feedState: q.pass.feedState,
+    },
+  }));
+}
+
 /**
- * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; the lionfish and
- * carp sets come with those apps' leaves and start empty.
+ * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; carp's is the
+ * question file (the source of truth for ids, categories, tools and pass criteria); lionfish's comes with its leaf.
  */
-export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: [] };
+export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }) };
+
+/** The ten question categories, in the order the eval prints them. */
+export const CATEGORIES = ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"] as const;

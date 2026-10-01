@@ -33,6 +33,10 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z
         species: z.array(z.string().max(64)).max(64).optional(),
         windowHours: z.number().int().min(1).max(24 * 31).optional(),
         selection: z.string().max(256).nullable(),
+        // Carp view state (shared contract with the carp UI): selected site, knowledge time, replay flag.
+        site: z.string().max(64).optional(),
+        asOf: z.number().int().min(0).optional(),
+        replay: z.boolean().optional(),
       })
       .optional(),
   })

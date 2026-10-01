@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 
-import { CapabilityRegistry, type AnyCapability, type CapabilityContext, type CapabilityOutput, type Evidence } from "@/server/agent/runtime/registry";
+import { CapabilityRegistry, type AnyCapability, type CapabilityContext, type CapabilityOutput } from "@/server/agent/runtime/registry";
 import {
   cellCenter,
   cellFor,
@@ -18,9 +18,14 @@ import {
   readingKey,
   speciesKeys,
 } from "@/server/agent/tools/evidence";
+import { carpTools } from "@/server/agent/tools/carp";
+import { commonTools } from "@/server/agent/tools/common";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
-import { gqlWithFeeds, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
+import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
+import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
+import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
+import { localTime } from "@/server/agent/tools/shared";
 import {
   GROUP_WORDS,
   GROUPS_OF,
@@ -45,13 +50,11 @@ import {
   type SightingRow,
 } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
-import { appBBox, clampToApp, type AppConfig } from "@/shared/apps";
-import { worstHealth, type FeedState } from "@/shared/feed-state";
+import type { AppConfig } from "@/shared/apps";
 import { QUALITY_CODES } from "@/shared/frames";
 import { sightingPageUrl } from "@/shared/source-pages";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
-const HOUR_MS = 3_600_000;
 /** Frames cover a 30-day window (PLAN.md C15). */
 const MAX_LOOKBACK_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
@@ -64,22 +67,6 @@ const DEFAULT_SIGHTING_HOURS = 24 * 7;
 export const NEARBY_DEG = 0.25;
 
 // ---------------------------------------------------------------- schemas
-
-const bboxSchema = z
-  .object({
-    west: z.number().min(-180).max(180),
-    south: z.number().min(-90).max(90),
-    east: z.number().min(-180).max(180),
-    north: z.number().min(-90).max(90),
-  })
-  .refine((b) => b.west < b.east && b.south < b.north, "bbox needs west < east and south < north")
-  .describe("Area in degrees. Get one from geocode. Defaults to the user's current view.");
-
-const timeSchema = z
-  .string()
-  // Models often send "" for an optional time they mean to leave out; treat it as not given.
-  .refine((value) => value === "" || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
-  .describe("ISO 8601 time, e.g. 2026-01-15T03:00:00Z");
 
 type SpeciesSchema = z.ZodType<string>;
 
@@ -100,109 +87,19 @@ type Param = (typeof PARAMS)[number];
 
 // ---------------------------------------------------------------- helpers
 
-/** The asked-for (or viewed) area cut to the app's extent; outside it the tool refuses with the app's refusal text (P4). */
-export function resolveBbox(input: BBox | undefined, ctx: Pick<CapabilityContext, "app" | "view">): BBox {
-  const bbox = input ?? ctx.view?.bbox ?? appBBox(ctx.app);
-  const clamped = clampToApp(ctx.app, bbox);
-  if (!clamped) throw new Error(`bbox is outside this app's regions (${ctx.app.regions.map((r) => r.name).join(", ")}). ${ctx.app.agent.refusal}`);
-  return clamped;
-}
+export { ageWords, feedSummary, resolveBbox };
 
 function resolveWindow(
   input: { from?: string; to?: string; hours?: number },
   ctx: CapabilityContext,
   defaultHours: number,
 ): { from: string; to: string } {
-  const to = input.to ? new Date(input.to) : ctx.now;
-  const hours = Math.min(input.hours ?? defaultHours, MAX_LOOKBACK_HOURS);
-  const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
-  if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
-  return { from: from.toISOString(), to: to.toISOString() };
+  const window = lookbackWindow(input, ctx.now, defaultHours, MAX_LOOKBACK_HOURS);
+  return { from: window.from, to: window.to };
 }
 
 const inBox = (bbox: BBox, lat: number, lon: number) =>
   lat >= bbox.south && lat <= bbox.north && lon >= bbox.west && lon <= bbox.east;
-
-/** `bbox` grown by `deg` on every side, clamped to the app's extent. */
-function padBbox(app: AppConfig, bbox: BBox, deg: number): BBox {
-  const r = (v: number) => Math.round(v * 1e6) / 1e6;
-  const region = appBBox(app);
-  return {
-    west: r(Math.max(region.west, bbox.west - deg)),
-    south: r(Math.max(region.south, bbox.south - deg)),
-    east: r(Math.min(region.east, bbox.east + deg)),
-    north: r(Math.min(region.north, bbox.north + deg)),
-  };
-}
-
-function atTime(input: string | undefined, ctx: CapabilityContext): string {
-  return (input ? new Date(input) : ctx.now).toISOString();
-}
-
-/** Feeds this result depends on: the sources seen in rows, else the tool's defaults. */
-function feedsFor(all: GqlFeedState[], seen: Iterable<string>, fallback: readonly string[] | "all"): GqlFeedState[] {
-  if (fallback === "all") return all;
-  const wanted = new Set(seen);
-  return all.filter(
-    (feed) => wanted.has(feed.source) || (wanted.size === 0 && fallback.some((prefix) => feed.source.startsWith(prefix))),
-  );
-}
-
-/** A feed's last fetch run, citable as `fetch:<id>` when the API reports it. */
-function fetchEvidence(feed: GqlFeedState): Evidence | null {
-  if (!feed.lastFetchRunId) return null;
-  const state = toFeedState(feed);
-  return evidence("fetch", feed.lastFetchRunId, `${feed.source} ${state.state} · last fetch ${feed.lastFetchAt ?? "never"}`);
-}
-
-/** Age in words for the model: "25 min", "8 h", "25 days". */
-export function ageWords(seconds: number): string {
-  if (seconds < 90 * 60) return `${Math.max(1, Math.round(seconds / 60))} min`;
-  if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)} h`;
-  return `${Math.round(seconds / 86_400)} days`;
-}
-
-/**
- * The analyst reads this summary before any claim about freshness. `mention` lists every feed that is not
- * nominal, with the citation marker already written, so naming a degraded feed and citing it is one copy.
- */
-export function feedSummary(feeds: FeedState[]) {
-  const pick = (state: FeedState["state"]) => feeds.filter((feed) => feed.state === state).map((feed) => feed.source);
-  return {
-    worst: feeds.length > 0 ? worstHealth(feeds) : "unknown",
-    lagging: pick("lagging"),
-    stale: pick("stale"),
-    down: pick("down"),
-    mention: feeds
-      .filter((feed) => feed.state !== "nominal")
-      .map((feed) => ({
-        source: feed.source,
-        state: feed.state,
-        newestObservation: feed.lagSeconds === null ? "none stored" : `${ageWords(feed.lagSeconds)} old`,
-        note: feed.note,
-        cite: feed.lastFetchRunId ? `[e:fetch:${feed.lastFetchRunId}]` : null,
-      })),
-  };
-}
-
-function output(
-  data: Record<string, unknown>,
-  evidenceRows: Evidence[],
-  rawFeeds: GqlFeedState[],
-  count: number,
-): CapabilityOutput {
-  const feeds = rawFeeds.map(toFeedState);
-  const fetches = rawFeeds.map(fetchEvidence);
-  const allEvidence = [...evidenceRows, ...fetches.filter((row): row is Evidence => row !== null)];
-  const modelFeeds = feeds.map((feed, index) => ({ ...feed, evidenceId: fetches[index]?.id ?? null }));
-  return {
-    // Data-quality first, bulky rows last: if a long result is ever pruned head/tail, the caveats survive.
-    data: { feedSummary: feedSummary(feeds), feeds: modelFeeds, ...data, evidence: allEvidence },
-    evidence: allEvidence,
-    feeds,
-    count,
-  };
-}
 
 const lower = (value: string) => value.toLowerCase();
 
@@ -696,25 +593,43 @@ type GqlAlert = {
   expires: string | null;
 };
 
-const alertsInput = z.object({ bbox: bboxSchema.optional(), at: timeSchema.optional() });
+const alertsInput = z.object({
+  bbox: bboxSchema.optional(),
+  site: z.string().min(2).max(80).optional().describe("A configured location (conditions apps): its NWPS id, name or town, e.g. 'MCGL1' or 'Morgan City'. Replaces bbox."),
+  at: timeSchema.optional().describe("Time the alerts must be in effect (default: the reference time). For a past day give that time."),
+});
 
 const alerts = {
   name: LAYER.alerts,
-  description: "NWS alerts (freeze, heat, marine, flood) in effect over an area at a time.",
+  description:
+    "NWS alerts (freeze, heat, marine, flood, wind) in effect over an area or at a configured location at a time. An empty result still returns the time of the last alerts check, citable as its fetch run, so 'no active alerts' is a grounded claim.",
   inputSchema: alertsInput,
   async execute(input: z.infer<typeof alertsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const bbox = resolveBbox(input.bbox, ctx);
-    const at = atTime(input.at, ctx);
+    const siteName = given(input.site);
+    // One site, or a preset's sites ("Atchafalaya"), or no site: the asked-for area.
+    const sites = siteName ? resolveSites(ctx.app, [siteName]) : [];
+    const site = sites.length === 1 ? sites[0]! : null;
+    const bbox = sites.length > 0 ? sitesBox(sites, 0.15) : resolveBbox(input.bbox, ctx);
+    const at = atTime(given(input.at), ctx);
     const data = await gqlWithFeeds<{ alerts: GqlAlert[]; feeds: GqlFeedState[] }>(
       "AgentAlerts",
       ALERTS_QUERY,
       { bbox, at },
       ctx,
     );
-    const evidenceRows = data.alerts.map((row) => evidence("alert", row.id, `${row.event} (${row.severity})`));
+    const evidenceRows = data.alerts.map((row) => evidence("alert", row.id, `${row.event} (${row.severity})`, "nws-alerts"));
     const feeds = feedsFor(data.feeds, [], ["nws", "nwws"]);
     const rows = data.alerts.map((row, index) => ({ evidenceId: evidenceRows[index]!.id, ...row }));
-    return withView(output({ bbox, at, rows }, evidenceRows, feeds, data.alerts.length), alertsView(rows, bbox, at));
+    const check = feeds.find((f) => f.source === "nws-alerts" || f.source === "nws");
+    const empty =
+      rows.length === 0 && check
+        ? {
+            noActiveAlerts: `No active NWS alerts ${site ? `at ${site.name}` : sites.length > 1 ? `at ${sites.map((s) => s.short).join(", ")}` : "in this area"} as of ${check.lastFetchAt ? localTime(ctx.app, check.lastFetchAt) : at} (the last alerts check)${check.lastFetchRunId ? `; cite that check as [e:fetch:${check.lastFetchRunId}]` : ""}. Say it in those words: "no active NWS alerts".`,
+            checkedAt: check.lastFetchAt,
+            checkedLocal: check.lastFetchAt ? localTime(ctx.app, check.lastFetchAt) : null,
+          }
+        : {};
+    return withView(output({ bbox, ...(site ? { site: site.lid, siteName: site.name } : sites.length > 1 ? { sites: sites.map((s) => s.lid) } : {}), at, atLocal: localTime(ctx.app, at), ...empty, rows }, evidenceRows, feeds, data.alerts.length), alertsView(rows, bbox, at));
   },
 };
 
@@ -900,27 +815,66 @@ const feedState = {
 
 // ---------------------------------------------------------------- set_view
 
-const setViewInput = z.object({
-  bbox: bboxSchema,
-  time: timeSchema.optional().describe("Timeline time. Defaults to the current reference time."),
-});
+const setViewInput = z
+  .object({
+    bbox: bboxSchema.optional(),
+    preset: z.string().min(2).max(60).optional().describe("A named camera preset of this app (conditions apps: 'all-sites' or 'atchafalaya'). Replaces bbox."),
+    site: z.string().min(2).max(80).optional().describe("Select and frame one configured location (NWPS id, name or town). Replaces bbox."),
+    time: timeSchema.optional().describe("Timeline time. Defaults to the current reference time."),
+    asOf: timeSchema.optional().describe("Knowledge time for replay: show what was known at this time (forecast versions, observations, alerts as of then). Sets the timeline to it."),
+    replay: z.boolean().optional().describe("Switch the timeline to knowledge-time replay. Implied by asOf; pass false to leave replay while keeping the time."),
+  })
+  .refine((v) => v.bbox !== undefined || v.preset !== undefined || v.site !== undefined, "give bbox, preset or site");
 
 const setView = {
   name: "set_view",
-  description: "Fly the globe to an area and move the timeline. Use it when the answer is about a place.",
+  description:
+    "Fly the globe to an area, a camera preset or a configured location, and move the timeline. asOf switches the timeline to replay: what was known at that time. Use it when the answer is about a place or a past moment.",
   inputSchema: setViewInput,
   async execute(input: z.infer<typeof setViewInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const bbox = resolveBbox(input.bbox, ctx);
-    const time = atTime(input.time, ctx);
-    ctx.emit({ type: "view", bbox, time });
-    return output({ bbox, time, applied: true }, [], [], 1);
+    const presetName = given(input.preset);
+    const preset = presetName ? (ctx.app.cameraPresets ?? []).find((p) => [p.id, p.name].map((s) => s.toLowerCase()).some((s) => s.includes(presetName.toLowerCase()) || presetName.toLowerCase().includes(p.id))) : undefined;
+    const siteName = given(input.site);
+    // An unknown preset next to a site ("preset: Simmesport, site: SMML1") is a site name: the site wins.
+    if (presetName && !preset && !siteName) throw new Error(`no camera preset "${presetName}" (presets: ${(ctx.app.cameraPresets ?? []).map((p) => p.id).join(", ") || "none"})`);
+    // A site that is also the preset's name ("Atchafalaya") means the preset.
+    const site = siteName && !(preset && preset.name.toLowerCase().includes(siteName.toLowerCase())) ? findSite(ctx.app, siteName) : null;
+    if (siteName && !site && !preset) throw new Error(`"${siteName}" is not a configured location. ${ctx.app.agent.refusal}`);
+    const bbox = resolveBbox(site ? siteBox(site) : preset ? presetBox(preset) : input.bbox, ctx);
+    const asOfText = givenTime(input.asOf);
+    const asOf = asOfText ? Date.parse(asOfText) : undefined;
+    const time = asOf !== undefined ? new Date(asOf).toISOString() : atTime(input.time, ctx);
+    const replay = input.replay ?? asOf !== undefined;
+    ctx.emit({
+      type: "view",
+      bbox,
+      time,
+      ...(site ? { site: site.lid } : {}),
+      ...(asOf !== undefined ? { asOf } : {}),
+      ...(replay ? { replay: true } : {}),
+    });
+    return output({ bbox, time, ...(preset ? { preset: preset.id } : {}), ...(site ? { site: site.lid, siteName: site.name } : {}), ...(asOf !== undefined ? { asOf: time } : {}), replay, applied: true }, [], [], 1);
   },
 };
 
-/** Every tool an app may list in `agent.tools`. */
+/** Every tool an app may list in `agent.tools`: the species tools for species apps, the river tools for conditions apps, the rest for all. */
 function allCapabilities(app: AppConfig): AnyCapability[] {
   const species = speciesSchemaFor(app);
-  return [geocode, sightings, speciesCounts, conditions, alerts, hotspots(species), explainCell(species), backtest(species), feedState, notes, setView];
+  const kind = (app as Partial<AppConfig>).kind;
+  const speciesOnly = kind !== "conditions";
+  const riverTools = kind === "species" ? [] : carpTools;
+  return [
+    geocode,
+    ...(speciesOnly ? [sightings, speciesCounts] : []),
+    conditions,
+    alerts,
+    ...(speciesOnly ? [hotspots(species), explainCell(species), backtest(species)] : []),
+    ...riverTools,
+    feedState,
+    ...commonTools,
+    notes,
+    setView,
+  ];
 }
 
 export const CAPABILITY_NAMES: readonly string[] = allCapabilities({ taxa: [] } as unknown as AppConfig).map((cap) => cap.name);
@@ -931,10 +885,11 @@ export const CAPABILITY_NAMES: readonly string[] = allCapabilities({ taxa: [] } 
  */
 export function buildAgentRegistry(app: AppConfig): CapabilityRegistry {
   const allowed = new Set(app.agent.tools);
-  const unknown = [...allowed].filter((name) => !CAPABILITY_NAMES.includes(name));
+  const available = allCapabilities(app);
+  const unknown = [...allowed].filter((name) => !available.some((cap) => cap.name === name));
   if (unknown.length) throw new Error(`app ${app.id}: agent.tools names unknown tools: ${unknown.join(", ")}`);
   const registry = new CapabilityRegistry();
-  for (const cap of allCapabilities(app)) if (allowed.has(cap.name)) registry.register(cap);
+  for (const cap of available) if (allowed.has(cap.name)) registry.register(cap);
   return registry;
 }
 

@@ -40,11 +40,11 @@ function scriptedAgent() {
 
 const text = (value: string) => ({ type: "assistant/chunk", chunk: { type: "text-delta", index: 0, text: value } });
 
-function run(script: (s: ReturnType<typeof scriptedAgent>, ledger: EvidenceLedger) => void) {
+function run(script: (s: ReturnType<typeof scriptedAgent>, ledger: EvidenceLedger) => void, options?: { holdFinal?: boolean }) {
   const scripted = scriptedAgent();
   const ledger = new EvidenceLedger();
   const events: AgentStreamEvent[] = [];
-  const bridge = attachStreamBridge(scripted.agent, ledger, (event) => events.push(event));
+  const bridge = attachStreamBridge(scripted.agent, ledger, (event) => events.push(event), options);
   script(scripted, ledger);
   return { bridge, events, of: <T extends AgentStreamEvent["type"]>(type: T) => events.filter((e) => e.type === type) as Extract<AgentStreamEvent, { type: T }>[] };
 }
@@ -110,6 +110,37 @@ describe("stream bridge", () => {
     expect(bridge.toolCalls.map((call) => [call.capabilityName, call.ok])).toEqual([["alerts", true]]);
     expect(bridge.streamedContent).toBe(true);
     expect(bridge.finishError).toBeUndefined();
+  });
+
+  test("holdFinal streams a lead-in before a tool call at once, holds the final answer, and a discarded draft never reaches the client", () => {
+    const { bridge, of } = run((s, ledger) => {
+      ledger.add([{ id: "status:MCGL1", kind: "alert", label: "MCGL1" }]);
+      s.send("turn/start");
+      s.send("assistant/chunk", { chunk: text("Checking the sites.").chunk });
+      s.send("assistant/message", { message: { content: [{ type: "text", text: "Checking the sites." }, { type: "tool-call", id: "c1", name: "site_status", arguments: "{}" }] } });
+      s.send("assistant/chunk", { chunk: text("Draft [e:status:MCGL1] [e:status:BOGUS]").chunk });
+      s.send("assistant/message", { message: { content: [{ type: "text", text: "Draft [e:status:MCGL1] [e:status:BOGUS]" }] } });
+    }, { holdFinal: true });
+    expect(of("content_delta").map((e) => e.text).join("")).toBe("Checking the sites.");
+    expect(bridge.heldText()).toBe("Draft [e:status:MCGL1] [e:status:BOGUS]");
+    expect(bridge.citations()).toEqual([]);
+    expect(bridge.streamedContent).toBe(true);
+    bridge.discardHeld();
+    expect(bridge.heldText()).toBeUndefined();
+    bridge.releaseHeld();
+    expect(of("content_delta").map((e) => e.text).join("")).toBe("Checking the sites.");
+
+    const released = run((s, ledger) => {
+      ledger.add([{ id: "status:MCGL1", kind: "alert", label: "MCGL1" }]);
+      s.send("assistant/chunk", { chunk: text("Final [e:status:MCGL1] [e:status:BOGUS].").chunk });
+      s.send("assistant/message", { message: { content: [{ type: "text", text: "Final [e:status:MCGL1] [e:status:BOGUS]." }] } });
+    }, { holdFinal: true });
+    expect(released.of("content_delta")).toEqual([]);
+    released.bridge.releaseHeld();
+    expect(released.of("content_delta").map((e) => e.text).join("")).toBe("Final [e:status:MCGL1].");
+    expect(released.of("citation").map((e) => e.id)).toEqual(["status:MCGL1"]);
+    expect(released.bridge.heldText()).toBeUndefined();
+    expect(released.bridge.finalText()).toBe("Final [e:status:MCGL1].");
   });
 
   test("a denied tool call becomes tool_end ok=false with the denial text", () => {

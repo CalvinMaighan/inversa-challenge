@@ -1,17 +1,14 @@
 import type { z } from "zod";
 
-import type { AgentStreamEvent, BBox, EvidenceKind } from "@/shared/agent/events";
+import type { AgentStreamEvent, BBox, CarpViewState, EvidenceKind } from "@/shared/agent/events";
 import type { AppConfig } from "@/shared/apps";
 import type { FeedState } from "@/shared/feed-state";
 
-/**
- * C14 kinds. `backtest:<species>:<days>` was accepted into C14 after
- * `shared/agent/events.ts` was written, so it is added here until EvidenceKind carries it.
- */
-export type CitableKind = EvidenceKind | "backtest";
+/** C14 kinds, as `shared/agent/events.ts` lists them. */
+export type CitableKind = EvidenceKind;
 
-/** One citable record (PLAN.md C14). `id` is `<kind>:<key>`. */
-export type Evidence = { id: string; kind: CitableKind; label: string };
+/** One citable record (PLAN.md C14). `id` is `<kind>:<key>`; `feed` names the source it came from (eval `feed:` checks). */
+export type Evidence = { id: string; kind: CitableKind; label: string; feed?: string };
 
 /** What every capability returns: model-facing data plus its evidence and feed envelopes. */
 export type CapabilityOutput = {
@@ -24,7 +21,7 @@ export type CapabilityOutput = {
   count: number;
 };
 
-export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null };
+export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState;
 
 export type CapabilityContext = {
   /** The app the turn runs in: its regions bound every area, its API prefix every query (C-A5). */

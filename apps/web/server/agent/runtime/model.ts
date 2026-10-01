@@ -38,9 +38,17 @@ const LUNA: AgentLlmEndpoint = {
   reasoningEffort: "low",
 };
 
-export function resolveAgentEndpoint(modelId: string): AgentLlmEndpoint {
+/**
+ * Reasoning effort per app, when one differs from the endpoint default. Measured on carp: `medium` passed the
+ * benchmark no more often than `low` (68/69 vs 66-69/69) and pushed first-token p50 from 1.3 s to 1.9 s;
+ * `minimal` did not lower it (1.3 s), so every app stays on `low`.
+ */
+const EFFORT_BY_APP: Partial<Record<string, ReasoningEffort>> = {};
+
+export function resolveAgentEndpoint(modelId: string, appId?: string): AgentLlmEndpoint {
   if (modelId.trim() !== AGENT_MODEL_ID) throw new Error(`Unknown agent model: ${modelId} (only ${AGENT_MODEL_ID})`);
-  return LUNA;
+  const effort = appId ? EFFORT_BY_APP[appId] : undefined;
+  return effort ? { ...LUNA, reasoningEffort: effort } : LUNA;
 }
 
 export function openRouterApiKey(): string | undefined {

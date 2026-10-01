@@ -20,6 +20,20 @@ export type StreamBridge = {
   citations(): string[];
   /** Final answer: last assistant message with unverified markers removed. */
   finalText(): string;
+  /** With `holdFinal`: the final answer held back from the client (raw markers), or undefined when none is held. */
+  heldText(): string | undefined;
+  /** With `holdFinal`: streams the held final answer to the client (through the citation filter). No-op when nothing is held. */
+  releaseHeld(): void;
+  /** With `holdFinal`: drops the held final answer (a revision replaces it). */
+  discardHeld(): void;
+};
+
+export type StreamBridgeOptions = {
+  /**
+   * Hold back a final answer (an assistant message without tool calls) instead of streaming it, so the turn can
+   * check it and ask for a revision first. Lead-in text before a tool call still streams at once.
+   */
+  holdFinal?: boolean;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,8 +59,12 @@ export function attachStreamBridge(
   agent: Agent,
   ledger: EvidenceLedger,
   onEvent: (event: AgentStreamEvent) => void,
+  options: StreamBridgeOptions = {},
 ): StreamBridge {
   const usage: TurnUsage = { promptTokens: 0, completionTokens: 0, cacheRead: 0 };
+  // Hold mode: content of the message being generated, and the final answer held back from the client.
+  let pending = "";
+  let held: string | undefined;
   const toolCalls: ToolCallRecord[] = [];
   const toolStarted = new Map<string, number>();
   const toolNames = new Map<string, string>();
@@ -73,7 +91,7 @@ export function attachStreamBridge(
     },
   });
 
-  const emitContent = (delta: string) => {
+  const streamContent = (delta: string) => {
     const safe = citations.push(delta);
     if (!safe) return;
     if (!generating) {
@@ -84,7 +102,25 @@ export function attachStreamBridge(
     onEvent({ type: "content_delta", text: safe });
   };
 
-  const flushMessage = () => {
+  const flushCitations = () => {
+    const tail = citations.flush();
+    if (tail) {
+      text += tail;
+      onEvent({ type: "content_delta", text: tail });
+    }
+  };
+
+  const release = (content: string) => {
+    streamContent(content);
+    flushCitations();
+  };
+
+  const emitContent = (delta: string) => {
+    if (options.holdFinal) pending += delta;
+    else streamContent(delta);
+  };
+
+  const flushMessage = (final: boolean) => {
     const tail = thinking.pending;
     const phase = thinking.phase;
     thinking = createThinkingPartition();
@@ -92,11 +128,14 @@ export function attachStreamBridge(
       if (phase === "inside") onEvent({ type: "reasoning_delta", text: tail });
       else emitContent(tail);
     }
-    const held = citations.flush();
-    if (held) {
-      text += held;
-      onEvent({ type: "content_delta", text: held });
+    if (!options.holdFinal) {
+      flushCitations();
+      return;
     }
+    const content = pending;
+    pending = "";
+    if (final) held = content;
+    else release(content);
   };
 
   const addUsage = (reported?: TokenUsage) => {
@@ -140,7 +179,8 @@ export function attachStreamBridge(
       return;
     }
     if (event.type === "assistant/message") {
-      flushMessage();
+      const content = event.data.message.content as readonly { type: string }[];
+      flushMessage(!content.some((block) => block.type === "tool-call"));
       addUsage(event.data.usage);
       return;
     }
@@ -194,6 +234,16 @@ export function attachStreamBridge(
       return text.trim().length > 0;
     },
     citations: () => [...cited],
+    heldText: () => held,
+    releaseHeld() {
+      if (held === undefined) return;
+      const content = held;
+      held = undefined;
+      release(content);
+    },
+    discardHeld() {
+      held = undefined;
+    },
     finalText() {
       const last = [...agent.session.events].reverse().find((event) => event.type === "assistant/message");
       const assembled =
