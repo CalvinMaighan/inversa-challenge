@@ -9,10 +9,12 @@ import { activeApp } from "./app";
  * - `asOf`: the "what we knew" time, unix ms. Absent: live. Every carp panel then shows what was knowable at that
  *   moment (the forecast issued at or before it, observations up to it) and draws later observations apart.
  * - `replay`: play forward from `asOf` (one hour per tick) until now, then return to live.
+ * - `scrubbing`: the timeline scrubber is being dragged (input events, no release yet): the panels answer the
+ *   moving `asOf` from what they hold and fetch the exact as-of status once it is released.
  *
  * Only a conditions app reads it; an app switch clears it.
  */
-export type CarpState = { site?: string; asOf?: number; replay?: boolean };
+export type CarpState = { site?: string; asOf?: number; replay?: boolean; scrubbing?: boolean };
 
 export const CARP = key("CARP", {} as CarpState);
 
@@ -54,6 +56,7 @@ function compact(state: CarpState): CarpState {
   if (state.site) out.site = state.site;
   if (state.asOf !== undefined) out.asOf = state.asOf;
   if (state.replay && state.asOf !== undefined) out.replay = true;
+  if (state.scrubbing && state.asOf !== undefined) out.scrubbing = true;
   return out;
 }
 
@@ -61,7 +64,7 @@ function compact(state: CarpState): CarpState {
  * Apply a partial view (the agent's `view` event, a share link, a control). A field left out keeps its value;
  * `null` clears it. Invalid sites are ignored, times are clamped; `replay` needs a past `asOf`.
  */
-export function applyCarpView(view: { site?: string | null; asOf?: number | string | null; replay?: boolean | null }, nowMs = Date.now()): void {
+export function applyCarpView(view: { site?: string | null; asOf?: number | string | null; replay?: boolean | null; scrubbing?: boolean | null }, nowMs = Date.now()): void {
   const locations = activeApp().locations;
   set<CarpState>(CARP, (prev = CARP.defaults) => {
     const next: CarpState = { ...prev };
@@ -73,6 +76,7 @@ export function applyCarpView(view: { site?: string | null; asOf?: number | stri
     if (view.asOf === null) delete next.asOf;
     else if (view.asOf !== undefined) next.asOf = normalizeAsOf(view.asOf, nowMs);
     if (view.replay !== undefined) next.replay = view.replay === true;
+    if (view.scrubbing !== undefined) next.scrubbing = view.scrubbing === true;
     return compact(next);
   });
 }
@@ -81,9 +85,18 @@ export function selectSite(site: string | null): void {
   applyCarpView({ site });
 }
 
-/** "What we knew" at `asOfMs` (live when it is now); stops a replay. */
+/** "What we knew" at `asOfMs` (live when it is now); stops a replay. A control that jumps there, not a drag. */
 export function setAsOf(asOfMs: number | null, nowMs = Date.now()): void {
-  applyCarpView({ asOf: asOfMs, replay: false }, nowMs);
+  applyCarpView({ asOf: asOfMs, replay: false, scrubbing: false }, nowMs);
+}
+
+/** A scrubber step while dragging: the as-of moves, the exact status waits for the release (`endScrub`). */
+export function scrubAsOf(asOfMs: number, nowMs = Date.now()): void {
+  applyCarpView({ asOf: asOfMs, replay: false, scrubbing: true }, nowMs);
+}
+
+export function endScrub(): void {
+  applyCarpView({ scrubbing: false });
 }
 
 export function goLive(): void {

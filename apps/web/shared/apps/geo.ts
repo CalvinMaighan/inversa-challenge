@@ -44,7 +44,7 @@ export function clampToApp(app: AppConfig, b: BBox): BBox | null {
   return out.west < out.east && out.south < out.north ? out : null;
 }
 
-/** Focus species filter keys, in config order: `taxa.id` is position + 1 (C-A4 TaxonIdx). */
+/** Focus species filter keys, in config order (the EVF hotspot section order, C-A4 TaxonIdx); a record's `taxa.id` is the taxon's `dbId`. */
 export function speciesIds(app: AppConfig): string[] {
   return app.taxa.map(taxonKey);
 }

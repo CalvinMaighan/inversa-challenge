@@ -48,6 +48,18 @@ export type AgentTurn = AgentChatMessage & {
 
 export type AgentThread = Omit<AgentChatState, "messages"> & { messages: AgentTurn[] };
 
+/**
+ * Reasoning as plain text: the model's thinking arrives with markdown headings and bold ("**Looking into CRW
+ * locations**"), and the block renders it as text, so the markers are dropped rather than shown.
+ */
+export function plainReasoning(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*\n]+)\*\*/g, "$1")
+    .replace(/__([^_\n]+)__/g, "$1")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?=[^*\w]|$)/g, "$1$2");
+}
+
 export type ThreadAction =
   | { type: "session"; sessionId: string }
   | { type: "user"; id: string; text: string; nowMs: number }

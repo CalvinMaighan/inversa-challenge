@@ -8,9 +8,9 @@ export type SpeciesKey = string;
 
 export type FocusSpecies = { key: SpeciesKey; taxonId: string; common: string; scientific: string };
 
-/** The app's focus species. Config order is the EVF species order, so `taxa.id` is position + 1 (C-A4). */
+/** The app's focus species. `taxonId` is the config's `dbId`: the `taxa.id` the API filters and cites by (C-A4). */
 export function focusSpecies(app: AppConfig): FocusSpecies[] {
-  return app.taxa.map((t, index) => ({ key: taxonKey(t), taxonId: String(index + 1), common: t.name, scientific: t.scientificName }));
+  return app.taxa.map((t) => ({ key: taxonKey(t), taxonId: String(t.dbId), common: t.name, scientific: t.scientificName }));
 }
 
 export function speciesKeys(app: AppConfig): SpeciesKey[] {

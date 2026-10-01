@@ -96,8 +96,33 @@ export function drawHeat(ctx: CanvasRenderingContext2D, pixels: readonly HeatPix
   return stats;
 }
 
-/** Word labels at each area's pixel patch when its product is missing or stale ("never zero": say it). */
-export function drawHeatLabels(ctx: CanvasRenderingContext2D, groups: readonly { lat: number; lon: number; text: string }[], project: Project): void {
+/** A heat label's box: 18 px tall, centred on its point. */
+export const HEAT_LABEL_H = 18;
+/** A ranked-cell marker's box (Overlay.tsx `[data-kind="cell"]`: 26 px square, centred), plus a 2 px gap. */
+const MARKER_HALF = 15;
+/** One step clears a marker centred on the label's point: half the label, half the marker and its gap. */
+export const HEAT_LABEL_STEP = HEAT_LABEL_H / 2 + MARKER_HALF + 2;
+const LABEL_STEPS = 4;
+
+/**
+ * Where a label of width `w` centred at (x, y) goes so that it covers none of the marker points: it steps up,
+ * then down, until its box is clear of every 26 px marker square (the numbered priority markers draw above the
+ * canvas, so a label under one is unreadable). The original place when nothing clear is found within reach.
+ */
+export function placeLabel(x: number, y: number, w: number, avoid: readonly { x: number; y: number }[]): { x: number; y: number } {
+  const clear = (cy: number) => avoid.every((m) => x + w / 2 <= m.x - MARKER_HALF || x - w / 2 >= m.x + MARKER_HALF || cy + HEAT_LABEL_H / 2 <= m.y - MARKER_HALF || cy - HEAT_LABEL_H / 2 >= m.y + MARKER_HALF);
+  if (clear(y)) return { x, y };
+  for (let i = 1; i <= LABEL_STEPS; i++) {
+    for (const cy of [y - i * HEAT_LABEL_STEP, y + i * HEAT_LABEL_STEP]) if (clear(cy)) return { x, y: cy };
+  }
+  return { x, y };
+}
+
+/**
+ * Word labels at each area's pixel patch when its product is missing or stale ("never zero": say it), moved off
+ * the ranked-cell markers (`avoid`, in CSS px) that would otherwise sit on top of them.
+ */
+export function drawHeatLabels(ctx: CanvasRenderingContext2D, groups: readonly { lat: number; lon: number; text: string }[], project: Project, avoid: readonly { x: number; y: number }[] = []): void {
   ctx.font = "600 11px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
@@ -105,10 +130,11 @@ export function drawHeatLabels(ctx: CanvasRenderingContext2D, groups: readonly {
     const p = project(g.lon, g.lat);
     if (!p) continue;
     const w = ctx.measureText(g.text).width + 10;
+    const at = placeLabel(p.x, p.y, w, avoid);
     ctx.fillStyle = "rgba(11,13,18,0.82)";
-    ctx.fillRect(p.x - w / 2, p.y - 9, w, 18);
+    ctx.fillRect(at.x - w / 2, at.y - HEAT_LABEL_H / 2, w, HEAT_LABEL_H);
     ctx.fillStyle = "#f0f0f4";
-    ctx.fillText(g.text, p.x, p.y);
+    ctx.fillText(g.text, at.x, at.y);
   }
 }
 

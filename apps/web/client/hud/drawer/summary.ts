@@ -7,7 +7,7 @@
  * Pure over the evidence record (C14 shapes from Axum) and the time cursor. Never shows raw coordinates or ids;
  * those stay under "Details for experts".
  */
-import { isFocusTaxon } from "client/globe/species";
+import { speciesIndexOfTaxon } from "client/globe/species";
 import { activeApp } from "client/state/app";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
@@ -52,7 +52,7 @@ const NEUTRAL_COLOR = "#b8c0cc";
 export function speciesCard(taxon: Record<string, unknown>): SpeciesCard {
   const id = Number(taxon.id);
   const app = activeApp();
-  const focus = isFocusTaxon(id) ? app.taxa[id - 1] : undefined;
+  const focus = app.taxa[speciesIndexOfTaxon(id)];
   const common = str(taxon.commonName);
   const sci = str(taxon.scientificName) ?? focus?.scientificName ?? null;
   // iNat capitalises every word ("Burmese Python"); the card reads better in sentence case.

@@ -116,6 +116,8 @@ const taxon = z.strictObject({
   /** Other names people use for it ("burmese python", "pterois"), matched lower case. */
   aliases: z.array(text).optional(),
   scientificName: text,
+  /** The taxon's `taxa.id` in the app's observations database (the API's migration seed, checked at its boot). */
+  dbId: posInt,
   inatTaxonId: posInt.optional(),
   inatLineageIds: z.array(posInt).optional(),
   gbifKey: posInt.optional(),

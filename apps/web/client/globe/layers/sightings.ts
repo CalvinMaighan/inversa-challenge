@@ -101,7 +101,7 @@ export function visibleRecords(records: readonly TrailRecord[], filter: Readonly
  * species still shows what turning it back on would draw.
  */
 export function sightingBreakdown(records: readonly Pick<SightingRecord, "taxon">[]): Record<string, number> {
-  const out: Record<string, number> = Object.fromEntries(activeApp().taxa.map((_, i) => [String(i + 1), 0]));
+  const out: Record<string, number> = Object.fromEntries(activeApp().taxa.map((t) => [String(t.dbId), 0]));
   for (const r of records) {
     const key = String(r.taxon);
     if (key in out) out[key]! += 1;

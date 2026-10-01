@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
 
+import { plainReasoning } from "client/agent/chat/thread";
+
+describe("reasoning text", () => {
+  test("markdown headings and emphasis in the model's thinking are dropped, not shown as markers", () => {
+    expect(plainReasoning("**Looking into CRW locations**\n\nI'll call reef_heat.")).toBe("Looking into CRW locations\n\nI'll call reef_heat.");
+    expect(plainReasoning("## Plan\n__two__ steps, *one* at a time; 3*4 stays")).toBe("Plan\ntwo steps, one at a time; 3*4 stays");
+    expect(plainReasoning("plain text")).toBe("plain text");
+  });
+});
+
 import {
   EMPTY_THREAD,
   MAX_TURNS,

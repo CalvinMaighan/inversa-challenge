@@ -62,29 +62,29 @@ Name what is not live: the deploy (human steps in `docs/HUMAN_STEPS.md`), GOES-1
 | App selector | `bun run --cwd apps/web e2e:appselect` | `APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=…` |
 | Carp board, timeline, what we knew, evidence | `bun run --cwd apps/web e2e:carp` | `CARP …`, `CARP-TIMELINE …`, `CARP-ASOF …`, `CARP-EVIDENCE …` |
 | Lionfish areas, card, quality, replay | `bun run --cwd apps/web e2e:lionfish` | `LIONFISH …`, `LIONFISH-CARD …`, `LIONFISH-QUALITY …`, `LIONFISH-REPLAY …` |
-| First load per app, screenshots | `bun run --cwd apps/web e2e:firstload --app carp --evidence-shots` | `FIRSTLOAD … app=carp` |
+| First load per app, screenshots | `bun run --cwd apps/web e2e:firstload --app carp --evidence-shots` | `FIRSTLOAD app=carp records=… errors=0 kind=conditions sites=8/8 …` |
 | Python scrub | `bun run --cwd apps/web e2e:scrub` | `SCRUB median=… requests=0 …` |
 | Cold-snap window | `bun run --cwd apps/web e2e:client` | `COLDSNAP … python_max=…` |
 | Direct messages | `bun run --cwd apps/web e2e:dm` | `DM chars_streamed=40/40 …` |
 | Notes | `bun run --cwd apps/web e2e:notes` | `NOTES … live_edit=ok caret=ok converge=ok …` |
 
-## Scene: South Florida cold snap, 30 Jan to 3 Feb 2026
+## Scene: South Florida cold snap, 30 Jan to 7 Feb 2026
 
-A cold front came through on 31 January 2026. Metro Miami dropped to about 2 °C on the mornings of 1 and 2 February. NWS Miami issued an Extreme Cold Warning and Freeze Warnings, and NWS Key West Cold Weather Advisories. Burmese pythons are tropical: below 15 °C the app's activity rule drops to 0.3×.
+A cold front came through on 31 January 2026. Metro Miami dropped to about 2 °C on the mornings of 1 and 2 February. NWS Miami issued an Extreme Cold Warning and Freeze Warnings, and NWS Key West Cold Weather Advisories. Burmese pythons are tropical: below 15 °C the app's activity rule drops to 0.3×. The window runs on to 7 February so the replay shows the rebound: no python report reaches iNaturalist on the cold days, two research-grade reports are observed on 6 February once it warmed.
 
 - Scene id: `cold-snap-2026-02-01`, python app only
-- Window: `2026-01-30T00:00:00Z` to `2026-02-04T00:00:00Z`
+- Window: `2026-01-30T00:00:00Z` to `2026-02-08T00:00:00Z`
 - Files: `api/fixtures/scenes/cold-snap-2026-02-01/`, with `manifest.json` and the recorder `fetch.sh`
 
 ### Sources in the scene
 
 | Source | What was recorded | Link |
 |---|---|---|
-| iNaturalist | Every Burmese python observation in the bbox observed 30 Jan to 3 Feb: 0. The empty page is kept so the replay says so from real data | [API query](https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&d1=2026-01-30&d2=2026-02-03&order_by=id&order=asc&per_page=200) |
+| iNaturalist | Every Burmese python observation in the bbox observed 30 Jan to 7 Feb: 2, both research grade and both observed on 6 Feb (none on the cold days; re-recorded 2026-10-01) | [API query](https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&d1=2026-01-30&d2=2026-02-07&order_by=id&order=asc&per_page=200) |
 | Open-Meteo historical archive | hourly air temperature, precipitation, wind at the poller's 0.25° grid | `archive-api.open-meteo.com/v1/archive` (full URL in the manifest) |
 | Open-Meteo marine | hourly wave height and sea surface temperature at the same grid | `marine-api.open-meteo.com/v1/marine` |
 | USGS NWIS | instantaneous stage, lake elevation and water temperature for the Everglades box | `nwis.waterservices.usgs.gov/nwis/iv/` |
-| NWS Miami and Key West | the 21 Non-Precipitation Weather products issued 30 Jan to 3 Feb, raw text from the Iowa Environmental Mesonet AFOS archive | [IEM product list](https://mesonet.agron.iastate.edu/api/1/nws/afos/list.json?pil=NPWMFL&date=2026-01-31), [VTEC events MFL 2026](https://mesonet.agron.iastate.edu/json/vtec_events_bywfo.py?wfo=MFL&year=2026) |
+| NWS Miami and Key West | the 24 Non-Precipitation Weather products issued 30 Jan to 7 Feb, raw text from the Iowa Environmental Mesonet AFOS archive | [IEM product list](https://mesonet.agron.iastate.edu/api/1/nws/afos/list.json?pil=NPWMFL&date=2026-01-31), [VTEC events MFL 2026](https://mesonet.agron.iastate.edu/json/vtec_events_bywfo.py?wfo=MFL&year=2026) |
 
 Key NWS events, from the IEM VTEC listing:
 
@@ -100,7 +100,7 @@ Also confirmed by the Open-Meteo archive daily minimum at Miami (1.9 °C on 1 an
 
 ### How the payloads were converted
 
-Everything the scene ingests is the upstream response, byte for byte, with two exceptions. Open-Meteo's archive answers in the forecast API's shape, so the same adapter parses it. NWS: `api.weather.gov` serves only active alerts, so each IEM product's raw text is wrapped, unchanged, in the NWWS-OI stanza the `nwws` push source receives live, and parsed by the same code. Every payload is replayed with fetch time `2026-02-04T00:00:00Z`; the real retrieval time is `recorded_at` in the manifest.
+Everything the scene ingests is the upstream response, byte for byte, with two exceptions. Open-Meteo's archive answers in the forecast API's shape, so the same adapter parses it. NWS: `api.weather.gov` serves only active alerts, so each IEM product's raw text is wrapped, unchanged, in the NWWS-OI stanza the `nwws` push source receives live, and parsed by the same code. Every payload is replayed with fetch time `2026-02-08T00:00:00Z`; the real retrieval time is `recorded_at` in the manifest.
 
 ### Load and check the scene
 
@@ -112,9 +112,9 @@ INVERSA_DATA_DIR=./data cargo run -q --release --manifest-path api/Cargo.toml --
 INVERSA_SOURCES=off cargo run -q --release --manifest-path api/Cargo.toml -- backfill --dry-run --app python --scene cold-snap-2026-02-01
 ```
 
-The dry run, re-measured 2026-10-01, prints: iNat 1 payload, 0 rows; Open-Meteo 2 payloads, 95,520 rows; USGS 2 payloads, 71,167 rows; NWWS 21 payloads, 110 rows; then `scene cold-snap-2026-02-01 … sightings=0 readings=165951 air_below_10c=5328 alerts=42` and `BACKFILL-DRY-RUN-OK`. The test `cargo test --manifest-path api/Cargo.toml scene_cold_snap` checks the same counts, the three NWS event types and the python activity term at cell `292:142` (passes, re-run 2026-10-01).
+The dry run, re-measured 2026-10-01 after the re-recording, prints: iNat 1 payload, 2 rows; Open-Meteo 2 payloads, 171,936 rows; USGS 2 payloads, 127,956 rows; NWWS 24 payloads, 113 rows; then `scene cold-snap-2026-02-01 … sightings=2 readings=299157 air_below_10c=6722 alerts=43` and `BACKFILL-DRY-RUN-OK`. The test `cargo test --manifest-path api/Cargo.toml scene_cold_snap` checks the same counts, that the cold days (30 Jan to 3 Feb) hold no sighting and both reports are observed on 6 Feb, the three NWS event types and the python activity term at cell `292:142` (passes, re-run 2026-10-01).
 
-The scene is older than the live 30-day window, so its 121 hourly frames are built on first request to `/v1/python/frames`.
+The scene is older than the live 30-day window, so its 217 hourly frames are built on first request to `/v1/python/frames`.
 
 ### Moments to scrub to (UTC, Miami time in brackets)
 
@@ -123,12 +123,13 @@ The scene is older than the live 30-day window, so its 121 hourly frames are bui
 3. **1 Feb 12:00 (7 AM).** Coldest hour: about 2.2 °C at the metro grid point.
 4. **1 Feb 17:00 (noon).** Cell `292:142` (Coral Gables / South Miami): air still about 7 °C, activity term 0.3×.
 5. **3 Feb 19:00 (2 PM).** The rebound: about 19 °C, activity term back to 1.0.
+6. **6 Feb.** The first python reports since the cold snap: two research-grade iNaturalist observations (one in Everglades National Park, one near Homestead).
 
 ### What to ask the agent in the scene
 
-- "Did the cold snap change python activity?": expect the activity term at 0.3× during the sub-15 °C hours, tied to the NWS warnings, and the statement that no python reports were posted in the window; citations of `reading:` and `alert:` ids.
+- "Did the cold snap change python activity?": expect the activity term at 0.3× during the sub-15 °C hours, tied to the NWS warnings, and the statement that no python report was observed during the cold days (the two reports in the window are from 6 Feb); citations of `reading:` and `alert:` ids.
 - "Which alerts were in effect overnight on 31 January?": the warnings and advisories above.
-- "Were there any python reports during the cold snap?": none.
+- "Were there any python reports during the cold snap?": none on 30 Jan to 3 Feb; two on 6 Feb, after the rebound.
 
 The same terms from the API, while `bun run dev` runs:
 

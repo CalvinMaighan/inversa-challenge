@@ -20,6 +20,7 @@
         "pterois miles"
       ],
       "scientificName": "Pterois volitans/miles",
+      "dbId": 4,
       "inatTaxonId": 47284,
       "inatLineageIds": [
         47280,

@@ -12,7 +12,10 @@ const MAX_ENTRIES = 200;
 
 export type CachedAnswer = { events: AgentStreamEvent[]; content: string; citations: string[]; storedAt: number };
 
-const entries = new Map<string, CachedAnswer>();
+// On `globalThis`, not the module: `next dev` re-evaluates this module whenever a source file changes (and may
+// instantiate it once per compiled route), and a repeat question then misses an answer the last instance stored.
+const SLOT = Symbol.for("inversa.answerCache");
+const entries: Map<string, CachedAnswer> = ((globalThis as Record<symbol, unknown>)[SLOT] ??= new Map<string, CachedAnswer>()) as Map<string, CachedAnswer>;
 
 /** Case, whitespace and trailing punctuation do not change the question. */
 export function normalizeQuestion(question: string): string {

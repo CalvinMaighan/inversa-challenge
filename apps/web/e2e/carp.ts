@@ -148,6 +148,11 @@ async function main(): Promise<void> {
       SITES.every((lid) => markers.some((m) => m.lid === lid)) &&
       markers.every((m) => STATUSES.includes(m.status ?? "") && m.glyph === m.status && !!m.ring && /:/.test(m.label) && !m.hidden);
     if (!markersOk) log("markers", JSON.stringify(markers));
+    // The markers show the API's review status (C5 `reviewBoard`), never a browser derivation that disagrees with it.
+    const served = await stack.graphql<{ reviewBoard: { sites: { site: string; status: string }[] } }>("{ reviewBoard { sites { site status } } }");
+    const agree = markers.filter((m) => served.reviewBoard.sites.find((s) => s.site === m.lid)?.status.toLowerCase() === m.status).length;
+    console.log(`CARP-STATUS agree=${agree}/${SITES.length}`);
+    if (agree !== SITES.length) log("api statuses", JSON.stringify(served.reviewBoard.sites));
     // Tooltip on hover.
     await page.hover('[data-carp-site="BTRL1"]');
     const tipVisible = await page.$eval('[data-carp-site="BTRL1"] .tip', (el) => getComputedStyle(el).visibility === "visible" && (el as HTMLElement).innerText.includes("Baton Rouge"));

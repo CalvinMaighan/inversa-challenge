@@ -180,6 +180,10 @@ pub struct TaxonCfg {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
     pub scientific_name: String,
+    /// The taxon's `taxa.id` in the app's observations database: the migration seed (0001_init.sql)
+    /// and the id every GraphQL filter, EVF record and agent tool carries. `App::resolve_taxa`
+    /// refuses to boot on a database whose row for this species has another id.
+    pub db_id: i64,
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub inat_taxon_id: Option<i64>,
     #[serde(default)]
@@ -477,6 +481,9 @@ impl AppConfig {
             if t.scientific_name.trim().is_empty() || !names.insert(t.scientific_name.trim()) {
                 return Err(format!("taxon {:?}: empty or duplicate scientificName", t.id));
             }
+            if t.db_id < 1 {
+                return Err(format!("taxon {:?}: dbId must be a positive taxa.id", t.id));
+            }
             if !(t.half_life_days > 0.0 && t.half_life_days.is_finite()) {
                 return Err(format!("taxon {:?}: halfLifeDays must be positive", t.id));
             }
@@ -646,7 +653,7 @@ pub fn grid_of(r: &RegionCfg) -> Result<Grid, String> {
 
 /// A focus taxon at runtime. `idx` is its position in `taxa[]` and in every frame's hotspot
 /// section; `taxon_id` is its `taxa.id` in the app's observations database (0 until
-/// `App::resolve_taxa` ran against that database).
+/// `App::resolve_taxa` ran against that database, then always the config's `dbId`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Taxon {
     pub idx: u8,
@@ -755,22 +762,29 @@ impl App {
         self.cfg.kind == AppKind::Species
     }
 
-    /// Sync the `taxa` table with the config and learn each taxon's `taxa.id`: config taxa are
-    /// upserted by scientific name with `focus = 1`; every other row loses focus. Then the rows of
+    /// Sync the `taxa` table with the config and check each taxon's `taxa.id`: config taxa are
+    /// upserted by scientific name (inserted at their `dbId`) with `focus = 1`, and a row whose id
+    /// is not the config's `dbId` is an error (the web client, the agent and the EVF records all
+    /// carry that id). Every other row loses focus. Then the rows of
     /// every other taxon go (R14: an app stores its own species only), except a sighting whose
     /// taxon history names the app's species: an ID flip away from it stays, flagged, for review.
     /// Runs on the database's first connection, before any reader or writer starts.
     pub fn resolve_taxa(&mut self, conn: &Connection) -> rusqlite::Result<()> {
         let mut upsert = conn.prepare(
-            "insert into taxa (scientific_name, common_name, focus, inat_taxon_id) values (?1, ?2, 1, ?3)
+            "insert into taxa (id, scientific_name, common_name, focus, inat_taxon_id) values (?4, ?1, ?2, 1, ?3)
              on conflict(scientific_name) do update set focus = 1,
                inat_taxon_id = coalesce(taxa.inat_taxon_id, excluded.inat_taxon_id),
                common_name = case when taxa.common_name = '' then excluded.common_name else taxa.common_name end",
         )?;
         let mut select = conn.prepare("select id from taxa where scientific_name = ?1")?;
         for t in &mut self.taxa {
-            upsert.execute(rusqlite::params![t.cfg.scientific_name, t.cfg.name, t.cfg.inat_taxon_id])?;
+            upsert.execute(rusqlite::params![t.cfg.scientific_name, t.cfg.name, t.cfg.inat_taxon_id, t.cfg.db_id])?;
             t.taxon_id = select.query_row([&t.cfg.scientific_name], |r| r.get(0))?;
+            if t.taxon_id != t.cfg.db_id {
+                return Err(rusqlite::Error::ToSqlConversionFailure(
+                    format!("taxon {:?} ({}) has taxa.id {} in this database; its config dbId is {}", t.cfg.id, t.cfg.scientific_name, t.taxon_id, t.cfg.db_id).into(),
+                ));
+            }
         }
         let names = serde_json::to_string(&self.taxa.iter().map(|t| t.cfg.scientific_name.as_str()).collect::<Vec<_>>())
             .expect("string list");
@@ -1065,6 +1079,7 @@ mod tests {
         let mut app = App::builtin("lionfish").unwrap();
         app.resolve_taxa(&conn).unwrap();
         assert_eq!(app.taxa[0].taxon_id, 4, "the seeded lionfish row");
+        assert_eq!(app.taxa[0].taxon_id, app.taxa[0].cfg.db_id, "the config's dbId is the id the database uses");
         assert_eq!(ids(&conn, "select id from taxa order by id"), [4], "the python row goes from the lionfish database");
         assert_eq!(app.taxon("4").map(|t| t.id()), Some("lionfish"));
 
@@ -1072,7 +1087,22 @@ mod tests {
         let mut python = App::builtin("python").unwrap();
         python.resolve_taxa(&conn).unwrap();
         assert_eq!(python.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1]);
+        assert_eq!(python.taxa[0].cfg.db_id, 1);
         assert_eq!(ids(&conn, "select id from taxa"), [1]);
+
+        // A database whose row for the species has another id refuses to boot: every id the web
+        // client and the agent carry comes from the config.
+        let conn = migrated();
+        conn.execute_batch("delete from taxa where id = 4; insert into taxa (id, scientific_name, common_name, focus) values (9, 'Pterois volitans/miles', 'Lionfish', 1);").unwrap();
+        let mut lf = App::builtin("lionfish").unwrap();
+        let err = lf.resolve_taxa(&conn).unwrap_err().to_string();
+        assert!(err.contains("taxa.id 9") && err.contains("dbId is 4"), "{err}");
+        // An empty taxa table gets the row at the config's id.
+        let conn = migrated();
+        conn.execute_batch("delete from taxa").unwrap();
+        let mut lf = App::builtin("lionfish").unwrap();
+        lf.resolve_taxa(&conn).unwrap();
+        assert_eq!(ids(&conn, "select id from taxa"), [4]);
     }
 
     /// R14: a python database from before the pivot holds lionfish and background taxa. Their
