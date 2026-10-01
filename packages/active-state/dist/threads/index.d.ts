@@ -206,7 +206,7 @@ type GridShape = {
     /** score = u8 * hotspotScale. */
     hotspotScale: number;
 };
-/** i16 sentinel for a missing or flagged environment cell. */
+/** i16 sentinel for an environment cell with no reading (-32767, one above, marks a flagged pixel; see apps/web/shared/frames.ts). */
 declare const ENV_MISSING = -32768;
 /** "EVF2" as a little-endian u32. */
 declare const GRID_MAGIC = 843470405;

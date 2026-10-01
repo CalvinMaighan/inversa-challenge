@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { isAgentStreamEvent } from "shared/agent/events";
 import { type FeedState, worstHealth } from "shared/feed-state";
-import { ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, readEvfHeader } from "shared/frames";
+import { ENV_FLAGGED, ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, isEnvValue, readEvfHeader } from "shared/frames";
 import { isVoiceControlRequest, VOICE_INPUT_SAMPLE_RATE, VOICE_OUTPUT_SAMPLE_RATE } from "shared/voice/protocol";
 import { parseUiCommand, UI_TOOL_NAMES } from "shared/voice/ui-tools";
 
@@ -48,6 +48,8 @@ describe("shared contracts", () => {
     expect(layout.sightingsOffset % 4).toBe(0);
     expect(evfFrameBytes(h, 3)).toBe(layout.sightingsOffset + 4 + 3 * 16);
     expect(ENV_MISSING).toBe(-32768);
+    expect(ENV_FLAGGED).toBe(-32767);
+    expect([ENV_MISSING, ENV_FLAGGED, -32766, 0].map(isEnvValue)).toEqual([false, false, true, true]);
   });
 
   test("voice protocol rates and control guard", () => {

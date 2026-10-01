@@ -5,7 +5,7 @@
  * decoded frame is copied in with one `set`:
  *   hotspot u8[speciesCount * hsCols * hsRows]   species-major, row-major from SW
  *   pad to 2
- *   lst i16[envCols * envRows]                    centi-degC, ENV_MISSING = missing
+ *   lst i16[envCols * envRows]                    centi-degC, ENV_MISSING = no reading, -32767 = flagged
  *   sst i16[envCols * envRows]
  *   pad to 4
  * A writer (the db worker) calls `writeFrameFromEvf` then `bump()`; readers
@@ -26,7 +26,7 @@ export type GridShape = {
   hotspotScale: number;
 };
 
-/** i16 sentinel for a missing or flagged environment cell. */
+/** i16 sentinel for an environment cell with no reading (-32767, one above, marks a flagged pixel; see apps/web/shared/frames.ts). */
 export const ENV_MISSING = -32768;
 
 /** "EVF2" as a little-endian u32. */

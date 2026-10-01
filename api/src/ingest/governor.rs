@@ -20,6 +20,9 @@ use chrono::{DateTime, Utc};
 pub const DEFAULT_CAP: Duration = Duration::from_secs(30 * 60);
 /// Backoff never starts below this, so zero-interval (long-poll) sources still back off.
 pub const BACKOFF_FLOOR: Duration = Duration::from_secs(5);
+/// The first backoff doubles from the cadence or from this, whichever is shorter: the first retry after a
+/// failure comes within 2 min even for hourly and daily sources, then doubles towards the cap.
+pub const RETRY_BASE: Duration = Duration::from_secs(60);
 /// Upper bound on an honoured `Retry-After`, against a hostile or broken header.
 pub const RETRY_AFTER_MAX: Duration = Duration::from_secs(24 * 60 * 60);
 
@@ -162,7 +165,10 @@ impl Governor {
     }
 
     fn back_off(&self, s: &mut Inner, now: Instant, status: Option<u16>) {
-        s.interval = (s.interval * 2).max(BACKOFF_FLOOR.min(self.cap)).min(self.cap);
+        // The doubling starts from the cadence, or from RETRY_BASE when the cadence is longer: a 15-minute
+        // poller that hits one transient error retries in 2 min, not 30 (PRD §13 poll freshness).
+        let from = if s.consecutive_failures == 0 { s.interval.min(RETRY_BASE) } else { s.interval };
+        s.interval = (from * 2).max(BACKOFF_FLOOR.min(self.cap)).min(self.cap);
         s.consecutive_failures = s.consecutive_failures.saturating_add(1);
         s.last_status = status;
         s.next_at = Some(now + s.interval);
@@ -312,6 +318,24 @@ mod tests {
         assert_eq!(snap.last_status, Some(503));
         let note = snap.note().unwrap();
         assert!(note.contains("backoff 1800s after HTTP 503 (9 consecutive)"), "{note}");
+    }
+
+    #[test]
+    fn governor_long_cadence_retries_within_two_minutes_then_doubles() {
+        // USGS (15 min) and NAS (daily): one transient error must not cost a doubled cadence.
+        let g = Governor::new(S(900));
+        let t = Instant::now();
+        let mut waits = Vec::new();
+        for _ in 0..6 {
+            g.record(Attempt::Failed { status: None }, t);
+            waits.push(g.wait(t).as_secs());
+        }
+        assert_eq!(waits, [120, 240, 480, 960, 1800, 1800]);
+        g.record(Attempt::Success, t);
+        assert_eq!(g.wait(t), S(900), "a success goes back to the cadence");
+        let daily = Governor::new(S(24 * 3600));
+        daily.record(Attempt::Throttled { status: 503, retry_after: None }, t);
+        assert_eq!(daily.wait(t), S(120));
     }
 
     #[test]

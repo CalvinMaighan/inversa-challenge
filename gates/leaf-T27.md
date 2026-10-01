@@ -2,15 +2,15 @@
 
 Scope: seed each R5 case (stale, missing, duplicate, conflicting, late). Each one must be visible in the UI badge, in the evidence drawer, and in the agent's wording.
 
-- [ ] G1: a fixture seeder produces all 5 cases, and a GraphQL check confirms each (test e2e_quality_cases)
+- [x] G1: a fixture seeder produces all 5 cases, and a GraphQL check confirms each (test e2e_quality_cases)
   CHECK: cargo test --manifest-path api/Cargo.toml e2e_quality_cases 2>&1 | grep -E "running [1-9]|test result"
   EXPECT: /running [1-9][\s\S]*test result: ok/
-  EVIDENCE: pending
+  EVIDENCE: running 1 test | test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 221 filtered out; finished in 7.89s
 
-- [ ] G2: the agent eval includes the 5 quality questions and states each case; the live eval prints the quality subset `EVAL quality passed 5/5`
+- [x] G2: the agent eval includes the 5 quality questions and states each case; the live eval prints the quality subset `EVAL quality passed 5/5`
   CHECK: bun run eval 2>&1 | grep "EVAL quality"
   EXPECT: EVAL quality passed 5/5
-  EVIDENCE: pending
+  EVIDENCE: EVAL quality passed 5/5 (gate-check run on the tree merged with main). Merged tree, full `bun run eval`, consecutive after the last agent change: 5/5 and 15/15 three times, then this gate-check run 5/5 (4 in a row). The merge first dropped it to 5/5, 4/5, 4/5: T41's 48 h globe-window line made the model narrow "tegu reports near Homestead" to 48 h; the prompt now keeps that window for questions about what the globe shows. One run after that missed the late NAS record (4/5); the sightings tool now lists `lateRecords` with cite markers up front. Before the merge: 5/5 four runs in a row; before T27, 5/5, 4/5, 5/5. The five quality questions cover stale, missing, duplicate+late, and conflicting (SST and ID flip).
 
-- [ ] G3: screenshots of the UI badge and drawer for each case (manual: paths under docs/evidence/quality/)
-  EVIDENCE: pending
+- [x] G3: screenshots of the UI badge and drawer for each case (manual: paths under docs/evidence/quality/)
+  EVIDENCE: `bun run e2e:quality` on the merged tree (T41 layout) prints `QUALITY cases=5 shots=11`; each drawer is asserted to show its flags before the shot, and every image was looked at. The flags sit under T41's plain summary in plain words; the technical badges, links and the feed note stay under "Details for experts" (unfolded for the stale, failed-fetch and conflict shots). stale: docs/evidence/quality/stale-feed-row.png (About popover, Data sources: WEB stale · push 3d, note "newest observation is 3d old; max latency is 1d"; the name opens the fetch run) and stale-drawer.png ("WEB data out of date", feed note); missing: missing-cloud-globe.png (cloud and bad-DQF pixels hatched on the LST layer), missing-cloud-drawer.png ("Cloud cover — no reading"), missing-bad-dqf-drawer.png ("Bad satellite data — no reading"), missing-fetch-failed-drawer.png ("Data check failed", the normalize error); duplicate: duplicate-drawer.png ("Same animal as an earlier report", DUPLICATE OF sighting:10) and duplicate-canonical-drawer.png ("Also reported once more elsewhere"); conflicting: conflict-idflip-drawer.png ("Sources disagree", 1 REVISION, taxon Salvator merianae → Tupinambinae) and conflict-sst-drawer.png ("Sources disagree", 1 CONFLICT linked to the satellite pixel); late: late-drawer.png ("Late report — reached us 139d 7h after it was seen", ingest lag 139d 7h). UI fixes found by looking: flagged pixels were filled from the neighbouring pixel in the frames and never hatched with one GOES scan (new `ENV_FLAGGED` sentinel, in-cell sampling); the drawer had no late / missing / failed-fetch / feed-state flags and no feed note; feed notes needed a hover (a feed row now opens its last fetch run).

@@ -13,6 +13,7 @@ import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { ABOUT_SENTENCE } from "../help/content";
+import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
 
@@ -147,6 +148,20 @@ const FeedList = styled.ul`
   }
 `;
 
+/** A feed's name, as a button that opens its latest fetch run in the evidence drawer. */
+const FeedRun = styled.button`
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  &:hover b,
+  &:focus-visible b {
+    text-decoration: underline;
+  }
+`;
+
 const Choices = styled.div`
   display: flex;
   flex-direction: column;
@@ -214,10 +229,19 @@ function Feeds({ list }: { list: FeedState[] }) {
     <FeedList aria-label="Feeds">
       {sortFeedsForStatus(list).map((feed) => {
         const chip = feedChip(feed);
+        // The chip opens the feed's latest fetch run in the drawer: state, note and error readable without a hover.
+        const run = feed.lastFetchRunId ? `fetch:${feed.lastFetchRunId}` : null;
+        const open = run ? () => openEvidence(run) : undefined;
         return (
           <li key={chip.source} title={chip.title} data-feed={chip.source} data-state={chip.state}>
             <Dot $tone={chip.tone} />
-            <b>{chip.label}</b>
+            {open ? (
+              <FeedRun type="button" onClick={open} title={`Open ${chip.label}'s latest fetch run: state, note and error`}>
+                <b>{chip.label}</b>
+              </FeedRun>
+            ) : (
+              <b>{chip.label}</b>
+            )}
             <small>
               {chip.state} · {chip.mode}
             </small>

@@ -174,6 +174,8 @@ impl Kernel {
 struct CondLayer {
     nearest: Arc<Vec<u32>>,
     values: Vec<f32>,
+    /// `Snapshot::stations` index of each value.
+    stations: Vec<u32>,
 }
 
 /// Conditions for every cell at one frame time.
@@ -184,9 +186,14 @@ pub struct CondFrame {
 
 impl CondFrame {
     pub fn value(&self, p: CondParam, idx: usize) -> Option<f32> {
+        self.value_from(p, idx).map(|(v, _)| v)
+    }
+
+    /// `value`, with the `Snapshot::stations` index of the station it was read from.
+    pub fn value_from(&self, p: CondParam, idx: usize) -> Option<(f32, u32)> {
         let layer = self.layers[p as usize].as_ref()?;
         let n = layer.nearest[idx];
-        (n != u32::MAX).then(|| layer.values[n as usize])
+        (n != u32::MAX).then(|| (layer.values[n as usize], layer.stations[n as usize]))
     }
 
     pub fn at(&self, idx: usize) -> Conditions {
@@ -428,6 +435,21 @@ impl Snapshot {
         CondFrame { month, layers }
     }
 
+    /// Stations that reported `p` in the `STALE_MS` up to `at` with flagged values only (cloud,
+    /// bad DQF, missing): there, but with nothing usable. Sorted by station index.
+    pub fn flagged_stations(&self, p: CondParam, at: i64) -> Vec<u32> {
+        let readings = &self.readings[p as usize];
+        let lo = readings.partition_point(|r| r.observed_at <= at - STALE_MS);
+        let hi = readings.partition_point(|r| r.observed_at <= at);
+        let mut any_valid: HashMap<u32, bool> = HashMap::new();
+        for r in &readings[lo..hi] {
+            *any_valid.entry(r.station).or_insert(false) |= !r.value.is_nan();
+        }
+        let mut out: Vec<u32> = any_valid.into_iter().filter(|&(_, valid)| !valid).map(|(s, _)| s).collect();
+        out.sort_unstable();
+        out
+    }
+
     fn layer(&self, p: CondParam, at: i64) -> Option<CondLayer> {
         let readings = &self.readings[p as usize];
         let lo = readings.partition_point(|r| r.observed_at <= at - STALE_MS);
@@ -454,7 +476,7 @@ impl Snapshot {
         if ids.is_empty() {
             return None;
         }
-        let key = (p, ids);
+        let key = (p, ids.clone());
         let nearest = {
             let cache = self.nearest_cache.lock().expect("nearest cache");
             cache.get(&key).cloned()
@@ -472,7 +494,7 @@ impl Snapshot {
                 n
             }
         };
-        Some(CondLayer { nearest, values })
+        Some(CondLayer { nearest, values, stations: ids })
     }
 
     /// density × activity × access for every cell, given a density grid and the conditions.

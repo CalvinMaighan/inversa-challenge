@@ -17,7 +17,7 @@ import {
   sampleRamp,
   tempLut,
 } from "client/globe/ramp";
-import { ENV_MISSING } from "shared/frames";
+import { ENV_FLAGGED, ENV_MISSING } from "shared/frames";
 
 const px = (out: Uint8ClampedArray, i: number) => [...out.subarray(i * 4, i * 4 + 4)];
 
@@ -139,5 +139,17 @@ describe("paintEnv", () => {
   test("everValidMask marks cells valid in any frame", () => {
     const frames = [new Int16Array([ENV_MISSING, 1, ENV_MISSING]), new Int16Array([ENV_MISSING, ENV_MISSING, 5])];
     expect([...everValidMask(frames, 3)]).toEqual([0, 1, 1]);
+  });
+
+  test("a flagged pixel (cloud, bad DQF) hatches even when it never cleared in the window", () => {
+    // One GOES scan: cell 0 valid, cell 1 cloud, cell 2 outside the product.
+    const values = new Int16Array([2000, ENV_FLAGGED, ENV_MISSING]);
+    const mask = everValidMask([values], 3);
+    expect([...mask]).toEqual([1, 1, 0]);
+    const out = new Uint8ClampedArray(3 * k * k * 4);
+    expect(paintEnv(out, 3, 1, values, lut, LST_RANGE_C, k, mask)).toEqual({ valid: 1, gaps: 1 });
+    // Without a mask as well: flagged is a gap by itself.
+    expect(paintEnv(out, 3, 1, values, lut, LST_RANGE_C, k, new Uint8Array(3)).gaps).toBe(1);
+    expect(decodeEnvC(ENV_FLAGGED)).toBeNull();
   });
 });

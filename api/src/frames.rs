@@ -6,8 +6,9 @@
 //!   south-west corner, 0.02°). Each cell is the max of its 2 × 2 children on the 0.01°
 //!   scoring grid, quantized as `round(score / HOTSPOT_SCALE)` and clamped to 255.
 //! - pad to 2 bytes.
-//! - `lst`, `sst` i16 × 68 × 64 cells (0.05°, the GOES `g5` cells) in centi-°C, sampled at
-//!   each cell's centre from the nearest valid reading; `ENV_MISSING` when none.
+//! - `lst`, `sst` i16 × 68 × 64 cells (0.05°, the GOES `g5` cells) in centi-°C: the latest
+//!   valid reading of a station inside the cell; `ENV_FLAGGED` (-32767) when a station inside
+//!   it reported only flagged values (cloud, bad DQF); `ENV_MISSING` (-32768) when none reported.
 //! - pad to 4 bytes.
 //! - `u32 sightingCount` and 16-byte records (`u32 id, f32 lon, f32 lat, u16 taxon,
 //!   u8 quality, u8 flags`; `id` is `sightings.id`, citable as `sighting:<id>`): the sightings
@@ -60,7 +61,10 @@ pub const SIGHTING_BYTES: usize = 16;
 pub const SPECIES_COUNT: u32 = 4;
 /// `score = u8 × HOTSPOT_SCALE`; scores top out around 2.4 (density 1 × the largest boosts).
 pub const HOTSPOT_SCALE: f32 = 0.01;
+/// Env cell with no reading at all (outside the product's domain, or nothing reported).
 pub const ENV_MISSING: i16 = -32768;
+/// Env cell whose pixel reported, but flagged (cloud, bad DQF, missing value): a data gap to show.
+pub const ENV_FLAGGED: i16 = -32767;
 /// Stored and default step.
 pub const STEP_MIN: u32 = 60;
 pub const STEP_MS: i64 = STEP_MIN as i64 * 60_000;
@@ -210,7 +214,8 @@ fn quantize_score(score: f32) -> u8 {
 
 fn quantize_env(value: Option<f32>) -> i16 {
     match value {
-        Some(v) if v.is_finite() => (v * 100.0).round().clamp(-32767.0, 32767.0) as i16,
+        // The two lowest i16 values are the sentinels.
+        Some(v) if v.is_finite() => (v * 100.0).round().clamp(-32766.0, 32767.0) as i16,
         _ => ENV_MISSING,
     }
 }
@@ -239,11 +244,33 @@ pub fn frame_body(snap: &Snapshot, layout: &Layout, at: i64, step_ms: i64) -> Ve
         }
     }
     out.resize(layout.lst_offset(), 0);
+    // An env cell shows only a reading from inside it. The scorer lets a fine cell borrow the
+    // nearest pixel up to `max_cells` away, which reaches the neighbouring g5 centre; on the
+    // display grid that would paint a cloudy or bad-DQF pixel with its neighbour's value, so the
+    // gap the globe hatches would vanish (PRD §7: missing data is never interpolated). A cell
+    // whose pixel reported only flagged values is `ENV_FLAGGED`, so the client can hatch it even
+    // when it never cleared in the loaded window.
     for param in [CondParam::LstC, CondParam::SstC] {
+        let flagged: std::collections::HashSet<(u32, u32)> = snap
+            .flagged_stations(param, at)
+            .into_iter()
+            .filter_map(|s| {
+                let (lat, lon) = snap.stations[s as usize];
+                layout.env.col_row(lon, lat)
+            })
+            .collect();
         for er in 0..layout.env.rows {
             for ec in 0..layout.env.cols {
                 let idx = grid.index(ec * ENV_FACTOR + ENV_FACTOR / 2, er * ENV_FACTOR + ENV_FACTOR / 2);
-                out.extend_from_slice(&quantize_env(cond.value(param, idx)).to_le_bytes());
+                let value = cond.value_from(param, idx).and_then(|(v, station)| {
+                    let (lat, lon) = snap.stations[station as usize];
+                    (layout.env.col_row(lon, lat) == Some((ec, er))).then_some(v)
+                });
+                let q = match value {
+                    None if flagged.contains(&(ec, er)) => ENV_FLAGGED,
+                    v => quantize_env(v),
+                };
+                out.extend_from_slice(&q.to_le_bytes());
             }
         }
     }
@@ -640,8 +667,12 @@ mod tests {
             let lst = layout.lst_offset();
             assert_eq!(i16_at(body, lst + layout.env.index(0, 0) * 2), 1225);
             assert_eq!(i16_at(body, lst + layout.env.index(1, 1) * 2), ENV_MISSING);
+            // Each pixel's flagged parameter is a gap, not the valid neighbour one g5 cell away
+            // (PRD §7: never interpolated).
+            assert_eq!(i16_at(body, lst + layout.env.index(1, 0) * 2), ENV_FLAGGED);
             let sst = layout.sst_offset();
             assert_eq!(i16_at(body, sst + layout.env.index(1, 0) * 2), 2400);
+            assert_eq!(i16_at(body, sst + layout.env.index(0, 0) * 2), ENV_FLAGGED);
             assert_eq!(i16_at(body, sst + layout.env.index(3, 1) * 2), ENV_MISSING);
             let n = u32_at(body, layout.sightings_offset()) as usize;
             counts.push(n);
@@ -702,6 +733,8 @@ mod tests {
         assert_eq!(quantize_env(Some(-3.456)), -346);
         assert_eq!(quantize_env(Some(f32::NAN)), ENV_MISSING);
         assert_eq!(quantize_env(None), ENV_MISSING);
+        // A value never lands on a sentinel.
+        assert_eq!(quantize_env(Some(-400.0)), ENV_FLAGGED + 1);
         let round = compress(&out);
         assert_eq!(decompress(&round).unwrap(), out);
         assert_eq!(parse_time("1738368000000").unwrap(), 1_738_368_000_000);

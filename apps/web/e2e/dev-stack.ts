@@ -1,8 +1,10 @@
 /**
  * The development stack for the team e2e scripts (team, notes): `wrangler dev --local` for the signal Worker,
  * a real Axum (`cargo run --release`) over a temp INVERSA_DATA_DIR with INVERSA_SOURCES=off, and `next dev`
- * proxying /v1 to it. Dev mode on purpose: `window.__team` (client/hud/missions/team.ts) only exists outside
- * production builds. Free ports throughout, so a developer's own `bun run dev` (3050, 4041, 8799) keeps running.
+ * proxying /v1 to it. `window.__team` (client/hud/missions/team.ts) exists in dev and e2e builds; e2e:team
+ * defaults to the production e2e build on e2e/stack.ts and takes this stack with E2E_TEAM_STACK=dev. Free ports
+ * throughout, so a developer's own `bun run dev` (3050, 4041, 8799) keeps running, but `next dev` here still
+ * needs apps/web's dev lock, which a running `bun run dev` holds.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";

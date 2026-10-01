@@ -6,8 +6,9 @@
  * already in memory, which costs no request:
  *
  * 1. **Structural cells are ignored.** SST is always missing over land and LST over open water. A cell
- *    counts toward coverage only if it is valid in at least one loaded frame of the window.
- * 2. **`ENV_MISSING`**: every counted LST and SST cell is `ENV_MISSING` (the i16 sentinel, PLAN.md C4).
+ *    counts toward coverage only if it is valid or flagged (`ENV_FLAGGED`: its pixel reported cloud or bad
+ *    DQF) in at least one loaded frame of the window.
+ * 2. **`ENV_MISSING`**: no counted LST or SST cell has a value (both i16 sentinels, PLAN.md C4).
  *    GOES delivered nothing usable for that frame: a feed outage, or the whole region under cloud.
  * 3. **`CLOUD`**: at least `CLOUD_FRACTION` of the counted cells are missing, but not all. Cloud or DQF
  *    masking over a large part of the region.
@@ -18,7 +19,7 @@
  *    not occur in South Florida, so this is a frame the db worker has not filled yet. Drawn as pending,
  *    not as a gap, and left out of steps 1–4.
  */
-import { ENV_MISSING } from "shared/frames";
+import { ENV_MISSING, isEnvValue } from "shared/frames";
 
 export const GAP_FLAG = { ENV_MISSING: 1, CLOUD: 2, NO_SIGHTINGS: 4, UNLOADED: 8 } as const;
 export const CLOUD_FRACTION = 0.5;
@@ -79,8 +80,8 @@ export function frameGapFlags(grid: EnvFrames, sightingCounts: ArrayLike<number>
       let missing = 0;
       for (let i = 0; i < ever.length; i++) {
         const e = ever[i];
-        if (e & 1 && lst[i] === ENV_MISSING) missing++;
-        if (e & 2 && sst[i] === ENV_MISSING) missing++;
+        if (e & 1 && !isEnvValue(lst[i]!)) missing++;
+        if (e & 2 && !isEnvValue(sst[i]!)) missing++;
       }
       if (missing === counted) flags[f] |= GAP_FLAG.ENV_MISSING;
       else if (missing / counted >= CLOUD_FRACTION) flags[f] |= GAP_FLAG.CLOUD;
