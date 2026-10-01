@@ -184,7 +184,7 @@ async function askAgent(page: Page, stack: DevStack): Promise<string> {
   // The notes must have reached Axum (the outbox flushes them) before the agent reads the board.
   const deadline = Date.now() + CONVERGE_TIMEOUT_MS;
   for (;;) {
-    const { board } = await stack.graphql<{ board: { notes: { id: string; fields: Record<string, unknown> }[] } }>('query { board(id: "everglades") { notes { id fields } } }');
+    const { board } = await stack.graphql<{ board: { notes: { id: string; fields: Record<string, unknown> }[] } }>(`query { board(id: ${JSON.stringify(stack.boardId)}) { notes { id fields } } }`);
     const live = board.notes.filter((n) => n.fields._deleted !== true && typeof n.fields.text === "string");
     if (live.length >= 2) break;
     if (Date.now() > deadline) fail(`server board has ${live.length} live notes`);
@@ -416,7 +416,7 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
 async function main(): Promise<number> {
   let stack: DevStack | null = null;
   try {
-    stack = await startDevStack("notes");
+    stack = await startDevStack("notes", "python");
     const lines = await scenario(stack);
     for (const l of lines) console.log(l);
     return 0;

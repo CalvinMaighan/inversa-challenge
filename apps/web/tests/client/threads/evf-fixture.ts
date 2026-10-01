@@ -67,7 +67,7 @@ export function encodeEvf2(o: FixtureOptions): Uint8Array {
   view.setUint16(58, h.envRows, true);
   view.setFloat32(60, h.envCellDeg, true);
   view.setFloat32(64, h.hotspotScale, true);
-  view.setUint32(68, 0, true);
+  view.setUint32(68, 1, true); // regionCount: one region
 
   const hsCells = h.hsCols * h.hsRows;
   for (let f = 0; f < h.frameCount; f++) {

@@ -24,7 +24,7 @@ const Canvas = styled.canvas`
   background: #0b1418;
 `;
 
-/** Species tints for the heat layer, in EVF_SPECIES order. */
+/** Species tints for the heat layer, in the fixture's (python app's) `evfSpecies` order. */
 const TINTS: [number, number, number][] = [
   [255, 96, 64],
   [255, 200, 64],

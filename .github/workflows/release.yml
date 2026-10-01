@@ -120,7 +120,7 @@ jobs:
           install -m 755 "$RUNNER_TEMP/api/inversa-api" "$DIST/api/inversa-api"
           tar --zstd -xf "$RUNNER_TEMP/web/inversa-web.tar.zst" -C "$DIST/web"
           cp deploy/Caddyfile deploy/litestream.yml deploy/*.service "$DIST/deploy/"
-          install -m 755 deploy/restore.sh deploy/remote-unpack.sh "$DIST/deploy/"
+          install -m 755 deploy/restore.sh deploy/remote-unpack.sh deploy/migrate-app-dirs.sh "$DIST/deploy/"
           jq -n --arg version "$VERSION" --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" \
             --arg run "$GITHUB_RUN_ID" '{version: $version, sha: $sha, ref: $ref, run_id: $run}' \
             | tee "$DIST/release.json" out/release.json

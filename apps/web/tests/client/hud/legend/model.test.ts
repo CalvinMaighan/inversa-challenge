@@ -41,7 +41,7 @@ describe("legend", () => {
     const stats = [stat(SIGHTINGS, 9, breakdown)];
     const row = legendRows(layers(), stats, taxa).find((r) => r.layer === SIGHTINGS)!;
     expect(row.count).toBe(9);
-    expect(row.swatches.slice(0, 5).map((s) => s.label)).toEqual(["Burmese python", "Argentine black and white tegu", "Green iguana", "Red lionfish", "Snakes"]);
+    expect(row.swatches.slice(0, 5).map((s) => s.label)).toEqual(["Burmese python", "Argentine black and white tegu", "Green iguana", "Lionfish", "Snakes"]);
     expect(row.swatches.map((s) => s.shape).every((s) => s === "icon")).toBe(true);
     expect(row.swatches.slice(0, 4).map((s) => s.icon)).toEqual(["snakes", "lizards", "lizards", "fish"]);
     expect(row.swatches.slice(4).map((s) => s.icon)).toEqual([...CATEGORY_IDS]);

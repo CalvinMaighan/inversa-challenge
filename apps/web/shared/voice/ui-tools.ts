@@ -8,7 +8,7 @@
  */
 import { z } from "zod";
 
-import { LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
+import { appLayerIds, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
 
 export { LAYER_IDS };
 
@@ -72,7 +72,7 @@ const cache = new WeakMap<AppConfig, UiToolSchemas>();
 export function uiToolSchemasFor(app: AppConfig): UiToolSchemas {
   let s = cache.get(app);
   if (!s) {
-    s = schemas(app.layers, speciesIds(app)) as unknown as UiToolSchemas;
+    s = schemas(appLayerIds(app), speciesIds(app)) as unknown as UiToolSchemas;
     cache.set(app, s);
   }
   return s;

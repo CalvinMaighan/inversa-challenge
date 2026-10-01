@@ -44,9 +44,9 @@ export function viewFor(app: AppConfig, seq = 0): ViewState {
     bbox,
     lat: camera?.lat ?? (bbox.south + bbox.north) / 2,
     lon: camera?.lon ?? (bbox.west + bbox.east) / 2,
-    altitudeM: camera?.altitudeM ?? altitudeToFit(bbox),
-    heading: camera?.heading ?? 0,
-    pitch: camera?.pitch ?? -90,
+    altitudeM: camera?.heightM ?? altitudeToFit(bbox),
+    heading: 0,
+    pitch: -90,
     place: null,
     seq,
   };

@@ -11,7 +11,9 @@
 import { allocFrameGrid, type FrameGrid } from "@calvinjs/active-state/threads";
 
 import type { FrameMeta, FrameSightings } from "client/threads/api";
-import { ENV_MISSING, EVF_SPECIES, type SightingRecord } from "shared/frames";
+import { V1_APP } from "client/state/app";
+import { getApp } from "shared/apps";
+import { ENV_MISSING, evfSpecies, type SightingRecord } from "shared/frames";
 
 import { frameSightingsOf, gridFromEvf } from "./evf";
 import { C4_BBOX, C4_GEOMETRY } from "./geometry";
@@ -71,32 +73,37 @@ function rng(seed: number): () => number {
 
 type Blob = { lon: number; lat: number; sigma: number; peak: number };
 
-/** Hotspot centres per species, in EVF_SPECIES order: python, tegu, iguana, lionfish. */
-const BLOBS: readonly (readonly Blob[])[] = [
-  [
+/** The fixture is the python app's (South Florida, its four taxa); hotspot planes in its `taxa[]` order. */
+const SPECIES = evfSpecies(getApp(V1_APP));
+
+/** Hotspot centres per species id. */
+const BLOBS: Readonly<Record<string, readonly Blob[]>> = {
+  python: [
     { lon: -80.85, lat: 25.7, sigma: 0.14, peak: 0.95 },
     { lon: -80.62, lat: 25.42, sigma: 0.1, peak: 0.8 },
     { lon: -81.2, lat: 25.95, sigma: 0.12, peak: 0.6 },
   ],
-  [
+  tegu: [
     { lon: -80.46, lat: 25.5, sigma: 0.09, peak: 0.9 },
     { lon: -80.35, lat: 25.62, sigma: 0.06, peak: 0.55 },
   ],
-  [
+  iguana: [
     { lon: -80.19, lat: 25.87, sigma: 0.07, peak: 0.9 },
     { lon: -81.78, lat: 24.56, sigma: 0.06, peak: 0.8 },
     { lon: -80.1, lat: 26.6, sigma: 0.08, peak: 0.7 },
     { lon: -80.62, lat: 24.92, sigma: 0.05, peak: 0.6 },
   ],
-  [
+  lionfish: [
     { lon: -80.34, lat: 24.95, sigma: 0.1, peak: 0.85 },
     { lon: -81.45, lat: 24.48, sigma: 0.12, peak: 0.75 },
     { lon: -80.03, lat: 26.2, sigma: 0.08, peak: 0.7 },
   ],
-];
+};
 
 /** Hour of peak activity (local, UTC−5) per species; lionfish do not follow the sun. */
-const PEAK_HOUR = [22, 13, 12, -1];
+const PEAK_HOUR: Readonly<Record<string, number>> = { python: 22, tegu: 13, iguana: 12, lionfish: -1 };
+/** Marine species (the one without a diurnal peak, lionfish): unaffected by the cold front. */
+const marine = (id: string) => (PEAK_HOUR[id] ?? 0) < 0;
 
 export type FixtureFrames = { grid: FrameGrid; meta: FrameMeta; sightings: FrameSightings };
 
@@ -128,7 +135,7 @@ export function syntheticFrames({
     frameCount,
     hsCols: HS_COLS,
     hsRows: HS_ROWS,
-    speciesCount: EVF_SPECIES.length,
+    speciesCount: SPECIES.length,
     envCols: ENV_COLS,
     envRows: ENV_ROWS,
     hotspotScale: 1 / 255,
@@ -160,12 +167,13 @@ export function syntheticFrames({
     // A cold front sweeps in over the last third of the window, reaching 12 °C below normal inland.
     const front = Math.min(1, Math.max(0, (f / frameCount - 0.62) / 0.3));
 
-    for (let s = 0; s < EVF_SPECIES.length; s += 1) {
-      const peak = PEAK_HOUR[s]!;
+    for (let s = 0; s < SPECIES.length; s += 1) {
+      const id = SPECIES[s]!;
+      const peak = PEAK_HOUR[id] ?? -1;
       const diurnal = peak < 0 ? 1 : 0.45 + 0.55 * Math.cos(((hourLocal - peak) / 24) * Math.PI) ** 2;
-      const cold = s === EVF_SPECIES.length - 1 ? 1 : 1 - 0.7 * front;
+      const cold = marine(id) ? 1 : 1 - 0.7 * front;
       const cells = grid.hotspot(f, s);
-      for (const blob of BLOBS[s]!) {
+      for (const blob of BLOBS[id] ?? []) {
         const amp = blob.peak * diurnal * cold;
         const reach = blob.sigma * 3;
         const c0 = Math.max(0, Math.floor((blob.lon - reach - C4_BBOX.west) / HS_DEG));
@@ -211,9 +219,10 @@ export function syntheticFrames({
     }
 
     const records: SightingRecord[] = [];
-    for (let s = 0; s < EVF_SPECIES.length; s += 1) {
-      for (const blob of BLOBS[s]!) {
-        if (random() > blob.peak * 0.35 * (1 - 0.6 * front * (s < 3 ? 1 : 0))) continue;
+    for (let s = 0; s < SPECIES.length; s += 1) {
+      const id = SPECIES[s]!;
+      for (const blob of BLOBS[id] ?? []) {
+        if (random() > blob.peak * 0.35 * (1 - 0.6 * front * (marine(id) ? 0 : 1))) continue;
         const jitter = () => (random() + random() + random() - 1.5) * blob.sigma;
         records.push({
           id: nextId++,

@@ -21,10 +21,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { isAppId, type AppId } from "../shared/apps";
 import { buildApi, freePort, REPO_DIR } from "./stack";
 
 const API_BIN = path.join(process.env.CARGO_TARGET_DIR ?? path.join(REPO_DIR, "api/target"), "release/inversa-api");
 const MINUTES = Number(process.argv[2] ?? 70);
+/** The app whose pollers run (`INVERSA_APPS`); its feeds and `fetch_runs` are judged. `E2E_APP`, default python. */
+const APP: AppId = isAppId(process.env.E2E_APP) ? process.env.E2E_APP : "python";
 const GRACE_S = 120;
 const log = (...a: unknown[]) => console.error("[perf:poll]", ...a);
 
@@ -37,7 +40,7 @@ async function main() {
   const api = `http://127.0.0.1:${port}`;
   const child = spawn(API_BIN, [], {
     cwd: REPO_DIR,
-    env: { ...process.env, INVERSA_DATA_DIR: dir, INVERSA_BIND: `127.0.0.1:${port}`, RUST_LOG: "warn" },
+    env: { ...process.env, INVERSA_DATA_DIR: dir, INVERSA_BIND: `127.0.0.1:${port}`, INVERSA_APPS: APP, RUST_LOG: "warn" },
     stdio: ["ignore", "ignore", "pipe"],
     detached: true,
   });
@@ -47,7 +50,7 @@ async function main() {
     errTail.splice(0, Math.max(0, errTail.length - 50));
   });
   const feeds = async (): Promise<Feed[]> => {
-    const res = await fetch(`${api}/v1/graphql`, {
+    const res = await fetch(`${api}/v1/${APP}/graphql`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ query: "{ feeds { source mode state lagSeconds lastFetchAt note } }" }),
@@ -77,7 +80,7 @@ async function main() {
     last = await feeds();
     const endedAt = Date.now();
 
-    const db = new Database(path.join(dir, "observations.db"), { readonly: true });
+    const db = new Database(path.join(dir, APP, "observations.db"), { readonly: true });
     const sources = db.query("select id, cadence_s, mode, disabled_reason from sources where mode = 'poll' order by id").all() as {
       id: string;
       cadence_s: number;

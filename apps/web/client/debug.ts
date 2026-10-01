@@ -8,10 +8,11 @@ import { get } from "@calvinjs/active-state";
 import { getGlobe, type ScreenPoint } from "client/globe/api";
 import type { GlobeHandle } from "client/globe/viewer";
 import type { StateKeyId } from "client/state";
+import { activeApp } from "client/state/app";
 import { TIME, type TimeState } from "client/state/time";
 import { threadsBooted } from "client/threads/boot";
 import { frameIndexAt, getFrameGrid, getFrameMeta, getFrameSightings } from "client/threads/api";
-import { EVF_SPECIES, SIGHTING_FLAG } from "shared/frames";
+import { evfSpecies, SIGHTING_FLAG } from "shared/frames";
 
 export const DEBUG_HOOK = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_INVERSA_E2E === "1";
 
@@ -31,10 +32,10 @@ export type InversaDebug = {
   snapshot(): InversaSnapshot;
   /** A catalog key's current value (TIME, VIEW, SELECTION, FEEDS ...). */
   state(key: StateKeyId): unknown;
-  /** Hotspot score at a place for the frame covering `atIso`; null outside the grid. */
-  hotspotAt(atIso: string, species: (typeof EVF_SPECIES)[number], lon: number, lat: number): number | null;
-  /** Highest hotspot score of one species in the frame covering `atIso`. */
-  maxHotspot(atIso: string, species: (typeof EVF_SPECIES)[number]): number | null;
+  /** Hotspot score at a place for the frame covering `atIso`; null outside the grid. `species` is an active-app taxon id. */
+  hotspotAt(atIso: string, species: string, lon: number, lat: number): number | null;
+  /** Highest hotspot score of one species (active-app taxon id) in the frame covering `atIso`. */
+  maxHotspot(atIso: string, species: string): number | null;
   /** Sighting ids in the frame covering `atIso`. */
   sightingIds(atIso: string): number[];
   /** Sighting records (id, EVF taxon, position) in the frame covering `atIso`, duplicates left out. */
@@ -110,7 +111,7 @@ export function installDebugHook(): void {
       const grid = getFrameGrid();
       const meta = getFrameMeta();
       const i = frameAt(atIso);
-      const s = EVF_SPECIES.indexOf(species);
+      const s = evfSpecies(activeApp()).indexOf(species);
       if (!grid || !meta || i === null || s < 0) return null;
       const col = Math.floor((lon - meta.geometry.west) / meta.geometry.hsCellDeg);
       const row = Math.floor((lat - meta.geometry.south) / meta.geometry.hsCellDeg);
@@ -120,7 +121,7 @@ export function installDebugHook(): void {
     maxHotspot(atIso, species) {
       const grid = getFrameGrid();
       const i = frameAt(atIso);
-      const s = EVF_SPECIES.indexOf(species);
+      const s = evfSpecies(activeApp()).indexOf(species);
       if (!grid || i === null || s < 0) return null;
       let max = 0;
       for (const v of grid.hotspot(i, s)) if (v > max) max = v;

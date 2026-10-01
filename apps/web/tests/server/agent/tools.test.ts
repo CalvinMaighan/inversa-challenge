@@ -373,7 +373,7 @@ describe("capability tools", () => {
     const bad = await registry.execute("sightings", { from: "2026-01-15T00:00:00Z", to: "2026-01-14T00:00:00Z" }, ctx);
     expect(bad).toMatchObject({ ok: false, code: "error" });
     const outside = await registry.execute("alerts", { bbox: { west: -100, south: 40, east: -99, north: 41 } }, ctx);
-    expect(outside).toMatchObject({ ok: false, error: expect.stringContaining("outside this app's regions (South Florida)") });
+    expect(outside).toMatchObject({ ok: false, error: expect.stringContaining("outside this app's regions (South Florida and the Keys)") });
   });
 
   test("GraphQL errors surface as tool errors", async () => {

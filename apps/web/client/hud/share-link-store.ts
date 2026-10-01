@@ -5,6 +5,7 @@
  */
 import { get, set } from "@calvinjs/active-state";
 
+import { hasLayer } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { onGlobeReady } from "client/globe/api";
@@ -59,7 +60,7 @@ export function applyShareState(state: ShareState): () => void {
   }
   if (state.layers || state.species || state.taxa || state.hours) {
     // Only layers the app has can be turned on, whatever the link says.
-    const visibleIds = state.layers ? new Set(state.layers.filter((id) => app.layers.includes(id))) : null;
+    const visibleIds = state.layers ? new Set(state.layers.filter((id) => hasLayer(app, id))) : null;
     const speciesIds = state.species ? new Set(state.species) : null;
     set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
       // Layer pins travel along; a link's species list replaces the keys and the taxon overrides.

@@ -1,4 +1,4 @@
-# Litestream 0.5: continuous replication of both SQLite databases to Cloudflare R2.
+# Litestream 0.5: continuous replication of each app's two SQLite databases to Cloudflare R2.
 # Used by inversa-litestream.service (replicate) and deploy/restore.sh (restore).
 # Credentials come from /etc/inversa/env (rendered from Doppler inversa/prd):
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
@@ -19,13 +19,36 @@ snapshot:
   interval: 24h
   retention: 168h
 
+# One pair per app, matching the API's <INVERSA_DATA_DIR>/<app>/{observations,team}.db layout
+# (PLAN.md C-A1). Replica paths are <app>/<db>. The pre-pivot replicas at "observations" and
+# "team" (python, single-app) are no longer written; see deploy/README.md "Multi-app migration".
 dbs:
-  - path: /var/lib/inversa/observations.db
+  - path: /var/lib/inversa/carp/observations.db
     replica:
       type: s3
-      path: observations
+      path: carp/observations
 
-  - path: /var/lib/inversa/team.db
+  - path: /var/lib/inversa/carp/team.db
     replica:
       type: s3
-      path: team
+      path: carp/team
+
+  - path: /var/lib/inversa/lionfish/observations.db
+    replica:
+      type: s3
+      path: lionfish/observations
+
+  - path: /var/lib/inversa/lionfish/team.db
+    replica:
+      type: s3
+      path: lionfish/team
+
+  - path: /var/lib/inversa/python/observations.db
+    replica:
+      type: s3
+      path: python/observations
+
+  - path: /var/lib/inversa/python/team.db
+    replica:
+      type: s3
+      path: python/team

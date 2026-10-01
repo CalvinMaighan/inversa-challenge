@@ -1,7 +1,9 @@
 /**
- * App config contract (PLAN.md C-A3): one JSON file per app under `spec/apps/`, validated here with zod and in
- * Rust with serde. Objects are loose: a field this side does not read yet (score rules, feed params) passes
- * through untouched, so the Rust side can grow the files without breaking the web.
+ * App config contract (PLAN.md C-A3): one JSON file per app under `spec/apps/`, documented by
+ * `spec/apps/app-config.schema.json` and loaded by Rust (`api/src/app/config.rs`, serde with `deny_unknown_fields`)
+ * and here (zod). Both sides accept exactly the same files: objects are strict (an unknown key is an error), there
+ * are no alternative spellings, and every rule `AppConfig::validate` enforces is enforced here too. The shared
+ * corpus `spec/apps/invalid/*.json` and the "app config conformance" tests hold the two in step.
  *
  * Pure: no runtime globals, so the browser, the workers, the Next routes and the eval harness share it.
  */
@@ -23,108 +25,215 @@ export function boardIdFor(id: AppId): string {
   return `${id}:main`;
 }
 
-/** Every globe layer the client can draw. An app's `layers[]` picks the ones it shows. */
+/**
+ * Every globe layer the client can draw. An app's `layers[]` may also name layers the client does not draw yet
+ * (lionfish `heat`, carp `locations`); those are listed in the config and skipped by the client.
+ */
 export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
-const SLUG = /^[a-z0-9][a-z0-9-]*$/;
-const slug = z.string().regex(SLUG, "lower-case letters, digits and dashes");
-const text = z.string().trim().min(1);
-const lon = z.number().min(-180).max(180);
-const lat = z.number().min(-90).max(90);
+export function isLayerId(value: unknown): value is LayerId {
+  return typeof value === "string" && (LAYER_IDS as readonly string[]).includes(value);
+}
+
+/** Feed sources and the mode each adapter runs in (`api/src/app/config.rs` `SOURCES`). */
+export const FEED_SOURCES = {
+  inat: "poll",
+  nas: "poll",
+  gbif: "poll",
+  nws: "poll",
+  usgs: "poll",
+  ndbc: "poll",
+  coops: "poll",
+  openmeteo: "poll",
+  goes19: "push",
+  nwws: "push",
+  web: "push",
+  crw: "poll",
+  nwps: "poll",
+} as const;
+export type FeedSource = keyof typeof FEED_SOURCES;
+const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];
+
+/** Activity/access rule sets (`api/src/hotspot/rules.rs`). */
+export const RULE_SETS = ["python", "tegu", "iguana", "lionfish"] as const;
+
+/** IANA zones `copy.timezone` may name (`TIMEZONES` in config.rs; the schema's enum). */
+export const TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Phoenix",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Puerto_Rico",
+  "America/Cancun",
+  "America/Merida",
+  "America/Belize",
+  "America/Bogota",
+  "America/Havana",
+  "America/Nassau",
+  "America/Jamaica",
+  "America/Panama",
+  "America/Costa_Rica",
+  "UTC",
+] as const;
+
+export const MAX_HELPER_QUESTIONS = 8;
+
+/** A region edge is a whole number of this many scoring cells (hotspot grid 2 cells, environment grid 5). */
+export const GRID_MULTIPLE = 10;
+
+const ID = /^[a-z][a-z0-9-]*$/;
+const id = z.string().regex(ID, "lower-case kebab-case id");
+/** Non-blank text. Not trimmed in the output: Rust keeps the string as written, so must the web. */
+const text = z.string().refine((s) => s.trim().length > 0, "must not be blank");
+const finite = z.number().refine(Number.isFinite, "must be finite");
+const positive = finite.refine((n) => n > 0, "must be positive");
+const posInt = z.number().int().min(1);
+const hours = z.number().int().min(1).max(0xffff_ffff);
 
 export type BBox = { west: number; south: number; east: number; north: number };
 
-/** `[W, S, E, N]` as in the contract, or the `{west, south, east, north}` object the GraphQL input uses. */
-const bbox = z
-  .union([z.tuple([lon, lat, lon, lat]), z.object({ west: lon, south: lat, east: lon, north: lat })])
-  .transform((b): BBox => (Array.isArray(b) ? { west: b[0], south: b[1], east: b[2], north: b[3] } : { ...b }))
-  .refine((b) => b.west < b.east && b.south < b.north, "bbox needs west < east and south < north");
+/** `[west, south, east, north]` in the file, `{west, south, east, north}` in memory. */
+const bbox = z.tuple([finite, finite, finite, finite]).transform((b): BBox => ({ west: b[0], south: b[1], east: b[2], north: b[3] }));
 
-const camera = z.looseObject({
-  lat,
-  lon,
-  altitudeM: z.number().positive().max(20_000_000).optional(),
-  heading: z.number().optional(),
-  pitch: z.number().min(-90).max(0).optional(),
-});
+const camera = z.strictObject({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180), heightM: positive });
 
-const region = z.looseObject({ id: slug, name: text, bbox, cellDeg: z.number().positive().max(5), camera: camera.optional() });
+const region = z.strictObject({ id, name: text, bbox, cellDeg: positive, camera, thin: z.boolean().default(false) });
 
-const taxon = z.looseObject({
-  /** Filter key; derived from the name when absent. */
-  id: slug.optional(),
+const taxon = z.strictObject({
+  id,
   /** Common name. */
   name: text,
   /** Chip label ("Python"); the name when absent. */
   short: text.optional(),
-  scientific: text.optional(),
   /** One plain line for the welcome guide. */
   line: text.optional(),
   /** Other names people use for it ("burmese python", "pterois"), matched lower case. */
   aliases: z.array(text).optional(),
   /** Category icon for the focus species (`shared/species-categories.ts`). */
   category: z.enum(CATEGORY_IDS).optional(),
+  scientificName: text,
+  inatTaxonId: posInt.optional(),
+  inatLineageIds: z.array(posInt).optional(),
+  gbifKey: posInt.optional(),
+  nasGenus: text.optional(),
+  nasSpecies: z.string().nullable().optional(),
+  iconicGroup: text.optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "colour as #rrggbb"),
-  halfLifeDays: z.number().positive().optional(),
+  halfLifeDays: positive,
+  rules: z.enum(RULE_SETS),
 });
 
-const location = z.looseObject({ id: slug, name: text, lat, lon });
+const location = z.strictObject({
+  id,
+  name: text,
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  usgs: z.string().nullable().optional(),
+  nwps: z.string().nullable().optional(),
+  nws: z.string().nullable().optional(),
+  provisional: z.boolean().default(false),
+});
 
-const feed = z.looseObject({ source: text, mode: z.enum(["push", "poll"]) });
+const feed = z
+  .strictObject({
+    source: z.enum(SOURCE_IDS),
+    mode: z.enum(["push", "poll"]),
+    name: z.string().optional(),
+    homepage: z.string().optional(),
+    params: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine((f) => FEED_SOURCES[f.source] === f.mode, { message: "mode is not the mode its source runs in", path: ["mode"] });
 
-const agent = z.preprocess(
-  // Field names per C-A3 ("persona, scope text, tool allowlist, refusal text"); the long spellings are accepted too.
-  (raw) => {
-    if (!raw || typeof raw !== "object") return raw;
-    const a = raw as Record<string, unknown>;
-    return { ...a, scope: a.scope ?? a.scopeText, tools: a.tools ?? a.toolAllowlist ?? a.allowlist, refusal: a.refusal ?? a.refusalText };
-  },
-  z.looseObject({ persona: text, scope: text, tools: z.array(text).min(1), refusal: text }),
-);
+const score = z.strictObject({
+  label: z.string(),
+  components: z.array(z.strictObject({ id: z.string(), label: z.string(), weight: finite.min(0), description: z.string().optional() })).min(1),
+});
 
 const windows = z
-  .looseObject({ default: z.number().int().positive(), options: z.array(z.number().int().positive()).min(1) })
-  .refine((w) => w.options.includes(w.default), "windows.default must be one of windows.options");
+  .strictObject({ defaultHours: hours, optionsHours: z.array(hours).min(1) })
+  .refine((w) => w.optionsHours.includes(w.defaultHours), "windows.defaultHours must be one of windows.optionsHours");
+
+const layer = z.strictObject({ id, label: z.string(), defaultOn: z.boolean(), description: z.string().optional() });
+
+const copy = z.object({ about: text, region: text, timezone: z.enum(TIMEZONES) }).catchall(z.string());
+
+const agent = z.strictObject({ persona: text, scope: text, tools: z.array(text).min(1), refusal: text });
+
+/** Edges of `b` in `cellDeg` cells, when each is a whole multiple of GRID_MULTIPLE (config.rs `grid_of`). */
+function gridProblem(b: BBox, cellDeg: number): string | null {
+  if (!(b.west < b.east && b.south < b.north)) return "bbox needs west < east and south < north";
+  if (b.south < -90 || b.north > 90 || b.west < -180 || b.east > 180) return "bbox leaves the globe";
+  for (const [what, span] of [
+    ["width", b.east - b.west],
+    ["height", b.north - b.south],
+  ] as const) {
+    const n = span / cellDeg;
+    const cells = Math.round(n);
+    if (Math.abs(n - cells) > 1e-6 || cells < 1 || cells > 1e6) return `${what} is not a whole number of ${cellDeg} deg cells`;
+    if (cells % GRID_MULTIPLE !== 0) return `${what} is ${cells} cells; must be a multiple of ${GRID_MULTIPLE}`;
+  }
+  return null;
+}
+
+const overlaps = (a: BBox, b: BBox) => a.west < b.east && b.west < a.east && a.south < b.north && b.south < a.north;
 
 export const appConfigSchema = z
-  .looseObject({
+  .strictObject({
     id: z.enum(APP_IDS),
     name: text,
     icon: text,
     tagline: text,
     question: text,
     kind: z.enum(["species", "conditions"]),
-    taxa: z.array(taxon).default([]),
-    regions: z.array(region).min(1),
-    locations: z.array(location).default([]),
+    provisional: z.boolean().default(false),
+    taxa: z.array(taxon).max(255),
+    regions: z.array(region).min(1).max(255),
+    locations: z.array(location),
     feeds: z.array(feed).min(1),
-    score: z.looseObject({ components: z.array(z.unknown()).min(1) }),
+    score,
     windows,
-    layers: z.array(z.enum(LAYER_IDS)).min(1),
-    legend: z.union([z.string(), z.array(z.unknown()), z.looseObject({})]),
-    copy: z.record(z.string(), z.unknown()),
-    helperQuestions: z.array(text).min(1).max(8),
+    layers: z.array(layer),
+    legend: z.record(z.string(), z.string()),
+    copy,
+    helperQuestions: z.array(text).min(1).max(MAX_HELPER_QUESTIONS),
     agent,
-    eval: z.preprocess((raw) => (typeof raw === "string" ? { goldenSet: raw } : raw), z.looseObject({ goldenSet: text })),
+    eval: z.strictObject({ goldenSet: text }),
   })
   .superRefine((app, ctx) => {
-    if (app.kind === "species" && app.taxa.length === 0) ctx.addIssue({ code: "custom", path: ["taxa"], message: "a species app needs at least one taxon" });
-    if (app.kind === "conditions" && app.locations.length === 0)
-      ctx.addIssue({ code: "custom", path: ["locations"], message: "a conditions app needs at least one location" });
-    const keys = app.taxa.map(taxonKey);
-    if (new Set(keys).size !== keys.length) ctx.addIssue({ code: "custom", path: ["taxa"], message: "taxon ids must be unique" });
-    const regionIds = app.regions.map((r) => r.id);
-    if (new Set(regionIds).size !== regionIds.length) ctx.addIssue({ code: "custom", path: ["regions"], message: "region ids must be unique" });
+    const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: "custom", path, message });
+    const dupes = (list: readonly string[]) => list.filter((v, i) => list.indexOf(v) !== i);
+    if (app.kind === "species" && app.taxa.length === 0) issue(["taxa"], "kind species needs at least one taxon");
+    if (app.kind === "conditions" && app.taxa.length > 0) issue(["taxa"], "kind conditions must list no taxa");
+    if (app.kind === "conditions" && app.locations.length === 0) issue(["locations"], "kind conditions needs at least one location");
+    if (dupes(app.taxa.map((t) => t.id)).length) issue(["taxa"], "taxon ids must be unique");
+    if (dupes(app.taxa.map((t) => t.scientificName.trim())).length) issue(["taxa"], "scientificName must be unique");
+    if (dupes(app.regions.map((r) => r.id)).length) issue(["regions"], "region ids must be unique");
+    app.regions.forEach((r, i) => {
+      const problem = gridProblem(r.bbox, r.cellDeg);
+      if (problem) issue(["regions", i, "bbox"], problem);
+      for (const other of app.regions.slice(0, i)) if (overlaps(r.bbox, other.bbox)) issue(["regions", i, "bbox"], `overlaps region ${other.id}`);
+    });
+    if (dupes(app.locations.map((l) => l.id)).length) issue(["locations"], "location ids must be unique");
+    if (dupes(app.feeds.map((f) => f.source)).length) issue(["feeds"], "a source is listed twice");
+    if (dupes(app.score.components.map((c) => c.id)).length) issue(["score", "components"], "component ids must be unique");
+    const layerIds = app.layers.map((l) => l.id);
+    if (dupes(layerIds).length) issue(["layers"], "layer ids must be unique");
+    for (const key of Object.keys(app.legend)) if (!layerIds.includes(key)) issue(["legend", key], "names no layer in layers[]");
+    if (dupes(app.agent.tools).length) issue(["agent", "tools"], "a tool is listed twice");
   });
 
 export type AppConfig = z.output<typeof appConfigSchema>;
 export type AppRegion = AppConfig["regions"][number];
 export type AppTaxon = AppConfig["taxa"][number];
+export type AppLayer = AppConfig["layers"][number];
 
-/** A taxon's filter key: its `id`, else its name as a slug ("Burmese python" → "burmese-python"). */
-export function taxonKey(taxon: { id?: string; name: string }): string {
-  return taxon.id ?? taxon.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+/** A taxon's filter key: its `id`. */
+export function taxonKey(taxon: { id: string }): string {
+  return taxon.id;
 }
 
 export type AppConfigIssue = { path: string; message: string };

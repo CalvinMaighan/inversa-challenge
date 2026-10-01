@@ -8,10 +8,10 @@
   "required": ["id", "name", "icon", "tagline", "question", "kind", "taxa", "regions", "locations", "feeds", "score", "windows", "layers", "legend", "copy", "helperQuestions", "agent", "eval"],
   "properties": {
     "id": { "type": "string", "enum": ["carp", "lionfish", "python"], "description": "App id; also the route prefix (/v1/{id}/...), the data dir (<INVERSA_DATA_DIR>/{id}) and the room prefix ({id}:main)." },
-    "name": { "type": "string", "minLength": 1 },
-    "icon": { "type": "string", "minLength": 1, "description": "Icon id in apps/web/shared/species-icons.ts." },
-    "tagline": { "type": "string" },
-    "question": { "type": "string", "minLength": 1, "description": "The one question the app answers (docs/APPS.md)." },
+    "name": { "$ref": "#/$defs/text" },
+    "icon": { "$ref": "#/$defs/text", "description": "Icon id in apps/web/shared/species-icons.ts." },
+    "tagline": { "$ref": "#/$defs/text" },
+    "question": { "$ref": "#/$defs/text", "description": "The one question the app answers (docs/APPS.md)." },
     "kind": { "type": "string", "enum": ["species", "conditions"], "description": "species: hotspot grid, frames, taxa. conditions: readings, forecast snapshots and alerts per location; no hotspot grid." },
     "provisional": { "type": "boolean", "description": "True while the app's locations/regions are placeholders awaiting a data proof." },
     "taxa": {
@@ -23,14 +23,18 @@
         "required": ["id", "name", "scientificName", "halfLifeDays", "color", "rules"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-          "name": { "type": "string", "minLength": 1, "description": "Common name." },
-          "scientificName": { "type": "string", "minLength": 1, "description": "Matches taxa.scientific_name (unique) in observations.db." },
+          "name": { "$ref": "#/$defs/text", "description": "Common name." },
+          "short": { "$ref": "#/$defs/text", "description": "Chip label (\"Python\"); the name when absent." },
+          "line": { "$ref": "#/$defs/text", "description": "One plain line for the welcome guide." },
+          "aliases": { "type": "array", "items": { "$ref": "#/$defs/text" }, "description": "Other names people use for it, matched lower case by the agent." },
+          "category": { "type": "string", "enum": ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"], "description": "Category icon (apps/web/shared/species-categories.ts CATEGORY_IDS)." },
+          "scientificName": { "$ref": "#/$defs/text", "description": "Matches taxa.scientific_name (unique) in observations.db." },
           "inatTaxonId": { "type": "integer", "minimum": 1 },
           "inatLineageIds": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "description": "Further iNat taxon ids that collapse to this taxon (e.g. the species under a genus)." },
           "gbifKey": { "type": "integer", "minimum": 1, "description": "GBIF backbone key; matched against speciesKey and genusKey." },
-          "nasGenus": { "type": "string" },
+          "nasGenus": { "$ref": "#/$defs/text" },
           "nasSpecies": { "type": ["string", "null"], "description": "NAS species epithet; null matches any species of the genus." },
-          "iconicGroup": { "type": "string" },
+          "iconicGroup": { "$ref": "#/$defs/text" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
           "halfLifeDays": { "type": "number", "exclusiveMinimum": 0 },
           "rules": { "type": "string", "enum": ["python", "tegu", "iguana", "lionfish"], "description": "Named activity/access rule set in api/src/hotspot/rules.rs." }
@@ -46,14 +50,14 @@
         "required": ["id", "name", "bbox", "cellDeg", "camera"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-          "name": { "type": "string", "minLength": 1 },
+          "name": { "$ref": "#/$defs/text" },
           "bbox": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" }, "description": "[west, south, east, north] in degrees. Width and height must be whole multiples of 10 x cellDeg (the hotspot grid is 2 x cellDeg, the environment grid 5 x cellDeg)." },
           "cellDeg": { "type": "number", "exclusiveMinimum": 0, "description": "Scoring cell size in degrees (0.01 for every current app)." },
           "camera": {
             "type": "object",
             "additionalProperties": false,
             "required": ["lat", "lon", "heightM"],
-            "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "heightM": { "type": "number", "exclusiveMinimum": 0 } }
+            "properties": { "lat": { "type": "number", "minimum": -90, "maximum": 90 }, "lon": { "type": "number", "minimum": -180, "maximum": 180 }, "heightM": { "type": "number", "exclusiveMinimum": 0, "description": "Camera height above the ellipsoid in metres (the web's altitudeM)." } }
           },
           "thin": { "type": "boolean", "description": "Data proof found too few recent records for a ranked score; the UI labels it." }
         }
@@ -68,7 +72,7 @@
         "required": ["id", "name", "lat", "lon"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-          "name": { "type": "string", "minLength": 1 },
+          "name": { "$ref": "#/$defs/text" },
           "lat": { "type": "number", "minimum": -90, "maximum": 90 },
           "lon": { "type": "number", "minimum": -180, "maximum": 180 },
           "usgs": { "type": ["string", "null"], "description": "USGS site number." },
@@ -133,32 +137,54 @@
         "additionalProperties": false,
         "required": ["id", "label", "defaultOn"],
         "properties": {
-          "id": { "type": "string" },
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Layer id; the web draws the ids in apps/web/shared/apps/schema.ts LAYER_IDS and ignores the others until a client layer exists." },
           "label": { "type": "string" },
           "defaultOn": { "type": "boolean" },
           "description": { "type": "string" }
         }
       }
     },
-    "legend": { "type": "object", "additionalProperties": { "type": "string" } },
-    "copy": { "type": "object", "additionalProperties": { "type": "string" } },
-    "helperQuestions": { "type": "array", "items": { "type": "string" } },
+    "legend": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Legend text per layer id; every key names a layer in layers[]." },
+    "copy": {
+      "type": "object",
+      "required": ["about", "region", "timezone"],
+      "properties": {
+        "about": { "$ref": "#/$defs/text", "description": "The About popover's first line." },
+        "region": { "$ref": "#/$defs/text", "description": "The app's area in words." },
+        "timezone": {
+          "type": "string",
+          "enum": ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Puerto_Rico", "America/Cancun", "America/Merida", "America/Belize", "America/Bogota", "America/Havana", "America/Nassau", "America/Jamaica", "America/Panama", "America/Costa_Rica", "UTC"],
+          "description": "IANA zone of the app's local times (clock, day boundaries). A closed list so Rust and the web accept the same files."
+        }
+      },
+      "additionalProperties": { "type": "string" },
+      "description": "UI strings. about, region and timezone are read by name; other keys are free-form."
+    },
+    "helperQuestions": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "$ref": "#/$defs/text" } },
     "agent": {
       "type": "object",
       "additionalProperties": false,
       "required": ["persona", "scope", "tools", "refusal"],
       "properties": {
-        "persona": { "type": "string" },
-        "scope": { "type": "string" },
-        "tools": { "type": "array", "items": { "type": "string" }, "description": "Tool allowlist (names from apps/web/server/agent/tools)." },
-        "refusal": { "type": "string", "description": "Text for out-of-scope questions; names what the app covers." }
+        "persona": { "$ref": "#/$defs/text" },
+        "scope": { "$ref": "#/$defs/text" },
+        "tools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/text" }, "description": "Tool allowlist (capability names in apps/web/server/agent/tools/capabilities.ts, e.g. sightings, explain_cell, set_view)." },
+        "refusal": { "$ref": "#/$defs/text", "description": "Text for out-of-scope questions; names what the app covers." }
       }
     },
     "eval": {
       "type": "object",
       "additionalProperties": false,
       "required": ["goldenSet"],
-      "properties": { "goldenSet": { "type": "string" } }
+      "properties": { "goldenSet": { "$ref": "#/$defs/text" } }
     }
+  },
+  "allOf": [
+    { "if": { "properties": { "kind": { "const": "species" } } }, "then": { "properties": { "taxa": { "minItems": 1 } } } },
+    { "if": { "properties": { "kind": { "const": "conditions" } } }, "then": { "properties": { "taxa": { "maxItems": 0 }, "locations": { "minItems": 1 } } } }
+  ],
+  "$comment": "Rules beyond JSON Schema, enforced by both loaders (api/src/app/config.rs validate, apps/web/shared/apps/schema.ts): ids unique per list; scientificName unique; region bbox west < east and south < north, edges whole multiples of 10 x cellDeg, regions never overlap; feed mode equals its source's mode; windows.defaultHours in optionsHours; text fields are not blank after trimming.",
+  "$defs": {
+    "text": { "type": "string", "pattern": "\\S", "description": "Non-blank text." }
   }
 }

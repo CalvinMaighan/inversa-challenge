@@ -1,0 +1,352 @@
+{
+  "id": "python",
+  "name": "Everglades Ops",
+  "icon": "python",
+  "tagline": "Burmese python removal crews, South Florida",
+  "question": "Where are Burmese pythons active and where should removal crews go next?",
+  "kind": "species",
+  "taxa": [
+    {
+      "id": "python",
+      "name": "Burmese python",
+      "short": "Python",
+      "line": "giant constrictor eating Everglades wildlife",
+      "aliases": [
+        "burmese python"
+      ],
+      "category": "snakes",
+      "scientificName": "Python bivittatus",
+      "inatTaxonId": 238252,
+      "inatLineageIds": [],
+      "gbifKey": 4820533,
+      "nasGenus": "Python",
+      "nasSpecies": "bivittatus",
+      "iconicGroup": "Reptilia",
+      "color": "#e4572e",
+      "halfLifeDays": 21,
+      "rules": "python"
+    },
+    {
+      "id": "tegu",
+      "name": "Argentine black and white tegu",
+      "short": "Tegu",
+      "line": "big lizard that raids the nests of birds, turtles and alligators",
+      "aliases": [
+        "argentine tegu",
+        "black and white tegu",
+        "argentine black-and-white tegu"
+      ],
+      "category": "lizards",
+      "scientificName": "Salvator merianae",
+      "inatTaxonId": 318758,
+      "inatLineageIds": [],
+      "gbifKey": 5227370,
+      "nasGenus": "Salvator",
+      "nasSpecies": "merianae",
+      "iconicGroup": "Reptilia",
+      "color": "#f3a712",
+      "halfLifeDays": 14,
+      "rules": "tegu"
+    },
+    {
+      "id": "iguana",
+      "name": "Green iguana",
+      "short": "Iguana",
+      "line": "tree-climbing lizard that burrows into seawalls and canal banks",
+      "aliases": [
+        "green iguana"
+      ],
+      "category": "lizards",
+      "scientificName": "Iguana iguana",
+      "inatTaxonId": 35342,
+      "inatLineageIds": [],
+      "gbifKey": 2459658,
+      "nasGenus": "Iguana",
+      "nasSpecies": "iguana",
+      "iconicGroup": "Reptilia",
+      "color": "#5bc0be",
+      "halfLifeDays": 14,
+      "rules": "iguana"
+    },
+    {
+      "id": "lionfish",
+      "name": "Lionfish",
+      "short": "Lionfish",
+      "line": "venomous reef fish that eats young native fish",
+      "aliases": [
+        "red lionfish",
+        "common lionfish",
+        "devil firefish",
+        "pterois",
+        "pterois volitans",
+        "pterois miles"
+      ],
+      "category": "fish",
+      "scientificName": "Pterois volitans/miles",
+      "inatTaxonId": 47284,
+      "inatLineageIds": [
+        47280,
+        123459
+      ],
+      "gbifKey": 2334432,
+      "nasGenus": "Pterois",
+      "nasSpecies": null,
+      "iconicGroup": "Actinopterygii",
+      "color": "#a06cd5",
+      "halfLifeDays": 60,
+      "rules": "lionfish"
+    }
+  ],
+  "regions": [
+    {
+      "id": "everglades",
+      "name": "South Florida and the Keys",
+      "bbox": [
+        -83.2,
+        24.3,
+        -79.8,
+        27.5
+      ],
+      "cellDeg": 0.01,
+      "camera": {
+        "lat": 25.9,
+        "lon": -81.5,
+        "heightM": 420000
+      }
+    }
+  ],
+  "locations": [],
+  "feeds": [
+    {
+      "source": "inat",
+      "mode": "poll",
+      "params": {
+        "queries": [
+          "focus",
+          "introduced"
+        ]
+      }
+    },
+    {
+      "source": "nas",
+      "mode": "poll",
+      "params": {
+        "state": "FL"
+      }
+    },
+    {
+      "source": "gbif",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "nws",
+      "mode": "poll",
+      "params": {
+        "area": "FL,AM,GM",
+        "offices": [
+          "KMFL",
+          "KKEY"
+        ],
+        "senders": [
+          "NWS Miami FL",
+          "NWS Key West FL"
+        ],
+        "sameCodes": [
+          "012011",
+          "012015",
+          "012021",
+          "012027",
+          "012043",
+          "012049",
+          "012051",
+          "012055",
+          "012071",
+          "012081",
+          "012085",
+          "012086",
+          "012087",
+          "012093",
+          "012099",
+          "012111",
+          "012115"
+        ]
+      }
+    },
+    {
+      "source": "usgs",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "ndbc",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "coops",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "openmeteo",
+      "mode": "poll",
+      "params": {
+        "stepDeg": 0.25
+      }
+    },
+    {
+      "source": "goes19",
+      "mode": "push",
+      "params": {
+        "products": [
+          "ABI-L2-LSTC",
+          "ABI-L2-SSTF",
+          "ABI-L2-FDCC",
+          "ABI-L2-ACMC"
+        ]
+      }
+    },
+    {
+      "source": "nwws",
+      "mode": "push",
+      "params": {}
+    },
+    {
+      "source": "web",
+      "mode": "push",
+      "params": {}
+    }
+  ],
+  "score": {
+    "label": "Hotspot score (density x activity x access, labelled heuristic)",
+    "components": [
+      {
+        "id": "density",
+        "label": "Recent sightings",
+        "weight": 1,
+        "description": "Kernel density of recent sightings, half-life per species; NAS and GBIF history as a static prior."
+      },
+      {
+        "id": "activity",
+        "label": "Activity rules",
+        "weight": 1,
+        "description": "Temperature, season and cold-stun rules per species."
+      },
+      {
+        "id": "access",
+        "label": "Crew access",
+        "weight": 1,
+        "description": "Levee stage for pythons, sea state for lionfish."
+      }
+    ]
+  },
+  "windows": {
+    "defaultHours": 168,
+    "optionsHours": [
+      48,
+      168,
+      720
+    ]
+  },
+  "layers": [
+    {
+      "id": "sightings",
+      "label": "Sightings",
+      "defaultOn": true
+    },
+    {
+      "id": "hotspots",
+      "label": "Hotspots",
+      "defaultOn": false
+    },
+    {
+      "id": "lst",
+      "label": "Land surface temperature (GOES)",
+      "defaultOn": false
+    },
+    {
+      "id": "sst",
+      "label": "Sea surface temperature (GOES)",
+      "defaultOn": false
+    },
+    {
+      "id": "stations",
+      "label": "Gauges and buoys",
+      "defaultOn": false
+    },
+    {
+      "id": "alerts",
+      "label": "NWS alerts",
+      "defaultOn": false
+    },
+    {
+      "id": "missions",
+      "label": "Team missions",
+      "defaultOn": true
+    },
+    {
+      "id": "peers",
+      "label": "Teammates",
+      "defaultOn": true
+    },
+    {
+      "id": "notes",
+      "label": "Field notes",
+      "defaultOn": true
+    }
+  ],
+  "legend": {
+    "sightings": "One dot per report; duplicates and ID conflicts are flagged, never hidden.",
+    "hotspots": "Score per 0.02 degree cell; brighter is higher. A heuristic, not a probability.",
+    "lst": "GOES-19 land surface temperature, hatched where cloud or bad quality.",
+    "sst": "GOES-19 sea surface temperature; buoys may disagree.",
+    "stations": "USGS gauges, NDBC buoys and CO-OPS tide stations with their latest reading.",
+    "alerts": "NWS products in effect at the cursor time.",
+    "missions": "Areas the team has claimed or finished.",
+    "peers": "Teammates on the board right now.",
+    "notes": "Field notes pinned to the map."
+  },
+  "copy": {
+    "about": "A live map of invasive animals in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.",
+    "region": "South Florida",
+    "timezone": "America/New_York",
+    "legendTitle": "Invasive animals reported in South Florida",
+    "title": "Everglades Ops",
+    "shortTitle": "Everglades",
+    "sightingsNote": "Sightings are reports, not abundance: more observers mean more reports.",
+    "scopeNote": "South Florida and the Keys only."
+  },
+  "helperQuestions": [
+    "Question 1?",
+    "Question 2?",
+    "Question 3?",
+    "Question 4?",
+    "Question 5?",
+    "Question 6?",
+    "Question 7?",
+    "Question 8?",
+    "Question 9?"
+  ],
+  "agent": {
+    "persona": "You are the operations analyst for Everglades invasive-species removal crews. You answer from the stored sightings, readings, alerts and hotspot scores of South Florida, cite every number, and state feed freshness.",
+    "scope": "Burmese python, Argentine tegu, green iguana and lionfish in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5).",
+    "tools": [
+      "geocode",
+      "sightings",
+      "species_counts",
+      "conditions",
+      "alerts",
+      "hotspots",
+      "explain_cell",
+      "backtest",
+      "feed_state",
+      "notes",
+      "set_view"
+    ],
+    "refusal": "This app covers Burmese python, tegu, green iguana and lionfish in South Florida and the Keys. Switch to Lionfish Watch for the Caribbean or to Carp for Louisiana rivers."
+  },
+  "eval": {
+    "goldenSet": "python"
+  }
+}

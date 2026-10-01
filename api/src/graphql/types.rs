@@ -431,6 +431,10 @@ pub struct Message {
     pub body: String,
     pub hlc: String,
     pub node_id: String,
+    /// Direct-message addressee (PLAN.md C-A7); null for a board-wide message.
+    pub to: Option<String>,
+    /// Direct-message thread id; null for a board-wide message.
+    pub thread: Option<String>,
 }
 
 #[derive(Debug, Clone, SimpleObject)]

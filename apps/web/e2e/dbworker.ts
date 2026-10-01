@@ -1,8 +1,9 @@
 /**
  * Browser check for the gql and db workers (gates/leaf-T19.md G2, G3).
  *
- * Runs `next dev` on its own port behind a stub that owns `/v1/graphql` (HTTP + graphql-transport-ws)
- * and `/v1/frames` (EVF2 from the test encoder, gzip) and proxies everything else to Next. Drives it with
+ * Runs `next dev` on its own port behind a stub that owns `/v1/<app>/graphql` (HTTP + graphql-transport-ws)
+ * and `/v1/<app>/frames` (EVF2 from the test encoder, gzip; any other `/v1` path is a 404 and fails the run) and
+ * proxies everything else to Next. Drives it with
  * Playwright's bundled Chromium:
  *   1. a cached `gqlRequest` round trip, timed in-page;
  *   2. a reload, which must be answered from the OPFS-backed cache without a network call;
@@ -18,6 +19,7 @@ import { join } from "node:path";
 import { chromium, type Page } from "playwright";
 
 import { copySqliteWasm } from "../scripts/copy-sqlite-wasm";
+import { APP_IDS } from "../shared/apps";
 import { encodeEvf2 } from "../tests/client/threads/evf-fixture";
 
 const NO_ISOLATION = process.argv.includes("--no-isolation");
@@ -26,7 +28,8 @@ const NEXT_PORT = Number(process.env.E2E_NEXT_PORT ?? 3062);
 const STUB_PORT = Number(process.env.E2E_STUB_PORT ?? 3061);
 const NEXT_ORIGIN = `http://127.0.0.1:${NEXT_PORT}`;
 const STUB_ORIGIN = `http://127.0.0.1:${STUB_PORT}`;
-export const PAGE = `${STUB_ORIGIN}/dev/threads`;
+/** The threads dev page in the python app (the scenario predates the apps; any app exercises the same workers). */
+export const PAGE = `${STUB_ORIGIN}/dev/threads?app=python`;
 const READY_TIMEOUT_MS = 180_000;
 const FEEDS_QUERY = "{ feeds { source mode state } }";
 
@@ -40,6 +43,9 @@ function fail(msg: string): never {
 // ---- stub: /v1/* plus a proxy to Next ---------------------------------------------------------
 
 const graphqlHits = new Map<string, number>();
+/** `/v1/<app>/<route>` (PLAN.md C-A2); anything else under `/v1` is answered 404 and recorded here. */
+const API_PATH = new RegExp(`^/v1/(${APP_IDS.join("|")})/(graphql|frames)$`);
+export const unprefixed: string[] = [];
 const feed = (source: string, mode: "PUSH" | "POLL") => ({ source, mode, state: "NOMINAL", newestObservedAt: new Date().toISOString(), lastFetchAt: new Date().toISOString(), lagSeconds: 3, note: null });
 
 function graphql(body: { query: string; variables?: Record<string, unknown> }): unknown {
@@ -75,7 +81,7 @@ export const startStub = () =>
   async fetch(req, server) {
     const url = new URL(req.url);
     if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-      if (url.pathname === "/v1/graphql") {
+      if (API_PATH.exec(url.pathname)?.[2] === "graphql") {
         const ok = server.upgrade(req, { data: { kind: "gql", subs: new Map() }, headers: { "sec-websocket-protocol": "graphql-transport-ws" } });
         return ok ? undefined : new Response("upgrade failed", { status: 400 });
       }
@@ -86,12 +92,16 @@ export const startStub = () =>
       if (!ok) upstream.close();
       return ok ? undefined : new Response("upgrade failed", { status: 400 });
     }
-    if (url.pathname === "/v1/graphql") {
+    if (url.pathname.startsWith("/v1/") && !API_PATH.test(url.pathname)) {
+      unprefixed.push(url.pathname);
+      return Response.json({ error: "unknown_app", apps: APP_IDS }, { status: 404 });
+    }
+    if (API_PATH.exec(url.pathname)?.[2] === "graphql") {
       if (req.method !== "POST") return new Response("POST only", { status: 405 });
       const body = (await req.json()) as { query: string; variables?: Record<string, unknown> };
       return Response.json(graphql(body));
     }
-    if (url.pathname === "/v1/frames") return framesResponse(url);
+    if (API_PATH.exec(url.pathname)?.[2] === "frames") return framesResponse(url);
     // Everything else is Next. Drop hop-by-hop headers; strip isolation when asked.
     const headers = new Headers(req.headers);
     headers.delete("host");
@@ -157,7 +167,8 @@ export function startNext(): ChildProcess {
     cwd: appDir,
     env: {
       ...process.env,
-      NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${STUB_PORT}/v1/graphql`,
+      // An origin: the gql worker adds `/v1/<app>/graphql` for the app it serves.
+      NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${STUB_PORT}`,
       INVERSA_API_ORIGIN: STUB_ORIGIN,
       NEXT_TELEMETRY_DISABLED: "1",
       BROWSER: "none",
@@ -343,6 +354,7 @@ async function run(): Promise<string> {
 
     const fatal = pageErrors.filter((e) => !/Failed to load resource|webpack-hmr|HMR|hot-reloader|WebSocket connection to 'ws:\/\/127\.0\.0\.1:\d+\/_next/.test(e));
     if (fatal.length) fail(`page errors:\n${fatal.join("\n")}`);
+    if (unprefixed.length) fail(`requests outside /v1/<app>/: ${[...new Set(unprefixed)].join(", ")}`);
 
     console.log(`  ok  transport=${first.transport} isolated=${first.isolated} frames=${s0.frames} sightings=${withSightings.sightings} proxied=${leaderInfo.proxied} failover=1`);
     return NO_ISOLATION ? "FALLBACK-OK" : `DBWORKER cached=${cachedMs.toFixed(1)} opfs=1 proxy=1`;
