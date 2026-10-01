@@ -45,8 +45,8 @@ if ("error" in doppler) {
 }
 
 /**
- * Dev-only hook secret (PLAN.md C18): with it the `web` hook source is on, so rows can be injected with a
- * signed `POST /v1/ingest/hook/web` (C10) to watch live updates end to end. A fresh random value per start,
+ * Dev-only hook secret (PLAN.md C18): with it the signed ingest hook is on, so a raw provider body can be
+ * delivered with `POST /v1/{app}/ingest/hook/{source}` for any poll source the app runs (C10) to watch live updates end to end. A fresh random value per start,
  * printed once below; an `INGEST_HOOK_SECRET` from the shell or Doppler wins and is not printed.
  */
 const configuredHookSecret = process.env.INGEST_HOOK_SECRET || ("secrets" in doppler ? doppler.secrets.INGEST_HOOK_SECRET : undefined);
@@ -107,7 +107,7 @@ const agent = keySource
   ? `openrouter openai/gpt-6-luna (key from ${keySource})`
   : "unavailable, OPENROUTER_API_KEY not set (/api/agent/stream answers 503)";
 console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${agent} · web: http://localhost:3050 · signal: http://127.0.0.1:8799`);
-if (generatedHookSecret) console.log(`ingest hook (dev only): POST http://127.0.0.1:4041/v1/ingest/hook/web, INGEST_HOOK_SECRET=${generatedHookSecret}`);
+if (generatedHookSecret) console.log(`ingest hook (dev only): POST http://127.0.0.1:4041/v1/<app>/ingest/hook/<source>, INGEST_HOOK_SECRET=${generatedHookSecret}`);
 start("api", "36", ["cargo", "run", "-q", "--release", "--manifest-path", "api/Cargo.toml"], root);
 start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
 // Same pinned wrangler as apps/signal-worker (package.json `dev`, scripts/e2e.ts); env dev allows origin localhost:3050.

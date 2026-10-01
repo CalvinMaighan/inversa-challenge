@@ -293,11 +293,11 @@ const REQUIRED: Record<AppId, Req[]> = {
     { label: "boundary: population growth", re: /population growing/i, category: "boundary", mode: "refuse-or-caveat" },
     { label: "boundary: invasion risk percent", re: /invasion risk percent/i, category: "boundary", mode: "refuse" },
     { label: "boundary: causal reef damage", re: /(killing|damaging) the reef/i, category: "boundary", mode: "refuse" },
-    { label: "boundary: non-lionfish species", re: /iguana|python|carp|tegu/i, category: "boundary", mode: "refuse" },
+    { label: "boundary: non-lionfish species", re: /python|carp/i, category: "boundary", mode: "refuse" },
     { label: "boundary: area outside the four", re: /Bahamas|Puerto Rico|Honduras|Hawaii/i, category: "boundary", mode: "refuse" },
   ],
   python: [
-    { label: "boundary: non-python species", re: /iguana|tegu|lionfish|carp/i, category: "boundary", mode: "refuse" },
+    { label: "boundary: non-python species", re: /lionfish|carp/i, category: "boundary", mode: "refuse" },
     { label: "boundary: area outside the Everglades region", re: /Orlando|Tampa|Texas|Georgia|Jacksonville/i, category: "boundary", mode: "refuse" },
   ],
 };

@@ -1,6 +1,6 @@
 {
   "app": "python",
-  "scope": "Python (Everglades). Question: where are Burmese pythons active and where should removal crews go next? Burmese python only, in the South Florida Everglades region (bbox -83.2, 24.3, -79.8, 27.5). Other species (tegu, iguana, lionfish, carp) and places outside the region are refused with this scope. The hotspot score is a labelled heuristic, not a probability or population estimate.",
+  "scope": "Python (Everglades). Question: where are Burmese pythons active and where should removal crews go next? Burmese python only, in the South Florida Everglades region (bbox -83.2, 24.3, -79.8, 27.5). Other species (lionfish, carp, any animal but the Burmese python) and places outside the region are refused with this scope. The hotspot score is a labelled heuristic, not a probability or population estimate.",
   "feeds": [
     "inat",
     "gbif",
@@ -303,7 +303,7 @@
       "app": "python",
       "category": "boundary",
       "question": "What invasive animals were seen near Homestead this week?",
-      "intent": "Give the species counts near Homestead as context while saying the app ranks and plans for Burmese pythons only.",
+      "intent": "Give the Burmese python count near Homestead and say the app tracks Burmese pythons only; it holds no counts for other animals.",
       "expectedTools": [
         "geocode",
         "species_counts"
@@ -319,7 +319,7 @@
           "(only|context|not (ranked|planned))"
         ],
         "forbid": [
-          "(tegus?|iguanas?) (hotspot|crews? should)"
+          "\\d+ (other|introduced) (species|animals)"
         ],
         "groundedNumbers": true,
         "feedState": true,

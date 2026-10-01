@@ -1710,10 +1710,10 @@
       "helper": false
     },
     {
-      "id": "lionfish-boundary-iguana",
+      "id": "lionfish-boundary-other-species",
       "app": "lionfish",
       "category": "boundary",
-      "question": "Where are invasive green iguanas on Cozumel?",
+      "question": "Where are Burmese pythons on Cozumel?",
       "intent": "Refuse because the app covers lionfish only, naming the species and areas it covers.",
       "expectedTools": [],
       "mustCite": [],
@@ -1724,7 +1724,7 @@
           "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
         ],
         "forbid": [
-          "iguanas? (were|are) (reported|seen|found)"
+          "pythons? (were|are) (reported|seen|found)"
         ],
         "groundedNumbers": true,
         "feedState": false,

@@ -986,7 +986,7 @@
       "intent": "Paraphrase of the other-species refusal.",
       "expectedTools": [],
       "mustCite": [],
-      "paraphraseOf": "lionfish-boundary-iguana",
+      "paraphraseOf": "lionfish-boundary-other-species",
       "pass": {
         "mode": "refuse",
         "forbid": [
