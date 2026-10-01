@@ -15,7 +15,7 @@
     "2026-10-01 AGB: carp-planning-compare-tomorrow's safety forbid also ignores 'neither … safer', 'not … safe' and 'cannot … safe': 'neither site stands out as a safer choice' declines the verdict rather than giving one.",
     "2026-10-01 AGB: carp-lookup-review-today and carp-planning-focus-tomorrow also accept 'peaks at', 'reaches' and 'reaching' as the review reason: 'needs review: its forecast peaks at 4 ft, at the 4 ft action stage' states the reason in the rule's own words.",
     "2026-10-01 J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts.",
-    "2026-10-01 J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. No statement was loosened below its regex."
+    "2026-10-01 J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. No statement was loosened below its regex."
   ],
   "scope": "Louisiana Field Conditions Explorer. Question: how have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? Eight demonstration locations (SMML1 Simmesport, KRZL1 Krotz Springs, BLRL1 Butte La Rose, MCGL1 Morgan City (Atchafalaya), BTRL1 Baton Rouge, AEXL1 Alexandria, MLUL1 Monroe, BXAL1 Bogalusa); L'CARP works only in the Atchafalaya Basin and targets silver, bighead, grass and black carp. The feeds describe conditions only: no carp abundance, catch, legal access or trip safety.",
   "feeds": [
@@ -197,7 +197,7 @@
           "Names Butte La Rose or BLRL1",
           "Names Morgan City or MCGL1",
           "States when the forecast issuance it uses was issued, or identifies that issuance by time",
-          "Gives each site's flood category: action, minor, moderate, major, or below any flood category"
+          "Gives the flood category: action, minor, moderate, major, or below any flood category"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -434,7 +434,7 @@
         "mustSay": [
           "States when the forecast issuance it uses was issued, or identifies that issuance by time",
           "Gives a stage or height value in feet",
-          "Reports the forecast rise per site"
+          "Reports the forecast rises"
         ],
         "forbid": [
           "will (definitely|certainly)",
@@ -468,7 +468,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "Names the sites that fell, with the size of the drop",
+          "Names the sites that fell or dropped",
           "Gives a stage or height value in feet"
         ],
         "forbid": [],
@@ -645,7 +645,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "Walks through each review rule",
+          "Walks through the review rules or reasons",
           "Names the rule inputs: stage, forecast, alerts or freshness"
         ],
         "forbid": [],
@@ -877,7 +877,7 @@
         "mode": "answer",
         "mustSay": [
           "Explains how NWS alerts can trigger review",
-          "Names the sites that need review"
+          "Refers to the review status or which sites need review"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1179,7 +1179,7 @@
       "pass": {
         "mode": "caveat",
         "mustSay": [
-          "Uses the river and weather forecasts to rank the days",
+          "Uses the forecasts to rank the days",
           "Says this covers conditions only, not safety or access"
         ],
         "forbid": [
@@ -1210,7 +1210,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "Names the sites to focus review on tomorrow",
+          "Names where to focus review, or the review status",
           "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"
         ],
         "forbid": [
@@ -1238,7 +1238,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "States the rain expectation per site, including dry",
+          "States the rain expectation, including dry",
           "States when the forecast was updated"
         ],
         "forbid": [],
@@ -1474,7 +1474,7 @@
         "mode": "answer",
         "mustSay": [
           "States when the forecast was updated",
-          "Names the NWS office, LCH or Lake Charles"
+          "Refers to the NWS office, LCH or Lake Charles"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1541,7 +1541,7 @@
         "mustSay": [
           "States when the forecast issuance it uses was issued, or identifies that issuance by time",
           "Compares the forecast with the observed stage",
-          "States the forecast error per site",
+          "States the forecast error or difference",
           "Gives a stage or height value in feet"
         ],
         "forbid": [],
@@ -1575,7 +1575,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "Names the sites that needed review at that time",
+          "Names the sites that needed review at that time, or says none did",
           "Frames the answer as what was known at that past time, as of then"
         ],
         "forbid": [],

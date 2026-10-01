@@ -77,7 +77,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: Give the forecast peak and its NWPS flood category for the four Atchafalaya sites with issuance times.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
   - View: map: Atchafalaya preset (30.35, -91.55, zoom 8.5)
-  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must say: Names Simmesport or SMML1; Names Krotz Springs or KRZL1; Names Butte La Rose or BLRL1; Names Morgan City or MCGL1; States when the forecast issuance it uses was issued, or identifies that issuance by time; Gives each site's flood category: action, minor, moderate, major, or below any flood category. Must not match `\d+(\.\d+)?\s*(%\|percent)`.
+  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must say: Names Simmesport or SMML1; Names Krotz Springs or KRZL1; Names Butte La Rose or BLRL1; Names Morgan City or MCGL1; States when the forecast issuance it uses was issued, or identifies that issuance by time; Gives the flood category: action, minor, moderate, major, or below any flood category. Must not match `\d+(\.\d+)?\s*(%\|percent)`.
 - **carp-lookup-discharge-simmesport**: How much water is the Atchafalaya carrying at Simmesport?
   - Intent: Report current discharge at SMML1 labelled with its source and unit.
   - Tools: `river_readings`. Cites: `feed:usgs`, `kind:reading`.
@@ -115,12 +115,12 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-change-forecast-rise-week**: Which sites are forecast to rise the most over the next week?
   - Intent: Rank sites by forecast stage change over seven days from the latest issuances.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must say: States when the forecast issuance it uses was issued, or identifies that issuance by time; Gives a stage or height value in feet; Reports the forecast rise per site. Must not match `will (definitely\|certainly)`, `\d+(\.\d+)?\s*(%\|percent)`.
+  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must say: States when the forecast issuance it uses was issued, or identifies that issuance by time; Gives a stage or height value in feet; Reports the forecast rises. Must not match `will (definitely\|certainly)`, `\d+(\.\d+)?\s*(%\|percent)`.
 - **carp-change-falling-3d**: Which sites have been falling over the last three days?
   - Intent: List sites whose USGS stage dropped over 72 hours with the size of the drop.
   - Tools: `river_readings`. Cites: `feed:usgs`, `kind:reading`.
   - View: timeline: last 3 days
-  - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must say: Names the sites that fell, with the size of the drop; Gives a stage or height value in feet.
+  - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must say: Names the sites that fell or dropped; Gives a stage or height value in feet.
 - **carp-change-morgan-city-flow**: Has the flow at Morgan City dropped today?
   - Intent: Answer with a 24 hour mean comparison because instantaneous discharge at the tidal MCGL1 gauge swings hour to hour.
   - Tools: `river_readings`. Cites: `feed:usgs`, `kind:reading`.
@@ -149,7 +149,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-explain-reasons-simmesport**: Walk me through each review rule for Simmesport.
   - Intent: List every review rule with SMML1's value against it and whether it fired.
   - Tools: `site_status`. Cites: `feed:usgs`, `feed:nwps`, `feed:nws`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Walks through each review rule; Names the rule inputs: stage, forecast, alerts or freshness.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Walks through the review rules or reasons; Names the rule inputs: stage, forecast, alerts or freshness.
 - **carp-explain-flood-categories**: What do action, minor, moderate and major flood stage mean at Krotz Springs?
   - Intent: Give KRZL1's NWPS thresholds and what each category means operationally, measured on the NWPS gauge.
   - Tools: `river_forecast`, `source_info`. Cites: `feed:nwps`.
@@ -184,7 +184,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-relevance-alerts-review**: How do NWS alerts affect which sites need review?
   - Intent: Explain the alert rule in the review status and show which sites any active alert covers right now.
   - Tools: `site_status`, `alerts`, `source_info`. Cites: `feed:nws`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Explains how NWS alerts can trigger review; Names the sites that need review.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Explains how NWS alerts can trigger review; Refers to the review status or which sites need review.
 - **carp-relevance-iem-archive**: Why do we use the Iowa Environmental Mesonet when NOAA already publishes forecasts?
   - Intent: Explain that NWPS keeps no forecast history, so the IEM archive backfills past issuances for replay.
   - Tools: `source_info`. Cites: `feed:iem`, `feed:nwps`, `kind:source`.
@@ -231,15 +231,15 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-planning-best-days-simmesport**: Which days this week look best for fieldwork at Simmesport based on the river and weather forecasts?
   - Intent: Rank the coming days at SMML1 on forecast stage trend, rain and wind, stating that this covers conditions only.
   - Tools: `river_forecast`, `weather_forecast`. Cites: `feed:nwps`, `feed:nws`, `kind:forecast`.
-  - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Uses the river and weather forecasts to rank the days; Says this covers conditions only, not safety or access. Must not match `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`, `(more\|fewer\|best) (for )?carp`.
+  - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Uses the forecasts to rank the days; Says this covers conditions only, not safety or access. Must not match `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`, `(more\|fewer\|best) (for )?carp`.
 - **carp-planning-focus-tomorrow**: Where should we focus operational review tomorrow?
   - Intent: Rank sites by tomorrow's review reasons from forecasts, alerts and data gaps.
   - Tools: `site_status`, `river_forecast`. Cites: `feed:nwps`, `feed:usgs`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names the sites to focus review on tomorrow; Gives the reason a site needs review: the rule, trigger or threshold behind the flag. Must not match `carp (are\|will be)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names where to focus review, or the review status; Gives the reason a site needs review: the rule, trigger or threshold behind the flag. Must not match `carp (are\|will be)`.
 - **carp-planning-rain-atchafalaya**: Is rain expected at any Atchafalaya site in the next three days?
   - Intent: Summarise NWS precipitation chances for the four Atchafalaya sites over three days with update times.
   - Tools: `weather_forecast`. Cites: `feed:nws`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: States the rain expectation per site, including dry; States when the forecast was updated.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: States the rain expectation, including dry; States when the forecast was updated.
 - **carp-planning-friday-morgan-city**: We plan to work at Morgan City on Friday. What stage is forecast then?
   - Intent: Give the MCGL1 forecast stage and category for Friday from the latest issuance, or say Friday is beyond the horizon.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
@@ -274,7 +274,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-sources-nws-updated**: When was the NWS forecast for Krotz Springs last updated?
   - Intent: Give the NWS office updateTime for KRZL1's grid and note it is per office run, not per point.
   - Tools: `weather_forecast`, `source_info`. Cites: `feed:nws`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: States when the forecast was updated; Names the NWS office, LCH or Lake Charles.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: States when the forecast was updated; Refers to the NWS office, LCH or Lake Charles.
 
 ### carp / replay (7)
 
@@ -287,12 +287,12 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: Score the issuance from two days ago against later NWPS observed stage per site and report the error.
   - Tools: `forecast_verify`. Cites: `feed:nwps`, `kind:forecast`, `kind:reading`.
   - View: timeline: issuance time two days ago to now, forecast vs observed
-  - Pass: mode answer; min 2 citations (1 forecast, 1 reading); numbers trace to tool output; discloses feed state. Must say: States when the forecast issuance it uses was issued, or identifies that issuance by time; Compares the forecast with the observed stage; States the forecast error per site; Gives a stage or height value in feet.
+  - Pass: mode answer; min 2 citations (1 forecast, 1 reading); numbers trace to tool output; discloses feed state. Must say: States when the forecast issuance it uses was issued, or identifies that issuance by time; Compares the forecast with the observed stage; States the forecast error or difference; Gives a stage or height value in feet.
 - **carp-replay-review-three-days-ago**: Which sites needed review at noon three days ago?
   - Intent: Recompute the review status from the data known at that time.
   - Tools: `site_status`, `set_view`. Cites: `feed:nwps`, `feed:usgs`.
   - View: timeline: noon three days ago
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names the sites that needed review at that time; Frames the answer as what was known at that past time, as of then.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names the sites that needed review at that time, or says none did; Frames the answer as what was known at that past time, as of then.
 - **carp-replay-coverage**: How far back can we replay forecasts?
   - Intent: State where replay coverage starts for our own snapshots and for the IEM backfill per site.
   - Tools: `river_forecast`, `source_info`. Cites: `feed:iem`, `feed:nwps`, `kind:source`.
@@ -464,7 +464,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Intent: Describe the DHW series at the Looe Key reef cell over 30 days with start, end and peak.
   - Tools: `reef_heat`. Cites: `feed:crw`, `kind:reading`.
   - View: timeline: last 30 days
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Reports degree heating weeks, the DHW value; Describes the DHW trend with its peak; Gives DHW in degree C weeks.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Reports degree heating weeks, the DHW value; Describes the DHW trend, its rise, fall or peak; Gives DHW in degree C weeks.
 - **lionfish-change-fl-30-vs-30**: How do Florida Keys reports in the last 30 days compare with the 30 days before?
   - Intent: Count reports by observed date in both windows and state the difference with the observer caveat.
   - Tools: `geocode`, `sightings`. Cites: `feed:inat`, `kind:sighting`.
@@ -547,7 +547,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-quality-freshest**: Which highlighted areas have the freshest supporting data?
   - Intent: For each highlighted area give the age of its newest report, CRW date and marine forecast run.
   - Tools: `hotspots`, `feed_state`, `evidence`. Cites: `kind:hotspot`, `feed:inat`, `feed:crw`, `kind:fetch`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names the areas: Florida Keys, Mexican Caribbean, Belize or Colombia; Says how fresh its data is: an age, an as-of time, or when it was updated or fetched; Says how fresh or stale each area's supporting data is.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names the areas: Florida Keys, Mexican Caribbean, Belize or Colombia; Says how fresh its data is: an age, an as-of time, or when it was updated or fetched; Says how fresh or stale the supporting data is.
 - **lionfish-quality-gbif-duplicates**: Which GBIF records duplicate iNaturalist?
   - Intent: List GBIF records that are copies of iNaturalist observations, matched by catalogue number, per area, and say they are not counted twice.
   - Tools: `sightings`. Cites: `feed:gbif`, `feed:inat`, `kind:sighting`.
@@ -555,11 +555,11 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-quality-buoy-vs-satellite**: Where are buoys and satellite SST disagreeing?
   - Intent: Compare in-situ buoy and satellite SST in the Florida Keys and state that the other areas have no buoys to compare.
   - Tools: `conditions`. Cites: `feed:ndbc`, `feed:goes19`, `kind:reading`.
-  - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must say: Names the buoy, the in-situ measured reading; Names the satellite reading; States whether the buoy and satellite readings agree or disagree; Says only Florida has buoys to compare; the other areas have none.
+  - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must say: Names the buoy, the in-situ measured reading; Names the satellite reading; States whether the buoy and satellite readings agree or disagree; Says only Florida has buoys to compare, or that the other areas have none.
 - **lionfish-quality-nas-colombia**: Is the NAS data for Colombia current?
   - Intent: Report the newest NAS record date in the co-caribbean box and call it stale.
   - Tools: `sightings`, `feed_state`. Cites: `feed:nas`, `kind:sighting`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Calls the NAS data stale, with its newest record date.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Calls the NAS data stale, or gives its newest record date.
 - **lionfish-quality-crw-latency**: Why is the reef heat data almost two days old?
   - Intent: Explain CRW daily cadence and about 1.7 days latency, and state when the feed counts as stale.
   - Tools: `reef_heat`, `feed_state`, `source_info`. Cites: `feed:crw`, `kind:fetch`.
@@ -571,7 +571,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-quality-imprecise-location**: Are any recent reports placed in open water far from a reef?
   - Intent: Flag reports whose coordinates are obscured or imprecise, such as mid-sea points, using positional accuracy from the record.
   - Tools: `sightings`. Cites: `feed:inat`, `kind:sighting`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the position is obscured, imprecise or uncertain, with its accuracy.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the position is obscured, imprecise or uncertain, or gives its accuracy.
 
 ### lionfish / planning (6)
 
@@ -583,7 +583,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-planning-next-survey** ★: Where should we run the next survey, and when?
   - Intent: Pick from the priority heuristic first, then choose a day from the marine forecast, presenting the two separately.
   - Tools: `hotspots`, `explain_cell`, `marine_forecast`. Cites: `kind:hotspot`, `feed:openmeteo`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the score or ranking is a heuristic rather than a measurement or prediction; Uses the marine forecast, waves or currents, to pick the day. Must not match `\d+(\.\d+)?\s*(%\|percent)`, `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the score or ranking is a heuristic rather than a measurement or prediction; Refers to the marine forecast, waves, sea or currents. Must not match `\d+(\.\d+)?\s*(%\|percent)`, `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
 - **lionfish-planning-weekend-currents**: Will currents at Banco Chinchorro be strong this weekend?
   - Intent: Give modelled currents for the weekend, or say the 3 day horizon does not reach it.
   - Tools: `geocode`, `marine_forecast`. Cites: `feed:openmeteo`.
@@ -655,12 +655,12 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Intent: Step the timeline daily over the last 7 days and narrate the reports and heat stress for each day.
   - Tools: `set_view`, `sightings`, `reef_heat`. Cites: `feed:inat`, `feed:crw`.
   - View: map: fl-keys preset; timeline: step daily over last 7 days
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Goes through the window day by day, or names the days; Narrates the reports or heat stress per day.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Goes through the window day by day, or names the days; Narrates the reports or heat stress.
 - **lionfish-replay-priority-two-weeks**: What did the priority ranking look like two weeks ago?
   - Intent: Show the area ranking as computed with data known two weeks ago and how it differs from today.
   - Tools: `hotspots`, `set_view`. Cites: `kind:hotspot`.
   - View: timeline: two weeks ago
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the score or ranking is a heuristic rather than a measurement or prediction; Frames the ranking as of two weeks ago; Compares the past ranking with today's, saying whether it differs.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the score or ranking is a heuristic rather than a measurement or prediction; Frames the ranking as of two weeks ago; Compares the past ranking with today's, or says whether it differs.
 
 ### lionfish / boundary (8)
 
@@ -850,7 +850,7 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
 - **python-relevance-air-alerts**: Why do we use air temperature and cold alerts?
   - Intent: Explain how air temperature and NWS cold alerts bear on the activity term and crew planning.
   - Tools: `source_info`. Cites: `feed:nws`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names air temperature or cold; Explains how NWS cold alerts bear on the activity term or crew planning.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names air temperature or cold; Refers to the NWS cold alerts.
 - **python-relevance-stage**: Why is water stage part of the python app?
   - Intent: Explain USGS stage as context for access and habitat conditions, without a causal claim.
   - Tools: `source_info`. Cites: `feed:usgs`, `kind:source`.
@@ -932,11 +932,11 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
 - **python-sources-licences**: What licences apply to the python app's data sources?
   - Intent: List licence and attribution per feed as recorded.
   - Tools: `source_info`. Cites: `feed:inat`, `feed:usgs`, `feed:nws`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the data is public domain; Names the licence of each feed.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says the data is public domain; Names the licences of the feeds.
 - **python-sources-freshness**: How fresh is each data feed right now?
   - Intent: Report each feed's state, newest data and last fetch time.
   - Tools: `feed_state`. Cites: `feed:inat`, `feed:goes19`, `kind:fetch`.
-  - Pass: mode answer; min 3 citations (3 fetch); numbers trace to tool output; discloses feed state. Must say: States each feed's state: nominal, lagging, stale or down; Says how fresh its data is: an age, an as-of time, or when it was updated or fetched.
+  - Pass: mode answer; min 3 citations (3 fetch); numbers trace to tool output; discloses feed state. Must say: States the feeds' states, such as nominal, lagging, stale or down; Says how fresh its data is: an age, an as-of time, or when it was updated or fetched.
 - **python-sources-lst-number**: Where does this land surface temperature number come from?
   - Intent: Name GOES-19 ABI LST, the cell, scan time, fetch time and quality flag of the cited reading.
   - Context: selectedEvidence=an LST reading

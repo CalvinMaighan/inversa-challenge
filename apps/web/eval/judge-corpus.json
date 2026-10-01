@@ -404,7 +404,7 @@
         "Names the buoy, the in-situ measured reading",
         "Names the satellite reading",
         "States whether the buoy and satellite readings agree or disagree",
-        "Says only Florida has buoys to compare; the other areas have none"
+        "Says only Florida has buoys to compare, or that the other areas have none"
       ],
       "toolOutputs": [
         "{\"feedSummary\":{\"worst\":\"unknown\",\"lagging\":[],\"stale\":[],\"down\":[],\"disabled\":[],\"mention\":[],\"line\":\"\"},\"feeds\":[],\"bbox\":{\"west\":-88.5,\"south\":9.7,\"east\":-74,\"north\":27.5},\"time\":\"2026-10-01T12:00:00.000Z\",\"timeLocal\":\"2026-10-01 08:00 EDT\",\"preset\":\"all-areas\",\"area\":\"all-areas\",\"areaName\":\"the four areas\",\"layers\":[\"sst\",\"stations\"],\"basis\":\"submitted\",\"asOf\":\"2026-10-01T12:00:00.000Z\",\"replay\":true,\"applied\":true,\"evidence\":[]}",
@@ -737,7 +737,7 @@
       "note": "real agent run, every item met",
       "question": "How fresh is each data feed right now?",
       "mustSay": [
-        "States each feed's state: nominal, lagging, stale or down",
+        "States the feeds' states, such as nominal, lagging, stale or down",
         "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
       ],
       "toolOutputs": [
@@ -1428,7 +1428,7 @@
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
         "Names USGS NAS as a source",
-        "Calls the NAS data stale, with its newest record date"
+        "Calls the NAS data stale, or gives its newest record date"
       ],
       "toolOutputs": [
         "{\"rows\":[{\"feed\":\"nas\",\"newestObservedAt\":\"2026-09-09T00:00:00Z\",\"ageDays\":22,\"state\":\"stale\"}],\"area\":\"co-caribbean\"}"
@@ -1731,7 +1731,7 @@
       "note": "lists ages but never gives the feed states",
       "question": "How fresh is each data feed right now?",
       "mustSay": [
-        "States each feed's state: nominal, lagging, stale or down",
+        "States the feeds' states, such as nominal, lagging, stale or down",
         "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
       ],
       "toolOutputs": [
@@ -2069,7 +2069,7 @@
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
         "Names USGS NAS as a source",
-        "Calls the NAS data stale, with its newest record date"
+        "Calls the NAS data stale, or gives its newest record date"
       ],
       "toolOutputs": [
         "{\"rows\":[{\"feed\":\"nas\",\"newestObservedAt\":\"2026-09-09T00:00:00Z\",\"ageDays\":22,\"state\":\"stale\"}],\"area\":\"co-caribbean\"}"
@@ -2372,7 +2372,7 @@
       "note": "echoes the item wording instead of stating feed states",
       "question": "How fresh is each data feed right now?",
       "mustSay": [
-        "States each feed's state: nominal, lagging, stale or down",
+        "States the feeds' states, such as nominal, lagging, stale or down",
         "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
       ],
       "toolOutputs": [

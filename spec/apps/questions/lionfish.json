@@ -351,7 +351,7 @@
         "mode": "answer",
         "mustSay": [
           "Reports degree heating weeks, the DHW value",
-          "Describes the DHW trend with its peak",
+          "Describes the DHW trend, its rise, fall or peak",
           "Gives DHW in degree C weeks"
         ],
         "forbid": [],
@@ -892,7 +892,7 @@
         "mustSay": [
           "Names the areas: Florida Keys, Mexican Caribbean, Belize or Colombia",
           "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched",
-          "Says how fresh or stale each area's supporting data is"
+          "Says how fresh or stale the supporting data is"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -953,7 +953,7 @@
           "Names the buoy, the in-situ measured reading",
           "Names the satellite reading",
           "States whether the buoy and satellite readings agree or disagree",
-          "Says only Florida has buoys to compare; the other areas have none"
+          "Says only Florida has buoys to compare, or that the other areas have none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -983,7 +983,7 @@
         "mode": "answer",
         "mustSay": [
           "Names USGS NAS as a source",
-          "Calls the NAS data stale, with its newest record date"
+          "Calls the NAS data stale, or gives its newest record date"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1064,7 +1064,7 @@
       "pass": {
         "mode": "answer",
         "mustSay": [
-          "Says the position is obscured, imprecise or uncertain, with its accuracy"
+          "Says the position is obscured, imprecise or uncertain, or gives its accuracy"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1123,7 +1123,7 @@
         "mode": "answer",
         "mustSay": [
           "Says the score or ranking is a heuristic rather than a measurement or prediction",
-          "Uses the marine forecast, waves or currents, to pick the day"
+          "Refers to the marine forecast, waves, sea or currents"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
@@ -1576,7 +1576,7 @@
         "mode": "answer",
         "mustSay": [
           "Goes through the window day by day, or names the days",
-          "Narrates the reports or heat stress per day"
+          "Narrates the reports or heat stress"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1606,7 +1606,7 @@
         "mustSay": [
           "Says the score or ranking is a heuristic rather than a measurement or prediction",
           "Frames the ranking as of two weeks ago",
-          "Compares the past ranking with today's, saying whether it differs"
+          "Compares the past ranking with today's, or says whether it differs"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1995,7 +1995,7 @@
     {
       "date": "2026-10-01",
       "by": "J1",
-      "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. No statement was loosened below its regex."
+      "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. No statement was loosened below its regex."
     }
   ]
 }
