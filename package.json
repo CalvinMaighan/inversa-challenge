@@ -20,6 +20,8 @@
     "test:live": "bun run --cwd apps/web test:live",
     "test:api": "cargo test --manifest-path api/Cargo.toml",
     "eval": "bun run --cwd apps/web eval",
+    "check:questions": "bun scripts/check-questions.ts",
+    "grade": "bun scripts/grade.ts",
     "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK"
   }
 }

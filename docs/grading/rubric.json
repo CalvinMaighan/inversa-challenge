@@ -1,0 +1,941 @@
+{
+  "version": 1,
+  "apps": ["carp", "lionfish", "python"],
+  "passBar": { "total": 90, "everyCriterionAtThreshold": true },
+  "defaults": { "timeout": 300 },
+  "criteria": [
+    {
+      "id": "feeds-realtime",
+      "title": "Three or more real-time feeds per app around one question",
+      "group": "technical",
+      "source": "brief",
+      "brief": "Three or more relevant real-time data feeds organized around a coherent shared question",
+      "weight": 6,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "config-feeds",
+          "kind": "static",
+          "share": 0.4,
+          "run": "bun scripts/grade.ts --probe config {app}",
+          "requires": { "files": ["spec/apps/{app}.json"] },
+          "expect": [
+            { "re": "^CONFIG app={app} question=1 feeds=(?<f>\\d+) sources=(?<s>\\d+)", "bounds": { "s": { "min": 3 }, "f": { "min": 3 } } }
+          ]
+        },
+        {
+          "id": "live-fetch",
+          "kind": "live",
+          "share": 0.6,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:feeds -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:feeds"],
+            "contains": [{ "path": "apps/web/e2e", "text": "FEEDS app=" }]
+          },
+          "expect": [
+            { "re": "^FEEDS app={app}\\b.*\\bfetched=(?<f>\\d+)", "bounds": { "f": { "min": 3 } } },
+            { "re": "^FEEDS app={app}\\b.*\\bfailed=(?<x>\\d+)", "bounds": { "x": { "max": 0 } } },
+            { "re": "^FEEDS app={app}\\b.*\\brecords=(?<r>\\d+)", "bounds": { "r": { "min": 1 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "backend",
+      "title": "Backend collects, stores and queries the feeds, one isolated store per app",
+      "group": "technical",
+      "source": "brief",
+      "brief": "Backend infrastructure for collecting, storing, and querying those feeds",
+      "weight": 6,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "api-suite",
+          "kind": "build",
+          "share": 0.4,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": { "files": ["api/Cargo.toml"] },
+          "expect": [
+            { "re": "^test \\S+ \\.\\.\\. ok$", "minCount": 200 },
+            { "re": "^test \\S*e2e_fixture_pipeline\\S* \\.\\.\\. ok$" },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        },
+        {
+          "id": "api-tenancy",
+          "kind": "build",
+          "share": 0.6,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": {
+            "contains": [
+              { "path": "api/src", "text": "app_isolation" },
+              { "path": "api/src", "text": "app_routes" },
+              { "path": "api/src", "text": "app_scheduler" }
+            ]
+          },
+          "expect": [
+            { "re": "^test \\S*app_isolation\\S* \\.\\.\\. ok$" },
+            { "re": "^test \\S*app_routes\\S* \\.\\.\\. ok$" },
+            { "re": "^test \\S*app_scheduler\\S* \\.\\.\\. ok$" },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "nl-query",
+      "title": "Natural-language questions over live and historical data, per app",
+      "group": "technical",
+      "source": "brief",
+      "brief": "A web interface supporting natural-language queries across real-time and historical data",
+      "weight": 5,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "agent-flow",
+          "kind": "live",
+          "share": 0.4,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:agent -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:agent"],
+            "contains": [{ "path": "apps/web/e2e/agent.ts", "text": "AGENT app=" }]
+          },
+          "expect": [
+            { "re": "^AGENT app={app}\\b.*\\bflow=ok" },
+            { "re": "^AGENT app={app}\\b.*\\btools=(?<t>\\d+)", "bounds": { "t": { "min": 1 } } },
+            { "re": "^AGENT app={app}\\b.*\\bcitation=ok" }
+          ]
+        },
+        {
+          "id": "eval-live-and-history",
+          "kind": "live",
+          "share": 0.6,
+          "timeout": 2400,
+          "repeat": 3,
+          "run": "bun run eval -- --app {app}",
+          "requires": {
+            "scripts": ["root:eval"],
+            "files": ["spec/apps/questions/{app}.json"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+          },
+          "expect": [
+            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
+            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["lookup", "change", "replay"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "timeline-replay",
+      "title": "Interactive timeline that replays change, per app",
+      "group": "technical",
+      "source": "brief",
+      "brief": "An interactive timeline for visualizing and replaying changes over time",
+      "weight": 6,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "replay",
+          "kind": "e2e",
+          "share": 0.6,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:replay -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:replay"],
+            "contains": [{ "path": "apps/web/e2e", "text": "REPLAY app=" }]
+          },
+          "expect": [
+            { "re": "^REPLAY app={app}\\b.*\\bplay=ok\\b.*\\bstep=ok\\b.*\\basof=ok" },
+            { "re": "^REPLAY app={app}\\b.*\\bframes=(?<f>\\d+)", "bounds": { "f": { "min": 24 } } },
+            { "re": "^REPLAY app={app}\\b.*\\berrors=(?<e>\\d+)", "bounds": { "e": { "max": 0 } } }
+          ]
+        },
+        {
+          "id": "scrub-frames",
+          "kind": "e2e",
+          "share": 0.4,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:scrub -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:scrub"],
+            "contains": [{ "path": "apps/web/e2e/scrub.ts", "text": "SCRUB app=" }]
+          },
+          "expect": [
+            { "re": "^SCRUB app={app}\\b.*\\bframes=(?<f>\\d+)", "bounds": { "f": { "min": 48 } } },
+            { "re": "^SCRUB app={app}\\b.*\\brequests=(?<r>\\d+)", "bounds": { "r": { "max": 0 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "new-technology",
+      "title": "A meaningful part uses technology new to the author, documented and tested",
+      "group": "deliverable",
+      "source": "brief",
+      "brief": "must use a technology that is new to you",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.8,
+      "checks": [
+        {
+          "id": "claim-doc",
+          "kind": "static",
+          "share": 0.4,
+          "run": "bun scripts/grade.ts --probe doc docs/new-technology.md --need '/new to (me|the author)/i' --need '/(apps|packages|api)\\/[\\w.\\/-]+/' --need '/\\bwhy\\b/i' --need '/learn/i'",
+          "requires": { "files": ["docs/new-technology.md"] },
+          "expect": [
+            { "re": "^DOC path=docs/new-technology.md words=(?<w>\\d+) needs=(?<k>\\d+)/(?<n>\\d+)", "eq": [["k", "n"]], "bounds": { "w": { "min": 250 }, "n": { "min": 4 } } }
+          ]
+        },
+        {
+          "id": "crdt-vectors",
+          "kind": "unit",
+          "share": 0.4,
+          "timeout": 120,
+          "run": "cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/client/threads/crdt 2>&1",
+          "requires": { "files": ["apps/web/tests/client/threads/crdt/vectors.test.ts"] },
+          "expect": [
+            { "re": "CRDT vectors passed: (?<p>\\d+)/(?<t>\\d+)", "eq": [["p", "t"]], "bounds": { "t": { "min": 14 } } },
+            { "re": "^\\s*(?<n>\\d+) pass$", "bounds": { "n": { "min": 1 } } },
+            { "re": "^\\s*0 fail$" },
+            { "re": "^Ran (?<r>\\d+) tests? across (?<f>\\d+) files?\\.", "bounds": { "r": { "min": 1 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "claim-true", "share": 0.2, "item": "The author confirms every technology named in docs/new-technology.md was new to them and is used where the doc says.", "evidence": ["docs/new-technology.md"] }
+      ]
+    },
+    {
+      "id": "deploy",
+      "title": "Deployable now; live at the shared URL once a human deploys",
+      "group": "deliverable",
+      "source": "brief",
+      "brief": "deployed online and accessible through a shared URL",
+      "weight": 6,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.5,
+      "checks": [
+        {
+          "id": "prod-ready",
+          "kind": "e2e",
+          "share": 0.35,
+          "timeout": 900,
+          "run": "bun run --cwd apps/web build >/dev/null 2>&1 && bun run --cwd apps/web e2e:prod -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:prod"],
+            "contains": [{ "path": "apps/web/e2e/prod.ts", "text": "PROD app=" }]
+          },
+          "expect": [
+            { "re": "^PROD app={app}\\b.*\\bhealth=ok\\b.*\\bratelimit=ok\\b.*\\bcostcap=ok\\b.*\\berrors=ok" }
+          ]
+        },
+        {
+          "id": "deploy-config",
+          "kind": "static",
+          "share": 0.15,
+          "run": "bun scripts/grade.ts --probe doc docs/HUMAN_STEPS.md --need '/deploy/i' --need '/inversa\\.calvinmaighan\\.dev/' --need '/doppler|secret/i' --need '/push/i'",
+          "requires": { "files": ["docs/HUMAN_STEPS.md", "deploy/Caddyfile", "deploy/inversa-api.service", "deploy/inversa-web.service", "deploy/litestream.yml"] },
+          "expect": [
+            { "re": "^DOC path=docs/HUMAN_STEPS.md words=(?<w>\\d+) needs=(?<k>\\d+)/(?<n>\\d+)", "eq": [["k", "n"]], "bounds": { "w": { "min": 100 }, "n": { "min": 4 } } }
+          ]
+        },
+        {
+          "id": "live-url",
+          "kind": "live",
+          "share": 0.3,
+          "timeout": 60,
+          "run": "curl -fsS --max-time 20 \"$GRADE_URL/health\" && echo && curl -sS --max-time 20 -o /dev/null -w 'PAGE app={app} status=%{http_code}\\n' \"$GRADE_URL/?app={app}\"",
+          "requires": { "env": ["GRADE_URL"] },
+          "expect": [
+            { "re": "\"{app}\"" },
+            { "re": "^PAGE app={app} status=200$" }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "url-smoke", "share": 0.2, "item": "On the shared URL, on a laptop and a phone, for each app: ask one helper question, open one citation at its source, scrub the timeline. Notes in docs/evidence/deploy-smoke.md.", "evidence": ["docs/evidence/deploy-smoke.md"] }
+      ]
+    },
+    {
+      "id": "system-design",
+      "title": "Clear boundaries, one config contract read by Rust and TS, clean types and lint",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "A well-designed system with clear boundaries, thoughtful data modeling, and sensible architectural decisions",
+      "weight": 5,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "config-ts",
+          "kind": "unit",
+          "share": 0.3,
+          "timeout": 120,
+          "run": "cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t 'app config' 2>&1",
+          "requires": { "contains": [{ "path": "apps/web/tests", "text": "app config" }] },
+          "expect": [
+            { "re": "^\\s*(?<n>\\d+) pass$", "bounds": { "n": { "min": 1 } } },
+            { "re": "^\\s*0 fail$" },
+            { "re": "^Ran (?<r>\\d+) tests? across (?<f>\\d+) files?\\.", "bounds": { "r": { "min": 1 } } }
+          ]
+        },
+        {
+          "id": "config-rust",
+          "kind": "build",
+          "share": 0.3,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": { "contains": [{ "path": "api/src", "text": "app_config" }] },
+          "expect": [
+            { "re": "^test \\S*app_config\\S* \\.\\.\\. ok$", "minCount": 2 },
+            { "re": "^test \\S*schema\\S* \\.\\.\\. ok$" },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        },
+        {
+          "id": "lint",
+          "kind": "build",
+          "share": 0.2,
+          "timeout": 300,
+          "run": "bun run --cwd apps/web lint >/dev/null 2>&1 && echo LINT-CLEAN",
+          "requires": { "scripts": ["apps/web:lint"] },
+          "expect": [{ "re": "^LINT-CLEAN$" }]
+        },
+        {
+          "id": "typecheck",
+          "kind": "build",
+          "share": 0.2,
+          "timeout": 300,
+          "run": "bun run --cwd apps/web typecheck >/dev/null 2>&1 && echo TYPECHECK-CLEAN",
+          "requires": { "scripts": ["apps/web:typecheck"] },
+          "expect": [{ "re": "^TYPECHECK-CLEAN$" }]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "agent-benchmark",
+      "title": "Live agent passes every question category, three runs in a row, per app",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "can interpret natural-language questions, use the available data and tools effectively",
+      "weight": 10,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "eval",
+          "kind": "live",
+          "share": 1,
+          "timeout": 2400,
+          "repeat": 3,
+          "run": "bun run eval -- --app {app}",
+          "requires": {
+            "scripts": ["root:eval"],
+            "files": ["spec/apps/questions/{app}.json"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+          },
+          "expect": [
+            { "re": "^EVAL app={app} model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 48 } } },
+            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
+            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 48 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "agent-grounding",
+      "title": "Answers are grounded: no invented numbers, citations checked, real model only",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "return reliable, grounded answers",
+      "weight": 4,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "real-model-only",
+          "kind": "static",
+          "share": 0.2,
+          "run": "grep -rniE '\\bmock|AGENT_HARNESS|harnessMode\\b|AGENT_EVAL_MODE|replayScript|fireworks|deepseek-v4' apps/web/server/agent apps/web/server/voice apps/web/app apps/web/eval apps/web/e2e/agent.ts apps/web/tests/server/agent apps/web/tests/live scripts package.json apps/web/package.json deploy/README.md .github/workflows --exclude-dir=tools --exclude-dir=node_modules | wc -l | awk '{print \"MODEL-STANDINS \" $1}'",
+          "requires": { "files": ["apps/web/server/agent", "apps/web/eval", "apps/web/e2e/agent.ts", "apps/web/tests/live", ".github/workflows"] },
+          "expect": [{ "re": "^MODEL-STANDINS (?<n>\\d+)$", "bounds": { "n": { "max": 0 } } }]
+        },
+        {
+          "id": "citation-filter",
+          "kind": "unit",
+          "share": 0.2,
+          "timeout": 120,
+          "run": "cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/server/agent/citations.test.ts 2>&1",
+          "requires": { "files": ["apps/web/tests/server/agent/citations.test.ts"] },
+          "expect": [
+            { "re": "^\\s*(?<n>\\d+) pass$", "bounds": { "n": { "min": 3 } } },
+            { "re": "^\\s*0 fail$" },
+            { "re": "^Ran (?<r>\\d+) tests? across (?<f>\\d+) files?\\.", "bounds": { "r": { "min": 1 } } }
+          ]
+        },
+        {
+          "id": "eval-grounded",
+          "kind": "live",
+          "share": 0.6,
+          "timeout": 2400,
+          "repeat": 3,
+          "run": "bun run eval -- --app {app}",
+          "requires": {
+            "scripts": ["root:eval"],
+            "files": ["spec/apps/questions/{app}.json"],
+            "contains": [
+              { "path": "apps/web/eval/run.ts", "text": "EVAL category" },
+              { "path": "apps/web/eval/run.ts", "text": "ungrounded=" }
+            ]
+          },
+          "expect": [
+            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
+            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 }, "c": { "min": 20 } } },
+            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["boundary", "sources"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "evidence-source",
+      "title": "Every answer and map item leads to its record and its publisher page",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "following evidence to its source",
+      "weight": 4,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "evidence-e2e",
+          "kind": "e2e",
+          "share": 0.6,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:evidence -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:evidence"],
+            "contains": [{ "path": "apps/web/e2e", "text": "EVIDENCE app=" }]
+          },
+          "expect": [
+            { "re": "^EVIDENCE app={app}\\b.*\\bcitation=ok\\b.*\\bdrawer=ok\\b.*\\braw=ok\\b.*\\bsource_link=ok\\b.*\\bnew_tab=ok" },
+            { "re": "^EVIDENCE app={app}\\b.*\\bsources=(?<s>\\d+)", "bounds": { "s": { "min": 3 } } }
+          ]
+        },
+        {
+          "id": "external-links",
+          "kind": "e2e",
+          "share": 0.2,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:links -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:links"],
+            "contains": [{ "path": "apps/web/e2e/links.ts", "text": "EXTERNAL-LINKS app=" }]
+          },
+          "expect": [
+            { "re": "^EXTERNAL-LINKS app={app} total=(?<t>\\d+) new_tab=(?<n>\\d+) unsafe=(?<u>\\d+)", "eq": [["t", "n"]], "bounds": { "t": { "min": 1 }, "u": { "max": 0 } } }
+          ]
+        },
+        {
+          "id": "source-pages",
+          "kind": "build",
+          "share": 0.2,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": { "files": ["api/src/source_pages.rs"] },
+          "expect": [
+            { "re": "^test \\S*source_page_url\\S* \\.\\.\\. ok$", "minCount": 10 },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "ui-accessibility",
+      "title": "No serious or critical axe violations, fully keyboard operable, per app",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "A responsive, human-friendly interface",
+      "weight": 4,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "axe-keyboard",
+          "kind": "e2e",
+          "share": 1,
+          "timeout": 900,
+          "run": "bun run --cwd apps/web e2e:a11y -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:a11y"],
+            "contains": [{ "path": "apps/web/e2e/a11y.ts", "text": "AXE app=" }]
+          },
+          "expect": [
+            { "re": "^AXE app={app} serious=(?<s>\\d+) critical=(?<c>\\d+) scans=(?<n>\\d+)", "bounds": { "s": { "max": 0 }, "c": { "max": 0 }, "n": { "min": 4 } } },
+            { "re": "^KEYBOARD-OK app={app}\\b" }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "ui-mobile",
+      "title": "Works at 375 px: no overflow, no sideways scroll, chat as a sheet",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "A responsive, human-friendly interface",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.8,
+      "checks": [
+        {
+          "id": "layout-mobile",
+          "kind": "e2e",
+          "share": 0.8,
+          "timeout": 900,
+          "run": "bun run --cwd apps/web e2e:layout -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:layout"],
+            "contains": [{ "path": "apps/web/e2e", "text": "MOBILE app=" }, { "path": "apps/web/e2e/layout.ts", "text": "LAYOUT app=" }]
+          },
+          "expect": [
+            { "re": "^LAYOUT app={app}\\b.*\\bmobile=ok" },
+            { "re": "^MOBILE app={app}\\b.*\\boverflow=(?<o>\\d+)\\b.*\\bhscroll=(?<h>\\d+)", "bounds": { "o": { "max": 0 }, "h": { "max": 0 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "screens-375", "share": 0.2, "item": "Look at this app's 375x812 screenshot: nothing clipped, chat sheet usable, timeline reachable.", "evidence": ["docs/evidence/mobile/{app}-375.png"] }
+      ]
+    },
+    {
+      "id": "ui-explore",
+      "title": "Data is easy to explore: legend, tooltips, agent result panels",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "makes the underlying data easy to explore and understand",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.8,
+      "checks": [
+        {
+          "id": "legend-tooltip",
+          "kind": "e2e",
+          "share": 0.4,
+          "timeout": 900,
+          "run": "bun run --cwd apps/web e2e:layout -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:layout"],
+            "contains": [{ "path": "apps/web/e2e/layout.ts", "text": "LAYOUT app=" }]
+          },
+          "expect": [{ "re": "^LAYOUT app={app}\\b.*\\blegend=ok\\b.*\\btooltip=ok" }]
+        },
+        {
+          "id": "agent-panels",
+          "kind": "live",
+          "share": 0.4,
+          "timeout": 900,
+          "run": "doppler run --project inversa --config dev -- bun run --cwd apps/web e2e:panels -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:panels"],
+            "contains": [{ "path": "apps/web/e2e/panels.ts", "text": "PANELS app=" }]
+          },
+          "expect": [
+            { "re": "^PANELS app={app} table=(?<t>\\d+) series=(?<s>\\d+)\\b.*\\bdrawer=1", "bounds": { "t": { "min": 1 }, "s": { "min": 1 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "screens-desktop", "share": 0.2, "item": "Look at this app's desktop screenshot: map, timeline, legend and evidence readable in light and dark.", "evidence": ["docs/evidence/{app}-desktop.png"] }
+      ]
+    },
+    {
+      "id": "scrub-speed",
+      "title": "Timeline scrub median under 16 ms with no network, per app",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "the timeline scrubs smoothly",
+      "weight": 4,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "scrub",
+          "kind": "e2e",
+          "share": 1,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:scrub -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:scrub"],
+            "contains": [{ "path": "apps/web/e2e/scrub.ts", "text": "SCRUB app=" }]
+          },
+          "expect": [
+            { "re": "^SCRUB app={app}\\b.*\\bmedian=(?<m>[0-9.]+)", "bounds": { "m": { "max": 15.99 } } },
+            { "re": "^SCRUB app={app}\\b.*\\bp95=(?<p>[0-9.]+)", "bounds": { "p": { "max": 33.3 } } },
+            { "re": "^SCRUB app={app}\\b.*\\brequests=(?<r>\\d+)", "bounds": { "r": { "max": 0 } } },
+            { "re": "^SCRUB app={app}\\b.*\\bframes=(?<f>\\d+)", "bounds": { "f": { "min": 48 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "query-speed",
+      "title": "First agent token p50 about 1 s; cached queries under 20 ms, per app",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "queries feel interactive",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "perf",
+          "kind": "live",
+          "share": 1,
+          "timeout": 900,
+          "run": "doppler run --project inversa --config dev -- bun run --cwd apps/web e2e:perf -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:perf"],
+            "contains": [{ "path": "apps/web/e2e/perf.ts", "text": "PERF app=" }]
+          },
+          "expect": [
+            { "re": "^PERF app={app}\\b.*\\bfirst_token_p50_ms=(?<v>\\d+)", "bounds": { "v": { "max": 1200 } } },
+            { "re": "^PERF app={app}\\b.*\\bn=(?<n>\\d+)", "bounds": { "n": { "min": 5 } } },
+            { "re": "^PERF app={app}\\b.*\\bcached_query_ms=(?<c>[0-9.]+)", "bounds": { "c": { "max": 20 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "data-quality",
+      "title": "Stale, missing and conflicting data shown and explained, per app",
+      "group": "lookingFor",
+      "source": "brief",
+      "brief": "High-quality data handling, including accurate real-time information and clear treatment of stale, missing, or conflicting data",
+      "weight": 7,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "quality-ui",
+          "kind": "e2e",
+          "share": 0.5,
+          "timeout": 900,
+          "run": "bun run --cwd apps/web e2e:quality -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:quality"],
+            "contains": [{ "path": "apps/web/e2e/quality.ts", "text": "QUALITY app=" }]
+          },
+          "expect": [
+            { "re": "^QUALITY app={app}\\b.*\\bstale=ok\\b.*\\bmissing=ok\\b.*\\bconflict=ok" },
+            { "re": "^QUALITY app={app}\\b.*\\bcases=(?<c>\\d+)", "bounds": { "c": { "min": 3 } } },
+            { "re": "^QUALITY app={app}\\b.*\\bshots=(?<s>\\d+)", "bounds": { "s": { "min": 3 } } }
+          ]
+        },
+        {
+          "id": "quality-agent",
+          "kind": "live",
+          "share": 0.3,
+          "timeout": 2400,
+          "repeat": 3,
+          "run": "bun run eval -- --app {app}",
+          "requires": {
+            "scripts": ["root:eval"],
+            "files": ["spec/apps/questions/{app}.json"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+          },
+          "expect": [
+            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
+            { "re": "^EVAL category quality passed (?<p>\\d+)/(?<t>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+          ]
+        },
+        {
+          "id": "quality-pipeline",
+          "kind": "build",
+          "share": 0.2,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": { "files": ["api/src/e2e_tests.rs"] },
+          "expect": [
+            { "re": "^test \\S*e2e_quality_cases\\S* \\.\\.\\. ok$" },
+            { "re": "^test \\S*(quality|conflict|stale|feed_state)\\S* \\.\\.\\. ok$", "minCount": 8 },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "question-rationale",
+      "title": "Each app's question, why it matters, why these sources",
+      "group": "prepared",
+      "source": "brief",
+      "brief": "The question you chose to explore, why it matters, and why you selected the data sources that support it",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.7,
+      "checks": [
+        {
+          "id": "doc-section",
+          "kind": "static",
+          "share": 0.7,
+          "run": "bun scripts/grade.ts --probe doc docs/interview-notes.md --section '{app}' --need '/\\bwhy\\b/i' --need '/matters?|important|value/i' --need '/sources?|feeds?/i' --need '/https?:\\/\\//'",
+          "requires": { "files": ["docs/interview-notes.md"] },
+          "expect": [
+            { "re": "^DOC path=docs/interview-notes.md section={app} words=(?<w>\\d+) needs=(?<k>\\d+)/(?<n>\\d+)", "eq": [["k", "n"]], "bounds": { "w": { "min": 150 }, "n": { "min": 4 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "reviewed", "share": 0.3, "item": "The author read this app's section as interview prep and its facts match docs/evidence.", "evidence": ["docs/interview-notes.md"] }
+      ]
+    },
+    {
+      "id": "design-alternatives",
+      "title": "Major choices with alternatives and tradeoffs",
+      "group": "prepared",
+      "source": "brief",
+      "brief": "including the alternatives you considered and the tradeoffs involved",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.7,
+      "checks": [
+        {
+          "id": "doc",
+          "kind": "static",
+          "share": 0.7,
+          "run": "bun scripts/grade.ts --probe doc docs/design-alternatives.md --each-section '^## ' --each-need '/alternative/i' --each-need '/trade-?offs?/i' --need '/three apps|one engine|app config/i'",
+          "requires": { "files": ["docs/design-alternatives.md"] },
+          "expect": [
+            { "re": "^DOC path=docs/design-alternatives.md words=(?<w>\\d+) needs=(?<k>\\d+)/(?<n>\\d+) sections=(?<s>\\d+) complete=(?<c>\\d+)", "eq": [["k", "n"]], "bounds": { "w": { "min": 800 }, "c": { "min": 8 }, "n": { "min": 1 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "reviewed", "share": 0.3, "item": "The author can defend each choice and each named alternative in an interview.", "evidence": ["docs/design-alternatives.md"] }
+      ]
+    },
+    {
+      "id": "scaling",
+      "title": "How the system grows with more data, traffic, users and use cases",
+      "group": "prepared",
+      "source": "brief",
+      "brief": "support substantially more data, traffic, users, or use cases",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.7,
+      "checks": [
+        {
+          "id": "doc",
+          "kind": "static",
+          "share": 0.7,
+          "run": "bun scripts/grade.ts --probe doc docs/scaling.md --need '/^#+ .*\\bdata\\b/im' --need '/^#+ .*traffic/im' --need '/^#+ .*users/im' --need '/^#+ .*use cases?/im' --need '/\\d+\\s*(x|rps|req\\/s|users|GB|TB|MB|ms)\\b/i'",
+          "requires": { "files": ["docs/scaling.md"] },
+          "expect": [
+            { "re": "^DOC path=docs/scaling.md words=(?<w>\\d+) needs=(?<k>\\d+)/(?<n>\\d+)", "eq": [["k", "n"]], "bounds": { "w": { "min": 600 }, "n": { "min": 5 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "reviewed", "share": 0.3, "item": "The author checked the numbers in docs/scaling.md against docs/perf.md and the measured gates.", "evidence": ["docs/scaling.md"] }
+      ]
+    },
+    {
+      "id": "three-apps",
+      "title": "Carp, lionfish and python each load with their own config, questions and data",
+      "group": "ours",
+      "source": "overnight",
+      "brief": "R14 Only three apps exist.",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "questions",
+          "kind": "unit",
+          "share": 0.3,
+          "timeout": 60,
+          "run": "bun scripts/check-questions.ts 2>&1",
+          "requires": { "files": ["scripts/check-questions.ts", "spec/apps/questions/carp.json", "spec/apps/questions/lionfish.json", "spec/apps/questions/python.json"] },
+          "expect": [
+            { "re": "^QUESTIONS carp=(?<c>\\d+) lionfish=(?<l>\\d+) python=(?<p>\\d+) categories=10/10 ok", "bounds": { "c": { "min": 48 }, "l": { "min": 48 }, "p": { "min": 48 } } }
+          ]
+        },
+        {
+          "id": "config-copy",
+          "kind": "static",
+          "share": 0.3,
+          "run": "bun scripts/grade.ts --probe config {app}",
+          "requires": { "files": ["spec/apps/{app}.json"] },
+          "expect": [
+            { "re": "^CONFIG app={app} question=1 feeds=\\d+ sources=\\d+ helpers=(?<h>\\d+)", "bounds": { "h": { "min": 6 } } }
+          ]
+        },
+        {
+          "id": "firstload",
+          "kind": "e2e",
+          "share": 0.4,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:firstload -- --app {app}",
+          "requires": {
+            "scripts": ["apps/web:e2e:firstload"],
+            "contains": [{ "path": "apps/web/e2e/firstload.ts", "text": "FIRSTLOAD app=" }]
+          },
+          "expect": [
+            { "re": "^FIRSTLOAD app={app}\\b.*\\brecords=(?<r>\\d+)", "bounds": { "r": { "min": 1 } } },
+            { "re": "^FIRSTLOAD app={app}\\b.*\\berrors=(?<e>\\d+)", "bounds": { "e": { "max": 0 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "app-selector",
+      "title": "App selector popover: URL, persistence, keyboard, fast switch",
+      "group": "ours",
+      "source": "apps",
+      "brief": "a species icon button in the HUD opens a popover listing the apps",
+      "weight": 2,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 0.8,
+      "checks": [
+        {
+          "id": "appselect",
+          "kind": "e2e",
+          "share": 0.8,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:appselect",
+          "requires": {
+            "scripts": ["apps/web:e2e:appselect"],
+            "contains": [{ "path": "apps/web/e2e", "text": "APPSELECT apps=" }]
+          },
+          "expect": [
+            { "re": "^APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=(?<s>\\d+)", "bounds": { "s": { "max": 499 } } }
+          ]
+        }
+      ],
+      "manual": [
+        { "id": "screens", "share": 0.2, "item": "Look at the selector screenshots (dark, light, 375 px): icon, name, question and health dot legible.", "evidence": ["docs/evidence/appselect-dark.png", "docs/evidence/appselect-light.png", "docs/evidence/appselect-mobile.png"] }
+      ]
+    },
+    {
+      "id": "push-first",
+      "title": "Push first; every poll justified with the provider's docs; one signed ingest path",
+      "group": "ours",
+      "source": "overnight",
+      "brief": "Every poll vs push choice is justified in docs/ingest-modes.md with the provider's docs URL",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "ingest-modes",
+          "kind": "static",
+          "share": 0.6,
+          "run": "bun scripts/grade.ts --probe ingest {app}",
+          "requires": { "files": ["docs/ingest-modes.md"] },
+          "expect": [
+            { "re": "^INGEST app={app} rows=(?<r>\\d+) push=\\d+ poll=(?<p>\\d+) poll_justified=(?<j>\\d+) urls=(?<u>\\d+)$", "eq": [["p", "j"], ["r", "u"]], "bounds": { "r": { "min": 3 } } }
+          ]
+        },
+        {
+          "id": "signed-hook",
+          "kind": "build",
+          "share": 0.4,
+          "timeout": 1500,
+          "run": "cargo test --manifest-path api/Cargo.toml 2>&1",
+          "requires": { "files": ["api/src/ingest/push/hook.rs"] },
+          "expect": [
+            { "re": "^test \\S*hook_\\S* \\.\\.\\. ok$", "minCount": 7 },
+            { "re": "^test \\S*hook_bad_signature_401 \\.\\.\\. ok$" },
+            { "re": "^test result: FAILED", "absent": true }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "realtime-messaging",
+      "title": "Per-keystroke direct messages and live note edits between viewers",
+      "group": "ours",
+      "source": "overnight",
+      "brief": "WebRTC data channels carry (a) direct messages between viewers with per-character streaming",
+      "weight": 3,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "dm",
+          "kind": "e2e",
+          "share": 0.5,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:dm",
+          "requires": {
+            "scripts": ["apps/web:e2e:dm"],
+            "contains": [{ "path": "apps/web/e2e/dm.ts", "text": "chars_streamed=" }]
+          },
+          "expect": [
+            { "re": "^DM chars_streamed=40/40 p50_ms=(?<p>[0-9.]+)\\b.*\\bbackspace=ok insert=ok persist=ok reload=ok", "bounds": { "p": { "max": 99.99 } } },
+            { "re": "^DM .*\\btyping=ok presence=ok" }
+          ]
+        },
+        {
+          "id": "notes",
+          "kind": "e2e",
+          "share": 0.5,
+          "timeout": 600,
+          "run": "bun run --cwd apps/web e2e:notes",
+          "requires": {
+            "scripts": ["apps/web:e2e:notes"],
+            "contains": [{ "path": "apps/web/e2e/notes.ts", "text": "live_edit=" }]
+          },
+          "expect": [
+            { "re": "^NOTES .*\\blive_edit=ok caret=ok converge=ok p50_ms=(?<p>[0-9.]+)\\b.*\\bpresence=ok", "bounds": { "p": { "max": 99.99 } } }
+          ]
+        }
+      ],
+      "manual": []
+    },
+    {
+      "id": "only-three-species",
+      "title": "Dropped species and feeds are gone from code, config and eval",
+      "group": "ours",
+      "source": "overnight",
+      "brief": "All other species (tegu, iguana, plants, generic \"other\" taxa, categories popover) are removed",
+      "weight": 1,
+      "appliesTo": ["carp", "lionfish", "python"],
+      "threshold": 1,
+      "checks": [
+        {
+          "id": "grep",
+          "kind": "static",
+          "share": 1,
+          "run": "n=$(ls spec/apps/*.json | grep -vc schema); r=$(grep -rniE 'tegu|iguana|Salvator merianae' api/src apps/web/client apps/web/server apps/web/shared apps/web/eval spec/apps 2>/dev/null | wc -l | tr -d ' '); echo \"SPECIES configs=$n removed_refs=$r\"",
+          "requires": { "files": ["spec/apps", "api/src", "apps/web/client", "apps/web/server", "apps/web/shared", "apps/web/eval"] },
+          "expect": [
+            { "re": "^SPECIES configs=(?<n>\\d+) removed_refs=(?<r>\\d+)$", "bounds": { "n": { "min": 3, "max": 3 }, "r": { "max": 0 } } }
+          ]
+        }
+      ],
+      "manual": []
+    }
+  ]
+}
