@@ -1597,7 +1597,7 @@
         "phrases": [
           "cold",
           "(activity|score)",
-          "(dropped|fell|rose|recovered|changed)"
+          "(dropped|fell|rose|recovered|changed|declined|decreas|increas|lower|higher|climbed|same|unchanged)"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1977,6 +1977,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "python-replay-cold-snap-map: pass phrase (February|2026-02) follows the January rename: (January|2026-01)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "python-replay-scores-during-cold: the change phrase accepted five verbs; \"declined\", \"lower\", \"unchanged\" and the like describe the same movement, so the pattern now takes them (1 pattern)."
     }
   ]
 }

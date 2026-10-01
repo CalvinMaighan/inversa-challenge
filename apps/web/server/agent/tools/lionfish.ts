@@ -146,7 +146,8 @@ export const reefHeat = {
   inputSchema: reefHeatInput,
   async execute(input: z.infer<typeof reefHeatInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const place = placeBox(ctx.app, input.place) ?? placeBox(ctx.app, input.area);
-    if ((given(input.place) || given(input.area)) && !place) throw new Error(`"${given(input.place) ?? given(input.area)}" is not one of the four areas or a place inside them. ${ctx.app.agent.refusal}`);
+    // A name the gazetteer does not know widens to the four areas and says so, rather than failing the turn.
+    const unknownPlace = (given(input.place) || given(input.area)) && !place ? (given(input.place) ?? given(input.area)) : null;
     const bbox = resolveBbox(place?.bbox ?? input.bbox ?? appBBox(ctx.app), ctx);
     const at = atTime(input.at, ctx);
     const days = input.days ?? 1;
@@ -280,6 +281,7 @@ export const reefHeat = {
           note: CRW_NOTE,
           credit: CRW_CREDIT,
           ...(place ? { place: place.name } : {}),
+          ...(unknownPlace ? { placeIgnored: `"${unknownPlace}" is not a place the app knows; every reef pixel of the four areas is shown instead` } : {}),
           areas,
           ...(missingAreas.length ? { missingAreas, missingNote: `No CRW product stored for ${missingAreas.join(", ")} in this window: say the heat stress there is unknown, not zero.` } : {}),
           baaLabels: BAA_LABELS.map((label, i) => `${i} = ${label}`).join("; "),
@@ -321,7 +323,8 @@ export const marineForecast = {
   async execute(input: z.infer<typeof marineInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const named = given(input.place) ?? given(input.area);
     const place = placeBox(ctx.app, input.place) ?? placeBox(ctx.app, input.area);
-    if (named && !place) throw new Error(`"${named}" is not one of the four areas or a place inside them. ${ctx.app.agent.refusal}`);
+    // A name the gazetteer does not know widens to every forecast point and says so, rather than failing the turn.
+    const unknownPlace = named && !place ? named : null;
     const point = input.lat !== undefined && input.lon !== undefined ? { lat: input.lat, lon: input.lon } : null;
     if (point && !inRegion(ctx.app, point.lat, point.lon)) throw new Error(`${point.lat}, ${point.lon} is outside the four areas. ${ctx.app.agent.refusal}`);
     const asked = point ? { west: point.lon - 0.35, south: point.lat - 0.35, east: point.lon + 0.35, north: point.lat + 0.35 } : (place?.bbox ?? input.bbox ?? appBBox(ctx.app));
@@ -350,7 +353,9 @@ export const marineForecast = {
     // Nearest point first when a single point was asked for.
     const dist = (s: GqlReading["station"]) => (point ? Math.hypot(s.lat - point.lat, s.lon - point.lon) : 0);
     const stationIds = [...byStation.keys()].sort((a, b) => dist(stationOf.get(a)!) - dist(stationOf.get(b)!) || a.localeCompare(b));
-    const chosen = point ? stationIds.slice(0, 1) : stationIds;
+    const chosen = point ? stationIds.slice(0, 1) : stationIds.slice(0, 8);
+    // Hourly rows only for one point: an all-areas call keeps to the daily summaries so the result stays small.
+    const withHourly = chosen.length === 1;
     const feed = data.feeds.find((f) => f.source === "openmeteo-marine") ?? data.feeds.find((f) => f.source.startsWith("openmeteo")) ?? null;
     const evidenceRows: Evidence[] = [];
     const seen = new Set<string>();
@@ -409,18 +414,22 @@ export const marineForecast = {
         waveMinM: allWaves.length ? r2(Math.min(...allWaves)) : null,
         calmestDay: calmest ? { date: calmest.date, weekday: calmest.weekday, waveMaxM: calmest.waveMaxM, cite: calmest.cite } : null,
         daily,
-        hourly: hourly
-          .filter((_, i) => i % 3 === 0)
-          .slice(0, 26)
-          .map((h) => ({
-            at: h.at,
-            atLocal: localTime(ctx.app, h.at),
-            waveM: h.slot.wave_m ?? null,
-            wavePeriodS: h.slot.wave_period_s ?? null,
-            currentMs: h.slot.current_ms ?? null,
-            currentKmh: typeof h.slot.current_ms === "number" ? r2(h.slot.current_ms * 3.6) : null,
-            currentDirDeg: h.slot.current_dir_deg ?? null,
-          })),
+        ...(withHourly
+          ? {
+              hourly: hourly
+                .filter((_, i) => i % 3 === 0)
+                .slice(0, 26)
+                .map((h) => ({
+                  at: h.at,
+                  atLocal: localTime(ctx.app, h.at),
+                  waveM: h.slot.wave_m ?? null,
+                  wavePeriodS: h.slot.wave_period_s ?? null,
+                  currentMs: h.slot.current_ms ?? null,
+                  currentKmh: typeof h.slot.current_ms === "number" ? r2(h.slot.current_ms * 3.6) : null,
+                  currentDirDeg: h.slot.current_dir_deg ?? null,
+                })),
+            }
+          : {}),
       };
     });
     const ranked = [...points].filter((p) => p.waveMaxM !== null).sort((a, b) => a.waveMaxM! - b.waveMaxM!).map((p) => ({ station: p.station, name: p.name, area: p.area, waveMaxM: p.waveMaxM, calmHours: p.daily.reduce((s, d) => s + d.calmHours, 0) }));
@@ -462,6 +471,7 @@ export const marineForecast = {
           beyondHorizon: "Anything later than the horizon end cannot be said: the model gives 72 hours, nothing more.",
           calmThresholdM: CALM_WAVE_M,
           ...(place ? { place: place.name } : {}),
+          ...(unknownPlace ? { placeIgnored: `"${unknownPlace}" is not a place the app knows; every forecast point of the four areas is shown instead` } : {}),
           ...(point ? { asked: point } : {}),
           ...(points.length === 0 ? { missing: "No Open-Meteo Marine forecast stored for this place in the next 72 hours." } : {}),
           citeNote: "Every wave or current number you quote carries its row's cite marker (daily rows: cite and citeCurrent); at least one marker per point you name.",

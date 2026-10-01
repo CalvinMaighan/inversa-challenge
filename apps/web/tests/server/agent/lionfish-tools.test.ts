@@ -189,8 +189,10 @@ describe("lionfish tool: reef_heat", () => {
     const past = await run("reef_heat", { area: "belize", at: "2026-09-01T12:00:00Z" });
     expect((past.data.areas as any[])[0]).toMatchObject({ productDate: "2026-09-01", baa: 2, baaLabel: "Bleaching Warning" });
     expect(past.data.asOf).toBe("2026-09-01T12:00:00.000Z");
-    const result = await registry.execute("reef_heat", { place: "Nassau, Bahamas" }, ctx);
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining(LIONFISH.agent.refusal) });
+    // An unknown place widens to the four areas and says so (the scope guard refuses places outside them before any tool runs).
+    const unknown = await run("reef_heat", { place: "Nassau, Bahamas" });
+    expect(String(unknown.data.placeIgnored)).toMatch(/not a place the app knows/);
+    expect((unknown.data.areas as any[]).length).toBe(6);
   });
 });
 
@@ -213,8 +215,12 @@ describe("lionfish tool: marine_forecast", () => {
     expect(saturday.currentMaxKmh).toBeGreaterThan(2.5);
     expect(saturday.cite).toMatch(/^\[e:reading:om-chinchorro:wave_m:\d+:modeled\]$/);
     expect(saturday.citeCurrent).toMatch(/^\[e:reading:om-chinchorro:current_ms:\d+:modeled\]$/);
-    expect(chinchorro.hourly[0]).toMatchObject({ waveM: expect.any(Number), currentKmh: expect.any(Number), currentDirDeg: expect.any(Number) });
-    expect(chinchorro.hourly[0].atLocal).toMatch(/EDT$/);
+    // Hourly rows come only with a single point; an all-areas call keeps to the daily summaries.
+    expect(chinchorro.hourly).toBeUndefined();
+    const one = await run("marine_forecast", { place: "Banco Chinchorro" });
+    const hourly = (one.data.points as any[])[0].hourly as any[];
+    expect(hourly[0]).toMatchObject({ waveM: expect.any(Number), currentKmh: expect.any(Number), currentDirDeg: expect.any(Number) });
+    expect(hourly[0].atLocal).toMatch(/EDT$/);
     // Calmest first: the Keys drop below 0.5 m while Cozumel builds past 1.8 m.
     const ranked = out.data.calmestFirst as any[];
     expect(ranked[0].station).toBe("om-keylargo");
@@ -236,7 +242,9 @@ describe("lionfish tool: marine_forecast", () => {
     const point = await run("marine_forecast", { lat: 12.5, lon: -81.7 });
     expect((point.data.points as any[]).map((p) => p.station)).toEqual(["om-sanandres"]);
     expect((point.data.points as any[])[0].distanceDeg).toBeLessThan(0.1);
-    expect(await registry.execute("marine_forecast", { place: "Roatan" }, ctx)).toMatchObject({ ok: false, error: expect.stringContaining(LIONFISH.agent.refusal) });
+    const unknown = await run("marine_forecast", { place: "Roatan" });
+    expect(String(unknown.data.placeIgnored)).toMatch(/not a place the app knows/);
+    expect((unknown.data.points as any[]).length).toBe(6);
     expect(await registry.execute("marine_forecast", { lat: 25.0, lon: -77.4 }, ctx)).toMatchObject({ ok: false, error: expect.stringContaining(LIONFISH.agent.refusal) });
   });
 });
