@@ -401,8 +401,12 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(await registry.execute("conditions", { params: ["sst_c"], hours: 24 * 40 }, ctx)).toMatchObject({ ok: true });
     // One feed's newest record in reach, per source: NAS has nothing in Colombia within 90 days, iNaturalist has.
     const nas = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "co-caribbean")!.bbox, hours: 2160, source: "nas" });
-    expect(nas.data.total).toBe(0);
+    // A focus feed orders the rows and names its newest record; the other feeds' rows stay (and stay citable).
+    expect(nas.data).toMatchObject({ focusSource: "nas", focusRows: 0, total: 4 });
     expect((nas.data.newestBySource as any).nas.none).toMatch(/no nas record in this box in the last 90 days/);
+    const gbif = await run("sightings", { species: ["lionfish"], hours: 2160, source: "gbif" });
+    expect((gbif.data.rows as any[])[0].source).toBe("gbif");
+    expect((gbif.data.rows as any[]).some((r) => r.source === "inat")).toBe(true);
     expect((nas.data.newestBySource as any).inat).toMatchObject({ cite: "[e:sighting:9501]", observedAge: "1.8 days old" });
     expect(nas.evidence.map((e) => e.id)).toContain("sighting:9501");
     const known = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "belize")!.bbox, hours: 2160, knownAt: "2026-09-01T00:00:00Z" });
@@ -483,6 +487,10 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(feeds.evidence.map((e) => e.id)).toContain("fetch:lf-crw-7299");
     const notes = await run("notes", { hours: 168 });
     expect(notes.data.total).toBe(6);
+    // Placeholders wrapped in punctuation (".__omit__") read as left out: every note, no species filter.
+    const omitted = await run("notes", { hours: 168, site: ".__omit__", species: ".__omit__" });
+    expect(omitted.data.total).toBe(6);
+    expect(omitted.data.placeIgnored).toBeUndefined();
     expect((notes.data.rows as any[])[0]).toMatchObject({ cite: expect.stringMatching(/^\[e:note:/), age: expect.stringMatching(/hours old$/) });
     const board = await run("team_board", { kind: "missions" });
     expect((board.data.missions as any[]).map((m) => m.title)).toHaveLength(3);

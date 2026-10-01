@@ -190,7 +190,7 @@ const sightingsInput = z.object({
     .optional()
     .describe("Which date the window counts by: observed (default; when the animal was seen) or submitted (when the record reached the feed: 'newly submitted', 'arrived', 'uploaded'). With submitted, rows can be years older than the window."),
   knownAt: timeSchema.optional().describe("Knowledge time: only records that had reached the feed by this time ('what did we know on …')."),
-  source: z.enum(["inat", "gbif", "nas"]).optional().describe("Only this feed's records (is NAS current here, what GBIF adds): the result then also names the feed's newest record in reach."),
+  source: z.enum(["inat", "gbif", "nas"]).optional().describe("The feed a question is about (is NAS current here, what GBIF adds): its rows are listed first and its newest record in reach is named; the other feeds' rows stay in the result (duplicates and corroboration need them). Leave it out for every report."),
 });
 
 /** Days between the observation and the record reaching the feed, one decimal; null when the API gives no ingest time. */
@@ -247,9 +247,9 @@ const sightings = {
       LAYER.sightings,
       ctx,
     );
+    // A focus feed orders the rows, it never drops the other feeds' rows (a filter made every other feed uncitable).
     const sourceAsked = given(input.source)?.toLowerCase();
-    const fetchedRows = sourceAsked ? data.sightings.filter((row) => lower(row.source) === sourceAsked) : data.sightings;
-    const known = knownAt ? fetchedRows.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : fetchedRows;
+    const known = knownAt ? data.sightings.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : data.sightings;
     const dateOf = (row: GqlSighting) => (bySubmitted ? Date.parse(row.ingestedAt ?? row.observedAt) : Date.parse(row.observedAt));
     const recent = known.filter((row) => dateOf(row) >= Date.parse(asked.from) && dateOf(row) <= Date.parse(asked.to));
     // Submitted-date windows widen the same way (to records that reached the feed within the backfill).
@@ -258,6 +258,7 @@ const sightings = {
     const window = widened ? { from: new Date(Date.parse(asked.to) - widenHours * HOUR_MS).toISOString(), to: asked.to } : asked;
     const rows = [...(widened ? (bySubmitted ? widenSubmitted : known) : recent)].sort(
       (a, b) =>
+        (sourceAsked ? Number(lower(b.source) === sourceAsked) - Number(lower(a.source) === sourceAsked) : 0) ||
         (QUALITY_RANK[lower(a.quality)] ?? 9) - (QUALITY_RANK[lower(b.quality)] ?? 9) ||
         Date.parse(b.observedAt) - Date.parse(a.observedAt),
     );
@@ -308,7 +309,7 @@ const sightings = {
     const newestBySource = Object.fromEntries(
       sources.map((source) => {
         const newest = data.sightings.filter((row) => lower(row.source) === source).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
-        return [source, newest ? { cite: `[e:sighting:${newest.id}]`, observedAt: newest.observedAt, submittedAt: newest.ingestedAt ?? null, observedAge: `${Math.round(((ctx.now.getTime() - Date.parse(newest.observedAt)) / (24 * HOUR_MS)) * 10) / 10} days old`, quality: lower(newest.quality) } : { none: `no ${source} record in this box in the last ${reachDays} days (the reach of this tool); its feed state (feeds, feedSummary) says how old the feed's newest record is overall` }];
+        return [source, newest ? { cite: `[e:sighting:${newest.id}]`, observedAt: newest.observedAt, submittedAt: newest.ingestedAt ?? null, observedAge: `${Math.round(((ctx.now.getTime() - Date.parse(newest.observedAt)) / (24 * HOUR_MS)) * 10) / 10} days old`, quality: lower(newest.quality) } : { none: `no ${source} record in this box in the last ${reachDays} days (the reach of this tool): say so, cite the feed's fetch marker (feeds) for its overall newest record, and cite the newest record of the other feeds here (newestBySource) so the absence is grounded in what the box does hold` }];
       }),
     );
     const newestEvidence = Object.values(newestBySource)
@@ -319,7 +320,7 @@ const sightings = {
       {
         bbox,
         window,
-        ...(sourceAsked ? { source: sourceAsked, sourceNote: `only ${sourceAsked} rows; newestBySource.${sourceAsked} is that feed's newest record in reach` } : {}),
+        ...(sourceAsked ? { focusSource: sourceAsked, focusRows: rows.filter((row) => lower(row.source) === sourceAsked).length, focusNote: `${sourceAsked} rows come first; newestBySource.${sourceAsked} is that feed's newest record in reach; the other feeds' rows follow and count in the totals` } : {}),
         reachNote: `records are searched by observed date up to ${reachDays} days back (the feed backfill); an older observation uploaded recently is beyond this tool's reach`,
         newestBySource,
         windowWords: endsNow ? `last ${days} days` : `${window.from.slice(0, 10)} to ${window.to.slice(0, 10)}`,
