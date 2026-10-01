@@ -22,7 +22,7 @@ import { carpTools, weatherForecast } from "@/server/agent/tools/carp";
 import { commonTools } from "@/server/agent/tools/common";
 import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfishSetView, lionfishTools } from "@/server/agent/tools/lionfish";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
-import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
+import { gqlWindowed, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
 import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenList, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
@@ -62,8 +62,11 @@ const WIDEN_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
 /** Default sightings lookback; with no window given and nothing in it, the tool widens to MAX_LOOKBACK_HOURS. */
 const DEFAULT_SIGHTING_HOURS = 24 * 7;
-/** Counting by submission date looks this far back for the observations (old photos are uploaded years later). */
-const SUBMITTED_LOOKBACK_HOURS = 24 * 366 * 10;
+/**
+ * Counting by submission date looks this far back for the observations. The API filters by observed time only (31-day
+ * pages), so a record observed earlier than this and uploaded recently is beyond what the tool can search; the result says so.
+ */
+const SUBMITTED_LOOKBACK_HOURS = MAX_LOOKBACK_HOURS;
 /**
  * Conditions query this much around the asked-for box. Rows inside the box win; when no station lies inside it
  * ("water levels near Homestead", with the nearest gauge a few km out), the nearby stations answer instead.
@@ -187,6 +190,7 @@ const sightingsInput = z.object({
     .optional()
     .describe("Which date the window counts by: observed (default; when the animal was seen) or submitted (when the record reached the feed: 'newly submitted', 'arrived', 'uploaded'). With submitted, rows can be years older than the window."),
   knownAt: timeSchema.optional().describe("Knowledge time: only records that had reached the feed by this time ('what did we know on …')."),
+  source: z.enum(["inat", "gbif", "nas"]).optional().describe("Only this feed's records (is NAS current here, what GBIF adds): the result then also names the feed's newest record in reach."),
 });
 
 /** Days between the observation and the record reaching the feed, one decimal; null when the API gives no ingest time. */
@@ -230,7 +234,8 @@ const sightings = {
       from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - (bySubmitted ? SUBMITTED_LOOKBACK_HOURS : widenHours) * HOUR_MS)).toISOString(),
       to: asked.to,
     };
-    const data = await gqlWithFeeds<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
+    // The API caps a window at 31 days: a longer reach is fetched in pages (gqlWindowed).
+    const data = await gqlWindowed<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }, typeof LAYER.sightings>(
       "AgentSightings",
       SIGHTINGS_QUERY,
       {
@@ -239,9 +244,12 @@ const sightings = {
         taxa: wanted?.taxonIds ?? null,
         quality: qualityAsked?.map((quality) => quality.toUpperCase()) ?? null,
       },
+      LAYER.sightings,
       ctx,
     );
-    const known = knownAt ? data.sightings.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : data.sightings;
+    const sourceAsked = given(input.source)?.toLowerCase();
+    const fetchedRows = sourceAsked ? data.sightings.filter((row) => lower(row.source) === sourceAsked) : data.sightings;
+    const known = knownAt ? fetchedRows.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : fetchedRows;
     const dateOf = (row: GqlSighting) => (bySubmitted ? Date.parse(row.ingestedAt ?? row.observedAt) : Date.parse(row.observedAt));
     const recent = known.filter((row) => dateOf(row) >= Date.parse(asked.from) && dateOf(row) <= Date.parse(asked.to));
     // Submitted-date windows widen the same way (to records that reached the feed within the backfill).
@@ -293,10 +301,27 @@ const sightings = {
     const lateRows = rows.filter((row) => lateBy(row) !== null);
     const impreciseRows = rows.filter(imprecise);
     const askedDays = Math.max(1, Math.round((Date.parse(asked.to) - Date.parse(asked.from)) / (24 * HOUR_MS)));
+    // The newest record of each feed within the fetched reach (the backfill), so "is feed X current here" is a cited row
+    // with its date, and a feed with nothing in reach is named as such rather than left out.
+    const reachDays = Math.round((Date.parse(fetched.to) - Date.parse(fetched.from)) / (24 * HOUR_MS));
+    const sources = [...new Set([...ctx.app.feeds.map((f) => f.source).filter((s) => /^(inat|gbif|nas)$/.test(s)), ...data.sightings.map((row) => lower(row.source))])];
+    const newestBySource = Object.fromEntries(
+      sources.map((source) => {
+        const newest = data.sightings.filter((row) => lower(row.source) === source).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
+        return [source, newest ? { cite: `[e:sighting:${newest.id}]`, observedAt: newest.observedAt, submittedAt: newest.ingestedAt ?? null, observedAge: `${Math.round(((ctx.now.getTime() - Date.parse(newest.observedAt)) / (24 * HOUR_MS)) * 10) / 10} days old`, quality: lower(newest.quality) } : { none: `no ${source} record in this box in the last ${reachDays} days (the reach of this tool); its feed state (feeds, feedSummary) says how old the feed's newest record is overall` }];
+      }),
+    );
+    const newestEvidence = Object.values(newestBySource)
+      .flatMap((n) => (typeof n.cite === "string" ? [n.cite.slice(3, -1)] : []))
+      .map((id) => data.sightings.find((row) => `sighting:${row.id}` === id)!)
+      .filter((row) => !shown.includes(row));
     const out = output(
       {
         bbox,
         window,
+        ...(sourceAsked ? { source: sourceAsked, sourceNote: `only ${sourceAsked} rows; newestBySource.${sourceAsked} is that feed's newest record in reach` } : {}),
+        reachNote: `records are searched by observed date up to ${reachDays} days back (the feed backfill); an older observation uploaded recently is beyond this tool's reach`,
+        newestBySource,
         windowWords: endsNow ? `last ${days} days` : `${window.from.slice(0, 10)} to ${window.to.slice(0, 10)}`,
         dateField: bySubmitted ? "submitted (the window counts by the date each record reached the feed; observed dates can be much older)" : "observed (the window counts by the date the animal was seen; submittedAt says when the record reached the feed)",
         ...(knownAt
@@ -371,7 +396,7 @@ const sightings = {
           ...(lateBy(row) ? { arrivedLate: `${lateBy(row)} after it was observed` } : {}),
         })),
       },
-      evidenceRows,
+      [...evidenceRows, ...newestEvidence.map((row) => evidence("sighting", row.id, `${speciesLabel(row.taxon)} · ${lower(row.quality)} · ${row.source} · ${row.observedAt} · newest of its feed in reach`, row.source))],
       feeds,
       rows.length,
     );
@@ -509,10 +534,11 @@ const conditions = {
     // A parameter comes with its comparison partner (satellite sst_c with measured water_c), so a buoy check is always possible.
     const asked = givenList(input.params) as Param[] | undefined;
     const params = asked ? [...new Set(asked.flatMap((p) => [p, ...(Object.entries(COMPARE_AS).filter(([a, b]) => a === p || b === p).flatMap(([a, b]) => [a, b]) as Param[])]))] : null;
-    const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
+    const data = await gqlWindowed<{ readings: GqlReading[]; feeds: GqlFeedState[] }, "readings">(
       "AgentReadings",
       READINGS_QUERY,
       { bbox: around, ...window, params: params?.map((param) => param.toUpperCase()) ?? null },
+      "readings",
       ctx,
     );
     const inside = data.readings.filter((row) => inBox(area, row.station.lat, row.station.lon));

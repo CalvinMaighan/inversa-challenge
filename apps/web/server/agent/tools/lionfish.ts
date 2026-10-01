@@ -16,7 +16,7 @@ import { z } from "zod";
 import type { CapabilityContext, CapabilityOutput, Evidence } from "@/server/agent/runtime/registry";
 import { evidence, hotspotKey, readingKey } from "@/server/agent/tools/evidence";
 import { inRegion, lookupGazetteer, type Place } from "@/server/agent/tools/gazetteer";
-import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
+import { gqlWindowed, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { atTime, bboxSchema, feedsFor, given, givenTime, HOUR_MS, localTime, output, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { extentOf, MAX_HIGHLIGHT, withView, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
@@ -153,7 +153,8 @@ export const reefHeat = {
     const days = input.days ?? 1;
     // Four days of slack behind `at` so the latest product (1 to 2 days behind) is inside the window.
     const from = iso(ms(at) - (days + 3) * DAY_MS);
-    const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentReadings", READINGS_QUERY, { bbox, from, to: at, params: ["SST", "SST_ANOMALY", "DHW", "BAA"] }, ctx);
+    // Up to 93 days: fetched in 31-day pages (the API's window cap).
+    const data = await gqlWindowed<{ readings: GqlReading[]; feeds: GqlFeedState[] }, "readings">("AgentReadings", READINGS_QUERY, { bbox, from, to: at, params: ["SST", "SST_ANOMALY", "DHW", "BAA"] }, "readings", ctx);
     const rows = data.readings.filter((r) => lower(r.station.source) === "crw");
     const byStation = new Map<string, GqlReading[]>();
     for (const r of rows) byStation.set(r.station.id, [...(byStation.get(r.station.id) ?? []), r]);
@@ -229,7 +230,7 @@ export const reefHeat = {
                   dhwStart: first?.dhwCWeeks ?? null,
                   dhwEnd: last?.dhwCWeeks ?? null,
                   dhwChange: first?.dhwCWeeks !== null && first?.dhwCWeeks !== undefined && last?.dhwCWeeks !== null && last?.dhwCWeeks !== undefined ? r2(last.dhwCWeeks - first.dhwCWeeks) : null,
-                  dhwPeak: peak ? { dhwCWeeks: peak.value, date: peak.observedAt.slice(0, 10), cite: cite(peak) } : null,
+                  dhwPeak: peak ? { dhwCWeeks: peak.value, date: peak.observedAt.slice(0, 10), cite: cite(peak), next: `To show the peak day on the globe, call set_view with time "${peak.observedAt}" and the area.` } : null,
                   baaStart: first?.baa ?? null,
                   baaEnd: last?.baa ?? null,
                   baaChanges,

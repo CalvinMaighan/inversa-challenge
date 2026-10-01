@@ -355,7 +355,8 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
 describe("lionfish tool: sightings, conditions and set_view changes", () => {
   test("lionfish tool: sightings default to the app's 30-day window, carry submitted dates, lag days, area, imprecise and late flags, and GBIF copies as duplicates", async () => {
     const out = await run("sightings", { species: ["lionfish"] });
-    expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentSightings"]);
+    // The default 30-day window is fetched over the 90-day backfill reach: three 31-day pages, the API's cap.
+    expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentSightings", "AgentSightings", "AgentSightings"]);
     expect(out.data.window).toMatchObject({ from: new Date(NOW.getTime() - 30 * DAY).toISOString() });
     const byArea = out.data.byArea as Record<string, { name: string; reports: number; distinct: number; thin: boolean }>;
     expect(byArea["fl-keys"]).toEqual({ name: "Florida Keys / South Florida", thin: false, reports: 6, distinct: 4 });
@@ -386,11 +387,24 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
   test("lionfish tool: dateField submitted counts by arrival and surfaces old dives uploaded this month; knownAt replays what had arrived by a date", async () => {
     const submitted = await run("sightings", { species: ["lionfish"], dateField: "submitted", hours: 720 });
     const rows = submitted.data.rows as any[];
-    expect(rows.map((r) => r.evidenceId)).toContain("sighting:7009");
-    expect(rows.map((r) => r.evidenceId)).toContain("sighting:8015");
-    expect(rows.find((r) => r.evidenceId === "sighting:8015")).toMatchObject({ observedAt: "2021-03-11T15:00:00Z", submittedAt: "2026-09-29T08:00:00Z" });
+    // The API searches by observed date in 31-day pages: a 90-day reach is three requests, and a dive observed years
+    // ago and uploaded this month (7009, 8015) is beyond it; the result says so instead of pretending.
+    expect(stub.requests.filter((r) => r.operationName === "AgentSightings")).toHaveLength(3);
+    expect(stub.requests.every((r) => Date.parse(String(r.variables.to)) - Date.parse(String(r.variables.from)) <= 31 * DAY)).toBe(true);
+    expect(rows.map((r) => r.evidenceId)).toContain("sighting:8011");
+    expect(rows.find((r) => r.evidenceId === "sighting:8011")).toMatchObject({ observedAt: "2026-08-16T14:00:00Z", submittedAt: "2026-09-20T12:00:00Z", lagDays: 34.9 });
+    expect(rows.map((r) => r.evidenceId)).not.toContain("sighting:8015");
+    expect(String(submitted.data.reachNote)).toMatch(/up to 90 days back/);
     expect(String(submitted.data.dateField)).toMatch(/^submitted/);
     expect(submitted.data.widened).toBeUndefined();
+    // The stub refuses a window over 31 days as the API does.
+    expect(await registry.execute("conditions", { params: ["sst_c"], hours: 24 * 40 }, ctx)).toMatchObject({ ok: true });
+    // One feed's newest record in reach, per source: NAS has nothing in Colombia within 90 days, iNaturalist has.
+    const nas = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "co-caribbean")!.bbox, hours: 2160, source: "nas" });
+    expect(nas.data.total).toBe(0);
+    expect((nas.data.newestBySource as any).nas.none).toMatch(/no nas record in this box in the last 90 days/);
+    expect((nas.data.newestBySource as any).inat).toMatchObject({ cite: "[e:sighting:9501]", observedAge: "1.8 days old" });
+    expect(nas.evidence.map((e) => e.id)).toContain("sighting:9501");
     const known = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "belize")!.bbox, hours: 2160, knownAt: "2026-09-01T00:00:00Z" });
     const ids = (known.data.rows as any[]).map((r) => r.evidenceId);
     expect(ids).toContain("sighting:9001");
