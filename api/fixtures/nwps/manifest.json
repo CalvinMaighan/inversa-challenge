@@ -1,0 +1,70 @@
+{
+  "recorded_at": "2026-10-01T07:01:03Z",
+  "note": "Eight carp sites (docs/evidence/carp-data-proof.md): gauge metadata (flood categories, -9999 = not defined) then stageflow (observed hourly for 30 days + the current forecast). Order matters: thresholds land before the forecast they categorise.",
+  "files": [
+    {
+      "file": "SMML1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/SMML1"
+    },
+    {
+      "file": "SMML1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/SMML1/stageflow"
+    },
+    {
+      "file": "KRZL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/KRZL1"
+    },
+    {
+      "file": "KRZL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/KRZL1/stageflow"
+    },
+    {
+      "file": "BLRL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BLRL1"
+    },
+    {
+      "file": "BLRL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BLRL1/stageflow"
+    },
+    {
+      "file": "MCGL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/MCGL1"
+    },
+    {
+      "file": "MCGL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/MCGL1/stageflow"
+    },
+    {
+      "file": "BTRL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BTRL1"
+    },
+    {
+      "file": "BTRL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BTRL1/stageflow"
+    },
+    {
+      "file": "AEXL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/AEXL1"
+    },
+    {
+      "file": "AEXL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/AEXL1/stageflow"
+    },
+    {
+      "file": "MLUL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/MLUL1"
+    },
+    {
+      "file": "MLUL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/MLUL1/stageflow"
+    },
+    {
+      "file": "BXAL1.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BXAL1"
+    },
+    {
+      "file": "BXAL1.stageflow.json",
+      "url": "https://api.water.noaa.gov/nwps/v1/gauges/BXAL1/stageflow"
+    }
+  ]
+}

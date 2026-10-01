@@ -33,6 +33,9 @@ pub struct Config {
     pub aws_secret_access_key: Option<String>,
     pub nwws_user: Option<String>,
     pub nwws_pass: Option<String>,
+    /// `USGS_API_KEY`: a free key for api.waterdata.usgs.gov raises the anonymous per-IP rate
+    /// limit; sent as `X-Api-Key` by the `usgs` poller when set.
+    pub usgs_api_key: Option<String>,
     /// When false, the scheduler starts no network sources (tests, offline dev).
     pub sources_enabled: bool,
 }
@@ -74,6 +77,7 @@ impl Config {
             aws_secret_access_key: env("AWS_SECRET_ACCESS_KEY"),
             nwws_user: env("NWWS_USER"),
             nwws_pass: env("NWWS_PASS"),
+            usgs_api_key: env("USGS_API_KEY"),
             sources_enabled: env("INVERSA_SOURCES").as_deref() != Some("off"),
         }
     }
@@ -98,6 +102,7 @@ impl Config {
             aws_secret_access_key: None,
             nwws_user: None,
             nwws_pass: None,
+            usgs_api_key: None,
             sources_enabled: false,
         }
     }

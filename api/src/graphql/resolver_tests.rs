@@ -877,7 +877,7 @@ async fn forecast_graphql_forecasts_asof_and_coverage() {
     // Validation.
     let body = gql(&state, Q, json!({"site": "XXXX1"})).await;
     assert_eq!(error_code(&body), "UNKNOWN_SITE");
-    assert!(error_message(&body).contains("BTRL1, ALXL1, SMML1, MONL1"), "{body}");
+    assert!(error_message(&body).contains("SMML1, KRZL1, BLRL1, MCGL1, BTRL1, AEXL1, MLUL1, BXAL1"), "{body}");
     let body = gql(&state, Q, json!({"site": "BTRL1", "history": 61})).await;
     assert!(error_message(&body).contains("0..=60"), "{body}");
 }
@@ -971,7 +971,7 @@ async fn forecast_graphql_site_status_at() {
     assert_eq!(s["forecast"]["issuedAt"], iso(d0 - DAY));
     assert_eq!(s["forecastFreshness"], "AGING");
     // Nothing known at a configured site: MISSING bands, nulls, no conflicts.
-    let body = gql(&state, Q, json!({"site": "MONL1", "asOf": iso(d1)})).await;
+    let body = gql(&state, Q, json!({"site": "MLUL1", "asOf": iso(d1)})).await;
     let s = &body["data"]["siteStatusAt"];
     assert_eq!((s["observationFreshness"].as_str(), s["forecastFreshness"].as_str()), (Some("MISSING"), Some("MISSING")));
     assert_eq!((s["stageFt"].clone(), s["category"].clone(), s["forecast"].clone(), s["conflicts"].clone()), (Value::Null, Value::Null, Value::Null, json!([])));

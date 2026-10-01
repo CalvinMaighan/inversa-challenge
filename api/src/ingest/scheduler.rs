@@ -19,10 +19,11 @@ use sha2::{Digest, Sha256};
 use tokio::task::JoinHandle;
 
 use crate::app::config::App;
+use crate::forecast::store::{self as forecast_store, Inserted, NewSnapshot};
 use crate::ingest::archive::raw_key;
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::source::{FetchCtx, RawPayload, Source, SourceInfo};
-use crate::model::{AlertRow, ForecastRow, ReadingRow, RevisionRow, Row, SightingRow, StationRef, TaxonRef};
+use crate::model::{AlertRow, ForecastObservationsRow, ForecastRow, Param, ReadingRow, RevisionRow, Row, SightingRow, SiteAlertsRow, StationRef, TaxonRef, ThresholdsRow};
 use crate::realtime::Event;
 use crate::state::AppState;
 
@@ -567,6 +568,28 @@ fn valid_coord(lat: f64, lon: f64) -> bool {
     lat.is_finite() && lon.is_finite() && (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)
 }
 
+/// Plausible range of a river value, so a feed glitch (a sentinel that slipped through, a
+/// transposed unit) is skipped and counted instead of stored. Stage in feet may run slightly
+/// negative (tidal and datum offsets, Morgan City); discharge may be negative in a tidal reach.
+/// Wide on purpose: the record Mississippi crest at Baton Rouge is 47.3 ft, the record flow 1.5 M cfs.
+pub fn plausible_stage_ft(v: f64) -> bool {
+    v.is_finite() && (-50.0..=200.0).contains(&v)
+}
+
+pub fn plausible_flow_kcfs(v: f64) -> bool {
+    v.is_finite() && (-500.0..=5000.0).contains(&v)
+}
+
+/// The same bounds for a stored reading: `stage_m` in metres, `discharge_cfs` in cfs; every
+/// other parameter passes (their adapters apply the product's own valid range).
+pub fn plausible_reading(param: Param, value: Option<f64>) -> bool {
+    match (param, value) {
+        (Param::StageM, Some(v)) => plausible_stage_ft(v / crate::ingest::poll::physical::FEET_TO_M),
+        (Param::DischargeCfs, Some(v)) => plausible_flow_kcfs(v / 1000.0),
+        _ => true,
+    }
+}
+
 /// Upserts rows inside one transaction, resolving taxon and station refs with per-transaction
 /// caches. Every upsert only touches the row when a value differs, so `written` counts real
 /// changes and an identical payload writes nothing. Sightings and stations outside every region
@@ -617,6 +640,10 @@ impl<'t, 'c> RowWriter<'t, 'c> {
             Row::Station(s) => self.station(s)?.map(|(_, changed)| changed),
             Row::Revision(r) => self.revision(r)?,
             Row::Forecast(f) => self.forecast(f)?,
+            Row::ForecastSnapshot(s) => self.forecast_snapshot(s)?,
+            Row::ForecastObservations(o) => self.forecast_observations(o)?,
+            Row::Thresholds(t) => self.thresholds(t)?,
+            Row::SiteAlerts(a) => self.site_alerts(a)?,
         };
         match changed {
             None => self.skipped += 1,
@@ -624,6 +651,72 @@ impl<'t, 'c> RowWriter<'t, 'c> {
             Some(false) => {}
         }
         Ok(())
+    }
+
+    /// A forecast-store row names a site by NWPS lid; only the app's configured locations are
+    /// written (scope guard, PLAN.md P4), the rest are skipped and counted.
+    fn site_ok(&self, site: &str) -> bool {
+        !site.is_empty() && self.app.cfg.locations.iter().any(|l| l.nwps.as_deref() == Some(site))
+    }
+
+    /// A reading of a conditions app must come from a configured gauge (`locations[].usgs`;
+    /// the ext_id may carry a `:sensor` suffix). Species apps keep every station in their regions.
+    fn gauge_ok(&self, station: &StationRef) -> bool {
+        if self.app.is_species() || !matches!(station.kind, crate::model::StationKind::Gage) {
+            return true;
+        }
+        let site = station.ext_id.split(':').next().unwrap_or_default();
+        self.app.cfg.locations.iter().any(|l| l.usgs.as_deref() == Some(site))
+    }
+
+    fn forecast_snapshot(&mut self, s: &NewSnapshot) -> rusqlite::Result<Option<bool>> {
+        if !self.site_ok(&s.site) || s.payload_hash.is_empty() {
+            return Ok(None);
+        }
+        let mut snap = s.clone();
+        snap.points.retain(|p| p.stage_ft.is_none_or(plausible_stage_ft) && p.flow_kcfs.is_none_or(plausible_flow_kcfs));
+        self.skipped += s.points.len() - snap.points.len();
+        let thresholds = forecast_store::newest_thresholds(self.tx, &snap.site)?.unwrap_or_default();
+        let inserted = forecast_store::insert_snapshot(self.tx, &snap, &thresholds)?;
+        if !matches!(inserted, Inserted::Duplicate { .. }) {
+            self.widen(snap.issued_at);
+        }
+        Ok(Some(!matches!(inserted, Inserted::Duplicate { .. })))
+    }
+
+    fn forecast_observations(&mut self, o: &ForecastObservationsRow) -> rusqlite::Result<Option<bool>> {
+        if !self.site_ok(&o.site) {
+            return Ok(None);
+        }
+        let keep: Vec<_> = o
+            .observations
+            .iter()
+            .copied()
+            .filter(|v| v.stage_ft.is_none_or(plausible_stage_ft) && v.flow_kcfs.is_none_or(plausible_flow_kcfs))
+            .collect();
+        self.skipped += o.observations.len() - keep.len();
+        let n = forecast_store::insert_observations(self.tx, &o.site, o.source, self.now, &keep)?;
+        if n > 0 {
+            if let Some(t) = keep.iter().map(|v| v.observed_at).max() {
+                self.widen(t);
+            }
+        }
+        Ok(Some(n > 0))
+    }
+
+    fn thresholds(&mut self, t: &ThresholdsRow) -> rusqlite::Result<Option<bool>> {
+        if !self.site_ok(&t.site) {
+            return Ok(None);
+        }
+        Ok(Some(forecast_store::upsert_thresholds(self.tx, &t.site, self.now, &t.thresholds)?))
+    }
+
+    fn site_alerts(&mut self, a: &SiteAlertsRow) -> rusqlite::Result<Option<bool>> {
+        if !self.site_ok(&a.site) {
+            return Ok(None);
+        }
+        let r = forecast_store::record_alerts(self.tx, &a.site, a.seen_at, &a.alerts)?;
+        Ok(Some(r.new > 0 || r.ended > 0))
     }
 
     fn taxon(&mut self, t: &TaxonRef) -> rusqlite::Result<Option<i64>> {
@@ -758,6 +851,9 @@ impl<'t, 'c> RowWriter<'t, 'c> {
     }
 
     fn reading(&mut self, r: &ReadingRow) -> rusqlite::Result<Option<bool>> {
+        if !self.gauge_ok(&r.station) || !plausible_reading(r.param, r.value) {
+            return Ok(None);
+        }
         let Some((station_id, station_changed)) = self.station(&r.station)? else { return Ok(None) };
         if station_changed {
             self.written += 1;
@@ -1367,8 +1463,10 @@ mod tests {
 
         let carp = crate::app::test_support::test_state_for("carp");
         let p = plan(&carp);
-        assert_eq!(p.runnable_ids(), ["nws", "usgs"]);
-        assert_eq!(p.known_ids(), ["nws", "usgs", "web", "nwps"]);
+        assert_eq!(p.runnable_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
+        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws", "web"]);
+        let nwws = p.known.iter().find(|(i, _)| i.id == "nwws").unwrap();
+        assert!(nwws.1.as_deref().unwrap().contains("NWWS_USER"), "registered but down with the reason: {:?}", nwws.1);
 
         // A config with the iNat feed removed: the fake app never spawns iNat, and `start`
         // registers exactly its feeds.

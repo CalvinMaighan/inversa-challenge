@@ -2,11 +2,12 @@
 //! (`Db::write`) and is idempotent: replaying a poll changes nothing.
 
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
 use super::{Observation, Point, Source, Thresholds};
 
 /// A forecast issuance as the adapter hands it in.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NewSnapshot {
     /// NWPS lid, e.g. `BTRL1`.
     pub site: String,
@@ -32,6 +33,7 @@ pub enum Inserted {
 }
 
 impl Inserted {
+    #[cfg(test)]
     pub fn id(self) -> i64 {
         match self {
             Inserted::New { id } | Inserted::Duplicate { id } | Inserted::Revision { id, .. } => id,
@@ -120,7 +122,8 @@ pub fn upsert_thresholds(tx: &Connection, site: &str, ingested_at: i64, t: &Thre
     Ok(true)
 }
 
-pub(super) fn newest_thresholds(conn: &Connection, site: &str) -> rusqlite::Result<Option<Thresholds>> {
+/// The newest thresholds stored for a site (what a snapshot inserted now is categorised against).
+pub fn newest_thresholds(conn: &Connection, site: &str) -> rusqlite::Result<Option<Thresholds>> {
     thresholds_asof(conn, site, i64::MAX)
 }
 
@@ -135,7 +138,7 @@ pub fn thresholds_asof(conn: &Connection, site: &str, t: i64) -> rusqlite::Resul
 }
 
 /// An NWS alert in effect at a site, as one poll saw it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AlertSeen {
     pub ext_id: String,
     pub event: String,

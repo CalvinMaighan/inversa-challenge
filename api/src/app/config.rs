@@ -22,13 +22,14 @@ use crate::model::TaxonRef;
 pub const APP_IDS: [&str; 3] = ["carp", "lionfish", "python"];
 pub const DEFAULT_APP: &str = "carp";
 
-/// Every source id a `feeds[]` entry may name, with the mode its adapter runs in. `nwps` has no
-/// adapter yet (leaf C2); a config may list it, and the scheduler registers it as down with that
-/// reason so the feed chips are honest. `crw` is a poller here; at runtime it also takes ERDDAP
-/// nudges and reports itself as `webhook` (`ingest::poll::crw`). `openmeteo-marine` (waves and
-/// currents, gated on the model run) and `goes19-sst` (the GOES-19 consumer narrowed to full-disk
-/// SST) are the Lionfish Watch forms of `openmeteo` and `goes19` (L4).
-pub const SOURCES: [(&str, Mode); 15] = [
+/// Every source id a `feeds[]` entry may name, with the mode its adapter runs in. `crw` is a
+/// poller here; at runtime it also takes ERDDAP nudges and reports itself as `webhook`
+/// (`ingest::poll::crw`). `openmeteo-marine` (waves and currents, gated on the model run) and
+/// `goes19-sst` (the GOES-19 consumer narrowed to full-disk SST) are the Lionfish Watch forms of
+/// `openmeteo` and `goes19` (L4). The carp (conditions) sources are `usgs` (shared with python,
+/// OGC API), `nwps`, `nws-alerts` (the `nws` poller scoped to `area=LA` and matched to sites),
+/// `nws-forecast` (gridpoint) and `iem` (HML archive backfill) (C4).
+pub const SOURCES: [(&str, Mode); 18] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
     ("gbif", Mode::Poll),
@@ -44,10 +45,14 @@ pub const SOURCES: [(&str, Mode); 15] = [
     ("nwps", Mode::Poll),
     ("openmeteo-marine", Mode::Poll),
     ("goes19-sst", Mode::Push),
+    ("nws-alerts", Mode::Poll),
+    ("nws-forecast", Mode::Poll),
+    ("iem", Mode::Poll),
 ];
 
-/// Sources listed in `SOURCES` whose adapter does not exist yet.
-pub const PENDING_SOURCES: [&str; 1] = ["nwps"];
+/// Sources listed in `SOURCES` whose adapter does not exist yet (none since leaf C4; the
+/// scheduler still registers any listed here as down with the reason).
+pub const PENDING_SOURCES: [&str; 0] = [];
 
 /// Cells per axis the scoring grid must divide into: the hotspot grid is 2 cells, the
 /// environment (GOES g5) grid 5 cells, so a region edge is a whole number of 10 cells.
@@ -232,6 +237,16 @@ impl RegionCfg {
     }
 }
 
+/// An NWS forecast grid cell (`/points/{lat},{lon}` → `gridId`, `gridX`, `gridY`), so the
+/// gridpoint poller needs no points lookup at runtime.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NwsGrid {
+    pub office: String,
+    pub x: u32,
+    pub y: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LocationCfg {
@@ -243,10 +258,34 @@ pub struct LocationCfg {
     pub usgs: Option<String>,
     #[serde(default)]
     pub nwps: Option<String>,
+    /// NWS forecast office (`LCH`, `LIX`, `SHV`).
     #[serde(default)]
     pub nws: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nws_grid: Option<NwsGrid>,
+    /// UGC codes of the location (forecast zone `LAZ033`, county `LAC097`): zone-based alerts
+    /// without a polygon match a site through these.
+    #[serde(default)]
+    pub nws_zones: Vec<String>,
+    /// Why this site is in the set, for the location briefing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
     #[serde(default)]
     pub provisional: bool,
+}
+
+/// A named map camera (the UI's preset list): `zoom` is a web-map zoom level.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CameraPreset {
+    pub id: String,
+    pub name: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub zoom: f64,
+    /// Location ids the preset frames (empty = all).
+    #[serde(default)]
+    pub locations: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -339,6 +378,8 @@ pub struct AppConfig {
     pub taxa: Vec<TaxonCfg>,
     pub regions: Vec<RegionCfg>,
     pub locations: Vec<LocationCfg>,
+    #[serde(default)]
+    pub camera_presets: Vec<CameraPreset>,
     pub feeds: Vec<FeedCfg>,
     pub score: ScoreCfg,
     pub windows: WindowsCfg,
@@ -487,6 +528,27 @@ impl AppConfig {
             blank(&format!("location {:?}: name", l.id), &l.name)?;
             if !(-90.0..=90.0).contains(&l.lat) || !(-180.0..=180.0).contains(&l.lon) {
                 return Err(format!("location {:?}: lat/lon out of range", l.id));
+            }
+            if self.kind == AppKind::Conditions && !self.regions.iter().any(|r| r.bbox.contains(l.lat, l.lon)) {
+                return Err(format!("location {:?} lies outside every region", l.id));
+            }
+        }
+        for (what, ids) in [("usgs", self.locations.iter().filter_map(|l| l.usgs.as_deref()).collect::<Vec<_>>()), ("nwps", self.locations.iter().filter_map(|l| l.nwps.as_deref()).collect())] {
+            let mut seen = HashSet::new();
+            if let Some(dup) = ids.iter().find(|id| !seen.insert(**id)) {
+                return Err(format!("{what} id {dup:?} is used by two locations"));
+            }
+        }
+        let mut seen = HashSet::new();
+        for p in &self.camera_presets {
+            if !id_ok(&p.id) || !seen.insert(p.id.as_str()) {
+                return Err(format!("camera preset id {:?} is invalid or duplicated", p.id));
+            }
+            if p.zoom <= 0.0 || p.zoom > 24.0 || !(-90.0..=90.0).contains(&p.lat) || !(-180.0..=180.0).contains(&p.lon) {
+                return Err(format!("camera preset {:?}: lat/lon/zoom out of range", p.id));
+            }
+            if let Some(unknown) = p.locations.iter().find(|id| !self.locations.iter().any(|l| &l.id == *id)) {
+                return Err(format!("camera preset {:?} names unknown location {unknown:?}", p.id));
             }
         }
         if self.feeds.is_empty() {
@@ -835,8 +897,13 @@ mod tests {
         let carp = App::builtin("carp").unwrap();
         assert_eq!(carp.cfg.kind, AppKind::Conditions);
         assert!(carp.taxa.is_empty());
-        assert!(carp.cfg.provisional && carp.cfg.locations.iter().all(|l| l.provisional));
-        assert!(carp.cfg.has_feed("nwps"), "pending adapter may be listed");
+        assert!(!carp.cfg.provisional && carp.cfg.locations.iter().all(|l| !l.provisional), "C1 data proof landed");
+        assert_eq!(carp.cfg.locations.len(), 8);
+        assert!(carp.cfg.locations.iter().all(|l| l.usgs.is_some() && l.nwps.is_some() && l.nws_grid.is_some() && !l.nws_zones.is_empty()));
+        assert_eq!(carp.cfg.camera_presets.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["all-sites", "atchafalaya"]);
+        for feed in ["usgs", "nwps", "nws-alerts", "nws-forecast", "iem", "nwws", "web"] {
+            assert!(carp.cfg.has_feed(feed), "{feed}");
+        }
         assert_eq!(python.cell_id(&python.regions[0], python.regions[0].grid.index(12, 7)), "12:7");
         assert_eq!(python.parse_cell("everglades:12:7").map(|(_, i)| i), python.parse_cell("12:7").map(|(_, i)| i));
     }

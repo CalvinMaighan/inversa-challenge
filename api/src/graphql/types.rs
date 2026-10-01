@@ -86,6 +86,7 @@ db_text!(Param {
     StageM => "stage_m", WaveM => "wave_m", WindMs => "wind_ms", FireFrp => "fire_frp",
     Sst => "sst", SstAnomaly => "sst_anomaly", Dhw => "dhw", Baa => "baa",
     WavePeriodS => "wave_period_s", CurrentMs => "current_ms", CurrentDirDeg => "current_dir_deg",
+    DischargeCfs => "discharge_cfs",
 });
 db_text!(ReadingOrigin { Measured => "measured", Satellite => "satellite", Modeled => "modeled" });
 db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missing => "missing" });
@@ -141,6 +142,8 @@ pub enum Param {
     WavePeriodS,
     CurrentMs,
     CurrentDirDeg,
+    /// USGS discharge, ft^3/s (carp gauges). NWPS flow (kcfs) is in the forecast store, apart.
+    DischargeCfs,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

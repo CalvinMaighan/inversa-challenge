@@ -16,15 +16,15 @@
 //! resolvers call `query`.
 
 pub mod query;
-// The write side has no production caller until the NWPS/IEM/NWS adapters (leaf C4) land;
-// tests cover it. Drop the allow when C4 wires them.
-#[allow(dead_code)]
 pub mod store;
 #[cfg(test)]
 mod tests;
 
+use serde::{Deserialize, Serialize};
+
 /// Where a row came from. Only `NwpsLive` rows are gated by `ingested_at` in as-of views.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Source {
     NwpsLive,
     IemArchive,
@@ -53,6 +53,17 @@ impl Source {
     /// `ingested_at`.
     pub fn backfilled(self) -> bool {
         self != Source::NwpsLive
+    }
+}
+
+/// The `source` column value a feed (`sources.id`) writes: `nwps` → `nwps-live`, `iem` →
+/// `iem-archive`, `nws-forecast` → `nws-gridpoint`. Feed state and backfill counts use it.
+pub fn source_of_feed(source_id: &str) -> Option<&'static str> {
+    match source_id {
+        "nwps" => Some(Source::NwpsLive.db()),
+        "iem" => Some(Source::IemArchive.db()),
+        "nws-forecast" => Some(Source::NwsGridpoint.db()),
+        _ => None,
     }
 }
 
@@ -90,7 +101,7 @@ impl Category {
 }
 
 /// NWPS flood category thresholds in NWPS stage feet. `None` = not defined at the site.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub struct Thresholds {
     pub action_ft: Option<f64>,
     pub minor_ft: Option<f64>,
@@ -99,14 +110,18 @@ pub struct Thresholds {
 }
 
 /// A feed value as a threshold: `-9999`, `-999`, NaN and infinities are "not defined".
-#[allow(dead_code)] // adapter input (C4)
 pub fn clean_threshold(v: f64) -> Option<f64> {
     (v.is_finite() && v > -999.0).then_some(v)
 }
 
+/// A feed stage or flow value: NWPS writes `-999` (observed) and `-9999` (forecast) for "no
+/// value", USGS `-999999`; none of them is a number.
+pub fn clean_value(v: Option<f64>) -> Option<f64> {
+    v.and_then(clean_threshold)
+}
+
 impl Thresholds {
     /// From the raw feed numbers (`-9999` = missing).
-    #[allow(dead_code)] // adapter input (C4)
     pub fn from_feed(action: f64, minor: f64, moderate: f64, major: f64) -> Thresholds {
         Thresholds {
             action_ft: clean_threshold(action),
@@ -142,8 +157,7 @@ impl Thresholds {
 }
 
 /// One forecast point as the adapter hands it in. Stage in NWPS feet, flow in kcfs.
-#[allow(dead_code)] // adapter input (C4)
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Point {
     pub valid_at: i64,
     pub stage_ft: Option<f64>,
@@ -151,8 +165,7 @@ pub struct Point {
 }
 
 /// One observed value as the adapter hands it in (NWPS observed series).
-#[allow(dead_code)] // adapter input (C4)
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Observation {
     pub observed_at: i64,
     pub stage_ft: Option<f64>,

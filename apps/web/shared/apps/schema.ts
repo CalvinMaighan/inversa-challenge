@@ -53,6 +53,9 @@ export const FEED_SOURCES = {
   nwps: "poll",
   "openmeteo-marine": "poll",
   "goes19-sst": "push",
+  "nws-alerts": "poll",
+  "nws-forecast": "poll",
+  iem: "poll",
 } as const;
 export type FeedSource = keyof typeof FEED_SOURCES;
 const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];
@@ -137,7 +140,24 @@ const location = z.strictObject({
   usgs: z.string().nullable().optional(),
   nwps: z.string().nullable().optional(),
   nws: z.string().nullable().optional(),
+  /** NWS forecast grid cell (`/points` gridId, gridX, gridY), so the gridpoint poller needs no lookup (C4). */
+  nwsGrid: z.strictObject({ office: text, x: z.number().int().min(0), y: z.number().int().min(0) }).optional(),
+  /** UGC codes of the location (forecast zone, county): zone-based alerts match a site through these. */
+  nwsZones: z.array(text).optional(),
+  /** Why the site is in the set; data caveats (datum, missing discharge). */
+  note: z.string().optional(),
   provisional: z.boolean().default(false),
+});
+
+/** A named map camera for the preset list (conditions apps): `zoom` is a web-map zoom level. */
+const cameraPreset = z.strictObject({
+  id,
+  name: text,
+  lat: z.number().min(-90).max(90),
+  lon: z.number().min(-180).max(180),
+  zoom: z.number().gt(0).max(24),
+  /** Location ids the preset frames; empty = all. */
+  locations: z.array(id).optional(),
 });
 
 const feed = z
@@ -195,6 +215,7 @@ export const appConfigSchema = z
     taxa: z.array(taxon).max(255),
     regions: z.array(region).min(1).max(255),
     locations: z.array(location),
+    cameraPresets: z.array(cameraPreset).optional(),
     feeds: z.array(feed).min(1),
     score,
     windows,
@@ -220,6 +241,20 @@ export const appConfigSchema = z
       for (const other of app.regions.slice(0, i)) if (overlaps(r.bbox, other.bbox)) issue(["regions", i, "bbox"], `overlaps region ${other.id}`);
     });
     if (dupes(app.locations.map((l) => l.id)).length) issue(["locations"], "location ids must be unique");
+    if (app.kind === "conditions") {
+      app.locations.forEach((l, i) => {
+        if (!app.regions.some((r) => r.bbox.south <= l.lat && l.lat <= r.bbox.north && r.bbox.west <= l.lon && l.lon <= r.bbox.east))
+          issue(["locations", i], "lies outside every region");
+      });
+    }
+    for (const key of ["usgs", "nwps"] as const) {
+      if (dupes(app.locations.map((l) => l[key]).filter((v): v is string => typeof v === "string")).length) issue(["locations"], `${key} ids must be unique`);
+    }
+    const presets = app.cameraPresets ?? [];
+    if (dupes(presets.map((p) => p.id)).length) issue(["cameraPresets"], "preset ids must be unique");
+    presets.forEach((p, i) => {
+      for (const loc of p.locations ?? []) if (!app.locations.some((l) => l.id === loc)) issue(["cameraPresets", i, "locations"], `unknown location ${loc}`);
+    });
     if (dupes(app.feeds.map((f) => f.source)).length) issue(["feeds"], "a source is listed twice");
     if (dupes(app.score.components.map((c) => c.id)).length) issue(["score", "components"], "component ids must be unique");
     const layerIds = app.layers.map((l) => l.id);

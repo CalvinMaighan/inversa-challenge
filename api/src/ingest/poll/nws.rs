@@ -22,11 +22,14 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use sha2::Digest;
+
 use crate::app::config::App;
+use crate::forecast::store::AlertSeen;
 use crate::ingest::governor;
 use crate::ingest::poll::physical::{self, parse_rfc3339_ms, BBox};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
-use crate::model::{AlertRow, Row};
+use crate::model::{AlertRow, Row, SiteAlertsRow};
 use crate::state::Config;
 
 pub const API: &str = "https://api.weather.gov/alerts/active";
@@ -50,9 +53,41 @@ pub struct Scope {
     pub same_codes: Vec<String>,
 }
 
+/// A configured site alerts are matched to (carp): point for polygon alerts, UGC codes
+/// (`nwsZones`: forecast zone, county) for zone-based ones.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SiteRef {
+    pub lid: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub zones: Vec<String>,
+}
+
+/// The feed entry that configures the alerts poller: `nws-alerts` (carp, with site matching)
+/// or `nws` (python).
+pub fn feed_id(app: &App) -> &'static str {
+    if app.cfg.has_feed("nws-alerts") {
+        "nws-alerts"
+    } else {
+        "nws"
+    }
+}
+
+/// The sites an app's alerts are matched to: its locations with an NWPS id (carp only).
+pub fn sites(app: &App) -> Vec<SiteRef> {
+    if feed_id(app) != "nws-alerts" {
+        return Vec::new();
+    }
+    app.cfg
+        .locations
+        .iter()
+        .filter_map(|l| l.nwps.clone().map(|lid| SiteRef { lid, lat: l.lat, lon: l.lon, zones: l.nws_zones.clone() }))
+        .collect()
+}
+
 impl Scope {
     pub fn for_app(app: &App) -> Scope {
-        let params = app.cfg.feed("nws").map(|f| &f.params);
+        let params = app.cfg.feed(feed_id(app)).map(|f| &f.params);
         let list = |key: &str| -> Vec<String> {
             params
                 .and_then(|p| p.get(key))
@@ -88,14 +123,16 @@ struct Validators {
 }
 
 pub struct Nws {
+    id: &'static str,
     user_agent: String,
     scope: Scope,
+    sites: Vec<SiteRef>,
     validators: Mutex<Option<Validators>>,
 }
 
 impl Nws {
     pub fn new(config: &Config, app: std::sync::Arc<App>) -> Self {
-        Nws { user_agent: config.user_agent.clone(), scope: Scope::for_app(&app), validators: Mutex::new(None) }
+        Nws { id: feed_id(&app), user_agent: config.user_agent.clone(), scope: Scope::for_app(&app), sites: sites(&app), validators: Mutex::new(None) }
     }
 }
 
@@ -103,7 +140,7 @@ impl Nws {
 impl Source for Nws {
     fn info(&self) -> SourceInfo {
         SourceInfo {
-            id: "nws",
+            id: self.id,
             name: "NWS alerts API",
             homepage: "https://www.weather.gov/documentation/services-web-api",
             mode: Mode::Poll,
@@ -147,7 +184,9 @@ impl Source for Nws {
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
-        normalize_alerts(&raw.bytes, &self.scope)
+        let mut rows = normalize_alerts(&raw.bytes, &self.scope)?;
+        rows.extend(site_alert_rows(&raw.bytes, &self.sites, raw.fetched_at)?);
+        Ok(rows)
     }
 }
 
@@ -166,6 +205,65 @@ pub fn normalize_alerts(bytes: &[u8], scope: &Scope) -> anyhow::Result<Vec<Row>>
         }
     }
     Ok(rows)
+}
+
+/// One `Row::SiteAlerts` per site (carp): the actual alerts whose polygon contains the site or
+/// whose UGC codes name its zone or county, as seen at `seen_at`. A site with none still gets a
+/// row with an empty list: "no active alerts" is a recorded check, and it ends alert versions
+/// that were in effect at the previous poll. The version key is the CAP message id, which NWS
+/// changes on every update, so an updated alert is a new version and the old one ends.
+pub fn site_alert_rows(bytes: &[u8], sites: &[SiteRef], seen_at: i64) -> anyhow::Result<Vec<Row>> {
+    if sites.is_empty() {
+        return Ok(Vec::new());
+    }
+    let doc: Value = serde_json::from_slice(bytes).context("alerts json")?;
+    let features = doc.get("features").and_then(Value::as_array).context("alerts: no features array")?;
+    let mut rows = Vec::with_capacity(sites.len());
+    for site in sites {
+        let mut alerts = Vec::new();
+        for f in features {
+            let p = &f["properties"];
+            if p["status"].as_str() != Some("Actual") || !alert_covers_site(f, site) {
+                continue;
+            }
+            let Some(a) = alert_row(f) else { continue };
+            let cap_id = p["id"].as_str().unwrap_or_default();
+            alerts.push(AlertSeen {
+                ext_id: a.ext_id,
+                event: a.event,
+                severity: a.severity,
+                headline: a.headline,
+                onset: a.onset,
+                expires: a.expires,
+                source: crate::forecast::Source::NwsGridpoint,
+                payload_hash: hex::encode(sha2::Sha256::digest(cap_id.as_bytes())),
+            });
+        }
+        rows.push(Row::SiteAlerts(SiteAlertsRow { site: site.lid.clone(), seen_at, alerts }));
+    }
+    Ok(rows)
+}
+
+/// Does an alert cover a site: its polygon contains the point, or (no polygon) its UGC codes
+/// include the site's forecast zone or county.
+pub fn alert_covers_site(f: &Value, site: &SiteRef) -> bool {
+    let g = &f["geometry"];
+    if !g.is_null() {
+        return geometry_contains(g, site.lat, site.lon);
+    }
+    strings(&f["properties"]["geocode"]["UGC"]).iter().any(|u| site.zones.iter().any(|z| z == u))
+}
+
+/// Is `(lat, lon)` inside a GeoJSON Polygon or MultiPolygon (outer rings)?
+pub fn geometry_contains(g: &Value, lat: f64, lon: f64) -> bool {
+    match g["type"].as_str() {
+        Some("Polygon") => g["coordinates"].get(0).map(ring).is_some_and(|r| r.len() >= 3 && point_in_ring((lon, lat), &r)),
+        Some("MultiPolygon") => g["coordinates"].as_array().is_some_and(|polys| {
+            polys.iter().any(|p| p.get(0).map(ring).is_some_and(|r| r.len() >= 3 && point_in_ring((lon, lat), &r)))
+        }),
+        Some("GeometryCollection") => g["geometries"].as_array().is_some_and(|gs| gs.iter().any(|g| geometry_contains(g, lat, lon))),
+        _ => false,
+    }
 }
 
 fn strings(v: &Value) -> Vec<&str> {
@@ -687,6 +785,137 @@ mod tests {
         assert_eq!(carp.offices, ["KLIX", "KSHV", "KLCH", "KJAN"]);
         assert!(normalize_alerts(&fixture(FIXTURE), &carp).unwrap().is_empty(), "no Florida alert reaches the carp app");
         assert_eq!(alerts().len(), 6, "the python scope keeps the recorded six");
+    }
+
+    // ---- carp: `nws-alerts`, area=LA, matched to sites -------------------------------------
+
+    const LA_FIXTURE: &str = "nws_la/alerts/active_la.json";
+    /// 2026-10-01T07:01:03Z, when the Louisiana fixture was recorded (no active alerts).
+    const LA_RECORDED_AT: i64 = 1_790_838_063_000;
+
+    fn carp_nws() -> Nws {
+        Nws::new(&Config::for_tests(), std::sync::Arc::new(crate::app::config::App::builtin("carp").unwrap()))
+    }
+
+    /// A Louisiana alert document: a polygon flood warning around Krotz Springs and a
+    /// zone-based flood watch over the Baton Rouge zone, plus a test message.
+    fn la_doc() -> Value {
+        serde_json::json!({"features": [{
+            "geometry": {"type": "Polygon", "coordinates": [[[-91.9, 30.4], [-91.6, 30.4], [-91.6, 30.7], [-91.9, 30.7], [-91.9, 30.4]]]},
+            "properties": {
+                "id": "urn:oid:2.49.0.1.840.0.aaaa.001.1", "status": "Actual", "messageType": "Alert", "event": "Flood Warning",
+                "severity": "Severe", "senderName": "NWS Lake Charles LA", "sent": "2026-10-01T06:00:00Z",
+                "onset": "2026-10-01T06:00:00Z", "ends": "2026-10-03T12:00:00Z",
+                "parameters": {"VTEC": ["/O.NEW.KLCH.FL.W.0011.261001T0600Z-261003T1200Z/"], "NWSheadline": ["FLOOD WARNING IN EFFECT"]},
+                "geocode": {"UGC": ["LAC097"], "SAME": ["022097"]}
+            }
+        }, {
+            "geometry": null,
+            "properties": {
+                "id": "urn:oid:2.49.0.1.840.0.bbbb.001.1", "status": "Actual", "messageType": "Alert", "event": "Flood Watch",
+                "severity": "Moderate", "senderName": "NWS New Orleans LA", "sent": "2026-10-01T05:00:00Z",
+                "onset": "2026-10-01T05:00:00Z", "expires": "2026-10-02T05:00:00Z",
+                "parameters": {"VTEC": ["/O.NEW.KLIX.FA.A.0005.261001T0500Z-261002T0500Z/"]},
+                "geocode": {"UGC": ["LAZ046", "LAZ047"], "SAME": ["022033", "022121"]}
+            }
+        }, {
+            "geometry": null,
+            "properties": {"id": "urn:test", "status": "Test", "event": "Test Message", "senderName": "NWS Lake Charles LA", "geocode": {"UGC": ["LAZ047"]}}
+        }]})
+    }
+
+    /// The carp poller is `nws-alerts`, queries LA and knows the eight sites with their zones;
+    /// the recorded quiet day yields one empty `SiteAlerts` row per site, never nothing.
+    #[test]
+    fn nws_la_fixture_quiet_day_records_a_check_per_site() {
+        let nws = carp_nws();
+        assert_eq!(nws.info().id, "nws-alerts");
+        assert_eq!(nws.scope.url(), "https://api.weather.gov/alerts/active?area=LA");
+        assert_eq!(nws.sites.iter().map(|s| s.lid.as_str()).collect::<Vec<_>>(), ["SMML1", "KRZL1", "BLRL1", "MCGL1", "BTRL1", "AEXL1", "MLUL1", "BXAL1"]);
+        assert_eq!(nws.sites[1].zones, ["LAZ033", "LAC097"]);
+        let raw = recorded(&nws.scope.url(), "application/geo+json", fixture(LA_FIXTURE), 200, LA_RECORDED_AT);
+        let rows = nws.normalize(&raw).unwrap();
+        assert_eq!(rows.len(), 8, "{rows:?}");
+        for (row, site) in rows.iter().zip(&nws.sites) {
+            let Row::SiteAlerts(a) = row else { panic!("{row:?}") };
+            assert_eq!((a.site.as_str(), a.seen_at, a.alerts.len()), (site.lid.as_str(), LA_RECORDED_AT, 0));
+        }
+        // The python poller keeps its id and matches no sites.
+        let py = Nws::new(&Config::for_tests(), python_app());
+        assert_eq!((py.info().id, py.sites.len()), ("nws", 0));
+    }
+
+    /// Polygon alerts match the site inside them; zone alerts match through the site's UGC
+    /// codes; test messages never match; the geometry test is a real point-in-polygon.
+    #[test]
+    fn nws_la_alerts_match_sites_by_polygon_and_zone() {
+        let nws = carp_nws();
+        let raw = recorded(&nws.scope.url(), "application/geo+json", la_doc().to_string().into_bytes(), 200, LA_RECORDED_AT);
+        let rows = nws.normalize(&raw).unwrap();
+        let alerts: Vec<&AlertRow> = rows.iter().filter_map(|r| if let Row::Alert(a) = r { Some(a) } else { None }).collect();
+        assert_eq!(alerts.len(), 2, "both actual alerts are in the Louisiana region");
+        let by_site: std::collections::BTreeMap<&str, Vec<&str>> = rows
+            .iter()
+            .filter_map(|r| if let Row::SiteAlerts(s) = r { Some((s.site.as_str(), s.alerts.iter().map(|a| a.event.as_str()).collect())) } else { None })
+            .collect();
+        assert_eq!(by_site["KRZL1"], ["Flood Warning"], "inside the polygon (also its county, but the polygon decides)");
+        assert_eq!(by_site["BTRL1"], ["Flood Watch"], "zone LAZ047");
+        for quiet in ["SMML1", "BLRL1", "MCGL1", "AEXL1", "MLUL1", "BXAL1"] {
+            assert!(by_site[quiet].is_empty(), "{quiet}");
+        }
+        let krzl1 = rows.iter().find_map(|r| if let Row::SiteAlerts(s) = r { (s.site == "KRZL1").then_some(s) } else { None }).unwrap();
+        let a = &krzl1.alerts[0];
+        assert_eq!(a.ext_id, "vtec:KLCH.FL.W.0011.2026:LAC097");
+        assert_eq!((a.severity.as_str(), a.headline.as_deref()), ("Severe", Some("FLOOD WARNING IN EFFECT")));
+        assert_eq!(a.expires, Some(ms("2026-10-03T12:00:00Z")));
+        assert_eq!(a.source, crate::forecast::Source::NwsGridpoint);
+        assert_eq!(a.payload_hash.len(), 64);
+
+        let site = &nws.sites[1];
+        let poly = &la_doc()["features"][0];
+        assert!(alert_covers_site(poly, site));
+        assert!(!alert_covers_site(poly, &SiteRef { lid: "X".into(), lat: 31.3, lon: -92.4, zones: vec!["LAC097".into()] }), "outside the polygon: the polygon decides even with a matching county");
+        assert!(geometry_contains(&serde_json::json!({"type": "MultiPolygon", "coordinates": [[[[-92.0, 30.0], [-91.0, 30.0], [-91.0, 31.0], [-92.0, 31.0], [-92.0, 30.0]]]]}), 30.5, -91.5));
+        assert!(!geometry_contains(&Value::Null, 30.5, -91.5));
+    }
+
+    /// Through the pipeline: alert versions open at the first poll, are refreshed by a repeat,
+    /// and end when a later poll no longer lists them; every poll is a fetch run with a time.
+    #[tokio::test]
+    async fn nws_la_ingest_opens_refreshes_and_ends_site_alerts() {
+        use crate::app::test_support::test_state_for;
+        use crate::forecast::query::active_alerts_asof;
+        use crate::ingest::scheduler::ingest_payload;
+        let state = test_state_for("carp");
+        let nws = carp_nws();
+        let t1 = LA_RECORDED_AT;
+        let raw = |doc: &Value, at: i64| recorded(&nws.scope.url(), "application/geo+json", doc.to_string().into_bytes(), 200, at);
+        let first = ingest_payload(&state, &nws, raw(&la_doc(), t1), None).await.unwrap();
+        assert_eq!((first.rows_in, first.rows_skipped, first.error.clone()), (10, 0, None), "{first:?}");
+        assert_eq!(first.rows_written, 2 + 2, "two alert rows, two sites with a new version");
+        let again = ingest_payload(&state, &nws, raw(&la_doc(), t1 + 60_000), None).await.unwrap();
+        assert_eq!(again.rows_written, 0, "{again:?}");
+        let counts = |t: i64| {
+            let state = state.clone();
+            async move { state.obs.read(move |c| Ok((active_alerts_asof(c, "KRZL1", t)?, active_alerts_asof(c, "BTRL1", t)?, active_alerts_asof(c, "SMML1", t)?))).await.unwrap() }
+        };
+        assert_eq!(counts(t1 + 60_000).await, (1, 1, 0));
+        assert_eq!(counts(t1 - 1).await, (0, 0, 0), "not yet seen");
+        // The quiet recorded day comes next: both versions end at that poll.
+        let t2 = t1 + 10 * 60_000;
+        let quiet = recorded(&nws.scope.url(), "application/geo+json", fixture(LA_FIXTURE), 200, t2);
+        let out = ingest_payload(&state, &nws, quiet, None).await.unwrap();
+        assert_eq!((out.rows_in, out.rows_written, out.status), (8, 2, crate::ingest::scheduler::RunStatus::Ok), "{out:?}");
+        assert_eq!(counts(t2).await, (0, 0, 0));
+        assert_eq!(counts(t2 - 1).await, (1, 1, 0), "still in effect just before the poll that ended them");
+        let (runs, last_at): (i64, i64) = state
+            .obs
+            .read(|c| c.query_row("select count(*), max(fetched_at) from fetch_runs where source_id = 'nws-alerts' and status in ('ok', 'empty')", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        assert_eq!((runs, last_at), (3, t2), "the quiet poll is a recorded check with its time");
+        let alerts: i64 = state.obs.read(|c| c.query_row("select count(*) from alerts where source_id = 'nws-alerts'", [], |r| r.get(0))).await.unwrap();
+        assert_eq!(alerts, 2, "the region's alerts also land in the alerts table for the map layer");
     }
 
     #[tokio::test]

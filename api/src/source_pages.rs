@@ -89,8 +89,10 @@ fn page_for(source: &str, ext_id: &str) -> Option<String> {
         }
         "ndbc" => format!("https://www.ndbc.noaa.gov/station_page.php?station={}", alnum(ext_id)?.to_ascii_lowercase()),
         "coops" => format!("https://tidesandcurrents.noaa.gov/stationhome.html?id={}", digits(ext_id)?),
-        "nws" | "nwws" => alert_page(ext_id)?,
+        "nws" | "nws-alerts" | "nwws" => alert_page(ext_id)?,
         "crw" => crw_page(ext_id)?,
+        // NWPS lid (`BTRL1`), the station ext_id of the nwps, iem and nws-forecast sources.
+        "nwps" | "iem" | "nws-forecast" => format!("https://water.noaa.gov/gauges/{}", alnum(ext_id)?.to_ascii_uppercase()),
         _ => return None,
     })
 }

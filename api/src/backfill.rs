@@ -6,7 +6,9 @@
 //!
 //! - `--app ID` (default `carp`, PLAN.md C-A1): the app whose databases are written; only that
 //!   app is opened, and only the feeds its config lists are walked.
-//! - `--days N` (default 30): iNat observations updated in the last N days.
+//! - `--days N` (default 30): iNat observations updated in the last N days; for a conditions
+//!   app (carp) N days of USGS readings and of IEM archive issuances, plus one live poll of
+//!   NWPS (thresholds first), the NWS gridpoint forecast and the NWS alerts check.
 //! - `--baseline-years Y` (default 5): NAS and GBIF records observed in the last Y years.
 //! - `--scene NAME`: replay a recorded scene, `<fixtures root>/scenes/NAME/manifest.json`
 //!   ([`SceneManifest`]): payloads from several sources over one time window, fed in manifest
@@ -48,11 +50,13 @@ use crate::app::config::{App, APP_IDS};
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::poll::bio::{self, Pacer, Pager};
 use crate::ingest::poll::gbif::{self, Gbif};
+use crate::ingest::poll::iem::{self, Iem};
 use crate::ingest::poll::inat::{self, Inat};
 use crate::ingest::poll::nas::{self, Nas};
 use crate::ingest::poll::crw;
 use crate::ingest::poll::openmeteo::OpenMeteo;
-use crate::ingest::poll::usgs::Usgs;
+use crate::ingest::poll::usgs::{self, Usgs};
+use crate::ingest::poll::{nwps, nws, nws_forecast};
 use crate::ingest::push::nwws::Nwws;
 use crate::ingest::push::{goes_sqs, nwws};
 use crate::ingest::scheduler::{ingest_payload, RunStatus};
@@ -154,9 +158,12 @@ pub struct Measured {
     pub stations: i64,
     pub readings: i64,
     pub alerts: i64,
+    /// Forecast snapshots the source wrote (`nwps`, `iem`, `nws-forecast`; 0 for the rest).
+    pub snapshots: i64,
 }
 
 pub async fn measure(state: &AppState, source_id: &'static str) -> anyhow::Result<Measured> {
+    let forecast_source = crate::forecast::source_of_feed(source_id).unwrap_or("");
     state
         .obs
         .read(move |c| {
@@ -167,9 +174,10 @@ pub async fn measure(state: &AppState, source_id: &'static str) -> anyhow::Resul
                    count(canonical_id),
                    (select count(*) from stations where source_id = ?1),
                    (select count(*) from readings r join stations s on s.id = r.station_id where s.source_id = ?1),
-                   (select count(*) from alerts where source_id = ?1)
+                   (select count(*) from alerts where source_id = ?1),
+                   (select count(*) from forecast_snapshots where source = ?2)
                  from sightings where source_id = ?1",
-                [source_id],
+                rusqlite::params![source_id, forecast_source],
                 |r| {
                     Ok(Measured {
                         sightings: r.get(0)?,
@@ -179,11 +187,23 @@ pub async fn measure(state: &AppState, source_id: &'static str) -> anyhow::Resul
                         stations: r.get(4)?,
                         readings: r.get(5)?,
                         alerts: r.get(6)?,
+                        snapshots: r.get(7)?,
                     })
                 },
             )
         })
         .await
+}
+
+/// One live fetch of `source` through the pipeline (the carp pollers in a network backfill).
+async fn fetch_once(state: &AppState, source: &dyn Source) -> anyhow::Result<Tally> {
+    let id = source.info().id;
+    let mut tally = Tally::default();
+    let payloads = source.fetch(&FetchCtx { state, cursor: None }).await.with_context(|| format!("{id}: fetch"))?;
+    for raw in payloads {
+        tally.add(&ingest_payload(state, source, raw, None).await?);
+    }
+    Ok(tally)
 }
 
 pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
@@ -286,6 +306,25 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
                 t.errors += tally.errors;
             }
         }
+        // The river feeds (carp): N days of USGS readings, one NWPS poll (thresholds before
+        // anything that is categorised), the gridpoint forecast, the alerts check, then N days
+        // of archived issuances. Each is one fetch through the pipeline, governed as a poll.
+        if app.cfg.has_feed(usgs::SOURCE_ID) && !app.is_species() {
+            let src = Usgs::new(&target.config, app.clone()).with_history_days(days);
+            out.push((usgs::SOURCE_ID, fetch_once(&target, &src).await?));
+        }
+        if app.cfg.has_feed(nwps::SOURCE_ID) {
+            out.push((nwps::SOURCE_ID, fetch_once(&target, &nwps::Nwps::new(app.clone())).await?));
+        }
+        if app.cfg.has_feed(nws_forecast::SOURCE_ID) {
+            out.push((nws_forecast::SOURCE_ID, fetch_once(&target, &nws_forecast::NwsForecast::new(&target.config, app.clone())).await?));
+        }
+        if app.cfg.has_feed("nws-alerts") {
+            out.push(("nws-alerts", fetch_once(&target, &nws::Nws::new(&target.config, app.clone())).await?));
+        }
+        if app.cfg.has_feed(iem::SOURCE_ID) {
+            out.push((iem::SOURCE_ID, fetch_once(&target, &Iem::new(app.clone()).with_days(days as i64)).await?));
+        }
         out
     };
 
@@ -324,7 +363,7 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         let m = measure(&target, id).await?;
         errors += t.errors;
         println!(
-            "{id}: payloads={} rows_in={} written={} skipped={} errors={} sightings={} revisions={} conflicts={} linked={} stations={} readings={} alerts={}",
+            "{id}: payloads={} rows_in={} written={} skipped={} errors={} sightings={} revisions={} conflicts={} linked={} stations={} readings={} alerts={} snapshots={}",
             t.payloads,
             t.rows_in,
             t.rows_written,
@@ -336,11 +375,23 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
             m.linked,
             m.stations,
             m.readings,
-            m.alerts
+            m.alerts,
+            m.snapshots
         );
     }
     if target.app.is_species() && target.app.cfg.has_feed(inat::ID) {
         area_lines(&target, days, window_end, !args.fixtures).await?;
+    }
+    if !target.app.is_species() {
+        let per_site: Vec<(String, i64)> = target
+            .obs
+            .read(|c| {
+                c.prepare("select site, count(*) from forecast_snapshots group by site order by site")?
+                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                    .collect()
+            })
+            .await?;
+        println!("forecast snapshots per site: {}", per_site.iter().map(|(s, n)| format!("{s}={n}")).collect::<Vec<_>>().join(" "));
     }
     anyhow::ensure!(errors == 0, "{errors} payloads failed to normalize (see fetch_runs)");
     println!("{}", if args.dry_run { "BACKFILL-DRY-RUN-OK" } else { "BACKFILL-OK" });
@@ -457,7 +508,9 @@ pub fn fixture_sources(state: &AppState) -> Vec<Arc<dyn Source>> {
         let regions = app.clone();
         out.push(Arc::new(Replay { info: goes_sqs::info_for(app), normalize: Box::new(move |raw| goes_sqs::normalize_object(raw, &regions)) }));
     }
-    if app.cfg.has_feed("nwws") {
+    // The recorded NWWS stanzas are Miami/Key West products; the adapter filters by the python
+    // offices, so only a species app replays them (carp's offices are a C3-ledger follow-up).
+    if app.cfg.has_feed("nwws") && app.is_species() {
         out.push(Arc::new(Replay { info: nwws::info(), normalize: Box::new(|raw| nwws::normalize_stanza(&raw.bytes, raw.fetched_at)) }));
     }
     if app.cfg.has_feed(crw::SOURCE_ID) {
@@ -468,12 +521,16 @@ pub fn fixture_sources(state: &AppState) -> Vec<Arc<dyn Source>> {
 }
 
 /// Fixture directory of a source id: `goes` for both GOES forms (shared with T7's decoder
-/// tests), `openmeteo` for the marine form, the id otherwise.
-pub fn fixture_dir(id: &str) -> &str {
+/// tests), `openmeteo` for the marine form, the carp recordings (`usgs_ogc` for a conditions
+/// app's OGC payload, `nws_la/*` for the Louisiana alerts and gridpoint forecasts), the id otherwise.
+pub fn fixture_dir(app: &App, id: &str) -> String {
     match id {
-        goes_sqs::SOURCE_ID | goes_sqs::SST_SOURCE_ID => "goes",
-        crate::ingest::poll::openmeteo::MARINE_SOURCE_ID => "openmeteo",
-        other => other,
+        goes_sqs::SOURCE_ID | goes_sqs::SST_SOURCE_ID => "goes".into(),
+        crate::ingest::poll::openmeteo::MARINE_SOURCE_ID => "openmeteo".into(),
+        usgs::SOURCE_ID if !app.is_species() => "usgs_ogc".into(),
+        "nws-alerts" => "nws_la/alerts".into(),
+        nws_forecast::SOURCE_ID => "nws_la/forecast".into(),
+        other => other.into(),
     }
 }
 
@@ -552,7 +609,7 @@ pub async fn ingest_fixtures(state: &AppState, source: &dyn Source, root: &std::
 
 /// [`ingest_fixtures`], also returning the manifest's `recorded_at` (unix ms).
 pub async fn ingest_fixtures_at(state: &AppState, source: &dyn Source, root: &std::path::Path) -> anyhow::Result<(Tally, i64)> {
-    let dir = root.join(fixture_dir(source.info().id));
+    let dir = root.join(fixture_dir(&state.app, source.info().id));
     let manifest_path = manifest_path(&dir, state.app.id());
     let manifest: Manifest = serde_json::from_slice(
         &std::fs::read(&manifest_path).with_context(|| format!("read {}", manifest_path.display()))?,
@@ -623,13 +680,14 @@ fn rfc3339_ms(s: &str, what: &str) -> anyhow::Result<i64> {
 
 /// The source a scene payload is replayed through. Only `normalize` runs, so no source starts
 /// a connection (the NWWS XMPP session is opened by `fetch`, never called here).
-fn scene_source(id: &str, app: &Arc<App>) -> anyhow::Result<Box<dyn Source>> {
+fn scene_source(id: &str, state: &AppState) -> anyhow::Result<Box<dyn Source>> {
+    let app = &state.app;
     Ok(match id {
         inat::ID => Box::new(Inat::new(app.clone())),
         nas::ID => Box::new(Nas::new(app.clone())),
         gbif::ID => Box::new(Gbif::new(app.clone())),
         "openmeteo" => Box::new(OpenMeteo::new(app.clone())),
-        "usgs" => Box::new(Usgs::new()),
+        usgs::SOURCE_ID => Box::new(Usgs::new(&state.config, app.clone())),
         "nwws" => Box::new(Nwws::new(String::new(), None)),
         other => anyhow::bail!("scene: no replay source for {other:?}"),
     })
@@ -672,7 +730,7 @@ pub async fn ingest_scene(state: &AppState, dir: &Path) -> anyhow::Result<SceneO
         let slot = match sources.iter().position(|(id, _, _)| *id == f.source) {
             Some(i) => i,
             None => {
-                let src = scene_source(&f.source, &state.app)?;
+                let src = scene_source(&f.source, state)?;
                 sources.push((src.info().id, src, Tally::default()));
                 sources.len() - 1
             }

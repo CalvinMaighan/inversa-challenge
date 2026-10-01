@@ -7,20 +7,22 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 
 pub use crate::app::config::BBox;
 use crate::app::config::App;
-use crate::ingest::poll::{coops, ndbc, nws, openmeteo, usgs};
+use crate::ingest::poll::{coops, iem, ndbc, nwps, nws, nws_forecast, openmeteo, usgs};
 use crate::ingest::source::{RawPayload, Source};
 use crate::model::{Flag, Origin, Param, ReadingRow, Row, StationRef};
 use crate::state::Config;
 
 /// The physical pollers the app's `feeds[]` lists, in registry order. NWWS-OI is a push source
-/// and lives in `push::nwws`.
+/// and lives in `push::nwws`. The carp (conditions) adapters come last: `nwps` before `iem`, so
+/// a fixture or network backfill stores the NWPS thresholds before the archive issuances they
+/// categorise.
 pub fn sources(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     let mut out: Vec<Arc<dyn Source>> = Vec::new();
-    if app.cfg.has_feed("nws") {
+    if app.cfg.has_feed("nws") || app.cfg.has_feed("nws-alerts") {
         out.push(Arc::new(nws::Nws::new(config, app.clone())));
     }
-    if app.cfg.has_feed("usgs") {
-        out.push(Arc::new(usgs::Usgs::new()));
+    if app.cfg.has_feed(usgs::SOURCE_ID) {
+        out.push(Arc::new(usgs::Usgs::new(config, app.clone())));
     }
     if app.cfg.has_feed("ndbc") {
         out.push(Arc::new(ndbc::Ndbc::for_app(app.clone())));
@@ -33,6 +35,15 @@ pub fn sources(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     }
     if app.cfg.has_feed(openmeteo::MARINE_SOURCE_ID) {
         out.push(Arc::new(openmeteo::OpenMeteoMarine::new(app.clone())));
+    }
+    if app.cfg.has_feed(nwps::SOURCE_ID) {
+        out.push(Arc::new(nwps::Nwps::new(app.clone())));
+    }
+    if app.cfg.has_feed(nws_forecast::SOURCE_ID) {
+        out.push(Arc::new(nws_forecast::NwsForecast::new(config, app.clone())));
+    }
+    if app.cfg.has_feed(iem::SOURCE_ID) {
+        out.push(Arc::new(iem::Iem::new(app.clone())));
     }
     out
 }
@@ -224,14 +235,202 @@ mod tests {
         assert!(!region.contains(28.5, -81.4), "Orlando");
         let ids: Vec<&str> = sources(&Config::for_tests(), &testing::python_app()).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["nws", "usgs", "ndbc", "coops", "openmeteo"]);
-        // Lionfish Watch lists no NWS, USGS, CO-OPS or Open-Meteo forecast feed; the carp skeleton lists USGS and NWS only.
+        // Lionfish Watch lists no NWS, USGS, CO-OPS or Open-Meteo forecast feed; carp runs the river adapters (C4).
         let lf = Arc::new(App::builtin("lionfish").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &lf).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["ndbc", "openmeteo-marine"], "bulk buoys and marine only (L4)");
         let carp = Arc::new(App::builtin("carp").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &carp).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["nws", "usgs"]);
+        assert_eq!(ids, ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
         assert_eq!(region_boxes(&lf).len(), 4);
+    }
+
+    // ---- C4 G5: carp scope guard and /health ---------------------------------------------
+
+    /// Rows for sites outside carp.json are skipped and counted; implausible observations too;
+    /// carp has no hotspot grid and no frames; `/health` lists the five carp pollers (plus the
+    /// hook and NWWS registrations) with their modes.
+    #[tokio::test]
+    async fn carp_scope_guard_skips_foreign_sites_and_implausible_values() {
+        use crate::app::test_support::test_state_for;
+        use crate::forecast::store::NewSnapshot;
+        use crate::forecast::{Observation, Point, Source as FSource, Thresholds};
+        use crate::ingest::scheduler::{ingest_payload, RunStatus};
+        use crate::model::{ForecastObservationsRow, SiteAlertsRow, ThresholdsRow};
+        let state = test_state_for("carp");
+        let t = 1_790_838_063_000;
+        let snap = |site: &str, stage: f64| {
+            Row::ForecastSnapshot(NewSnapshot {
+                site: site.into(),
+                product: "stageflow".into(),
+                issued_at: t,
+                ingested_at: t,
+                source: FSource::NwpsLive,
+                payload_hash: format!("h-{site}-{stage}"),
+                points: vec![Point { valid_at: t + 3_600_000, stage_ft: Some(stage), flow_kcfs: None }],
+            })
+        };
+        let gauge = |ext: &str, lat: f64, lon: f64, value: f64| {
+            reading(&StationRef { ext_id: ext.into(), name: ext.into(), lat, lon, kind: crate::model::StationKind::Gage }, Param::StageM, Some(value), t, Origin::Measured)
+        };
+        let rows = vec![
+            snap("KRZL1", 4.0),
+            snap("VLSL1", 4.0),
+            snap("MCGL1", 999.0),
+            Row::ForecastObservations(ForecastObservationsRow {
+                site: "BTRL1".into(),
+                source: FSource::NwpsLive,
+                observations: vec![Observation { observed_at: t, stage_ft: Some(8.0), flow_kcfs: Some(245.0) }, Observation { observed_at: t + 1, stage_ft: Some(-9999.0), flow_kcfs: None }],
+            }),
+            Row::ForecastObservations(ForecastObservationsRow { site: "RRVL1".into(), source: FSource::NwpsLive, observations: vec![Observation { observed_at: t, stage_ft: Some(1.0), flow_kcfs: None }] }),
+            Row::Thresholds(ThresholdsRow { site: "NOPE1".into(), thresholds: Thresholds::from_feed(1.0, 2.0, 3.0, 4.0) }),
+            Row::SiteAlerts(SiteAlertsRow { site: "NOPE1".into(), seen_at: t, alerts: vec![] }),
+            gauge("07381500", 30.5689, -91.7614, 1.0),
+            gauge("07380000", 30.6, -91.7, 1.0),
+            gauge("07381490", 30.9825, -91.7983, 500.0),
+        ];
+        let raw = crate::ingest::poll::physical::testing::recorded("test://scope", "application/json", serde_json::to_vec(&rows).unwrap(), 200, t);
+        let hook = crate::ingest::push::hook::HookSource::web();
+        let out = ingest_payload(&state, &hook, raw, None).await.unwrap();
+        assert_eq!(out.rows_in, 10);
+        // Skipped: VLSL1 snapshot, the 999 ft point (its snapshot still lands, empty), RRVL1
+        // observations, NOPE1 thresholds and alerts, the -9999 observation, the foreign gauge
+        // and the 500 m stage.
+        assert_eq!(out.rows_skipped, 8, "{out:?}");
+        assert_eq!(out.status, RunStatus::Partial);
+        let (snaps, points, obs, thr, stations): (i64, i64, i64, i64, i64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select (select count(*) from forecast_snapshots), (select count(*) from forecast_points),
+                            (select count(*) from forecast_observations), (select count(*) from forecast_thresholds),
+                            (select count(*) from stations)",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+            })
+            .await
+            .unwrap();
+        assert_eq!((snaps, points, obs, thr, stations), (2, 1, 1, 0, 1), "only configured sites and plausible values are stored");
+        assert!(!state.app.is_species(), "carp has no hotspot grid");
+        assert!(state.app.cfg.locations.len() == 8 && state.app.cfg.taxa.is_empty());
+
+        // /health for carp: the river pollers with their modes, once the scheduler registered them.
+        crate::ingest::scheduler::start(state.clone(), crate::ingest::scheduler::Supervision::default()).await.unwrap();
+        let router = crate::app::test_support::router_for(&state);
+        let res = tower::ServiceExt::oneshot(router, axum::http::Request::get("/health").body(axum::body::Body::empty()).unwrap()).await.unwrap();
+        let body: serde_json::Value =
+            serde_json::from_slice(&http_body_util::BodyExt::collect(res.into_body()).await.unwrap().to_bytes()).unwrap();
+        let carp = &body["apps"][0];
+        assert_eq!(carp["id"], "carp");
+        let modes: std::collections::BTreeMap<&str, &str> =
+            carp["feeds"].as_array().unwrap().iter().map(|f| (f["source"].as_str().unwrap(), f["mode"].as_str().unwrap())).collect();
+        for (source, mode) in [("usgs", "poll"), ("nwps", "poll"), ("nws-forecast", "poll"), ("nws-alerts", "poll"), ("iem", "poll"), ("nwws", "push"), ("web", "push")] {
+            assert_eq!(modes.get(source), Some(&mode), "{source}: {carp}");
+        }
+        assert!(!modes.contains_key("nws"), "carp runs nws-alerts, not the python nws id");
+        let nwws = carp["feeds"].as_array().unwrap().iter().find(|f| f["source"] == "nwws").unwrap();
+        assert_eq!(nwws["state"], "down");
+        assert!(nwws["note"].as_str().unwrap().contains("NWWS_USER"), "{nwws}");
+        let res = tower::ServiceExt::oneshot(crate::app::test_support::router_for(&state), axum::http::Request::get("/v1/carp/frames?from=0&to=0").body(axum::body::Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(res.status(), axum::http::StatusCode::NOT_FOUND, "no frames for a conditions app");
+    }
+
+    /// `backfill --app carp --fixtures` replays every recorded carp payload through the real
+    /// pipeline, in an order that stores thresholds before the archive, and ends with BACKFILL-OK.
+    #[tokio::test]
+    async fn carp_scope_fixture_backfill_covers_every_site() {
+        use crate::app::test_support::test_state_for;
+        let state = test_state_for("carp");
+        let ids: Vec<&str> = crate::backfill::fixture_sources(&state).iter().map(|s| s.info().id).collect();
+        assert_eq!(ids, ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
+        crate::backfill::run(state.clone(), &["--fixtures".to_string(), "--app".to_string(), "carp".to_string()]).await.unwrap();
+        let (sites_with_obs, sites_with_snaps, iem, gridpoint, gauges): (i64, i64, i64, i64, i64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select (select count(distinct site) from forecast_observations),
+                            (select count(distinct site) from forecast_snapshots where source = 'nwps-live'),
+                            (select count(*) from forecast_snapshots where source = 'iem-archive'),
+                            (select count(*) from forecast_snapshots where source = 'nws-gridpoint'),
+                            (select count(*) from stations where source_id = 'usgs')",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+            })
+            .await
+            .unwrap();
+        assert_eq!((sites_with_obs, sites_with_snaps, iem, gridpoint, gauges), (8, 8, 56, 8, 8));
+        let m = crate::backfill::measure(&state, "iem").await.unwrap();
+        assert_eq!(m.snapshots, 56);
+        assert_eq!(crate::backfill::measure(&state, "nwps").await.unwrap().snapshots, 8);
+        crate::backfill::run(state.clone(), &["--fixtures".to_string()]).await.unwrap();
+        let n: i64 = state.obs.read(|c| c.query_row("select count(*) from forecast_snapshots", [], |r| r.get(0))).await.unwrap();
+        assert_eq!(n, 72, "a second fixture backfill adds nothing");
+    }
+
+    /// Live smoke (C4 G6): every carp poller fetches from its real API into a memory state, then
+    /// prints `CARP-LIVE sites=8 usgs=N nwps=N nws=N snapshots=N iem=N` (sites with readings,
+    /// NWPS observations, gridpoint snapshots; snapshots overall; archive issuances).
+    /// `cargo test --manifest-path api/Cargo.toml carp_live -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore = "network: calls the live USGS, NWPS, NWS and IEM APIs"]
+    async fn carp_live_fetch_and_ingest() {
+        use crate::ingest::scheduler::ingest_payload;
+        use crate::ingest::source::FetchCtx;
+        let mut config = Config::for_tests();
+        config.user_agent = Config::from_env().user_agent;
+        config.usgs_api_key = Config::from_env().usgs_api_key;
+        let state = crate::state::AppState::memory(config.clone(), App::builtin("carp").unwrap());
+        let mut failures = Vec::new();
+        // The archive over 7 days (the data proof's window), not the 30-day default.
+        let mut sources = sources(&config, &state.app);
+        sources.retain(|s| s.info().id != iem::SOURCE_ID);
+        sources.push(Arc::new(iem::Iem::new(state.app.clone()).with_days(7)));
+        for source in sources {
+            let id = source.info().id;
+            let ctx = FetchCtx { state: &state, cursor: None };
+            let payloads = match source.fetch(&ctx).await {
+                Ok(p) if !p.is_empty() => p,
+                Ok(_) => {
+                    failures.push(format!("{id}: first fetch returned nothing"));
+                    continue;
+                }
+                Err(e) => {
+                    failures.push(format!("{id}: fetch: {e:#}"));
+                    continue;
+                }
+            };
+            let (mut rows_in, mut written, mut skipped, mut bytes) = (0, 0, 0, 0);
+            for raw in payloads.clone() {
+                bytes += raw.bytes.len();
+                let out = ingest_payload(&state, source.as_ref(), raw, None).await.unwrap();
+                if let Some(e) = &out.error {
+                    failures.push(format!("{id}: {e}"));
+                }
+                rows_in += out.rows_in;
+                written += out.rows_written;
+                skipped += out.rows_skipped;
+            }
+            println!("{id}: {} payloads, {bytes} bytes, {rows_in} rows, {written} written, {skipped} skipped", payloads.len());
+        }
+        let (usgs, nwps, nws, snapshots, iem): (i64, i64, i64, i64, i64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select (select count(distinct s.ext_id) from stations s join readings r on r.station_id = s.id where s.source_id = 'usgs' and s.kind = 'gage'),
+                            (select count(distinct site) from forecast_observations where source = 'nwps-live'),
+                            (select count(distinct site) from forecast_snapshots where source = 'nws-gridpoint'),
+                            (select count(*) from forecast_snapshots),
+                            (select count(*) from forecast_snapshots where source = 'iem-archive')",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
+            })
+            .await
+            .unwrap();
+        println!("CARP-LIVE sites={} usgs={usgs} nwps={nwps} nws={nws} snapshots={snapshots} iem={iem}", state.app.cfg.locations.len());
+        assert!(failures.is_empty(), "{failures:#?}");
     }
 
     /// Live smoke test: every poller fetches from its real API and the payloads ingest cleanly.

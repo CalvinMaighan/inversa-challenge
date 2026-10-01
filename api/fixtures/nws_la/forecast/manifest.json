@@ -1,0 +1,38 @@
+{
+  "recorded_at": "2026-10-01T07:01:03Z",
+  "note": "NWS gridpoint 12-hour period forecasts for the 8 carp sites (grid from /points, kept under ../points for evidence; the adapter reads the grid from spec/apps/carp.json). Versioned on properties.updateTime, which is per office run.",
+  "files": [
+    {
+      "file": "SMML1.json",
+      "url": "https://api.weather.gov/gridpoints/LCH/113,129/forecast"
+    },
+    {
+      "file": "KRZL1.json",
+      "url": "https://api.weather.gov/gridpoints/LCH/115,111/forecast"
+    },
+    {
+      "file": "BLRL1.json",
+      "url": "https://api.weather.gov/gridpoints/LCH/118,98/forecast"
+    },
+    {
+      "file": "MCGL1.json",
+      "url": "https://api.weather.gov/gridpoints/LCH/137,73/forecast"
+    },
+    {
+      "file": "BTRL1.json",
+      "url": "https://api.weather.gov/gridpoints/LIX/24,108/forecast"
+    },
+    {
+      "file": "AEXL1.json",
+      "url": "https://api.weather.gov/gridpoints/LCH/88,143/forecast"
+    },
+    {
+      "file": "MLUL1.json",
+      "url": "https://api.weather.gov/gridpoints/SHV/134,68/forecast"
+    },
+    {
+      "file": "BXAL1.json",
+      "url": "https://api.weather.gov/gridpoints/LIX/76,126/forecast"
+    }
+  ]
+}

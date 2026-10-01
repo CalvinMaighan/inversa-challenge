@@ -202,6 +202,19 @@ fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqli
             conn.prepare_cached(max_sql)?.query_row(params![source_id, now_ms], |r| r.get(0)).optional()?.flatten();
         newest = newest.max(max);
     }
+    // The forecast store (carp): a river poller's freshness is its newest observation (NWPS) or
+    // the newest issuance it stored (archive, gridpoint). Issuances are never future-dated.
+    if let Some(fsource) = crate::forecast::source_of_feed(source_id) {
+        let max: Option<i64> = conn
+            .prepare_cached(
+                "select max(t) from (select max(observed_at) as t from forecast_observations where source = ?1 and observed_at <= ?2
+                                     union all select max(issued_at) from forecast_snapshots where source = ?1 and issued_at <= ?2)",
+            )?
+            .query_row(params![fsource, now_ms], |r| r.get(0))
+            .optional()?
+            .flatten();
+        newest = newest.max(max);
+    }
     // Alerts only: sightings and stations empty, alerts present.
     let event_feed = !has[0] && !has[1] && has[2];
     Ok((newest, event_feed))

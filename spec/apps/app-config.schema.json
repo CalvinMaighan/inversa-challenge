@@ -78,8 +78,34 @@
           "lon": { "type": "number", "minimum": -180, "maximum": 180 },
           "usgs": { "type": ["string", "null"], "description": "USGS site number." },
           "nwps": { "type": ["string", "null"], "description": "NOAA NWPS gauge id (lid)." },
-          "nws": { "type": ["string", "null"], "description": "NWS forecast zone or office." },
+          "nws": { "type": ["string", "null"], "description": "NWS forecast office (LCH, LIX, SHV)." },
+          "nwsGrid": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["office", "x", "y"],
+            "properties": { "office": { "type": "string" }, "x": { "type": "integer", "minimum": 0 }, "y": { "type": "integer", "minimum": 0 } },
+            "description": "NWS forecast grid cell from /points/{lat},{lon} (gridId, gridX, gridY); the gridpoint poller needs no points lookup."
+          },
+          "nwsZones": { "type": "array", "items": { "type": "string" }, "description": "UGC codes of the location (forecast zone LAZ033, county LAC097): zone-based alerts match a site through these." },
+          "note": { "type": "string", "description": "Why the site is in the set; data caveats (datum, missing discharge)." },
           "provisional": { "type": "boolean" }
+        }
+      }
+    },
+    "cameraPresets": {
+      "type": "array",
+      "description": "Named map cameras for the UI preset list (conditions apps).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "lat", "lon", "zoom"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+          "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+          "zoom": { "type": "number", "exclusiveMinimum": 0, "maximum": 24, "description": "Web-map zoom level." },
+          "locations": { "type": "array", "items": { "type": "string" }, "description": "Location ids the preset frames; empty = all." }
         }
       }
     },
@@ -91,7 +117,7 @@
         "additionalProperties": false,
         "required": ["source", "mode"],
         "properties": {
-          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps", "openmeteo-marine", "goes19-sst"] },
+          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps", "openmeteo-marine", "goes19-sst", "nws-alerts", "nws-forecast", "iem"] },
           "mode": { "type": "string", "enum": ["push", "poll"] },
           "name": { "type": "string" },
           "homepage": { "type": "string" },

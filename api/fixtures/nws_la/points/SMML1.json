@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "s": "https://schema.org/",
+            "geo": "http://www.opengis.net/ont/geosparql#",
+            "unit": "http://codes.wmo.int/common/unit/",
+            "@vocab": "https://api.weather.gov/ontology#",
+            "geometry": {
+                "@id": "s:GeoCoordinates",
+                "@type": "geo:wktLiteral"
+            },
+            "city": "s:addressLocality",
+            "state": "s:addressRegion",
+            "distance": {
+                "@id": "s:Distance",
+                "@type": "s:QuantitativeValue"
+            },
+            "bearing": {
+                "@type": "s:QuantitativeValue"
+            },
+            "value": {
+                "@id": "s:value"
+            },
+            "unitCode": {
+                "@id": "s:unitCode",
+                "@type": "@id"
+            },
+            "forecastOffice": {
+                "@type": "@id"
+            },
+            "forecastGridData": {
+                "@type": "@id"
+            },
+            "publicZone": {
+                "@type": "@id"
+            },
+            "county": {
+                "@type": "@id"
+            }
+        }
+    ],
+    "id": "https://api.weather.gov/points/30.9825,-91.7983",
+    "type": "Feature",
+    "geometry": {
+        "type": "Point",
+        "coordinates": [
+            -91.7983,
+            30.9825
+        ]
+    },
+    "properties": {
+        "@id": "https://api.weather.gov/points/30.9825,-91.7983",
+        "@type": "wx:Point",
+        "cwa": "LCH",
+        "type": "land",
+        "forecastOffice": "https://api.weather.gov/offices/LCH",
+        "gridId": "LCH",
+        "gridX": 113,
+        "gridY": 129,
+        "forecast": "https://api.weather.gov/gridpoints/LCH/113,129/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/LCH/113,129/forecast/hourly",
+        "forecastGridData": "https://api.weather.gov/gridpoints/LCH/113,129",
+        "observationStations": "https://api.weather.gov/gridpoints/LCH/113,129/stations",
+        "relativeLocation": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -91.8142927,
+                    30.9811202
+                ]
+            },
+            "properties": {
+                "city": "Simmesport",
+                "state": "LA",
+                "distance": {
+                    "unitCode": "wmoUnit:m",
+                    "value": 0
+                },
+                "bearing": {
+                    "unitCode": "wmoUnit:degree_(angle)",
+                    "value": 0
+                }
+            }
+        },
+        "forecastZone": "https://api.weather.gov/zones/forecast/LAZ029",
+        "county": "https://api.weather.gov/zones/county/LAC009",
+        "fireWeatherZone": "https://api.weather.gov/zones/fire/LAZ029",
+        "timeZone": "America/Chicago",
+        "radarStation": "KPOE",
+        "astronomicalData": {
+            "sunrise": "2026-09-30T07:00:21-05:00",
+            "sunset": "2026-09-30T18:53:48-05:00",
+            "transit": "2026-09-30T12:57:05-05:00",
+            "civilTwilightBegin": "2026-09-30T06:36:19-05:00",
+            "civilTwilightEnd": "2026-09-30T19:17:50-05:00",
+            "nauticalTwilightBegin": "2026-09-30T06:08:18-05:00",
+            "nauticalTwilightEnd": "2026-09-30T19:45:51-05:00",
+            "astronomicalTwilightBegin": "2026-09-30T05:40:10-05:00",
+            "astronomicalTwilightEnd": "2026-09-30T20:13:59-05:00"
+        },
+        "nwr": {
+            "transmitter": "WXK78",
+            "sameCode": "022009",
+            "areaBroadcast": "https://api.weather.gov/radio/WXK78/broadcast",
+            "pointBroadcast": "https://api.weather.gov/points/30.9825,-91.7983/radio"
+        }
+    }
+}

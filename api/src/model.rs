@@ -24,7 +24,7 @@ impl Quality {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Param {
     LstC,
@@ -51,6 +51,10 @@ pub enum Param {
     CurrentMs,
     /// Open-Meteo Marine ocean current direction, degrees, the direction the water flows towards.
     CurrentDirDeg,
+    /// USGS discharge (parameter 00060), cubic feet per second, as the gauge reports it. Kept in
+    /// cfs (not kcfs) so a number on screen matches the USGS page; NWPS flow is kcfs and lives in
+    /// the forecast store, never mixed with this (docs/evidence/carp-data-proof.md, Monroe).
+    DischargeCfs,
 }
 
 impl Param {
@@ -72,6 +76,7 @@ impl Param {
             Param::WavePeriodS => "wave_period_s",
             Param::CurrentMs => "current_ms",
             Param::CurrentDirDeg => "current_dir_deg",
+            Param::DischargeCfs => "discharge_cfs",
         }
     }
 }
@@ -232,6 +237,31 @@ pub struct ForecastRow {
     pub valid_at: i64,
 }
 
+/// NWPS observed stage/flow for one site (the datum the flood categories are defined on).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ForecastObservationsRow {
+    /// NWPS lid (`locations[].nwps`).
+    pub site: String,
+    pub source: crate::forecast::Source,
+    pub observations: Vec<crate::forecast::Observation>,
+}
+
+/// NWPS flood category thresholds for one site, as the gauge metadata reports them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ThresholdsRow {
+    pub site: String,
+    pub thresholds: crate::forecast::Thresholds,
+}
+
+/// The NWS alerts one poll found in effect at one site. An empty list is a positive statement
+/// ("no active alerts at `seen_at`"): known versions missing from it are ended.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SiteAlertsRow {
+    pub site: String,
+    pub seen_at: i64,
+    pub alerts: Vec<crate::forecast::store::AlertSeen>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Row {
     Sighting(SightingRow),
@@ -240,4 +270,9 @@ pub enum Row {
     Station(StationRef),
     Revision(RevisionRow),
     Forecast(ForecastRow),
+    /// A river or weather forecast issuance (forecast store, conditions apps).
+    ForecastSnapshot(crate::forecast::store::NewSnapshot),
+    ForecastObservations(ForecastObservationsRow),
+    Thresholds(ThresholdsRow),
+    SiteAlerts(SiteAlertsRow),
 }

@@ -66,8 +66,10 @@ Latency to DB = provider delay (measured) + our worst-case wait. "Searched" is t
 
 **Kept source → app map**
 
-- carp only: `nwps` (C2), `nws_fcst` (C6), `iem_hml` (C7)
-- carp + python: `usgs` (C1, P11), `nwws` (C3, P6), `nws` (C4, P7), `iembot` (C5, P8)
+- carp only: `nwps` (C2), `nws-forecast` (C6), `iem` (C7), `nws-alerts` (C4: the `nws.rs` poller with `area=LA`, matched to sites)
+- carp + python: `usgs` (C1, P11; both on the OGC API since leaf C4, python by region bbox, carp by site list), `nwws` (C3, P6), `nws` (P7; python only by that id), `iembot` (C5, P8)
+
+Source ids as built (leaf C4, `api/src/app/config.rs` `SOURCES`): `nws_fcst` → `nws-forecast`, `iem_hml` → `iem`; the carp alerts poller registers as `nws-alerts` so its fetch runs, cursor and feed chip never mix with python's `nws`. Fixtures: `api/fixtures/{usgs_ogc,nwps,nws_la/{alerts,forecast},iem}`.
 - lionfish only: `crw` (L3)
 - lionfish + python: `inat` and `inat_taxa` (L1, L2, P1, P2), `openmeteo_marine` (L4, P13), `gbif` (L5, P3), `nas` (L6, P4), `ndbc` (L7, P9), `coops` (L8, P10), `goes19` (L9 SSTF; P5 LSTC, ACMC, FDCC, SSTF)
 - python only: `openmeteo` (P12)

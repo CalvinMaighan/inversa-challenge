@@ -82,7 +82,10 @@ pub fn sources(config: &Config) -> Vec<Arc<dyn Source>> {
 
 /// Why the source is not running, if it is not (the reason becomes the feed-state note).
 pub fn disabled_reason(config: &Config) -> Option<String> {
-    config.nwws_user.is_none().then(|| "NWWS_USER and NWWS_PASS not set; alerts come from the nws poller".to_string())
+    config.nwws_user.is_none().then(|| {
+        "NWWS_USER and NWWS_PASS not set (account by email to NWWS.Issue@noaa.gov, 10+ days); alerts come from the NWS alerts poller (nws / nws-alerts)"
+            .to_string()
+    })
 }
 
 /// Static description, shared by the running source and its disabled registration.
