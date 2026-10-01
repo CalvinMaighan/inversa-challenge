@@ -126,6 +126,11 @@ Hover a sighting to see the species first, then how sure the ID is, for example 
 | Timeline | LIVE / REPLAY | Shows whether you are looking at now or the past; click it while replaying to jump to now. |
 | Timeline | Date jump | Loads any UTC day, including days outside the 30-day window. |
 | Timeline | Scrubber | Drag through time, or step with the arrow keys. The line is sightings (following the species chips); hatching marks gaps. |
+| Map (carp) | Location markers | One per demonstration river location, status in shape, icon and colour (◆ ! needs review, ● ✓ no rule fired, dashed ■ ? cannot assess), freshness as a ring. Enter or click opens the briefing. |
+| Map (carp) | Review board | Every location, those needing review first, with reasons in words; camera presets All sites and Atchafalaya Basin; the boundary notice (conditions only, not carp abundance, catch, access or trip safety). |
+| Map (carp) | Location briefing | What changed, what is expected, what is missing; readings with units, datums and times; forecast issuance and source (NWPS live or IEM archive); thresholds; alerts; source pages in a new tab. |
+| Timeline (carp) | Stage timeline | USGS gauge height and NWPS observed stage, the NWPS forecast with the spread of recent issuances, flood thresholds, alerts, the replay-coverage marker, and "sources disagree" chips. |
+| Timeline (carp) | What we knew | Scrub, or press "What we knew yesterday afternoon": everything shows what was held at that time and draws later observations apart. Play replays to now; LIVE returns. |
 | Chat column | Agent tab | Ask the agent. Answers cite evidence, show their tool rows and data panels, and fly the globe. |
 | Chat column | Notes tab | Write a note about what you saw (pick a spot on the globe, or start from a sighting's card), read everyone's notes live, chat with the team and see who is online. Crew missions fold out at the bottom. |
 | Chat column | Mic | Talk instead of typing. Press it again to stop. |

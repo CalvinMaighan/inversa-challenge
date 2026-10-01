@@ -3,10 +3,12 @@
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import CarpHud from "client/carp/CarpHud";
 import { SELECTION } from "client/state/selection";
 import styled from "client/styled";
 
 import AppSelect from "./appselect/AppSelect";
+import { useActiveApp } from "./appselect/use-active-app";
 import EvidenceDrawer from "./drawer/EvidenceDrawer";
 import HelpSheet from "./help/HelpSheet";
 import DetectionOverlay from "./overlay/DetectionOverlay";
@@ -39,6 +41,14 @@ const Root = styled.div`
   ${MOBILE} {
     --hud-top: calc(max(var(--gap-s), env(safe-area-inset-top)) + 120px);
     --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 88px);
+  }
+
+  /* A conditions app (carp) has the taller stage timeline. */
+  &[data-kind="conditions"] {
+    --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 236px);
+    ${MOBILE} {
+      --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 210px);
+    }
   }
 `;
 
@@ -95,6 +105,7 @@ function HudBody({ sync = true }: HudProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const drawerOpen = useActiveState<HudSelection, boolean>(SELECTION, isDrawerOpen)[0] ?? false;
   const closeHelp = useCallback(() => setHelpOpen(false), []);
+  const app = useActiveApp();
   const rootRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
 
@@ -115,19 +126,22 @@ function HudBody({ sync = true }: HudProps) {
     return () => observer.disconnect();
   }, []);
 
+  const conditions = app.kind === "conditions";
   return (
-    <Root ref={rootRef} data-hud="" data-drawer-open={drawerOpen ? "" : undefined}>
+    <Root ref={rootRef} data-hud="" data-kind={app.kind} data-drawer-open={drawerOpen ? "" : undefined}>
       {sync && <Sync />}
       <ShareLinkSync />
       <DetectionOverlay focus={focus} layout={`${drawerOpen}:${helpOpen}`} />
       <GlobeTooltip />
       <TopRow ref={barRef}>
         <AppSelect />
-        <SpeciesBar />
+        {conditions ? null : <SpeciesBar />}
         <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
       </TopRow>
+      {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
+      {conditions ? <CarpHud key={app.id} app={app} /> : null}
       <EvidenceDrawer />
-      <Timeline />
+      {conditions ? null : <Timeline />}
       {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
     </Root>
   );

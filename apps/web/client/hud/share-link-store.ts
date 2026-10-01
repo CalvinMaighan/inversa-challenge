@@ -10,6 +10,7 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { onGlobeReady } from "client/globe/api";
 import { activeApp, activeAppId } from "client/state/app";
+import { applyCarpView, carpState, type CarpState } from "client/state/carp";
 import { LAYERS, shownSpecies, sightingHoursOf, speciesFilterIds, taxonKey, taxonOverrides, TAXON_KEY, type LayersState } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { retime, TIME, type TimeState } from "client/state/time";
@@ -34,7 +35,12 @@ export function readShareState(): ShareState {
     taxa: taxonOverrides(layers.species),
     hours: sightingHoursOf(layers),
     evidenceId: selection.evidenceId,
+    ...(activeApp().kind === "conditions" ? carpShareFields(carpState()) : {}),
   };
+}
+
+function carpShareFields(carp: CarpState): Pick<ShareState, "site" | "asOf"> {
+  return { site: carp.site, asOf: carp.asOf !== undefined ? new Date(carp.asOf).toISOString() : undefined };
 }
 
 /** Apply a decoded link. Returns an unsubscribe for the pending globe fly, a no-op once it has flown. */
@@ -80,5 +86,7 @@ export function applyShareState(state: ShareState): () => void {
     const evidenceId = state.evidenceId;
     set<HudSelection>(SELECTION, (prev = SELECTION.defaults) => ({ ...prev, evidenceId, drawerOpen: true }));
   }
+  // Carp: a link without `asof` is live; a site the app does not have is ignored.
+  if (app.kind === "conditions" && (state.site || state.asOf)) applyCarpView({ site: state.site, asOf: state.asOf ?? null, replay: false });
   return cancelFly;
 }
