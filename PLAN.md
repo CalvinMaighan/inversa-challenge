@@ -374,3 +374,5 @@ Wave 0: C1 (carp proof, running), F1 (ingest modes), Q1 (questions), A0 (this co
 
 - F1 merged 4/4 (driver re-ran gate-check). Push where real (GOES SQS, NWWS, CRW/IEMBot nudges), else poll in Rust scheduler with signed hook; nudge route added.
 - Q1 merged 5/5 (driver re-ran): 69 carp, 65 lionfish, 68 python questions; 11 new tools specified in spec/apps/questions/*.json; python legacy cases now include 6 refusals under the per-app scope guard (re-baseline).
+- G1 merged 5/5: bun run grade; 24 criteria, honest baseline 13.3/100 (21 pending). Later leaves must emit result lines listed in docs/grading/rubric.md.
+- A1b merged 9/9 (driver re-ran gate-check); M1 merged 9/9 (re-run, DM p50 26 ms, notes p50 32 ms). Merged tree web 794 pass, typecheck and lint clean. CONTRACT accepted: taxa extra fields, copy.about/region/timezone, /health shape, stream.sync/stream.resync, message value {body,to,thread}. Open: graphql Message to/thread mapping (A1a), signal worker ':' (A1a).
