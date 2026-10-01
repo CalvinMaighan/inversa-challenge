@@ -7,6 +7,7 @@
 
 import type { Golden } from "./golden";
 
+import { FRESHNESS_WORDS } from "@/server/agent/answer-check";
 import { citedIds } from "@/server/agent/cordis/citations";
 import type { Evidence } from "@/server/agent/runtime/registry";
 import type { AgentStreamEvent } from "@/shared/agent/events";
@@ -113,9 +114,6 @@ export function numbersTrace(answer: string, toolTexts: readonly string[], quest
 }
 
 // ---------------------------------------------------------------- feed-state disclosure
-
-const FRESHNESS_WORDS =
-  /\b(stale|lagging|down|fresh|nominal|current|up[- ]to[- ]date|late|live|real[- ]time)\b|\d+(\.\d+)?\s?(h|hr|hrs|hours?|min|mins|minutes?|days?)\s(old|ago)|\bas of\b|\b(last )?(updated|fetched|checked|issued|captured|polled|retrieved|ingested)\b/i;
 
 /**
  * The answer says how fresh its data is: freshness vocabulary or an age, and the state word of every

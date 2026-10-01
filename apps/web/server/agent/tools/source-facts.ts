@@ -43,6 +43,7 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
       "values are provisional and can be revised; -999999 means no value",
     ],
     tells: "observed river stage and discharge history: how high the river is and how it changed; it does not say anything about carp, catch, access or safety",
+    related: ["nwps"],
   },
   nwps: {
     feed: "nwps",
@@ -63,7 +64,7 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
     ],
     tells: "the official river forecast and its flood category per site, and whether the gauge agrees with it; it does not say anything about carp, catch, access or safety",
     sayAs: "NOAA's National Water Prediction Service (NWPS)",
-    related: ["iem"],
+    related: ["iem", "usgs"],
   },
   "nws-alerts": {
     feed: "nws-alerts",

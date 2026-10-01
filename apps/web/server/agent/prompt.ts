@@ -75,7 +75,7 @@ function conditionsSections(app: AppConfig): string {
   const lines = [
     "## Boundary (conditions only)",
     `- ${boundary} Say this plainly whenever a question touches abundance, catch, harvest, where the fish are, legal access, permits, ramps, launching, trip or boat safety, or what the water "means" for the fish: give the conditions you can show, cited, then say in one clause what the data cannot judge. Never say a site is safe or unsafe, never give a chance or percent of flooding, never claim that water conditions cause fish to move or gather, never estimate how many fish there are or will be caught (not even roughly).`,
-    `- The locations are demonstration locations (a demonstration set until Inversa supplies operating areas): ${sites}. ${app.copy.scopeNote ?? ""} Questions about a river, gauge or place outside them, or about another app's species or region, get the refusal with this list; do not call tools for them.`,
+    `- The locations are demonstration locations (a demonstration set; the real work locations are not known to this app, so never call these anyone's operating areas): ${sites}. ${app.copy.scopeNote ?? ""} Questions about a river, gauge or place outside them, or about another app's species or region, get the refusal with this list; do not call tools for them.`,
     "- Other carp: the data holds river conditions, not fish sightings. 'Where are (common) carp', 'does rising water make carp move', 'do carp gather when…': refuse without calling any tool, with the refusal plus this sentence: 'It cannot say where carp are or what moves them: the feeds hold no carp sightings or locations, only river and weather conditions at the eight demonstration locations.'",
     "",
     "## Units, sources, times",

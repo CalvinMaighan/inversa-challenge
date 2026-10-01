@@ -3,16 +3,19 @@ import { randomUUID } from "node:crypto";
 import { createUserMessage, type LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 
+import { answerProblems, revisionRequest } from "@/server/agent/answer-check";
 import { recordTokens, tokenBudget } from "@/server/agent/budget";
 import { answerCacheKey, readAnswerCache, writeAnswerCache } from "@/server/agent/cache";
 import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
 import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
+import { filterCitations } from "@/server/agent/cordis/citations";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
 import { agentSystemPrompt, questionHint, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
 import { scopeGuard } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
+import { matchSupportedQuestion } from "@/shared/apps/questions";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { dataVersion, fetchFeeds } from "@/server/agent/tools/gql";
@@ -177,6 +180,9 @@ async function runTurnUnguarded(
   const endpoint = resolveAgentEndpoint(entry.model, app.id);
   const hint = questionHint(app, question);
   const context = hint ? `${viewContext(params.view, now, app)}\n${hint}` : viewContext(params.view, now, app);
+  // A supported question's final answer is checked against its documented form before it streams; one
+  // revision is asked for when something is missing (docs/questions.md pass criteria).
+  const supported = matchSupportedQuestion(app.id, question)?.question;
   const prior = transcript(history);
   emit({
     type: "context",
@@ -223,7 +229,7 @@ async function runTurnUnguarded(
     emit({ type: "debug", text: `limit reached: ${what}` });
   };
   attachTurnLimits(agent, agent.ctx, limits, onLimit);
-  const bridge = attachStreamBridge(agent, ledger, emit);
+  const bridge = attachStreamBridge(agent, ledger, emit, { holdFinal: supported !== undefined });
   const cancel = () => {
     if (deadline.aborted) onLimit({ kind: "runtime", limit: limits.maxRuntimeMs });
     agent.cancel({ kind: "hook", reason: "timeout-or-client-abort" });
@@ -248,10 +254,27 @@ async function runTurnUnguarded(
     );
     agent.followup(createUserMessage({ content: [{ type: "text", text: question }], source: { kind: "user" } }));
     await agent.whenIdle();
+    const draft = bridge.heldText();
+    if (supported && draft !== undefined && !limitHit && !bridge.finishError && !turnSignal.aborted) {
+      const verified = filterCitations(draft, (id) => ledger.get(id) !== undefined);
+      const problems = answerProblems(supported, {
+        content: verified.text,
+        tools: bridge.toolCalls.map((call) => call.capabilityName),
+        cited: verified.verified,
+        feedOf: (id) => ledger.get(id)?.feed,
+      });
+      if (problems.length) {
+        emit({ type: "debug", text: `answer revised: ${problems.join("; ")}` });
+        bridge.discardHeld();
+        agent.followup(createUserMessage({ content: [{ type: "text", text: revisionRequest(problems) }], source: { kind: "user" } }));
+        await agent.whenIdle();
+      }
+    }
   } catch (error) {
     failed = true;
     emit({ type: "error", message: error instanceof Error ? error.message : "Agent turn failed" });
   } finally {
+    bridge.releaseHeld();
     turnSignal.removeEventListener("abort", cancel);
     await handle.dispose();
   }
