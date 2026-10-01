@@ -312,3 +312,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T38 merged 10/10 (agent data panels, globe highlights). Web 586 tests. Live eval 14-15/15 typical.
 - T40 merged 18/18 (chat-left layout, legend, tooltips, help). Web 620 tests.
 - T30/T31 merged 11/11 (axe 0/0 over 12 scans, keyboard walk, rate limits, injection test live, prod surface). Web 630, API 206, clippy clean.
+- T42 merged 7/7 (publisher links; EXTERNAL-LINKS 30/30 new tab). Accepted IEM VTEC page for VTEC-keyed NWS alerts. Re-run e2e:links after T41.
