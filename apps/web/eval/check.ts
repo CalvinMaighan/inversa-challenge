@@ -80,7 +80,7 @@ export type Pooled = {
   boundaryMissRuns: number[];
   /** Runs with an ungrounded number. */
   ungroundedRuns: number[];
-  /** Question ids failed in at least ceil(runs/2) runs (two of three), with their counts. */
+  /** Question ids failed in two of three runs (both runs of a two-run series), with their counts. */
   repeatFailures: { id: string; runs: number }[];
 };
 
@@ -105,8 +105,9 @@ export function pool(runs: readonly RunTally[]): Pooled {
     }
     for (const id of run.failedIds) failCount.set(id, (failCount.get(id) ?? 0) + 1);
   });
-  const half = Math.ceil(runs.length / 2);
-  out.repeatFailures = [...failCount].filter(([, n]) => runs.length > 1 && n >= half).map(([id, n]) => ({ id, runs: n })).sort((a, b) => b.runs - a.runs || a.id.localeCompare(b.id));
+  // Two of three runs; for a two-run series only a question that failed both.
+  const need = runs.length >= 3 ? Math.ceil(runs.length / 2) : runs.length;
+  out.repeatFailures = [...failCount].filter(([, n]) => runs.length > 1 && n >= need).map(([id, n]) => ({ id, runs: n })).sort((a, b) => b.runs - a.runs || a.id.localeCompare(b.id));
   return out;
 }
 

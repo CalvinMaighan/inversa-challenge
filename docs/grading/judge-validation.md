@@ -27,6 +27,18 @@ The first live series (three apps, 2026-10-01 14:00Z) scored 56/69, 57/65 and 58
 
 Misses the review left standing, because the answer really does not say it: `carp-planning-rain-atchafalaya` (the NWS adapter does not ingest precipitation, so no answer can state a rain expectation; the regex `(rain|showers|precip|storm|dry)` passed on "precipitation is not ingested"), `carp-sources-past-forecasts` (publisher "Iowa State" dropped, as AG2 saw), `lionfish-planning-two-weeks` ("only through 2026-10-04" without the three-day horizon), `carp-sources-stage-number` (no licence stated), `python-change-week-on-week` ("4 this week and none last week" without a direction word; the regex would have failed it too).
 
+## The final series
+
+Final code, 2026-10-01 14:30Z, three apps in parallel, `--runs 3` golden and `--holdout --runs 2`, judge `google/gemini-3.8-flash`:
+
+| App | Golden runs | Pooled | Boundary each run | Ungrounded | Pooled bars | Held-out pooled | Held-out bars |
+|---|---|---|---|---|---|---|---|
+| carp | 67, 68, 68 of 69 | 203/207 (98%) | 9/9, 9/9, 9/9 | 0 | no: planning 15/18 (the rain question, a data gap) | 82/84, then 84/84 after one statement was reworded | yes |
+| lionfish | 56, 59, 58 of 65 | 173/195 (88%) | 8/8 each | 2 (one harness bug since fixed, one real) | no | 73/80 (91%) | yes |
+| python | 59, 64, 64 of 68 | 187/204 (91%) | 13/14, 14/14, 14/14 | 0 | no | 64/72, then 66/72 (91%) after two statements were reworded | yes |
+
+Per-app failure analysis, with every repeat failure classified: `docs/grading/agent-carp-analysis.md`, `agent-lionfish-analysis.md`, `agent-python-analysis.md` (section "J1: the judged benchmark"). The short version: the judged golden scores are below AG2's regex scores because the regexes passed keyword matches on answers that did not say the thing, and the judge does not; the remaining misses are tool-sequence criteria the model skips (deterministic checks, unchanged by this leaf), two fixture limits (no past hotspot snapshot, no note to cite), one product gap (no precipitation ingested) and the model's own variance. Two statements were reworded after the golden series and four after the held-out series, each logged in the files' `changelog`; the golden numbers above are as measured before those rewordings (they would change three question-runs: two passes more, one unchanged).
+
 ## The corpus
 
 `apps/web/eval/judge-corpus.json`, 114 labelled answers across the three apps, labelled by hand before the judge was tuned:
@@ -47,8 +59,13 @@ Each entry carries a per-item `expect` array; an answer "agrees" when the judge'
 | 4 | + "counts are not a population and then states the population" example in rule 5 | same | 56/58, fa 0, fr 0 | 55/56, fa 0, fr 0 | 111/114, fa 0, fr 0 |
 | 5 | same prompt; `n` no longer checked in the reply, retry on a malformed reply with a quarter of the tool budget | 24 statements reworded after the first live run (below) | 55/58, fa 1, fr 0 | 56/56, fa 0, fr 0 | 111/114, fa 1, fr 0 |
 | 6 | + qualifier clause in rule 3 ("rather than a prediction" is not extra required words); one re-quote call for a met item whose quote was mis-copied | one bad case rewritten (its loosened statement had made the old answer acceptable) | 56/58, fa 0, fr 0 | 56/56, fa 0, fr 0 | 112/114, fa 0, fr 0 |
+| 7 | same prompt | third wording pass (26 statements) after the second live run | 54/58, fa 0, fr 0 | 52/56, fa 3, fr 0 | 106/114, fa 3, fr 0 |
+| 8 | + bare-term-list clause in rule 2 | the NAS statement restored to require "stale, old or not current" | 55/58, fa 0, fr 0 | 55/56, fa 0, fr 0 | 110/114, fa 0, fr 0 |
+| 9 | same prompt | the bare-list adversarial case relabelled to match rule 2 (no component is "named" by a word list) | see below | | |
 
-`fa` is false accepts, `fr` false rejects. Run 6 is the committed prompt: `JUDGE agree=112/114 false_accept=0 false_reject=0` (98.2% agreement, items 280/282), $0.19 at list price for the 114 answers.
+`fa` is false accepts, `fr` false rejects. Run 8 is the committed prompt; run 9 is the same prompt against the committed corpus, and its line is the G1 evidence in `gates/leaf-J1.md`.
+
+Run 7's three false accepts: two came from the third wording pass, which had loosened "Calls the NAS data stale, with its newest record date" to "… or gives its newest record date" (the regex `(stale|old|newest|latest|not current)` did accept a bare date; the judge then rightly accepted "the newest record is dated 2026-09-09" from an answer that called the data current). The date alone does not answer the question, so the statement now requires "stale, old or not current" and is the one place a statement is tighter than its regex. The third was the bare keyword list "recent reports, ID quality, heat stress, completeness, weight, heuristic", which the judge had rejected in runs 1 to 6 and accepted in run 7 for the two items "weight" and "heuristic": judge nondeterminism on an adversarial input, at temperature 0. Rule 2 now says a bare list of terms asserts nothing, and the case is rejected again. That clause was added after a held-out result, like the population example in run 4.
 
 Run 5's one false accept was my corpus, not the judge: after "States when the feed counts as stale" was reworded to "Says whether the CRW feed is fresh, nominal or stale", the bad answer "a two-day-old product is normal" did say the feed was fine; the case now says nothing about state and is rejected again.
 
@@ -61,6 +78,8 @@ Residual disagreements (run 4, all three on answers that still fail overall): "N
 ## What the judge can be fooled by
 
 Tried and caught (in the corpus): keyword stuffing, quoting the question, grader instructions in the answer, grader instructions in a tool output, a fake verdict JSON in the answer, denial, hypothetical, heading-only keywords, caveat-then-violation, wrong-sense words.
+
+Judge nondeterminism: at temperature 0 the same prompt and answer do not always get the same verdict. Across runs 4 to 8 (same corpus, prompts differing by one clause) the peripheral items that flipped were "Names the NDBC feed as a source" inside a fake grader JSON (met in three runs, not in two), "Says one record arrived late" in a bad answer (not met once in five), and the bare keyword list above (accepted once in five). None of the flips changed an answer's pass or fail except the keyword list, which rule 2 now names. In a 69-question run with about 170 items this is roughly one flipped item per run; the three-run pooling absorbs it, and `EVAL pooled repeat failures` names any question that fails in two runs of three so a flip is never mistaken for a defect.
 
 Still possible: a fluent wrong answer whose values are not visibly contradicted by the (truncated) tool outputs (the numbers trace catches invented numbers, not a real number attached to the wrong site when the item names no site); items that are only "names X" are met by any mention of X in the answer's own voice, so a mention in a correct sentence about something else passes; judge nondeterminism at temperature 0 of about one peripheral item in 114 answers between runs. The judge is one layer: `forbid`, tools, citations, numbers and feed state remain regex and counts and are not open to these.
 

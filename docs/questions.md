@@ -536,7 +536,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-relevance-nas**: What does USGS NAS add to the picture?
   - Intent: Explain NAS as curated records with weeks to months of lag, global in coverage but stale outside Florida.
   - Tools: `source_info`, `sightings`. Cites: `feed:nas`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says NAS records are curated; States NAS's lag of weeks to months; Says NAS is stale, or that its records outside Florida, such as Colombia, are old.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Says NAS records are curated; Says NAS records lag, by weeks to months; Says NAS is stale, or that its records outside Florida, such as Colombia, are old.
 
 ### lionfish / quality (8)
 
@@ -555,11 +555,11 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-quality-buoy-vs-satellite**: Where are buoys and satellite SST disagreeing?
   - Intent: Compare in-situ buoy and satellite SST in the Florida Keys and state that the other areas have no buoys to compare.
   - Tools: `conditions`. Cites: `feed:ndbc`, `feed:goes19`, `kind:reading`.
-  - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must say: Names the buoy, the in-situ measured reading; Names the satellite reading; States whether the buoy and satellite readings agree or disagree; Says only Florida has buoys to compare, or that the other areas have none.
+  - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must say: Refers to the buoy or in-situ measured reading, or its absence; Names the satellite reading; States whether the buoy and satellite readings agree or disagree; Says only Florida has buoys to compare, or that the other areas have none.
 - **lionfish-quality-nas-colombia**: Is the NAS data for Colombia current?
   - Intent: Report the newest NAS record date in the co-caribbean box and call it stale.
   - Tools: `sightings`, `feed_state`. Cites: `feed:nas`, `kind:sighting`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Says the NAS data is stale, old or not current.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names NAS or USGS NAS as a source; Says the NAS data is stale, old or not current.
 - **lionfish-quality-crw-latency**: Why is the reef heat data almost two days old?
   - Intent: Explain CRW daily cadence and about 1.7 days latency, and state when the feed counts as stale.
   - Tools: `reef_heat`, `feed_state`, `source_info`. Cites: `feed:crw`, `kind:fetch`.
@@ -941,11 +941,11 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Name GOES-19 ABI LST, the cell, scan time, fetch time and quality flag of the cited reading.
   - Context: selectedEvidence=an LST reading
   - Tools: `evidence`, `source_info`. Cites: `feed:goes19`, `kind:reading`.
-  - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must say: Names the GOES satellite as a source; Gives the scan or fetch time; Gives the quality flag.
+  - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must say: Names the GOES satellite as a source; Gives the scan or fetch time; Gives the quality flag, or notes cloud masking.
 - **python-sources-nas-cadence**: How often does USGS NAS update?
   - Intent: Give NAS cadence and typical lag from the source record.
   - Tools: `source_info`, `feed_state`. Cites: `feed:nas`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Gives the NAS cadence or lag in days, weeks or months.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names NAS or USGS NAS as a source; Gives the NAS cadence or lag in days, weeks or months.
 - **python-sources-gbif-lag**: Why is GBIF behind?
   - Intent: Explain GBIF ingestion lag with its newest record time from feed state.
   - Tools: `feed_state`, `source_info`. Cites: `feed:gbif`, `kind:fetch`.
@@ -962,7 +962,7 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Move the timeline to the 2026-02-01 scene and show the hotspots and temperatures as known then.
   - Tools: `set_view`, `hotspots`, `conditions`. Cites: `kind:hotspot`, `kind:reading`.
   - View: timeline: 2026-01-15 cold-snap scene
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Refers to the January cold snap; Places the scene in January 2026; Says the score or ranking is a heuristic rather than a measurement or prediction.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Refers to the January cold snap; Places the scene in the January cold snap; Says the score or ranking is a heuristic rather than a measurement or prediction.
 - **python-replay-known-tuesday**: What did we know about Shark Valley last Tuesday at noon?
   - Intent: Show records ingested by then and list later-arriving records separately.
   - Tools: `geocode`, `sightings`, `set_view`. Cites: `feed:inat`, `kind:sighting`.

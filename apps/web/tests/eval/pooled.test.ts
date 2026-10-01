@@ -51,6 +51,9 @@ describe("eval pooled", () => {
     const three = pool([run(65, 69, {}), run(69, 69, {}), run(67, 69, {})]);
     expect(pooledBarsUnmet(three, { overall: 95, category: 90 })).toEqual([]);
     expect(three.repeatFailures).toEqual([]);
+    // A two-run series reports only a question that failed both runs.
+    const two = pool([run(41, 42, {}, { failedIds: ["a", "b"] }), run(41, 42, {}, { failedIds: ["a"] })]);
+    expect(two.repeatFailures).toEqual([{ id: "a", runs: 2 }]);
   });
 
   test("eval pooled: --runs parses both spellings and rejects nonsense", () => {

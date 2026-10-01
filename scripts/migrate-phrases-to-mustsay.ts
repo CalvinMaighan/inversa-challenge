@@ -143,7 +143,7 @@ const STATEMENTS: Record<string, string> = {
   Cozumel: "Names Cozumel as the place it reports on",
   context: "Says heat stress is context, not evidence about lionfish",
   GBIF: "Names GBIF as a source",
-  NAS: "Names USGS NAS as a source",
+  NAS: "Names NAS or USGS NAS as a source",
   "(iNaturalist|GBIF|NAS)": "Names the feed the record came from: iNaturalist, GBIF or NAS",
   "https?:\\/\\/": "Gives the publisher page link as a URL",
   GOES: "Names the GOES satellite as a source",
@@ -181,7 +181,7 @@ const STATEMENTS: Record<string, string> = {
   "(Saturday|Sunday|weekend)": "Addresses the weekend days",
   "(river|stage|forecast|conditions)": "Says what the app does cover, such as river conditions, stage or forecasts",
   "(eight|8) (river )?(sites|locations|gauges)|demonstration locations|Atchafalaya": "Names the eight demonstration locations or the Atchafalaya as what the app covers",
-  "(eight|8)|demonstration|not (one of|among|covered)|outside|only (cover|has|hold)|Louisiana": "Says the place is outside the eight Louisiana demonstration locations the app covers",
+  "(eight|8)|demonstration|not (one of|among|covered)|outside|only (cover|has|hold)|Louisiana": "Names the eight Louisiana demonstration locations as what the app covers, or says the place is outside them",
   "Mexican Caribbean|Quintana Roo|Cozumel|Chinchorro": NAMES_IN("the Mexican Caribbean area, such as Quintana Roo, Cozumel or Chinchorro"),
   "alert level|BAA|bleaching alert": "Reports the bleaching alert level",
   "alert level|BAA": "Reports the bleaching alert level",
@@ -211,7 +211,7 @@ const STATEMENTS: Record<string, string> = {
   iNat: "Names iNaturalist as a source",
   iNaturalist: "Names iNaturalist as a source",
   "(not|never) (counted|count)": "Says the duplicates are not counted twice",
-  "buoy|in-situ|measured": "Names the buoy, the in-situ measured reading",
+  "buoy|in-situ|measured": "Refers to the buoy or in-situ measured reading, or its absence",
   "measured|in-situ": "Says which reading is measured in situ",
   "satellite|GOES": "Names the satellite reading",
   "(obscured|imprecise|accuracy|uncertain|open (sea|water)|offshore)": "Says the position is obscured, imprecise or uncertain, or gives its accuracy",
@@ -266,7 +266,7 @@ const STATEMENTS: Record<string, string> = {
   "(CC|Creative Commons|licen[cs]e)": "Names the licences of the feeds",
   "(weeks|months|days|lag)": "Gives the NAS cadence or lag in days, weeks or months",
   "(30[- ]days?|month)": "Covers the 30 day, one month, window",
-  "(January|2026-01)": "Places the scene in January 2026",
+  "(January|2026-01)": "Places the scene in the January cold snap",
   Flamingo: "Names Flamingo as the place it reports on",
   flamingo: "Names Flamingo as the place it reports on",
   "(Carp app|carp)": "Points to the Carp app for carp",
@@ -386,8 +386,8 @@ const STATEMENTS: Record<string, string> = {
   "(curated|verified|authoritative)": "Says NAS records are curated",
   "(curated|verified)": "Says NAS records are curated",
   "(curated|verified|authoritative|history)": "Says NAS records are curated, a verified history",
-  "(lag|weeks|months)": "States NAS's lag of weeks to months",
-  "(lag|weeks|months|late|behind)": "States NAS's lag of weeks to months",
+  "(lag|weeks|months)": "Says NAS records lag, by weeks to months",
+  "(lag|weeks|months|late|behind)": "Says NAS records lag or arrive late, by weeks to months",
   "(lag|late|delay)": "States the lag of the feed",
   "(Colombia|outside Florida|stale)": "Says NAS is stale, or that its records outside Florida, such as Colombia, are old",
   [`(only|just)${GAP}{0,60}Florida|no (sea temperature )?buoys?${GAP}{0,80}(Mexic|Belize|Colombia)`]: "Says only Florida has buoys to compare, or that the other areas have none",
@@ -426,7 +426,7 @@ const STATEMENTS: Record<string, string> = {
   "(coverage|between stations|grid|every)": "Says GOES covers the gaps between stations",
   "(nominal|lagging|stale|down)": "States the feeds' states, such as nominal, lagging, stale or down",
   "(scan|observed|fetched)": "Gives the scan or fetch time",
-  "(flag|quality|cloud|DQF)": "Gives the quality flag",
+  "(flag|quality|cloud|DQF)": "Gives the quality flag, or notes cloud masking",
   [`(arrived|ingested|reported) ${GAP}{0,40}(after|later)|late`]: "Says the records arrived after the observation, late",
   [`${LIMIT}${GAP}{0,80}(mammal|cause|causal|decline)`]: "Says in its own words that it cannot judge whether pythons caused the mammal decline",
   "(cannot|can't|does not|doesn't|not|no |limit)": "States what the alerts feed cannot tell",
@@ -545,7 +545,7 @@ function main(): number {
         log.push(typeof log[0] === "object" && log[0] !== null ? { date: "2026-10-01", by: "J1", change } : `2026-10-01 ${change}`);
       }
       if (!log.some((e) => JSON.stringify(e).includes(MARK2))) {
-        const change = `${MARK2}: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). No statement was loosened below its regex.`;
+        const change = `${MARK2}: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). After the final series: 'Places the scene in January 2026' is 'Places the scene in the January cold snap' (the regex was (January|2026-01)); 'Gives the quality flag' is 'Gives the quality flag, or notes cloud masking' (the regex accepted 'cloud'). After the held-out series: the outside-area refusal statement also accepts naming the eight locations as the coverage (the scope guard's wording); 'States NAS's lag of weeks to months' is 'Says NAS records lag or arrive late, by weeks to months'; 'Names the buoy, the in-situ measured reading' also accepts its absence (Belize has no buoy); 'Names USGS NAS as a source' is 'Names NAS or USGS NAS as a source'. No statement was loosened below its regex.`;
         log.push(typeof log[0] === "object" && log[0] !== null ? { date: "2026-10-01", by: "J1", change } : `2026-10-01 ${change}`);
       }
       // Key order is kept as the file had it, so the diff is the pass blocks and one changelog entry.

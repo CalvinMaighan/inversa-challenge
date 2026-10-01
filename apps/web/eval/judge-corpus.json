@@ -401,7 +401,7 @@
       "note": "real agent run, every item met",
       "question": "Where are buoys and satellite SST disagreeing?",
       "mustSay": [
-        "Names the buoy, the in-situ measured reading",
+        "Refers to the buoy or in-situ measured reading, or its absence",
         "Names the satellite reading",
         "States whether the buoy and satellite readings agree or disagree",
         "Says only Florida has buoys to compare, or that the other areas have none"
@@ -1427,7 +1427,7 @@
       "note": "calls the 22-day-old NAS data current",
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
-        "Names USGS NAS as a source",
+        "Names NAS or USGS NAS as a source",
         "Says the NAS data is stale, old or not current"
       ],
       "toolOutputs": [
@@ -2068,7 +2068,7 @@
       "note": "stale mentioned only inside a denial",
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
-        "Names USGS NAS as a source",
+        "Names NAS or USGS NAS as a source",
         "Says the NAS data is stale, old or not current"
       ],
       "toolOutputs": [
@@ -2147,7 +2147,7 @@
       "app": "lionfish",
       "split": "test",
       "label": "adversarial",
-      "note": "components listed as a bare word list copied from the question's vocabulary, weights and heuristic label absent",
+      "note": "a bare word list copied from the question's vocabulary asserts nothing: no component is named in a clause, weights and the heuristic label are absent",
       "question": "How is the priority score put together?",
       "mustSay": [
         "Names the recent reports component",
@@ -2162,10 +2162,10 @@
       ],
       "answer": "Priority score: recent reports, ID quality, heat stress, completeness, weight, heuristic.",
       "expect": [
-        true,
-        true,
-        true,
-        true,
+        false,
+        false,
+        false,
+        false,
         false,
         false
       ]

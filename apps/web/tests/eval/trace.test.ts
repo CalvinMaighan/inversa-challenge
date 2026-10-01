@@ -46,6 +46,10 @@ describe("eval trace", () => {
   test("eval trace: numbers in the answer are read without ids, dates, times and years", () => {
     const text = "At 2026-10-01T06:00:00Z (01:00 CDT, 1:00 am) KRZL1 read 1.65 ft (USGS 07381500), 15.5 h old; in 2026 the 3rd check at 10:32 found 8,110 cfs.";
     expect(extractNumbers(text).map((n) => n.raw)).toEqual(["1.65", "15.5", "8,110"]);
+    // A hyphen after a word is a joiner, not a minus: "last-90-days" holds 90 (which the question supplies), not -90.
+    expect(extractNumbers("in the last-90-days window, a 3-night average").map((n) => n.value)).toEqual([90, 3]);
+    expect(numbersTrace("the wider last-90-days results", [JSON.stringify({ windowDays: 90 })]).ungrounded).toEqual([]);
+    expect(extractNumbers("the anomaly was -1.2 °C").map((n) => n.value)).toEqual([-1.2]);
     // A whole number's trailing zeros are a rounding: 8110 matches 8105..8115, "21,200" matches 21187.
     expect(extractNumbers("8.11 kcfs = 8110 cfs")[1]).toEqual({ value: 8110, decimals: -1, raw: "8110" });
     expect(numbersTrace("about 21,200 cfs", [JSON.stringify({ mean24h: 21187 })]).ungrounded).toEqual([]);

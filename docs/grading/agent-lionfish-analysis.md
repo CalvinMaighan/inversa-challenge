@@ -71,3 +71,25 @@ Each entry: the question, what the agent did, why, the fix, and whether the fix 
 ## Cost
 
 A full lionfish run costs at most $0.26 (about 2.4 M input tokens, 42 k output, OpenRouter list price; cache reads are billed lower). The 17 lionfish runs, 12 python runs, 12 holdout runs (including the gate-check re-run of every live CHECK) and the verbose subsets of this leaf came to at most $10.50.
+
+## J1: the judged benchmark (2026-10-01, 14:30Z)
+
+Regex phrases replaced by judged `mustSay` statements, bars pooled over three runs (`docs/grading/judge-validation.md`, `docs/grading/rubric.md`). Final code.
+
+| Run | Score | Failed ids |
+|---|---|---|
+| golden 1 (14:30:28Z) | 56/65 | lookup-fl-week (forbid: "no lionfish were present" in the agent's own voice), explain-highlight (no hotspot citation), explain-colombia-hot-but-low (explain_cell not called), explain-score-recipe (explain_cell not called, no hotspot citation), relevance-nas (sightings not called), quality-freshest (evidence not called), quality-nas-colombia (sightings not called), planning-fl-tomorrow (no hotspot citation), planning-two-weeks (judged: the three-day horizon never stated) |
+| golden 2 (14:34:26Z) | 59/65 | explain-highlight, explain-belize-thin (explain_cell not called; `ungrounded` -90, see below), explain-score-recipe, quality-freshest, planning-two-weeks, replay-known-sept-1 (no inat citation) |
+| golden 3 (14:38:47Z) | 58/65 | explain-colombia-hot-but-low (reef_heat and sightings not called), relevance-ocean-measures (no tool called at all), relevance-current-units (marine_forecast returned nothing for the point it asked for), relevance-nas, quality-gbif-duplicates (judged: "not additional sightings" not credited as "not counted twice", a judge strictness miss), planning-fl-tomorrow, team-notes-linked (`ungrounded` 20.8: the model computed "20.8 days later" from two dates) |
+| pooled | 173/195 (88%) | boundary 24/24, views 354/354; explain 11/18, relevance 14/18, quality 20/24, planning 14/18 |
+| held-out 1 (14:43:16Z) | 37/40 | lh-explain-recipe (explain_cell not called), lh-relevance-nas-worth and lh-quality-belize-buoy (both judged not met on statements that over-specified the regex; reworded, `changelog`) |
+| held-out 2 (14:45:14Z) | 36/40 | lh-explain-top-cozumel, lh-explain-belize-blank, lh-relevance-nas-worth, lh-quality-belize-buoy |
+| held-out pooled | 73/80 (91%) | boundary 12/12, `ungrounded=0`: `met=yes` |
+
+Pooled golden bars: not met (overall 88%, four categories under 90%, an ungrounded number in runs 2 and 3). The repeat failures (two of three runs):
+
+- Tool-sequence criteria the model does not follow: `explain_cell` not called for an explain question (colombia-hot-but-low, score-recipe, held-out recipe), `evidence` not called (quality-freshest), `sightings` not called beside `source_info` (relevance-nas), a `hotspot` citation missing when the ranking was described from the `hotspots` call without pasting its marker (explain-highlight, planning-fl-tomorrow). AG2 saw the same class; the judge changes nothing here, these checks are deterministic.
+- `planning-two-weeks`: the answer says the forecast "only reaches 2026-10-04" and never that the model covers three days or 72 hours. The regex failed this too; the question's intent asks for the horizon, so the statement stays.
+- The -90 in run 2 was the numbers trace reading "last-90-days" as minus ninety: a harness defect, fixed in `server/agent/answer-check.ts` (a hyphen after a letter is a joiner) with a unit test; the runtime check had the same bug and would have asked for a revision. The 20.8 in run 3 is a real grounding miss, the model's own date arithmetic.
+
+Against AG2's 58 to 63 of 65 on the same code, the judged series sits at 56 to 59. The regexes had been passing keyword matches on answers that did not say the thing (the Belize buoy answer passed `buoy|in-situ|measured` on "no buoys"; "sea-condition" passed `(wave|sea|current)`), and the judge does not. The held-out set, whose statements were reworded after the first read, is at 91% and meets its bar.
