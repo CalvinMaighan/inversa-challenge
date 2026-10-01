@@ -225,6 +225,18 @@ export const appConfigSchema = z
     helperQuestions: z.array(text).min(1).max(MAX_HELPER_QUESTIONS),
     agent,
     eval: z.strictObject({ goldenSet: text }),
+    review: z.strictObject({
+      stageRiseFt: positive.optional(),
+      tidalSites: z.array(text).optional(),
+      tidalStageRiseFt: positive.optional(),
+      forecastHorizonHours: positive.optional(),
+      rapidRiseFtPer24h: positive.optional(),
+      tidalRapidRiseFtPer24h: positive.optional(),
+      staleObservationHours: positive.optional(),
+      staleForecastHours: positive.optional(),
+      conflictFt: positive.optional(),
+      flowConflictRatio: z.number().gt(1).optional(),
+    }).optional(),
   })
   .superRefine((app, ctx) => {
     const issue = (path: (string | number)[], message: string) => ctx.addIssue({ code: "custom", path, message });

@@ -15,13 +15,13 @@ use rusqlite::params;
 use super::types::{
     Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, ForecastVerification, ForecastView, FrameChunk,
     HotspotCell, HotspotExplain, HotspotGrid, HotspotTerm, Message, Mission, Op, Param, Quality, Reading, ReadingFlag,
-    ReadingOrigin, Sighting, SiteStatus, SpeciesCount, Station, Taxon, Time,
+    ReadingOrigin, ReviewBoard, ReviewHistory, Sighting, SiteReview, SiteStatus, SpeciesCount, Station, Taxon, Time,
 };
 use super::{app_state, now_ms};
 use crate::app::config::{App, Taxon as AppTaxon};
 use crate::db::Db;
 use crate::hotspot;
-use crate::{crdt, feed_state, forecast, frames};
+use crate::{crdt, feed_state, forecast, frames, review};
 
 pub struct QueryRoot;
 
@@ -78,14 +78,7 @@ pub const MAX_FORECAST_HISTORY: i32 = 60;
 /// A conditions app's forecast store, and the site as one of its configured NWPS ids. A species
 /// app gets a typed error (`code: NOT_CONDITIONS_APP`); an unknown site `UNKNOWN_SITE`.
 fn forecast_site(ctx: &Context<'_>, site: &ID) -> Result<String> {
-    let app = &app_state(ctx).app;
-    if app.is_species() {
-        return Err(async_graphql::Error::new(format!(
-            "app {} has no forecast store (kind species): forecasts, forecastVerify and siteStatusAt serve kind conditions apps only",
-            app.id()
-        ))
-        .extend_with(|_, e| e.set("code", "NOT_CONDITIONS_APP")));
-    }
+    let app = conditions_app(ctx)?;
     let wanted = site.trim().to_ascii_uppercase();
     let known: Vec<&str> = app.cfg.locations.iter().filter_map(|l| l.nwps.as_deref()).collect();
     if !known.contains(&wanted.as_str()) {
@@ -98,6 +91,36 @@ fn forecast_site(ctx: &Context<'_>, site: &ID) -> Result<String> {
         .extend_with(|_, e| e.set("code", "UNKNOWN_SITE")));
     }
     Ok(wanted)
+}
+
+/// The app if it is kind conditions; a species app gets `code: NOT_CONDITIONS_APP`.
+fn conditions_app<'a>(ctx: &Context<'a>) -> Result<&'a App> {
+    let app = &app_state(ctx).app;
+    if app.is_species() {
+        return Err(async_graphql::Error::new(format!(
+            "app {} has no forecast store (kind species): forecasts, forecastVerify, siteStatusAt, siteReview, reviewHistory and reviewBoard serve kind conditions apps only",
+            app.id()
+        ))
+        .extend_with(|_, e| e.set("code", "NOT_CONDITIONS_APP")));
+    }
+    Ok(app)
+}
+
+/// A conditions app's review sites and thresholds.
+fn review_sites(ctx: &Context<'_>) -> Result<(Vec<review::SiteRef>, review::ReviewCfg)> {
+    let app = conditions_app(ctx)?;
+    Ok((review::SiteRef::all(&app.cfg), app.cfg.review.clone().unwrap_or_default()))
+}
+
+/// One review site by NWPS id or config location id.
+fn review_site(ctx: &Context<'_>, site: &ID) -> Result<(review::SiteRef, review::ReviewCfg)> {
+    let (sites, cfg) = review_sites(ctx)?;
+    if let Some(s) = sites.iter().find(|s| s.location == site.trim()) {
+        return Ok((s.clone(), cfg));
+    }
+    let lid = forecast_site(ctx, site)?;
+    let s = sites.into_iter().find(|s| s.lid == lid).expect("forecast_site checked the configured lids");
+    Ok((s, cfg))
 }
 
 /// `taxa.id`s from ids or focus species names (the app's taxa ids).
@@ -602,6 +625,41 @@ impl QueryRoot {
             conflicts: s.conflicts.into_iter().map(Into::into).collect(),
             active_alerts: s.active_alerts as i32,
         })
+    }
+
+    /// Needs-review status of one site (NWPS id or location id) from the data known at `asOf`
+    /// (default now): every rule's check, the fired reasons by severity, and the inputs' ages.
+    /// Conditions apps only (C5).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn site_review(&self, ctx: &Context<'_>, site: ID, as_of: Option<Time>) -> Result<SiteReview> {
+        let (site, cfg) = review_site(ctx, &site)?;
+        let t = as_of.unwrap_or_else(|| Time(now_ms())).0;
+        Ok(app_state(ctx).obs.read(move |c| review::site_review(c, &site, t, &cfg)).await?.into())
+    }
+
+    /// When and why a site entered or left review in `from`..`to` (default the 7 days before
+    /// `to`, `to` default now; at most 31 days). Conditions apps only (C5).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn review_history(&self, ctx: &Context<'_>, site: ID, from: Option<Time>, to: Option<Time>) -> Result<ReviewHistory> {
+        let (site, cfg) = review_site(ctx, &site)?;
+        let to = to.unwrap_or_else(|| Time(now_ms())).0;
+        let from = from.map_or(to - review::HISTORY_DEFAULT_MS, |f| f.0);
+        if from > to {
+            return Err("`from` must not be after `to`".into());
+        }
+        if to - from > review::HISTORY_MAX_MS {
+            return Err(format!("window of {:.1} days exceeds the 31-day cap", (to - from) as f64 / DAY_MS as f64).into());
+        }
+        Ok(app_state(ctx).obs.read(move |c| review::history(c, &site, from, to, &cfg)).await?.into())
+    }
+
+    /// Every configured site's review at `asOf` (default now), review first, with counts.
+    /// Conditions apps only (C5).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn review_board(&self, ctx: &Context<'_>, as_of: Option<Time>) -> Result<ReviewBoard> {
+        let (sites, cfg) = review_sites(ctx)?;
+        let t = as_of.unwrap_or_else(|| Time(now_ms())).0;
+        Ok(app_state(ctx).obs.read(move |c| review::board(c, &sites, t, &cfg)).await?.into())
     }
 }
 

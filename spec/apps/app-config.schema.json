@@ -204,6 +204,23 @@
       "additionalProperties": false,
       "required": ["goldenSet"],
       "properties": { "goldenSet": { "$ref": "#/$defs/text" } }
+    },
+    "review": {
+      "type": "object",
+      "description": "Needs-review thresholds of a conditions app (api/src/review). Every field optional; defaults shown. Not allowed on species apps.",
+      "additionalProperties": false,
+      "properties": {
+        "stageRiseFt": { "type": "number", "exclusiveMinimum": 0, "default": 2.0, "description": "Observed NWPS stage rise over 24 h that flags review." },
+        "tidalSites": { "type": "array", "items": { "type": "string" }, "default": ["MCGL1"], "description": "NWPS ids whose stage carries tide; the tidal floors apply." },
+        "tidalStageRiseFt": { "type": "number", "exclusiveMinimum": 0, "default": 3.0 },
+        "forecastHorizonHours": { "type": "number", "exclusiveMinimum": 0, "default": 72 },
+        "rapidRiseFtPer24h": { "type": "number", "exclusiveMinimum": 0, "default": 2.0, "description": "Forecast rise within any 24 h of the horizon that flags review." },
+        "tidalRapidRiseFtPer24h": { "type": "number", "exclusiveMinimum": 0, "default": 3.0 },
+        "staleObservationHours": { "type": "number", "exclusiveMinimum": 0, "default": 6 },
+        "staleForecastHours": { "type": "number", "exclusiveMinimum": 0, "default": 36 },
+        "conflictFt": { "type": "number", "exclusiveMinimum": 0, "default": 1.0, "description": "NWPS gauge vs NWPS forecast stage difference that is a source conflict." },
+        "flowConflictRatio": { "type": "number", "exclusiveMinimum": 1, "default": 1.5, "description": "NWPS vs USGS flow ratio that is a source conflict." }
+      }
     }
   },
   "allOf": [
