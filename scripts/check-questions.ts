@@ -6,10 +6,15 @@
  *   bun scripts/check-questions.ts --require <app>  the questions the gates name for that app
  *   bun scripts/check-questions.ts --write          also (re)write docs/questions.md
  *
+ * A held-out file (`<app>.holdout.json`, gates/leaf-AGB.md G3) is validated with the same per-question schema
+ * plus its own rules: at least 30 questions, every category present, at least 10 new questions (no
+ * `paraphraseOf`), every `paraphraseOf` a golden id of that app, ids disjoint from the golden set, a
+ * `changelog` array. The size, helper and newTools rules of a golden file do not apply to it.
+ *
  * Tool names are checked against the live agent registry (`buildAgentRegistry` in
  * apps/web/server/agent/tools/capabilities.ts, read as source) plus the file's `newTools`.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { GOLDEN } from "../apps/web/eval/golden.ts";
 
@@ -50,6 +55,8 @@ type Question = {
   helper: boolean;
   context?: Record<string, string>;
   legacyId?: string;
+  /** Held-out file only: the golden question this one rewords. */
+  paraphraseOf?: string;
 };
 type AppFile = {
   app: AppId;
@@ -58,6 +65,8 @@ type AppFile = {
   newTools: NewTool[];
   toolChanges: { tool: string; change: string }[];
   questions: Question[];
+  /** Held-out file: every criterion edit made after seeing a run. */
+  changelog?: unknown;
 };
 
 const errors: string[] = [];
@@ -134,9 +143,89 @@ function regexOk(where: string, src: string): boolean {
   return true;
 }
 
-function load(app: AppId): AppFile {
-  const path = join(ROOT, `spec/apps/questions/${app}.json`);
+function load(app: AppId, holdout = false): AppFile | null {
+  const path = join(ROOT, `spec/apps/questions/${app}${holdout ? ".holdout" : ""}.json`);
+  if (holdout && !existsSync(path)) return null;
   return JSON.parse(readFileSync(path, "utf8")) as AppFile;
+}
+
+/** Validates an app's held-out file against its golden file; returns the number of questions. */
+function validateHoldout(file: AppFile, golden: AppFile, app: AppId, registry: string[]): number {
+  const where = `${app}.holdout`;
+  const goldenIds = new Set(golden.questions.map((q) => q.id));
+  if (!Array.isArray(file.changelog)) fail(where, "changelog must be an array (every criterion edit after a run is logged there)");
+  const ids = new Set<string>();
+  const tools = new Set([...registry, ...(golden.newTools ?? []).map((t) => t.name)]);
+  const citable = new Set([...golden.feeds.map((f) => `feed:${f}`), ...KINDS.map((k) => `kind:${k}`)]);
+  let fresh = 0;
+  for (const q of file.questions) {
+    validateQuestion(q, `${where}/${q.id ?? "?"}`, app, tools, citable, ids);
+    if (goldenIds.has(q.id)) fail(`${where}/${q.id}`, "id collides with a golden question");
+    if (golden.questions.some((g) => g.question.trim().toLowerCase() === q.question.trim().toLowerCase())) fail(`${where}/${q.id}`, "question text is a golden question verbatim");
+    if (q.paraphraseOf === undefined) fresh++;
+    else if (!goldenIds.has(q.paraphraseOf)) fail(`${where}/${q.id}`, `paraphraseOf ${q.paraphraseOf} is not a golden id`);
+  }
+  const counts = new Map<Category, number>();
+  for (const q of file.questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
+  for (const c of CATEGORIES) if (!counts.get(c)) fail(where, `category ${c} has no held-out question`);
+  if (file.questions.length < 30) fail(where, `${file.questions.length} questions < 30`);
+  if (fresh < 10) fail(where, `${fresh} new questions (no paraphraseOf) < 10`);
+  return file.questions.length;
+}
+
+/** The per-question schema shared by the golden and held-out files. */
+function validateQuestion(q: Question, where: string, app: AppId, tools: Set<string>, citable: Set<string>, ids: Set<string>, used?: Set<string>) {
+  if (!isStr(q.id) || !/^[a-z0-9-]+$/.test(q.id)) fail(where, "id must be kebab-case");
+  if (ids.has(q.id)) fail(where, "duplicate id");
+  ids.add(q.id);
+  if (q.app !== app) fail(where, `app is ${q.app}`);
+  if (!CATEGORIES.includes(q.category)) fail(where, `unknown category ${q.category}`);
+  if (!isStr(q.question)) fail(where, "question missing");
+  if (!isStr(q.intent) || q.intent.split(/[.!?](\s|$)/).filter((s) => s.trim()).length !== 1) fail(where, "intent must be one sentence");
+  if (typeof q.helper !== "boolean") fail(where, "helper must be boolean");
+  if (!isStrArr(q.expectedTools)) fail(where, "expectedTools must be an array of names");
+  for (const t of q.expectedTools ?? []) {
+    if (!tools.has(t)) fail(where, `tool ${t} is neither registered nor in newTools`);
+    used?.add(t);
+  }
+  if (!Array.isArray(q.mustCite) || !q.mustCite.every(isStr)) fail(where, "mustCite must be an array");
+  for (const c of q.mustCite ?? []) if (!citable.has(c)) fail(where, `mustCite ${c} is not a feed of this app or an evidence kind`);
+  if (q.view !== undefined && !(isStr(q.view.map) || isStr(q.view.timeline))) fail(where, "view needs map or timeline");
+  if (q.legacyId !== undefined && !isStr(q.legacyId)) fail(where, "legacyId must be a string");
+
+  const p = q.pass;
+  if (!p || typeof p !== "object") {
+    fail(where, "pass missing");
+    return;
+  }
+  if (!MODES.includes(p.mode)) fail(where, `pass.mode ${p.mode}`);
+  if (!isStrArr(p.phrases) || !p.phrases.length) fail(where, "pass.phrases needs at least one regex");
+  if (!Array.isArray(p.forbid)) fail(where, "pass.forbid must be an array");
+  for (const r of [...(p.phrases ?? []), ...(p.forbid ?? [])]) regexOk(where, r);
+  if (p.groundedNumbers !== true) fail(where, "pass.groundedNumbers must be true: every number traces to tool output");
+  if (typeof p.feedState !== "boolean") fail(where, "pass.feedState must be boolean");
+  if (FEED_STATE_REQUIRED.includes(q.category) && !p.feedState) fail(where, `${q.category} answers must disclose feed state`);
+  if (!Number.isInteger(p.minCitations) || p.minCitations < 0) fail(where, "pass.minCitations must be a non-negative integer");
+  for (const [kind, n] of Object.entries(p.cites ?? {})) {
+    if (!KINDS.includes(kind)) fail(where, `pass.cites kind ${kind}`);
+    if (!Number.isInteger(n) || n < 1) fail(where, `pass.cites.${kind} must be >= 1`);
+  }
+  const kindTotal = Object.values(p.cites ?? {}).reduce((a, b) => a + b, 0);
+  if (kindTotal > p.minCitations) fail(where, "pass.cites asks for more citations than minCitations");
+
+  if (q.category === "boundary") {
+    if (p.mode === "answer") fail(where, "boundary questions must refuse or caveat");
+    if (!p.forbid.length) fail(where, "boundary questions must forbid the claim they refuse");
+  } else if (p.mode === "refuse") {
+    fail(where, "only boundary questions refuse");
+  }
+  if (p.mode === "refuse" && p.minCitations > 0 && !q.expectedTools.length) fail(where, "a refusal without tools cannot cite");
+  if (p.mode !== "refuse") {
+    if (!q.expectedTools.length) fail(where, "answers need at least one tool");
+    const viewOnly = q.view && q.expectedTools.every((t) => t === "geocode" || t === "set_view");
+    if (p.minCitations < 1 && !viewOnly) fail(where, "answers need at least one citation");
+    if (!q.mustCite.length && !viewOnly) fail(where, "answers must name the feeds or evidence kinds they cite");
+  }
 }
 
 function validate(file: AppFile, app: AppId, registry: string[], ids: Set<string>, toolSpecs: Map<string, string>) {
@@ -159,60 +248,7 @@ function validate(file: AppFile, app: AppId, registry: string[], ids: Set<string
   const used = new Set<string>();
   const citable = new Set([...file.feeds.map((f) => `feed:${f}`), ...KINDS.map((k) => `kind:${k}`)]);
 
-  for (const q of file.questions) {
-    const where = `${app}/${q.id ?? "?"}`;
-    if (!isStr(q.id) || !/^[a-z0-9-]+$/.test(q.id)) fail(where, "id must be kebab-case");
-    if (ids.has(q.id)) fail(where, "duplicate id");
-    ids.add(q.id);
-    if (q.app !== app) fail(where, `app is ${q.app}`);
-    if (!CATEGORIES.includes(q.category)) fail(where, `unknown category ${q.category}`);
-    if (!isStr(q.question)) fail(where, "question missing");
-    if (!isStr(q.intent) || q.intent.split(/[.!?](\s|$)/).filter((s) => s.trim()).length !== 1) fail(where, "intent must be one sentence");
-    if (typeof q.helper !== "boolean") fail(where, "helper must be boolean");
-    if (!isStrArr(q.expectedTools)) fail(where, "expectedTools must be an array of names");
-    for (const t of q.expectedTools ?? []) {
-      if (!tools.has(t)) fail(where, `tool ${t} is neither registered nor in newTools`);
-      used.add(t);
-    }
-    if (!Array.isArray(q.mustCite) || !q.mustCite.every(isStr)) fail(where, "mustCite must be an array");
-    for (const c of q.mustCite ?? []) if (!citable.has(c)) fail(where, `mustCite ${c} is not a feed of this app or an evidence kind`);
-    if (q.view !== undefined && !(isStr(q.view.map) || isStr(q.view.timeline))) fail(where, "view needs map or timeline");
-    if (q.legacyId !== undefined && !isStr(q.legacyId)) fail(where, "legacyId must be a string");
-
-    const p = q.pass;
-    if (!p || typeof p !== "object") {
-      fail(where, "pass missing");
-      continue;
-    }
-    if (!MODES.includes(p.mode)) fail(where, `pass.mode ${p.mode}`);
-    if (!isStrArr(p.phrases) || !p.phrases.length) fail(where, "pass.phrases needs at least one regex");
-    if (!Array.isArray(p.forbid)) fail(where, "pass.forbid must be an array");
-    for (const r of [...(p.phrases ?? []), ...(p.forbid ?? [])]) regexOk(where, r);
-    if (p.groundedNumbers !== true) fail(where, "pass.groundedNumbers must be true: every number traces to tool output");
-    if (typeof p.feedState !== "boolean") fail(where, "pass.feedState must be boolean");
-    if (FEED_STATE_REQUIRED.includes(q.category) && !p.feedState) fail(where, `${q.category} answers must disclose feed state`);
-    if (!Number.isInteger(p.minCitations) || p.minCitations < 0) fail(where, "pass.minCitations must be a non-negative integer");
-    for (const [kind, n] of Object.entries(p.cites ?? {})) {
-      if (!KINDS.includes(kind)) fail(where, `pass.cites kind ${kind}`);
-      if (!Number.isInteger(n) || n < 1) fail(where, `pass.cites.${kind} must be >= 1`);
-    }
-    const kindTotal = Object.values(p.cites ?? {}).reduce((a, b) => a + b, 0);
-    if (kindTotal > p.minCitations) fail(where, "pass.cites asks for more citations than minCitations");
-
-    if (q.category === "boundary") {
-      if (p.mode === "answer") fail(where, "boundary questions must refuse or caveat");
-      if (!p.forbid.length) fail(where, "boundary questions must forbid the claim they refuse");
-    } else if (p.mode === "refuse") {
-      fail(where, "only boundary questions refuse");
-    }
-    if (p.mode === "refuse" && p.minCitations > 0 && !q.expectedTools.length) fail(where, "a refusal without tools cannot cite");
-    if (p.mode !== "refuse") {
-      if (!q.expectedTools.length) fail(where, "answers need at least one tool");
-      const viewOnly = q.view && q.expectedTools.every((t) => t === "geocode" || t === "set_view");
-      if (p.minCitations < 1 && !viewOnly) fail(where, "answers need at least one citation");
-      if (!q.mustCite.length && !viewOnly) fail(where, "answers must name the feeds or evidence kinds they cite");
-    }
-  }
+  for (const q of file.questions) validateQuestion(q, `${app}/${q.id ?? "?"}`, app, tools, citable, ids, used);
 
   const counts = new Map<Category, number>();
   for (const q of file.questions) counts.set(q.category, (counts.get(q.category) ?? 0) + 1);
@@ -357,8 +393,12 @@ if (requireApp && !APPS.includes(requireApp)) {
 const registry = registryTools();
 const ids = new Set<string>();
 const toolSpecs = new Map<string, string>();
-const files = APPS.map(load);
+const files = APPS.map((app) => load(app)!);
 const covered = APPS.map((app, i) => validate(files[i]!, app, registry, ids, toolSpecs));
+const holdouts = APPS.map((app, i) => {
+  const file = load(app, true);
+  return file ? `${app}=${validateHoldout(file, files[i]!, app, registry)}` : null;
+}).filter(Boolean);
 for (const e of errors) console.log(e);
 
 if (args.includes("--write")) writeFileSync(join(ROOT, "docs/questions.md"), renderDoc(files));
@@ -370,6 +410,7 @@ console.log(`newTools: ${[...toolSpecs.keys()].join(", ")}`);
 console.log(
   `QUESTIONS ${APPS.map((a, i) => `${a}=${files[i]!.questions.length}`).join(" ")} categories=${coveredAll}/${CATEGORIES.length} ${ok ? "ok" : `FAIL (${errors.length} errors)`}`,
 );
+if (holdouts.length) console.log(`HOLDOUT ${holdouts.join(" ")} ${ok ? "ok" : "FAIL"}`);
 if (requireApp) {
   const { met, total } = checkRequired(requireApp, files[APPS.indexOf(requireApp)]!);
   console.log(`REQUIRED ${requireApp} ${met}/${total} ${ok && met === total ? "ok" : "FAIL"}`);

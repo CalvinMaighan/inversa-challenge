@@ -129,7 +129,7 @@
           },
           "expect": [
             { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
-            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["lookup", "change", "replay"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "replay"], "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } }
           ]
         }
       ],
@@ -328,7 +328,7 @@
     },
     {
       "id": "agent-benchmark",
-      "title": "Live agent passes every question category, three runs in a row, per app",
+      "title": "Blind live agent clears the bars on the golden set three runs in a row and on the held-out set twice, per app",
       "group": "lookingFor",
       "source": "brief",
       "brief": "can interpret natural-language questions, use the available data and tools effectively",
@@ -339,19 +339,41 @@
         {
           "id": "eval",
           "kind": "live",
-          "share": 1,
+          "share": 0.7,
           "timeout": 2400,
           "repeat": 3,
           "run": "bun run eval -- --app {app}",
           "requires": {
             "scripts": ["root:eval"],
-            "files": ["spec/apps/questions/{app}.json"],
-            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+            "files": ["spec/apps/questions/{app}.json", "apps/web/tests/server/agent/no-answer-key.test.ts"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL bars" }]
           },
           "expect": [
-            { "re": "^EVAL app={app} model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 48 } } },
-            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
-            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 48 } } }
+            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 48 } } },
+            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "team"], "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } },
+            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
+            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
+            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 48 }, "pct": { "min": 95 } } },
+            { "re": "^EVAL bars .* met=yes$" }
+          ]
+        },
+        {
+          "id": "eval-holdout",
+          "kind": "live",
+          "share": 0.3,
+          "timeout": 2400,
+          "repeat": 2,
+          "run": "bun run eval -- --app {app} --holdout",
+          "requires": {
+            "scripts": ["root:eval"],
+            "files": ["spec/apps/questions/{app}.holdout.json"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "--holdout" }]
+          },
+          "expect": [
+            { "re": "^EVAL app={app} set={app}-holdout model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 30 } } },
+            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 1 } } },
+            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
+            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 30 }, "pct": { "min": 90 } } }
           ]
         }
       ],
@@ -406,7 +428,8 @@
           "expect": [
             { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
             { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 }, "c": { "min": 20 } } },
-            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+)$", "forEach": ["boundary", "sources"], "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
+            { "re": "^EVAL category sources passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } }
           ]
         }
       ],

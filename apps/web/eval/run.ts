@@ -4,31 +4,35 @@
  *
  *   bun run eval              (wraps `doppler run --project inversa --config dev`, which supplies OPENROUTER_API_KEY)
  *   bun run eval -- --app=carp   (or --app carp, or EVAL_APP=carp): that app's persona, tools and golden set; default python
+ *   bun run eval -- --app carp --holdout   the held-out set (spec/apps/questions/carp.holdout.json) instead
  *
- * Checks per question (eval/check.ts): the expected tools ran, every citation (events and final text) names
- * evidence a tool returned in that turn, enough citations by count, kind and feed, required and forbidden
- * phrases, every number in the answer traces to a tool output, feed state is disclosed, the C7 stream shape,
- * and the C17 views. Lines the grader parses (docs/grading/rubric.md):
+ * The benchmark is blind: the agent gets the question, the view and its own rules, never the golden tools,
+ * wording or citations (tests/server/agent/no-answer-key.test.ts). Checks per question (eval/check.ts): the
+ * expected tools ran, every citation (events and final text) names evidence a tool returned in that turn,
+ * enough citations by count, kind and feed, required and forbidden phrases, every number in the answer traces
+ * to a tool output, feed state is disclosed, the C7 stream shape, and the C17 views. Lines the grader parses
+ * (docs/grading/rubric.md):
  *   EVAL app=<id> model=<id> questions=<N>
- *   EVAL category <c> passed P/T      (one per category, when the set has categories)
+ *   EVAL category <c> passed P/T pct=<n>   (one per category, when the set has categories)
  *   EVAL ungrounded=<n> checked=<n>
- *   EVAL passed P/T
- * Exit 0 only when every question passed and ungrounded=0.
+ *   EVAL passed P/T pct=<n>
+ *   EVAL bars overall>=95 category>=90 boundary=100 ungrounded=0 met=yes|no
+ * Exit 0 only when the bars are met: a stochastic model is held to a rate, not to 100% (rubric.md).
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkQuestion, type ToolCapture } from "./check";
+import { BARS, barsMet, checkQuestion, pct } from "./check";
 import { CATEGORIES, GOLDEN_SETS, type Golden } from "./golden";
 import { fixtureNow, startStub } from "./stub-server";
 import { checkViews } from "./views";
 
+import { capturing, type ToolCapture } from "@/server/agent/answer-check";
 import { resetHarness } from "@/server/agent/cordis/boot";
 import { runTurn, type RunTurnResult } from "@/server/agent/run-turn";
 import { AGENT_MODEL_ID, MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
-import type { CapabilityContext, CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
 import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppId } from "@/shared/apps";
@@ -50,17 +54,6 @@ export function evalApp(argv: readonly string[], env: Record<string, string | un
   return raw;
 }
 
-/** A registry whose successful outputs are captured (model-facing JSON and feeds) for the numbers trace. */
-function capturing(registry: CapabilityRegistry, into: ToolCapture[]): CapabilityRegistry {
-  const execute = registry.execute.bind(registry);
-  registry.execute = async (name: string, rawInput: unknown, ctx: CapabilityContext) => {
-    const result = await execute(name, rawInput, ctx);
-    if (result.ok) into.push({ name, text: JSON.stringify(result.output.data), feeds: result.output.feeds });
-    return result;
-  };
-  return registry;
-}
-
 /** The question's `context` as view state: the selected site, a knowledge time, a replay flag. */
 function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
   const context = golden.context ?? {};
@@ -75,11 +68,8 @@ function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden):
 
 async function main(): Promise<number> {
   const app = getApp(evalApp(process.argv.slice(2), process.env));
-  // The benchmark is blind by default: the agent is not told the golden question's tools, wording or citations
-  // and its answer is not checked against the golden pass criteria before it streams. `--assisted` measures the
-  // supported-question hints instead (product feature, not the benchmark).
-  if (!process.argv.includes("--assisted")) process.env.AGENT_BLIND = "1";
-  const golden = GOLDEN_SETS[app.eval.goldenSet] ?? [];
+  const set = process.argv.includes("--holdout") ? `${app.eval.goldenSet}-holdout` : app.eval.goldenSet;
+  const golden = GOLDEN_SETS[set] ?? [];
   // EVAL_ONLY=id,id runs a subset while iterating; EVAL_CATEGORY=c one category; the gate runs all of them.
   const only = process.env.EVAL_ONLY?.split(",").map((id) => id.trim()).filter(Boolean);
   const category = process.env.EVAL_CATEGORY?.trim();
@@ -88,13 +78,18 @@ async function main(): Promise<number> {
   const categories = [...new Set(questions.map((g) => g.category).filter((c): c is string => !!c))].sort((a, b) => CATEGORIES.indexOf(a as (typeof CATEGORIES)[number]) - CATEGORIES.indexOf(b as (typeof CATEGORIES)[number]));
   const qualityTotal = questions.filter((g) => g.quality).length;
   const fixture = fixtureNow(app.id);
-  console.log(`EVAL app=${app.id} set=${app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${fixture}`);
+  console.log(`EVAL app=${app.id} set=${set} model=${AGENT_MODEL_ID} questions=${total} fixture=${fixture}`);
+  if (total === 0) {
+    console.log(`EVAL no questions in set ${set}`);
+    return 1;
+  }
   if (!openRouterApiKey()) {
     console.log(`EVAL ${MISSING_KEY_MESSAGE} (run it through \`bun run eval\`, which wraps doppler)`);
-    for (const c of categories) console.log(`EVAL category ${c} passed 0/${questions.filter((g) => g.category === c).length}`);
+    for (const c of categories) console.log(`EVAL category ${c} passed 0/${questions.filter((g) => g.category === c).length} pct=0`);
     console.log("EVAL ungrounded=0 checked=0");
     console.log(`EVAL quality passed 0/${qualityTotal}`);
-    console.log(`EVAL passed 0/${total}`);
+    console.log(`EVAL passed 0/${total} pct=0`);
+    console.log(`EVAL bars overall>=${BARS.overall} category>=${BARS.category} boundary=${BARS.boundary} ungrounded=${BARS.ungrounded} met=no`);
     return 1;
   }
 
@@ -133,6 +128,7 @@ async function main(): Promise<number> {
   let qualityPassed = 0;
   let tokensIn = 0;
   let tokensOut = 0;
+  let cacheRead = 0;
   let viewsValid = 0;
   let viewsTotal = 0;
   let ungrounded = 0;
@@ -157,6 +153,7 @@ async function main(): Promise<number> {
       byCategory.set(g.category, row);
     }
     tokensIn += outcome.result.usage.promptTokens + outcome.result.usage.cacheRead;
+    cacheRead += outcome.result.usage.cacheRead;
     tokensOut += outcome.result.usage.completionTokens;
     const tag = g.quality ? " [quality]" : "";
     console.log(`${ok ? "PASS" : "FAIL"} ${g.id}${tag} tools=${tools.join(",") || "-"} citations=${cited.length} numbers=${trace.checked} ${outcome.ms}ms`);
@@ -178,16 +175,19 @@ async function main(): Promise<number> {
   }
   // Cache reads are billed below list price, so this is an upper bound.
   const cost = (tokensIn * PRICE_IN + tokensOut * PRICE_OUT) / 1_000_000;
-  console.log(`EVAL tokens in=${tokensIn} out=${tokensOut} cost<=$${cost.toFixed(4)} wall=${Math.round((Date.now() - startedAll) / 1000)}s finished=${new Date().toISOString()}`);
+  // cache_read is the part of `in` the provider served from its prompt cache (system prompt and tool definitions).
+  console.log(`EVAL tokens in=${tokensIn} cache_read=${cacheRead} out=${tokensOut} cost<=$${cost.toFixed(4)} wall=${Math.round((Date.now() - startedAll) / 1000)}s finished=${new Date().toISOString()}`);
   console.log(`EVAL views valid ${viewsValid}/${viewsTotal}`);
   for (const c of categories) {
     const row = byCategory.get(c) ?? { passed: 0, total: 0 };
-    console.log(`EVAL category ${c} passed ${row.passed}/${row.total}`);
+    console.log(`EVAL category ${c} passed ${row.passed}/${row.total} pct=${pct(row.passed, row.total)}`);
   }
   console.log(`EVAL ungrounded=${ungrounded} checked=${checked}`);
   console.log(`EVAL quality passed ${qualityPassed}/${qualityTotal}`);
-  console.log(`EVAL passed ${passed}/${total}`);
-  return passed === total && ungrounded === 0 ? 0 : 1;
+  console.log(`EVAL passed ${passed}/${total} pct=${pct(passed, total)}`);
+  const met = barsMet(passed, total, byCategory, ungrounded);
+  console.log(`EVAL bars overall>=${BARS.overall} category>=${BARS.category} boundary=${BARS.boundary} ungrounded=${BARS.ungrounded} met=${met ? "yes" : "no"}`);
+  return met ? 0 : 1;
 }
 
 process.exit(await main());

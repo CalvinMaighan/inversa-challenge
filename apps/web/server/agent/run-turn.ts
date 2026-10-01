@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createUserMessage, type LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 
-import { answerProblems, revisionRequest } from "@/server/agent/answer-check";
+import { answerProblems, capturing, revisionRequest, type ToolCapture } from "@/server/agent/answer-check";
 import { recordTokens, tokenBudget } from "@/server/agent/budget";
 import { answerCacheKey, readAnswerCache, writeAnswerCache } from "@/server/agent/cache";
 import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
@@ -11,11 +11,10 @@ import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capab
 import { filterCitations } from "@/server/agent/cordis/citations";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
-import { agentSystemPrompt, questionHint, viewContext } from "@/server/agent/prompt";
+import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
 import { scopeGuard } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
-import { matchSupportedQuestion } from "@/shared/apps/questions";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { dataVersion, fetchFeeds } from "@/server/agent/tools/gql";
@@ -174,16 +173,13 @@ async function runTurnUnguarded(
     onEvent(event);
   };
 
-  const registry = params.registry ?? buildAgentRegistry(app);
+  // Every successful tool output is kept for the generic answer check (numbers trace, feed-state disclosure).
+  const captures: ToolCapture[] = [];
+  const registry = capturing(params.registry ?? buildAgentRegistry(app), captures);
   const root = await bootHarness();
   const entry = harnessModel(root);
   const endpoint = resolveAgentEndpoint(entry.model, app.id);
-  const blind = process.env.AGENT_BLIND === "1";
-  const hint = blind ? null : questionHint(app, question);
-  const context = hint ? `${viewContext(params.view, now, app)}\n${hint}` : viewContext(params.view, now, app);
-  // A supported question's final answer is checked against its documented form before it streams; one
-  // revision is asked for when something is missing (docs/questions.md pass criteria).
-  const supported = blind ? undefined : matchSupportedQuestion(app.id, question)?.question;
+  const context = viewContext(params.view, now, app);
   const prior = transcript(history);
   emit({
     type: "context",
@@ -230,7 +226,9 @@ async function runTurnUnguarded(
     emit({ type: "debug", text: `limit reached: ${what}` });
   };
   attachTurnLimits(agent, agent.ctx, limits, onLimit);
-  const bridge = attachStreamBridge(agent, ledger, emit, { holdFinal: supported !== undefined });
+  // The final answer is held until the generic answer check has seen it; a lead-in line before the first tool
+  // call still streams at once. One revision is asked for when something is missing (answer-check.ts).
+  const bridge = attachStreamBridge(agent, ledger, emit, { holdFinal: true });
   const cancel = () => {
     if (deadline.aborted) onLimit({ kind: "runtime", limit: limits.maxRuntimeMs });
     agent.cancel({ kind: "hook", reason: "timeout-or-client-abort" });
@@ -256,19 +254,20 @@ async function runTurnUnguarded(
     agent.followup(createUserMessage({ content: [{ type: "text", text: question }], source: { kind: "user" } }));
     await agent.whenIdle();
     const draft = bridge.heldText();
-    if (supported && draft !== undefined && !limitHit && !bridge.finishError && !turnSignal.aborted) {
+    if (draft !== undefined && !limitHit && !bridge.finishError && !turnSignal.aborted) {
       const verified = filterCitations(draft, (id) => ledger.get(id) !== undefined);
-      const problems = answerProblems(supported, {
-        content: verified.text,
-        tools: bridge.toolCalls.map((call) => call.capabilityName),
-        cited: verified.verified,
-        feedOf: (id) => ledger.get(id)?.feed,
-      });
+      const problems = answerProblems({ app, question, content: verified.text, captures });
       if (problems.length) {
         emit({ type: "debug", text: `answer revised: ${problems.join("; ")}` });
-        bridge.discardHeld();
+        bridge.beginRevision();
         agent.followup(createUserMessage({ content: [{ type: "text", text: revisionRequest(problems) }], source: { kind: "user" } }));
         await agent.whenIdle();
+        const revision = bridge.endRevision();
+        // A revision the provider fails or leaves empty is not worth an error: the draft stands.
+        if (revision.error || !revision.text?.trim()) {
+          emit({ type: "debug", text: `revision failed (${revision.error ?? "empty reply"}): keeping the draft` });
+          bridge.releaseText(draft);
+        }
       }
     }
   } catch (error) {

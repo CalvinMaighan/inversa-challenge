@@ -4,6 +4,8 @@
  * phrases the answer must contain, and how many verified citations it needs.
  */
 
+import carpHoldout from "app-configs/questions/carp.holdout.json";
+
 import { supportedQuestions, type QuestionFile } from "@/shared/apps/questions";
 
 export type Golden = {
@@ -167,8 +169,14 @@ export function goldenFromFile(file: QuestionFile): Golden[] {
 /**
  * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; carp's is the
  * question file (the source of truth for ids, categories, tools and pass criteria); lionfish's comes with its leaf.
+ * `<set>-holdout` is the held-out file (paraphrases and new questions the prompts never saw; `--holdout`).
  */
-export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }) };
+export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = {
+  python: GOLDEN,
+  lionfish: [],
+  carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }),
+  "carp-holdout": goldenFromFile(carpHoldout as QuestionFile),
+};
 
 /** The ten question categories, in the order the eval prints them. */
 export const CATEGORIES = ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"] as const;

@@ -303,6 +303,19 @@ describe("carp tool: river_readings", () => {
   });
 });
 
+describe("carp tool: river_readings, stopped gauge", () => {
+  test("carp tool: a window shorter than a day that misses a gauge which stopped reporting gives the newest known reading with its age, not 'no series'", async () => {
+    const out = await run("river_readings", { sites: ["Bogalusa"], hours: 1, params: ["stage"], source: "usgs" });
+    expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentRiverReadings", "AgentRiverReadings"]);
+    const row = (out.data as { rows: Record<string, any>[] }).rows.find((r) => r.site === "BXAL1" && r.source === "usgs" && r.param === "stage")!;
+    expect(row.notMeasured).toBe(false);
+    expect(row.latest.at).toBe("2026-10-01T03:15:00Z");
+    expect(row.ageHours).toBeCloseTo(3.75, 1);
+    expect(row.note).toMatch(/no USGS stage reading in the asked window .* newest known reading is .* hours old/);
+    expect(out.evidence.map((e) => e.id)).toContain(row.latest.evidenceId);
+  });
+});
+
 describe("carp tool: river_forecast", () => {
   test("carp tool: the issuance current now with provenance, issued time, peak and category against the thresholds, 6-hourly points, and previous=1 for the revision", async () => {
     const out = await run("river_forecast", { sites: ["Simmesport"], previous: 1 });

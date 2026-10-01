@@ -26,12 +26,22 @@ export type StreamBridge = {
   releaseHeld(): void;
   /** With `holdFinal`: drops the held final answer (a revision replaces it). */
   discardHeld(): void;
+  /**
+   * With `holdFinal`: drops the held draft and starts a revision turn whose model errors are recorded, not
+   * streamed, so a failed revision can fall back to the draft without an error reaching the client.
+   */
+  beginRevision(): void;
+  /** Ends the revision: its held text (undefined when none) and the error it hit, if any. */
+  endRevision(): { text?: string; error?: string };
+  /** Streams `content` to the client through the citation filter (a draft kept after a failed revision). */
+  releaseText(content: string): void;
 };
 
 export type StreamBridgeOptions = {
   /**
-   * Hold back a final answer (an assistant message without tool calls) instead of streaming it, so the turn can
-   * check it and ask for a revision first. Lead-in text before a tool call still streams at once.
+   * Hold back a final answer (an assistant message without tool calls, after at least one tool call) instead of
+   * streaming it, so the turn can check it and ask for a revision first. Lead-in text before a tool call, and
+   * a first message that is itself the answer (a refusal with no data behind it), still stream at once.
    */
   holdFinal?: boolean;
 };
@@ -72,6 +82,8 @@ export function attachStreamBridge(
   const removed = new Set<string>();
   let text = "";
   let finishError: string | undefined;
+  let revising = false;
+  let revisionError: string | undefined;
   let generating = false;
   let thinking = createThinkingPartition();
 
@@ -115,8 +127,12 @@ export function attachStreamBridge(
     flushCitations();
   };
 
+  // Only an answer that follows a tool call is held: the first message (a lead-in before the tools, or a
+  // refusal with no data behind it) streams as it is generated, so the first token is not delayed by the check.
+  const holding = () => options.holdFinal === true && toolCalls.length > 0;
+
   const emitContent = (delta: string) => {
-    if (options.holdFinal) pending += delta;
+    if (holding()) pending += delta;
     else streamContent(delta);
   };
 
@@ -128,7 +144,7 @@ export function attachStreamBridge(
       if (phase === "inside") onEvent({ type: "reasoning_delta", text: tail });
       else emitContent(tail);
     }
-    if (!options.holdFinal) {
+    if (!holding()) {
       flushCitations();
       return;
     }
@@ -146,6 +162,10 @@ export function attachStreamBridge(
   };
 
   const fail = (message: string) => {
+    if (revising) {
+      revisionError ??= message;
+      return;
+    }
     finishError = message;
     onEvent({ type: "error", message });
   };
@@ -243,6 +263,19 @@ export function attachStreamBridge(
     },
     discardHeld() {
       held = undefined;
+    },
+    beginRevision() {
+      held = undefined;
+      revising = true;
+      revisionError = undefined;
+    },
+    endRevision() {
+      revising = false;
+      return { text: held, error: revisionError };
+    },
+    releaseText(content: string) {
+      held = undefined;
+      release(content);
     },
     finalText() {
       const last = [...agent.session.events].reverse().find((event) => event.type === "assistant/message");

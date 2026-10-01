@@ -18,7 +18,9 @@ export const HOUR_MS = 3_600_000;
 export function given(value: string | undefined | null): string | undefined {
   if (value === undefined || value === null) return undefined;
   const s = value.trim().replace(/^[*\s]+|[*\s]+$/g, "");
-  if (!s || /^[.*_\-?\d]{0,3}$/.test(s) || /^\.?(invalid|null|none|n\/a|undefined|any|all|default|not set|unset|unknown|tbd|placeholder|omit|skip|x\??)$/i.test(s)) return undefined;
+  // Models fill optional arguments with junk (".", "___", ".૫", "null"): anything without an ASCII letter or
+  // digit, a short run of punctuation or digits, or a placeholder word is the same as leaving it out.
+  if (!s || !/[A-Za-z0-9]/.test(s) || /^[.*_\-?\d]{0,3}$/.test(s) || /^\.?(invalid|null|none|n\/a|undefined|any|all|default|not set|unset|unknown|tbd|placeholder|omit|skip|x\??)$/i.test(s)) return undefined;
   return s;
 }
 
