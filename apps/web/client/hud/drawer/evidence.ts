@@ -20,6 +20,8 @@ export type Evidence = {
   raw: unknown;
   rawKey: string | null;
   sourceUrl: string | null;
+  /** Publisher web page (PLAN.md C19), opened in a new tab; null when the publisher has none. */
+  sourcePageUrl: string | null;
   fetchedAt: string | null;
   ingestLagSeconds: number | null;
   feed: FeedState | null;
@@ -33,7 +35,7 @@ export type Backtest = { species: string; days: number; hitRate: number; baselin
 
 export const EVIDENCE_QUERY = `query HudEvidence($id: ID!) {
   evidence(id: $id) {
-    id kind record raw rawKey sourceUrl fetchedAt ingestLagSeconds
+    id kind record raw rawKey sourceUrl sourcePageUrl fetchedAt ingestLagSeconds
     feed { ${FEED_FIELDS} }
     links { id relation source }
   }
@@ -89,6 +91,7 @@ export function normalizeEvidence(raw: RawEvidence): Evidence {
     raw: raw.raw ?? null,
     rawKey: raw.rawKey ?? null,
     sourceUrl: raw.sourceUrl ?? null,
+    sourcePageUrl: raw.sourcePageUrl ?? null,
     fetchedAt: raw.fetchedAt ?? null,
     ingestLagSeconds: raw.ingestLagSeconds ?? null,
     feed: normalizeFeedState(raw.feed),

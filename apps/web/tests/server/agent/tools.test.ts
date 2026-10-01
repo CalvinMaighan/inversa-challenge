@@ -7,6 +7,8 @@ import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { cellCenter, cellFor, parseEvidenceId } from "@/server/agent/tools/evidence";
 import { lookupGazetteer } from "@/server/agent/tools/gazetteer";
+import { viewOf } from "@/server/agent/tools/views";
+import type { TableView } from "@/shared/agent/results";
 import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
 import { startStub } from "@/eval/stub-server";
 import type { AgentStreamEvent } from "@/shared/agent/events";
@@ -134,6 +136,19 @@ describe("capability tools", () => {
     expect(pythons.data.total).toBe(4);
     expect(pythons.data.distinctAnimals).toBe(2);
     expect(pythons.data.duplicates).toBe(2);
+  });
+
+  test("source page link: sightings table rows carry the publisher page, the model summary does not", async () => {
+    const out = await run("sightings", { bbox: { west: -80.85, south: 25.67, east: -80.68, north: 25.84 } });
+    const table = viewOf(out)!.result as TableView;
+    const pages = Object.fromEntries(table.rows.map((row) => [row.evidenceId, row.sourcePageUrl]));
+    expect(pages["sighting:1001"]).toBe("https://www.inaturalist.org/observations/301200411");
+    expect(pages["sighting:1002"]).toBe("https://www.gbif.org/occurrence/5012233411");
+    // Not a NAS specimen key: no link rather than a broken one.
+    expect(pages["sighting:1004"]).toBeNull();
+    expect(table.columns.map((column) => column.key)).not.toContain("sourcePageUrl");
+    expect(JSON.stringify(out.data)).not.toContain("sourcePageUrl");
+    expect(JSON.stringify(out.data)).not.toContain("inaturalist.org/observations");
   });
 
   test("hotspots are labelled heuristic with C14 hotspot ids", async () => {

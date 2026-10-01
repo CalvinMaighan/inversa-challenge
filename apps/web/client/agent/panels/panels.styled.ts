@@ -1,5 +1,6 @@
 "use client";
 
+import ExternalLink from "client/external-link";
 import styled, { keyframes } from "client/styled";
 
 /** Above the globe pane (HUD, drawer, legend) and the chat column, which share the shell's stacking context. */
@@ -233,6 +234,22 @@ export const SortButton = styled.button`
 
 export const Tone = styled.span<{ $tone: "ok" | "warn" | "danger" | "muted" }>`
   color: ${({ theme, $tone }) => ({ ok: theme.color.ok, warn: theme.color.warn, danger: theme.color.danger, muted: theme.color.muted })[$tone]};
+`;
+
+/** The ↗ cell of a table row whose record has a page at its publisher. */
+export const PageLink = styled(ExternalLink)`
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: ${({ theme }) => theme.color.accent};
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in oklab, ${({ theme }) => theme.color.accent} 22%, transparent);
+  }
 `;
 
 export const TableFoot = styled.div`

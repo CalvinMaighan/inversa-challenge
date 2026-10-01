@@ -89,6 +89,8 @@ export type SightingRow = {
   lon: number;
   duplicateOf: string | null;
   idConflict: boolean;
+  /** Publisher page (PLAN.md C19). A hidden column: the panel draws it as a ↗ link; the model never sees it. */
+  sourcePageUrl?: string | null;
 };
 
 export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: string): ToolViewData {
@@ -116,6 +118,7 @@ export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: s
       lon: row.lon,
       dup: row.duplicateOf,
       conflict: row.idConflict ? "conflict" : null,
+      sourcePageUrl: row.sourcePageUrl ?? null,
     })),
     ...(rows.length > shown.length ? { total: rows.length } : {}),
   };

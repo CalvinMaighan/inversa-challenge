@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import ExternalLink from "client/external-link";
 import { SELECTION } from "client/state/selection";
 import styled from "client/styled";
 
@@ -13,6 +14,7 @@ import { feedChip, formatLag } from "../topbar/feed-chips";
 import { evidenceBadges, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
+import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
 
 const Section = styled.section`
@@ -173,10 +175,12 @@ function Record({ evidence }: { evidence: Evidence }) {
         <Meta>
           <dt>Source</dt>
           <dd>
-            {evidence.sourceUrl ? (
-              <a href={evidence.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {evidence.sourceUrl && /^https?:\/\//.test(evidence.sourceUrl) ? (
+              <ExternalLink href={evidence.sourceUrl}>
                 {evidence.sourceUrl.replace(/^https?:\/\//, "").slice(0, 60)} <Icon name="external" />
-              </a>
+              </ExternalLink>
+            ) : evidence.sourceUrl ? (
+              <Mono>{evidence.sourceUrl}</Mono>
             ) : (
               "—"
             )}
@@ -224,7 +228,7 @@ function Record({ evidence }: { evidence: Evidence }) {
             <div key={k} style={{ display: "contents" }}>
               <dt>{k}</dt>
               <dd>
-                <Mono>{valueText(v)}</Mono>
+                <RecordValue value={v} text={valueText(v)} />
               </dd>
             </div>
           ))}
@@ -271,9 +275,12 @@ export default function EvidenceDrawer() {
       }
       tabLabel="Evidence"
       actions={
-        <IconButton type="button" onClick={clearSelection} title="Clear selection">
-          Clear
-        </IconButton>
+        <>
+          {state.status === "ready" && <SourcePageLink url={state.data.sourcePageUrl} />}
+          <IconButton type="button" onClick={clearSelection} title="Clear selection">
+            Clear
+          </IconButton>
+        </>
       }
       data-testid="hud-drawer"
     >
