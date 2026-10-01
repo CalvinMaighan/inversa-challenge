@@ -20,10 +20,10 @@ const HOUR_MS = 60 * 60_000;
 const READY_TIMEOUT_MS = 10_000;
 
 export const ALERTS_QUERY = `query GlobeAlerts($bbox: BBox!, $at: Time!) {
-  alerts(bbox: $bbox, at: $at) { id event severity areaGeojson }
+  alerts(bbox: $bbox, at: $at) { id event severity headline expires areaGeojson }
 }`;
 
-export type GqlAlert = { id: string; event: string; severity: string; areaGeojson: unknown };
+export type GqlAlert = { id: string; event: string; severity: string; headline?: string | null; expires?: string | null; areaGeojson: unknown };
 
 /** NWS CAP severities. */
 const SEVERITY_COLORS: Record<string, string> = {
@@ -66,8 +66,10 @@ export function createAlertsLayer(ctx: LayerContext): GlobeLayer {
   /** Bumped per swap (and on clear), so only the latest swap retires primitives. */
   let swapGeneration = 0;
   const stats: LayerStats = { id: ALERTS, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
+  /** Alerts in effect at the cursor by evidence id, for `describe`. */
+  let byId = new Map<string, GqlAlert>();
 
-  const remove = (list: readonly (GroundPrimitive | GroundPolylinePrimitive | null)[]) => {
+  const remove =(list: readonly (GroundPrimitive | GroundPolylinePrimitive | null)[]) => {
     if (viewer) for (const p of list) if (p) viewer.scene.primitives.remove(p);
   };
   const clear = () => {
@@ -103,6 +105,7 @@ export function createAlertsLayer(ctx: LayerContext): GlobeLayer {
 
   const draw = (key: string, alerts: readonly GqlAlert[]) => {
     if (!viewer || key === drawnKey) return;
+    byId = new Map(alerts.map((a) => [alertEvidenceId(a.id), a]));
     const sig = alerts.map((a) => `${a.id}:${a.severity}`).join(",");
     if (sig === drawnSig && (fill || alerts.length === 0)) {
       drawnKey = key;
@@ -198,9 +201,16 @@ export function createAlertsLayer(ctx: LayerContext): GlobeLayer {
       if (alerts) draw(key, alerts);
     },
     stats: () => ({ ...stats }),
+    describe(id) {
+      const a = enabled ? byId.get(id) : undefined;
+      if (!a) return null;
+      const expires = a.expires ? Date.parse(a.expires) : NaN;
+      return { kind: "alert", event: a.event, severity: a.severity, headline: a.headline ?? null, expiresMs: Number.isFinite(expires) ? expires : null };
+    },
     destroy() {
       fetcher.cancel();
       clear();
+      byId = new Map();
       viewer = null;
       enabled = stats.enabled = false;
     },

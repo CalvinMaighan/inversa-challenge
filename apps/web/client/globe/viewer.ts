@@ -357,8 +357,9 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
       set<MissionsState>(MISSIONS, (prev) => ({ ...MISSIONS.defaults, ...prev, focusedMissionId: missionId, panelOpen: true }));
       return;
     }
+    // A marker opens its record in the evidence drawer; empty globe clears the selection.
     const evidenceId = id && parseEvidenceId(id) ? id : null;
-    set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId }));
+    set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId, drawerOpen: evidenceId !== null }));
   }, ScreenSpaceEventType.LEFT_CLICK);
   disposers.push(() => {
     cancelAnimationFrame(cursorFrame);
@@ -387,6 +388,15 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     onCursor(cb) {
       cursorListeners.add(cb);
       return () => cursorListeners.delete(cb);
+    },
+    stats: () => layers.map((l) => l.stats()),
+    describe(id) {
+      if (destroyed) return null;
+      for (const layer of layers) {
+        const facts = layer.describe?.(id);
+        if (facts) return facts;
+      }
+      return null;
     },
   };
 

@@ -6,7 +6,8 @@ State at commit `81596be`, checked against the code:
 
 - Steps 1 to 4 and 6 work on a local run today.
 - Step 5, the cold-snap replay in the UI, works since T23: a time before the live 30 days recentres the window on it (`windowFor` / `retime` in `apps/web/client/state/time.ts`), through `set_time`, `play_timeline`, agent `view` events, share links and the timeline's date field. `bun run e2e:client` checks it (`COLDSNAP ... iguana=1.58`, screenshot `docs/evidence/cold-snap.png`).
-- Step 7, missions and the second browser, needs the Missions panel and rtc worker from T21, which has not landed. `Hud` renders no Missions tab until `app/page.tsx` passes it a `missions` prop.
+- Step 7, missions and the second browser, uses the team board from T21. Since T40 the board is the Missions tab of the chat column. `bun run --cwd apps/web e2e:team` drives this step through the Missions tab, and its lines are `TEAM rtc_p50=… converged=1` and `COUNTERS-OK OFFLINE-OK`.
+- Layout (T40): the chat column is on the left and the globe on the right. The **Layers** legend and the **?** help sheet both sit over the globe. `bun run --cwd apps/web e2e:layout` checks them.
 
 ## Before you start
 
@@ -16,7 +17,7 @@ State at commit `81596be`, checked against the code:
    bun run data
    bun run dev
    ```
-2. The agent is the live model, `openai/gpt-6-luna` on OpenRouter. `bun run dev` reads `OPENROUTER_API_KEY` from Doppler `inversa`/`dev`; check that its first line says `agent: openrouter openai/gpt-6-luna`. If it says `agent: unavailable`, log in with `doppler login`: without the key the chat card shows `agent unavailable: OPENROUTER_API_KEY not set` (HTTP 503) and there is no scripted fallback. Answers are the model's own words, so they differ from run to run; the tools, citations and caveats are what to point at.
+2. The agent is the live model, `openai/gpt-6-luna` on OpenRouter. `bun run dev` reads `OPENROUTER_API_KEY` from Doppler `inversa`/`dev`; check that its first line says `agent: openrouter openai/gpt-6-luna`. If it says `agent: unavailable`, log in with `doppler login`: without the key the chat column shows `agent unavailable: OPENROUTER_API_KEY not set` (HTTP 503) and there is no scripted fallback. Answers are the model's own words, so they differ from run to run; the tools, citations and caveats are what to point at.
 3. Voice needs `XAI_API_KEY`. Without it, skip the voice beat in step 3; text covers the same ground.
 4. Open http://localhost:3050 in Chrome, full screen. For step 7, open a second Chrome window, not a tab, on the same URL.
 
@@ -24,7 +25,11 @@ State at commit `81596be`, checked against the code:
 
 ### 1. Open the app (0:00–0:30)
 
-The globe fills the screen over South Florida, with the HUD on top: the top bar, the timeline along the bottom, and the agent orb in the bottom-right corner.
+The screen has two panes. On the left is the chat column, with the **Agent** and **Missions** tabs, the thread, and a composer with a mic button. On the right the globe shows South Florida, with the top bar above it and the timeline along the bottom. On a first visit, a hint above the composer offers example questions you can click.
+
+1. Click **Layers** at the top right of the globe. The legend names every mark. The blue, teal and violet squares are stations: a USGS water gauge, an NDBC buoy and a NOAA tide gauge. The amber, orange, green and pink dots are python, tegu, iguana and lionfish sightings. The haze from violet to yellow is the hotspot score. Each row has its own switch and a live count.
+2. Hover a blue square. The tooltip reads like `USGS gauge · <station> · stage 0.24 m · 45 min ago`.
+3. Click **?** in the top bar. The help sheet lists every control. Press Esc to close it.
 
 Say: one question, "where are invasive species active right now, and where should crews go next", four species, one map across land and sea. Everything on screen comes from public feeds the API ingested, stored and can trace back to the raw bytes.
 
@@ -42,18 +47,18 @@ Say: each chip is the same envelope the agent gets with every tool result, so th
 
 ### 3. Ask by text, then by voice (1:15–2:30)
 
-1. Click the orb once. It morphs into the chat card.
+1. The chat column is already open on the **Agent** tab.
 2. Click the "Ask the field agent…" box, type `Which data feeds are stale or down right now?` and press Enter.
-3. Watch the card: the tool timeline shows `feed_state`, then the answer streams in with numbered source chips under it. Each stale or down source is named with its state, and the chips point at each feed's last fetch run.
+3. Watch the thread: the tool timeline shows `feed_state`, then the answer streams in with numbered source chips under it. Each stale or down source is named with its state, and the chips point at each feed's last fetch run.
 4. Type `Why does the top python cell score so high tonight?` and press Enter. The answer names the cell, calls the score a heuristic, and lists the terms: density, activity, access.
-5. Voice, with `XAI_API_KEY` set: press and hold the orb for about half a second until the pulse ring shows, then say "Take me to Flamingo". The globe flies to Flamingo. Grok answers UI commands like this one itself, without calling the analytic agent. Without the key, type `Take me to Flamingo.` into the card instead: the agent's `set_view` event flies the globe the same way.
+5. Voice, with `XAI_API_KEY` set: click the mic button next to the composer. It pulses while listening. Say "Take me to Flamingo", and the globe flies to Flamingo. Grok answers UI commands like this one itself, without calling the analytic agent. Click the mic again to stop. Without the key, type `Take me to Flamingo.` into the composer instead. The agent's `set_view` event flies the globe the same way.
 
 ### 4. Follow a citation to the raw payload (2:30–3:30)
 
 1. Under the answer to the python question, click source chip `1`, labelled like `python cell 234:149 score 1.11`. The evidence drawer opens on the right, and the globe flies down to the cell and brackets it with a `HOTSPOT python cell …` label.
-2. Close the chat card with its X so it stops covering the drawer. The drawer title reads `EVIDENCE · HOTSPOT`. The id under it has the form `hotspot:python:<col>:<row>:<frame ms>`, and the URL hash now carries it as `e=`, so the link reopens the same view.
-3. Click the orb to reopen the card, scroll up to the feed answer and click one of its chips. The drawer switches to `EVIDENCE · FETCH`: the fetch run behind that feed, with its upstream URL, fetch time, HTTP status, rows in, the raw key under `raw/<source>/<yyyy>/<mm>/<dd>/`, and the raw payload.
-4. For a sighting, click any sighting point on the globe. The drawer shows, top to bottom: any DUPLICATE OF, DUPLICATES or CONFLICTS badges with their links and revisions; the source link, fetch time, ingest lag and feed state; the normalized record; and the raw payload exactly as fetched. The API cuts the inline text at 256 KB (`RAW_TEXT_CAP` in `api/src/evidence.rs`).
+2. The drawer opens inside the globe pane, so the chat column stays in view next to it. The drawer title reads `EVIDENCE · HOTSPOT`. The id under it has the form `hotspot:python:<col>:<row>:<frame ms>`, and the URL hash now carries it as `e=`, so the link reopens the same view.
+3. Scroll the thread up to the feed answer and click one of its chips. The drawer switches to `EVIDENCE · FETCH`: the fetch run behind that feed, with its upstream URL, fetch time, HTTP status, rows in, the raw key under `raw/<source>/<yyyy>/<mm>/<dd>/`, and the raw payload.
+4. For a sighting, hover any sighting dot first. The tooltip names the species, the ID grade, the source and the age. Then click the dot. The drawer shows, top to bottom: any DUPLICATE OF, DUPLICATES or CONFLICTS badges with their links and revisions; the source link, fetch time, ingest lag and feed state; the normalized record; and the raw payload exactly as fetched. The API cuts the inline text at 256 KB (`RAW_TEXT_CAP` in `api/src/evidence.rs`).
 5. Click the source link. It opens the exact upstream URL the API fetched, for example the iNaturalist API query.
 
 Say: every `[e:…]` citation is checked against the ids the tools returned in that turn. A citation the model invents is stripped before it reaches the screen.
@@ -96,13 +101,12 @@ Say: for each day, the grid is scored using only data from before that day, and 
 
 ### 7. Mission from a hotspot, seen in a second browser (5:30–6:30)
 
-Not demoable at `81596be`: the Missions panel and the rtc worker are T21. Its gates define the flow:
-
-1. With a hotspot selected, open the Missions tab on the left and create a mission from the cell. It carries the species, window, conditions and evidence.
+1. With a hotspot selected, click the **Missions tab** at the top of the chat column. Create a mission from the cell. It carries the species, the window, the conditions and the evidence.
 2. The mission appears in the first window in the same frame, before any network round trip.
-3. The second window shows it over WebRTC, with the WebSocket path as fallback. T21's gate requires an RTC p50 under 150 ms, and both windows must converge after removal counts are incremented concurrently and after an offline edit syncs.
+3. In the second window, stay on the Agent tab. A dot lights up on its Missions tab. Open the tab: the mission arrived over WebRTC, with the WebSocket path as fallback. T21's gate requires an RTC p50 under 150 ms. Both windows must converge after removal counts are incremented concurrently and after an offline edit syncs.
+4. Clicking a mission's diamond on the globe opens the Missions tab and focuses that mission.
 
-What exists today and can be shown instead, in a terminal:
+The same guarantees, shown in a terminal:
 
 ```sh
 cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/client/threads/crdt   # prints "CRDT vectors passed: 14/14", 11 pass

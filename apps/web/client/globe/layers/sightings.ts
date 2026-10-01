@@ -55,6 +55,20 @@ export function visibleRecords(records: readonly TrailRecord[], species: readonl
   });
 }
 
+/** Key for sightings of taxa outside the focus species in `sightingBreakdown`. */
+export const OTHER_TAXA_KEY = "other";
+
+/** Drawn records per focus species id, plus `other`, for the legend's species rows. */
+export function sightingBreakdown(records: readonly Pick<SightingRecord, "taxon">[]): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries([...SPECIES_IDS, OTHER_TAXA_KEY].map((s) => [s, 0]));
+  for (const r of records) {
+    const s = speciesIndexOfTaxon(r.taxon);
+    const key = s < 0 ? OTHER_TAXA_KEY : SPECIES_IDS[s]!;
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
 export function trailAlpha(ageMs: number): number {
   const t = Math.min(1, Math.max(0, ageMs / SIGHTING_TRAIL_MS));
   return 1 - (1 - OLDEST_ALPHA) * t;
@@ -100,11 +114,16 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     return img;
   };
 
+  /** Drawn records by evidence id, for `describe`. */
+  let drawnById = new Map<string, TrailRecord>();
+
   const clear = () => {
     if (!points || !icons || drawnKey === "none") return;
     points.removeAll();
     icons.removeAll();
     drawnKey = "none";
+    drawnById = new Map();
+    stats.breakdown = sightingBreakdown([]);
     stats.count = 0;
     ctx.requestRender();
   };
@@ -154,6 +173,8 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
         });
       }
     }
+    drawnById = new Map(visible.map((r) => [sightingEvidenceId(r.id), r]));
+    stats.breakdown = sightingBreakdown(visible);
     stats.count = visible.length;
     stats.frame = frame;
     stats.updatedAt = ctx.now();
@@ -183,8 +204,15 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     update(frameIndex, grid) {
       if (enabled) draw(frameIndex, grid);
     },
-    stats: () => ({ ...stats }),
+    stats: () => ({ ...stats, breakdown: stats.breakdown && { ...stats.breakdown } }),
+    describe(id) {
+      const r = enabled ? drawnById.get(id) : undefined;
+      return r
+        ? { kind: "sighting", id: r.id, taxon: r.taxon, quality: r.quality, ageMs: r.ageMs, conflict: (r.flags & SIGHTING_FLAG.conflict) !== 0, lon: r.lon, lat: r.lat }
+        : null;
+    },
     destroy() {
+      drawnById = new Map();
       if (viewer) {
         if (points) viewer.scene.primitives.remove(points);
         if (icons) viewer.scene.primitives.remove(icons);

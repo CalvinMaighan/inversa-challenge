@@ -33,8 +33,8 @@ const Host = styled.div`
 `;
 
 /**
- * Attribution stays on screen (Esri, OSM, Google and ion require it) but small, bottom-left, clear of the orb
- * corner. The HUD can lift it above the timeline with `--globe-credits-bottom`.
+ * Attribution stays on screen (Esri, OSM, Google and ion require it) but small, bottom-left.
+ * The HUD can lift it above the timeline with `--globe-credits-bottom`.
  */
 const Credits = styled.div`
   position: absolute;

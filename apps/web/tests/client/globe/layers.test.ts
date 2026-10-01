@@ -8,7 +8,7 @@ import { createHotspotLayer } from "client/globe/layers/hotspots";
 import { createMissionsLayer, MISSION_ID_PREFIX, missionMark } from "client/globe/layers/missions";
 import { createPeersLayer, cursorPeers } from "client/globe/layers/peers";
 import { createSightingsLayer, SIGHTING_TRAIL_MS, trailAlpha, trailFromFrames, visibleRecords } from "client/globe/layers/sightings";
-import { createStationsLayer, latestPerStation, stationBucket } from "client/globe/layers/stations";
+import { createStationsLayer, latestPerStation, stationBreakdown, stationBucket } from "client/globe/layers/stations";
 import { createLstLayer } from "client/globe/layers/env-raster";
 import type { GlobeLayer } from "client/globe/layers/types";
 import { LAYERS } from "client/state/layers";
@@ -282,7 +282,19 @@ describe("stations", () => {
       { param: "AIR_C", observedAt: "2026-09-30T11:00:00Z", origin: "MEASURED", station },
       { param: "AIR_C", observedAt: "2026-09-30T11:30:00Z", origin: "MODELED", station },
     ]);
-    expect(marks).toEqual([{ stationId: "8723970", source: "coops", lon: -81.1, lat: 24.71, evidenceId: `reading:8723970:air_c:${Date.parse("2026-09-30T11:00:00Z")}:measured` }]);
+    expect(marks).toEqual([
+      {
+        stationId: "8723970",
+        source: "coops",
+        name: "8723970",
+        lon: -81.1,
+        lat: 24.71,
+        param: "AIR_C",
+        value: null,
+        observedAtMs: Date.parse("2026-09-30T11:00:00Z"),
+        evidenceId: `reading:8723970:air_c:${Date.parse("2026-09-30T11:00:00Z")}:measured`,
+      },
+    ]);
     expect(stationBucket(Date.parse("2026-09-30T11:44:00Z"))).toBe(Date.parse("2026-09-30T11:30:00Z"));
   });
 
@@ -301,6 +313,30 @@ describe("stations", () => {
     const marks = viewer.added[0] as BillboardCollection;
     expect(marks.length).toBe(1);
     expect(marks.get(0).id).toMatch(/^reading:usgs-1:stage_m:\d+:measured$/);
+  });
+
+  test("describe() answers from the drawn mark; stats split by network", async () => {
+    const observedAt = "2026-09-30T11:00:00Z";
+    const ctx = fakeContext({
+      gql: async () => ({
+        readings: [
+          { param: "STAGE_M", value: 1.21, observedAt, origin: "MEASURED", station: { id: "usgs-1", source: "usgs", name: "Shark River", lat: 25.6, lon: -80.7 } },
+          { param: "WATER_C", value: 24.5, observedAt, origin: "MEASURED", station: { id: "ndbc-1", source: "ndbc", name: "Fowey Rocks", lat: 25.59, lon: -80.1 } },
+        ],
+      }),
+    });
+    const layer = createStationsLayer(ctx);
+    layer.init(fakeViewer());
+    layer.enable();
+    layer.update(0, null);
+    await flush();
+    const id = `reading:usgs-1:stage_m:${Date.parse(observedAt)}:measured`;
+    expect(layer.describe?.(id)).toEqual({ kind: "station", source: "usgs", name: "Shark River", param: "STAGE_M", value: 1.21, observedAtMs: Date.parse(observedAt), lon: -80.7, lat: 25.6 });
+    expect(layer.describe?.("reading:nope:stage_m:1:measured")).toBeNull();
+    expect(layer.stats().breakdown).toEqual({ usgs: 1, ndbc: 1, coops: 0, other: 0 });
+    expect(stationBreakdown([{ source: "USGS" }, { source: "wmo" }])).toEqual({ usgs: 1, ndbc: 0, coops: 0, other: 1 });
+    layer.disable();
+    expect(layer.describe?.(id)).toBeNull();
   });
 });
 

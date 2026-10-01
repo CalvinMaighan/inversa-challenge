@@ -3,48 +3,59 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
-import { IconButton } from "../card.styled";
+import { IconButton } from "../chat.styled";
 import { CloseIcon } from "../icons";
+import { motionMs, POPOUT_MS, prefersReducedMotion } from "../layout/geometry";
 import { PanelBox } from "./DataPanels";
 import { focusPanel } from "./effects";
 import { expandedPanelRect, type Rect } from "./model";
 import { Floating, FloatingBody, FloatingHead, Stack } from "./panels.styled";
 import { useTurnPanels } from "./store";
 
-/** Attribute the card's click-away check skips, so using this panel does not collapse the card. */
-export const AGENT_OVERLAY_ATTR = "data-agent-overlay";
+/** The globe pane the app shell lays out right of the chat column (client/ui/AppShell). */
+export const GLOBE_PANE_SELECTOR = '[data-slot="globe-pane"]';
 
-function subscribeResize(cb: () => void): () => void {
-  window.addEventListener("resize", cb);
-  return () => window.removeEventListener("resize", cb);
+function paneElement(): Element | null {
+  return document.querySelector(GLOBE_PANE_SELECTOR);
 }
 
-const viewportKey = () => `${window.innerWidth}x${window.innerHeight}`;
+/** Window resizes and pane resizes (dragging the column's edge moves the pane without a window resize). */
+function subscribeLayout(cb: () => void): () => void {
+  window.addEventListener("resize", cb);
+  const pane = paneElement();
+  const observer = pane && typeof ResizeObserver === "function" ? new ResizeObserver(cb) : null;
+  if (pane) observer?.observe(pane);
+  return () => {
+    window.removeEventListener("resize", cb);
+    observer?.disconnect();
+  };
+}
 
-function cardRect(): Rect | null {
-  const el = document.querySelector("[data-agent-card]");
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
-  return { top: r.top, left: r.left, width: r.width, height: r.height };
+function layoutKey(): string {
+  const r = paneElement()?.getBoundingClientRect();
+  return `${window.innerWidth}x${window.innerHeight}|${r ? `${r.left},${r.top},${r.width},${r.height}` : ""}`;
 }
 
 /**
- * The wide data panel: every panel of one answer, about 640 px wide, docked left of the chat card and clear of
- * the globe centre; a full-screen sheet on phones. Esc or the close button returns to the card.
+ * The wide data panel: every panel of one answer, up to 640 px wide, over the left part of the globe pane next
+ * to the chat column and clear of the pane centre; a full-screen sheet on phones. Esc or the close button
+ * returns to the thread.
  */
 export default function ExpandedPanels({ turnId, onClose }: { turnId: string; onClose: () => void }) {
   const panels = useTurnPanels(turnId);
   const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
-  const viewport = useSyncExternalStore(subscribeResize, viewportKey, () => "");
-  // The card is placed (open) before its Expand button can be pressed; re-placed on every resize.
+  const layout = useSyncExternalStore(subscribeLayout, layoutKey, () => "");
   const rect = useMemo(() => {
-    const [width, height] = viewport.split("x").map(Number);
-    const card = viewport ? cardRect() : null;
-    return card && width && height ? expandedPanelRect(card, { width, height }) : null;
-  }, [viewport]);
+    if (!layout) return null;
+    const [size, box] = layout.split("|");
+    const [width, height] = size!.split("x").map(Number);
+    const [left, top, w, h] = (box ?? "").split(",").map(Number);
+    const pane: Rect = box ? { left: left!, top: top!, width: w!, height: h! } : { left: 0, top: 0, width: width!, height: height! };
+    return width && height ? expandedPanelRect(pane, { width, height }) : null;
+  }, [layout]);
+  const [ms] = useState(() => motionMs(POPOUT_MS, prefersReducedMotion()));
 
   useEffect(() => {
-    // The card's own Esc handler runs on window; claiming the key here keeps the card open.
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
       event.preventDefault();
@@ -69,12 +80,13 @@ export default function ExpandedPanels({ turnId, onClose }: { turnId: string; on
 
   return createPortal(
     <Floating
-      {...{ [AGENT_OVERLAY_ATTR]: "" }}
       $sheet={rect.sheet}
+      $ms={ms}
       role="dialog"
       aria-label="Result data"
       data-expanded-panels=""
       data-sheet={rect.sheet ? "" : undefined}
+      data-motion-ms={ms}
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
     >
       <FloatingHead>

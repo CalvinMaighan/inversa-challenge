@@ -24,8 +24,7 @@ export const SPEEDS = [1, 2, 4, 8, 16, 32] as const;
 const Root = styled(Surface)`
   position: absolute;
   left: max(var(--gap-m), env(safe-area-inset-left));
-  /* Leaves the bottom-right corner to the agent orb. */
-  right: calc(max(var(--gap-l), env(safe-area-inset-right)) + 76px);
+  right: max(var(--gap-m), env(safe-area-inset-right));
   bottom: max(var(--gap-s), env(safe-area-inset-bottom));
   padding: 6px var(--gap-m) 8px;
   border-radius: var(--radius-m);
@@ -33,7 +32,7 @@ const Root = styled(Surface)`
 
   ${MOBILE} {
     left: var(--gap-s);
-    right: calc(var(--gap-s) + 64px);
+    right: var(--gap-s);
     padding: 6px var(--gap-s) 6px;
   }
 `;

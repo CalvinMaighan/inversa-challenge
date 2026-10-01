@@ -207,10 +207,12 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       const scope = scoped ? drawScope(ctx, w, h, selectedPoint) : null;
 
       // HUD surfaces are obstacles too: a label under the drawer or the timeline is a label nobody sees.
+      // Obstacles are in viewport pixels, labels in canvas pixels: the globe pane starts right of the chat column.
       const obstacles: Rect[] = [];
+      const origin = canvas.getBoundingClientRect();
       for (const el of document.querySelectorAll("[data-hud-obstacle]")) {
         const r = el.getBoundingClientRect();
-        obstacles.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+        obstacles.push({ x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height });
       }
       const placed = new Map(arbiter.solve(candidates, w, h, obstacles).map((p) => [p.key, p]));
       for (const [id, el] of labelEls.current) {

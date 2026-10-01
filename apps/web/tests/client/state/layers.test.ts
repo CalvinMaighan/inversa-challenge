@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { get, init, set } from "@calvinjs/active-state";
 
 import { state } from "client/state";
-import { LAYERS, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
+import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 init(state);
@@ -30,6 +30,19 @@ describe("LAYERS", () => {
     expect(now.species[SPECIES_IDS[0]]).toBe(true);
     // Defaults are never mutated in place.
     expect(LAYERS.defaults.visible[first]).toBe(true);
+    set(LAYERS, LAYERS.defaults);
+  });
+
+  test("setLayerSpeciesPin pins one layer to one species and unpins with null", () => {
+    const hotspots = LAYER_IDS[1];
+    const iguana = SPECIES_IDS[2];
+    setLayerSpeciesPin(hotspots, iguana);
+    expect(get<LayersState>(LAYERS)!.species[hotspots]).toBe(iguana);
+    // The species booleans are untouched.
+    expect(SPECIES_IDS.every((id) => get<LayersState>(LAYERS)!.species[id])).toBe(true);
+    setLayerSpeciesPin(hotspots, null);
+    expect(hotspots in get<LayersState>(LAYERS)!.species).toBe(false);
+    expect(LAYERS.defaults.species[hotspots]).toBeUndefined();
     set(LAYERS, LAYERS.defaults);
   });
 });

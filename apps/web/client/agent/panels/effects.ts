@@ -16,13 +16,16 @@ import { panelsOf } from "./store";
 
 export type TurnFocus = { targets: AgentHighlightTarget[]; primary: number };
 
-/** Straight-down camera over `box`, high enough for this viewport's shape (see altitudeForBox). */
-export function frameCamera(box: BBox, viewport: { width: number; height: number } = viewportSize()) {
+/** Straight-down camera over `box`, high enough for the globe's shape on screen (see altitudeForBox). */
+export function frameCamera(box: BBox, viewport: { width: number; height: number } = globeSize()) {
   return { ...bboxCamera(box), altitudeM: altitudeForBox(box, viewport) };
 }
 
-function viewportSize(): { width: number; height: number } {
-  return typeof window === "undefined" ? { width: 16, height: 10 } : { width: window.innerWidth, height: window.innerHeight };
+/** The globe canvas's box: the pane right of the chat column (full screen on phones). */
+function globeSize(): { width: number; height: number } {
+  if (typeof window === "undefined") return { width: 16, height: 10 };
+  const globe = document.querySelector("[data-globe]")?.getBoundingClientRect();
+  return globe && globe.width > 0 && globe.height > 0 ? { width: globe.width, height: globe.height } : { width: window.innerWidth, height: window.innerHeight };
 }
 
 /** The turn's highlight and its most relevant panel. Pure over the panels. */

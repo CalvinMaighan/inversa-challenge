@@ -2,7 +2,7 @@ import type { AgentStreamEvent } from "shared/agent/events";
 
 /**
  * Streamed agent output for voice-spawned tasks (`task.event`). Deliberately outside
- * active-state: content deltas arrive many times a second and only the orb card needs them.
+ * active-state: content deltas arrive many times a second and only the chat column needs them.
  */
 
 export type TaskEventListener = (taskId: string, event: AgentStreamEvent) => void;

@@ -6,7 +6,7 @@ import DevAgent from "./DevAgent";
 export const dynamic = "force-dynamic";
 
 /**
- * Scratch route for the agent orb (T14 e2e): the orb in the app shell with no globe or HUD, talking to the
+ * Scratch route for the chat column (T14/T40 e2e): the column in the app shell with no globe or HUD, talking to the
  * real agent. `?at=<ISO>` moves the replay window to that instant (the eval fixtures live in January 2026).
  * Dev server only.
  */

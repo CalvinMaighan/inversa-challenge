@@ -11,6 +11,8 @@ import type { Peer } from "client/state/peers";
 import type { FrameMeta, GqlVariables } from "client/threads/api";
 import type { SightingRecord } from "shared/frames";
 
+import type { HoverFacts } from "../hover";
+
 /** The slice of a Cesium widget a layer touches. A fake with an array-backed collection passes in tests. */
 export type GlobeViewer = {
   scene: {
@@ -31,6 +33,11 @@ export type LayerStats = {
   /** `performance.now()`-style ms of the last change on screen, or null. */
   updatedAt: number | null;
   error: string | null;
+  /**
+   * Drawn items split by what the legend shows per row: species ids (plus `other`) for sightings, networks
+   * for stations. Absent for layers the legend counts as a whole.
+   */
+  breakdown?: Record<string, number>;
 };
 
 /** What layers read besides the frame grid. The globe wires it to active-state and the threads API. */
@@ -68,5 +75,7 @@ export interface GlobeLayer {
   stats(): LayerStats;
   /** Evidence id for a globe position, for rasters whose single primitive covers many cells. */
   pickAt?(lon: number, lat: number): string | null;
+  /** What one of this layer's evidence ids stands for, from what it drew (hover tooltips); null when not its own. */
+  describe?(id: string): HoverFacts | null;
   destroy(): void;
 }

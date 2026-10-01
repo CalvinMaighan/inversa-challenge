@@ -2,7 +2,8 @@
 
 import styled, { keyframes } from "client/styled";
 
-import { MORPH_Z } from "../morph/morph.styled";
+/** Above the globe pane (HUD, drawer, legend) and the chat column, which share the shell's stacking context. */
+export const OVERLAY_Z = 1000;
 
 /** Data panels (PLAN.md C17). Colours come from the Emotion theme, whose values are the mode's CSS variables. */
 
@@ -424,9 +425,10 @@ export const Chip = styled.li<{ $tone: "ok" | "warn" | "danger" | "muted" }>`
 
 // ---------------------------------------------------------------- expanded panel
 
-export const Floating = styled.aside<{ $sheet: boolean }>`
+/** `$ms`: entrance length from `motionMs(POPOUT_MS, reduced)`, 0 under reduced motion. */
+export const Floating = styled.aside<{ $sheet: boolean; $ms: number }>`
   position: fixed;
-  z-index: ${MORPH_Z + 1};
+  z-index: ${OVERLAY_Z};
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -438,7 +440,9 @@ export const Floating = styled.aside<{ $sheet: boolean }>`
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   box-shadow: ${({ theme }) => theme.color.shadow};
   color: ${({ theme }) => theme.color.text};
-  animation: ${rise} 160ms ease-out;
+  animation-name: ${rise};
+  animation-duration: ${({ $ms }) => $ms}ms;
+  animation-timing-function: ease-out;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;

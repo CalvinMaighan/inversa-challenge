@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { get } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
@@ -14,7 +14,7 @@ import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
-import { Dot, Icon, IconButton, Mono, MOBILE, Pill, Surface } from "../primitives";
+import { Dot, Icon, IconButton, Mono, MOBILE, COMPACT_PANE, NARROW_PANE, Pill, Surface } from "../primitives";
 import { formatClocks, isLive } from "./clock";
 import { formatLatLon, unproject } from "./coords";
 import { feedChip, feedSummary } from "./feed-chips";
@@ -31,6 +31,12 @@ const Bar = styled(Surface)`
   padding: 5px var(--gap-s) 5px var(--gap-m);
   border-radius: var(--radius-m);
   z-index: 4;
+
+  ${COMPACT_PANE} {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    gap: var(--gap-s);
+  }
 
   ${MOBILE} {
     left: var(--gap-s);
@@ -65,6 +71,11 @@ const Chips = styled.ul`
     display: none;
   }
 
+  ${COMPACT_PANE} {
+    order: 10;
+    flex-basis: 100%;
+  }
+
   ${MOBILE} {
     order: 10;
     flex-basis: 100%;
@@ -87,6 +98,11 @@ const Readouts = styled.div`
   margin-left: auto;
   font-size: 12px;
   white-space: nowrap;
+
+  ${MOBILE} {
+    order: 2;
+    gap: var(--gap-s);
+  }
 `;
 
 const Label = styled.span`
@@ -97,6 +113,10 @@ const Label = styled.span`
 `;
 
 const HideOnPhone = styled.span`
+  ${NARROW_PANE} {
+    display: none;
+  }
+
   ${MOBILE} {
     display: none;
   }
@@ -207,7 +227,9 @@ function CursorReadout() {
         return;
       }
       const view = get<ViewState>(VIEW) ?? VIEW.defaults;
-      const hit = unproject((lon, lat) => globe.project(lon, lat), x, y, { lon: view.lon, lat: view.lat });
+      // project() is in canvas pixels; the globe pane sits right of the chat column, so offset the pointer.
+      const origin = document.querySelector("[data-globe]")?.getBoundingClientRect();
+      const hit = unproject((lon, lat) => globe.project(lon, lat), x - (origin?.left ?? 0), y - (origin?.top ?? 0), { lon: view.lon, lat: view.lat });
       el.textContent = hit ? formatLatLon(hit) : "—";
     };
     const onMove = (e: PointerEvent) => {
@@ -244,9 +266,30 @@ function ThemeSwitch() {
   );
 }
 
-export default function TopBar({ focus, onFocus }: { focus: boolean; onFocus: (next: boolean) => void }) {
+/** "?": after the readouts on wide screens; on phones it shares the first row with the LIVE badge. */
+const HelpButton = styled(IconButton)`
+  ${MOBILE} {
+    order: 1;
+    margin-left: auto;
+  }
+`;
+
+export default function TopBar({
+  focus,
+  onFocus,
+  helpOpen,
+  onHelp,
+  barRef,
+}: {
+  focus: boolean;
+  onFocus: (next: boolean) => void;
+  helpOpen: boolean;
+  onHelp: (open: boolean) => void;
+  /** The bar's element, so the HUD can keep panels below however many rows it wraps to. */
+  barRef?: Ref<HTMLElement>;
+}) {
   return (
-    <Bar as="header" data-hud-obstacle="" data-testid="hud-topbar">
+    <Bar as="header" ref={barRef as Ref<HTMLDivElement>} data-hud-obstacle="" data-testid="hud-topbar">
       <Brand>
         <HideOnPhone>Everglades Ops</HideOnPhone>
         <LiveBadge />
@@ -261,6 +304,18 @@ export default function TopBar({ focus, onFocus }: { focus: boolean; onFocus: (n
         </IconButton>
         <ThemeSwitch />
       </Readouts>
+      <HelpButton
+        type="button"
+        $active={helpOpen}
+        aria-expanded={helpOpen}
+        aria-label="Help: what every control does"
+        title="Help: what every control does"
+        data-help-button=""
+        data-testid="help-button"
+        onClick={() => onHelp(!helpOpen)}
+      >
+        <Icon name="help" />
+      </HelpButton>
     </Bar>
   );
 }

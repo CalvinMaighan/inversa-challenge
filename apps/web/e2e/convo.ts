@@ -7,10 +7,10 @@
  *   bun run e2e:convo --shot    also save docs/evidence/convo.png
  *   E2E_SKIP_BUILD=1 …          reuse the last e2e build
  *
- * On the ops page `/`: open the orb card, ask a question that needs a place and a time, and check what the real
+ * On the ops page `/`: in the chat column, ask a question that needs a place and a time, and check what the real
  * model's answer did, whatever its wording:
  * 1. the stream carried a `view` event, and the real Cesium camera now looks at that box (the globe writes its
- *    camera back to VIEW after the flight; the box centre also projects near the screen centre);
+ *    camera back to VIEW after the flight; the box centre also projects near the globe pane centre);
  * 2. the answer has citation chips; clicking the first opens the evidence drawer on that id, and the drawer shows
  *    the record Axum returns for `evidence(id)` (every field name, and its values).
  * A real model can skip `set_view` or citations on one turn; one follow-up asks for what is missing.
@@ -42,7 +42,7 @@ type Tapped = { status: number; text: string; done: boolean };
 
 /**
  * Test tap, installed before the page loads: tees the body of each `/api/agent/stream` response, so the script
- * reads the NDJSON the card read without taking the stream from it (Playwright cannot always hand back the
+ * reads the NDJSON the column read without taking the stream from it (Playwright cannot always hand back the
  * body of a streamed response).
  */
 function tapAgentStreams(): void {
@@ -71,10 +71,10 @@ function tapAgentStreams(): void {
   window.fetch = tapped as typeof fetch;
 }
 
-/** Ask in the card and return the NDJSON events of that turn's stream. */
+/** Ask in the chat column and return the NDJSON events of that turn's stream. */
 async function ask(page: Page, text: string): Promise<StreamEvent[]> {
-  const card = page.getByRole("dialog", { name: "Agent chat" });
-  const input = card.getByRole("textbox", { name: "Question" });
+  const column = page.locator("[data-chat-column]");
+  const input = column.getByRole("textbox", { name: "Question" });
   const before = await page.evaluate(() => (window as unknown as { __agentStreams: Tapped[] }).__agentStreams.length);
   await input.fill(text);
   await input.press("Enter");
@@ -84,9 +84,9 @@ async function ask(page: Page, text: string): Promise<StreamEvent[]> {
     { timeout: TURN_TIMEOUT_MS },
   );
   const res = await page.evaluate((n) => (window as unknown as { __agentStreams: Tapped[] }).__agentStreams[n]!, before);
-  // The card has rendered the end of the turn.
+  // The column has rendered the end of the turn.
   await page.waitForFunction(
-    () => !document.querySelector('[data-agent-card] [data-source="text"][data-status="streaming"], [data-agent-card] [data-source="text"][data-status="pending"]'),
+    () => !document.querySelector('[data-chat-column] [data-source="text"][data-status="streaming"], [data-chat-column] [data-source="text"][data-status="pending"]'),
     undefined,
     { timeout: 30_000 },
   );
@@ -130,18 +130,17 @@ async function main() {
     await page.waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0 && window.__inversa?.globe() !== null, undefined, { timeout: 120_000 });
     const viewBefore = (await page.evaluate(() => window.__inversa!.state("VIEW"))) as { lat: number; lon: number };
 
-    await page.getByRole("button", { name: /open agent chat/i }).click();
-    await page.getByRole("dialog", { name: "Agent chat" }).waitFor();
+    await page.locator("[data-chat-column]").waitFor();
 
     let events = await ask(page, QUESTION);
     const summary = (evs: StreamEvent[]) => evs.map((e) => e.type).filter((t, i, a) => a.indexOf(t) === i).join(",");
     log(`turn 1 events: ${summary(events)}`);
-    let chips = page.locator("[data-agent-card] .agent-cite");
+    let chips = page.locator("[data-chat-column] .agent-cite");
     if (!events.some((e) => e.type === "view") || (await chips.count()) === 0) {
       const more = await ask(page, FOLLOW_UP);
       log(`turn 2 events: ${summary(more)}`);
       events = [...events, ...more];
-      chips = page.locator("[data-agent-card] .agent-cite");
+      chips = page.locator("[data-chat-column] .agent-cite");
     }
     const views = events.filter((e): e is StreamEvent & { bbox: BBox; time: string } => e.type === "view" && !!e.bbox);
     if (views.length === 0) fail(`no view event in the stream (${summary(events)})`);
@@ -161,7 +160,7 @@ async function main() {
     const camera = await page.evaluate(([b]) => {
       const d = window.__inversa!;
       const p = d.project((b.west + b.east) / 2, (b.south + b.north) / 2);
-      return { view: d.state("VIEW") as { lat: number; lon: number; altitudeM: number }, centre: p, w: window.innerWidth, h: window.innerHeight, time: d.state("TIME") as { at: string } };
+      return { view: d.state("VIEW") as { lat: number; lon: number; altitudeM: number }, centre: p, w: document.querySelector("[data-globe] canvas")?.clientWidth ?? window.innerWidth, h: document.querySelector("[data-globe] canvas")?.clientHeight ?? window.innerHeight, time: d.state("TIME") as { at: string } };
     }, [view.bbox] as const);
     if (!camera.centre || Math.abs(camera.centre.x - camera.w / 2) > camera.w * 0.2 || Math.abs(camera.centre.y - camera.h / 2) > camera.h * 0.2) {
       fail(`view box centre projects to ${JSON.stringify(camera.centre)}, not near the screen centre`);

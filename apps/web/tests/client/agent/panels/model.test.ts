@@ -198,8 +198,9 @@ describe("data panels", () => {
     expect(readoutAt(view, 1.6 * H)).toEqual([{ label: "a", t: 2 * H, value: 3 }]);
   });
 
-  test("panel expanded: docked left of the card, never over the globe centre, a sheet on phones", () => {
-    const cardAt = (vw: number, vh: number) => ({ top: vh - 12 - 480, left: vw - 12 - 360, width: 360, height: 480 });
+  test("panel expanded: docked against the chat column, never over the globe pane centre, a sheet on phones", () => {
+    const COLUMN = 420;
+    const paneAt = (vw: number, vh: number) => ({ top: 0, left: COLUMN, width: vw - COLUMN, height: vh });
     for (const [vw, vh] of [
       [1280, 800],
       [1440, 900],
@@ -207,21 +208,25 @@ describe("data panels", () => {
       [2560, 1440],
       [1024, 768],
     ] as const) {
-      const card = cardAt(vw, vh);
-      const r = expandedPanelRect(card, { width: vw, height: vh });
+      const pane = paneAt(vw, vh);
+      const r = expandedPanelRect(pane, { width: vw, height: vh });
       expect(r.sheet).toBe(false);
-      expect(covers(r, vw / 2, vh / 2)).toBe(false);
-      expect(r.left + r.width).toBe(card.left - 12);
-      expect(r.top + r.height).toBe(card.top + card.height);
-      expect(r.left).toBeGreaterThanOrEqual(0);
+      // The globe pane's centre, where the camera frames the answer, stays clear.
+      expect(covers(r, pane.left + pane.width / 2, pane.top + pane.height / 2)).toBe(false);
+      // Next to the column, over the left part of the pane, inside it.
+      expect(r.left).toBe(COLUMN + 12);
+      expect(r.top + r.height).toBe(vh - 12);
+      expect(r.left + r.width).toBeLessThanOrEqual(vw - 12);
       expect(r.width).toBeLessThanOrEqual(EXPAND_WIDTH);
     }
     // 1280×800: the full 640 fits only below the centre line.
-    expect(expandedPanelRect(cardAt(1280, 800), { width: 1280, height: 800 })).toEqual({ top: 440, left: 256, width: 640, height: 348, sheet: false });
+    expect(expandedPanelRect(paneAt(1280, 800), { width: 1280, height: 800 })).toEqual({ top: 440, left: 432, width: 640, height: 348, sheet: false });
     // 2560×1440: room for 640 beside the centre, at full height.
-    const wide = expandedPanelRect(cardAt(2560, 1440), { width: 2560, height: 1440 });
-    expect(wide).toMatchObject({ width: 640, height: 600 });
-    expect(expandedPanelRect({ top: 332, left: 0, width: 375, height: 480 }, { width: 375, height: 812 })).toEqual({
+    expect(expandedPanelRect(paneAt(2560, 1440), { width: 2560, height: 1440 })).toEqual({ top: 828, left: 432, width: 640, height: 600, sheet: false });
+    // A cramped pane: a sheet over the pane, never over the column.
+    expect(expandedPanelRect({ top: 0, left: 420, width: 380, height: 600 }, { width: 800, height: 600 })).toEqual({ top: 0, left: 420, width: 380, height: 600, sheet: true });
+    // Phones: full screen.
+    expect(expandedPanelRect({ top: 0, left: 0, width: 375, height: 744 }, { width: 375, height: 812 })).toEqual({
       top: 0,
       left: 0,
       width: 375,

@@ -4,11 +4,11 @@ import type { VoiceInputMode, VoiceState as VoicePhase, VoiceTaskSnapshot } from
 
 export type VoiceStatus = "off" | "connecting" | "live" | "error";
 
-/** Voice session as the orb and card read it. Written by `client/voice/voice-runtime.ts`. */
+/** Voice session as the chat column reads it. Written by `client/voice/voice-runtime.ts`. */
 export type VoiceState = {
   status: VoiceStatus;
   sessionId: string | null;
-  /** Session phase from the voice relay; drives the orb's pulse ring. */
+  /** Session phase from the voice relay; drives the mic pulse and status line. */
   state: VoicePhase;
   /** Live transcript of the current turn (user while listening, assistant while speaking). */
   transcript: string;
@@ -21,7 +21,7 @@ export type VoiceState = {
   inputMode: VoiceInputMode;
   /** Background analysis spawned from this session, oldest first. Streamed output: `onTaskEvent`. */
   tasks: VoiceTaskSnapshot[];
-  /** Last UI command applied, e.g. "fly_to", for the orb's receipt line. */
+  /** Last UI command applied, e.g. "fly_to", for the column's receipt line. */
   lastCommand: string | null;
 };
 
