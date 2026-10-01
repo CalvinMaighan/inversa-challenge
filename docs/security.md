@@ -63,7 +63,7 @@ Threat model and controls for the three-app deployment (carp, lionfish, python) 
   - `X-Timestamp` more than 300 s from now is 401: a replay after five minutes fails.
   - A replay inside the window is answered from idempotency: the key is `sha256(body)` (an `X-Idempotency-Key` must equal it, else 400); if the app already holds that raw object and a fetch run for it, or the same bytes are being ingested at that moment, the answer is 200 `duplicate` and nothing is written.
   - Body capped at 2 MB (413); rows validated (422, archived and recorded); a source the app does not run is 404, only after the signature passes.
-  - No secret, no hook: 503 and the `web` feed reported down with the reason. Production secrets should be 32+ random bytes.
+  - No secret, no hook: 503. Production secrets should be 32+ random bytes.
 - **Check:** `cargo test ingest_hook`, 10 tests: valid then duplicate, idempotency key must match, concurrent duplicates ingest once, raw provider body, bad signature (including one trailing byte), the 300 s window, missing secret, oversize, invalid rows, unknown source.
 
 ### 4. Nudges

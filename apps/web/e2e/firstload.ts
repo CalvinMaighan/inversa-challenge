@@ -34,11 +34,17 @@ import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
-/** The Axum fixtures were recorded 2026-09-30T20:40Z; the browser clock sits just after, at the live edge. */
+/**
+ * The Axum fixtures were recorded 2026-09-30T20:40Z; the browser clock sits just after, at the live edge. The
+ * python app tracks one species (K1), and the newest Burmese python in its fixtures was observed 2026-09-14, so
+ * its 7-day default window at 2026-09-30 is empty: for python the clock sits the day after that record instead.
+ */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
+const PYTHON_CLOCK = "2026-09-15T21:00:00Z";
 const LOAD_TIMEOUT_MS = 120_000;
 const APP_ARG = process.argv[process.argv.indexOf("--app") + 1];
 const APP: AppId = process.argv.includes("--app") ? (isAppId(APP_ARG) ? APP_ARG : fail(`--app ${APP_ARG}: not an app id`)) : "python";
+const CLOCK = APP === "python" ? PYTHON_CLOCK : FIXTURE_CLOCK;
 const CONFIG = getApp(APP);
 const SPECIES_APP = CONFIG.kind === "species";
 const REGION = appBBox(CONFIG);
@@ -163,7 +169,7 @@ async function popovers(page: Page): Promise<string> {
 
 async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promise<string[]> {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
-  await context.clock.install({ time: new Date(FIXTURE_CLOCK) });
+  await context.clock.install({ time: new Date(CLOCK) });
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));

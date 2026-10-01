@@ -9,7 +9,11 @@
  * hook (client/debug.ts). `E2E_SKIP_BUILD=1` reuses the last build when it was an e2e build.
  *
  * Axum runs with `INVERSA_SOURCES=off` (no pollers: the data is the fixtures, so runs are repeatable) and a
- * random `INGEST_HOOK_SECRET`, so a script can inject rows through the signed hook (PLAN.md C10).
+ * random `INGEST_HOOK_SECRET`, so a script can deliver raw provider payloads through the signed hook (PLAN.md
+ * C10, docs/ingest-modes.md "As built"): `hook("inat", <observations page>)` runs the app's `inat` adapter over
+ * it, exactly as a poll would. With sources off every feed reports `down` ("disabled: INVERSA_SOURCES=off");
+ * `offlinePollers` runs the pollers instead, with every outbound request sent to a dead proxy, so feeds are
+ * judged on their stored rows (fixtures and hook deliveries) and no data comes from the network.
  *
  * Apps (PLAN.md C-A1/C-A2): the API serves every app under `/v1/<app>/...` and `/health` lists them. A stack is
  * opened for one app (`StackOptions.app`, python by default: the fixtures are the Everglades data): `graphql` and
@@ -65,7 +69,16 @@ export type StackOptions = {
    * the client's own app resolution (no `?app=`: localStorage, then the default).
    */
   pinApp?: boolean;
+  /**
+   * Run the app's pollers (no `INVERSA_SOURCES=off`) with `HTTP(S)_PROXY`/`ALL_PROXY` pointing at a closed local
+   * port, so each poll fails fast and stores nothing. Feed health then follows the stored rows (stale, lagging,
+   * nominal) instead of `down`/disabled. Default false.
+   */
+  offlinePollers?: boolean;
 };
+
+/** Optional delivery headers of the hook (`X-Source-Url`, `X-Fetched-At` unix ms, `Content-Type`). */
+export type HookMeta = { sourceUrl?: string; fetchedAt?: number; contentType?: string };
 
 export type Stack = {
   /** The page origin (the front proxy). */
@@ -74,10 +87,13 @@ export type Stack = {
   app: AppId;
   /** Axum, direct. */
   api: string;
-  /** POST rows (model::Row serde form) through the signed hook; returns the parsed 202 body. */
-  hook(rows: unknown[]): Promise<Record<string, unknown>>;
-  /** POST any body through the signed hook, whatever the answer (a body that does not normalize is a 422). */
-  hookRaw(body: string): Promise<{ status: number; text: string }>;
+  /**
+   * POST a raw provider payload to `/v1/<app>/ingest/hook/<source>` (`source`: one of the app's poll adapters,
+   * whose `normalize` reads the body); returns the parsed 202 body. A non-string body is sent as JSON.
+   */
+  hook(source: string, body: unknown, meta?: HookMeta): Promise<Record<string, unknown>>;
+  /** As `hook`, whatever the answer (a body that does not normalize is a 422, an unknown source a 404). */
+  hookRaw(source: string, body: unknown, meta?: HookMeta): Promise<{ status: number; text: string }>;
   /** POST a GraphQL query to Axum. */
   graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
   /** Path of every request the proxy sent to Axum (`/v1/...`, `/health`), in order. */
@@ -86,6 +102,30 @@ export type Stack = {
   logs(): string;
   stop(): Promise<void>;
 };
+
+/**
+ * An iNaturalist `/v1/observations` page with one Burmese python observation: the `inat` adapter's raw body. It is
+ * the recorded observation 398269828 (api/fixtures/inat/focus-p1.json, the one the API's hook tests deliver) given
+ * a new id, place and time.
+ */
+export async function inatPage(o: { id: number; lat: number; lon: number; observedAt: number }): Promise<Record<string, unknown>> {
+  const page = (await Bun.file(path.join(REPO_DIR, "api/fixtures/inat/focus-p1.json")).json()) as { results: Record<string, unknown>[] };
+  const template = page.results.find((r) => r.id === 398269828);
+  if (!template) throw new Error("inat fixture: observation 398269828 not found");
+  const iso = (ms: number) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const obs = {
+    ...template,
+    id: o.id,
+    uuid: crypto.randomUUID(),
+    time_observed_at: iso(o.observedAt),
+    observed_on: iso(o.observedAt).slice(0, 10),
+    created_at: iso(Math.min(o.observedAt + 10 * 60_000, Date.now())),
+    updated_at: iso(Date.now()),
+    location: `${o.lat},${o.lon}`,
+    geojson: { type: "Point", coordinates: [o.lon, o.lat] },
+  };
+  return { total_results: 1, page: 1, per_page: 200, results: [obs] };
+}
 
 export function buildWeb(log: (...a: unknown[]) => void): void {
   if (process.env.E2E_SKIP_BUILD === "1" && existsSync(SERVER) && existsSync(E2E_MARKER)) return;
@@ -244,7 +284,12 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   const secret = randomBytes(24).toString("hex");
   const apiPort = freePort();
   const api = `http://127.0.0.1:${apiPort}`;
-  const axumEnv = { INVERSA_DATA_DIR: dataDir, INVERSA_BIND: `127.0.0.1:${apiPort}`, INVERSA_SOURCES: "off", INGEST_HOOK_SECRET: secret };
+  const axumEnv: Record<string, string> = { INVERSA_DATA_DIR: dataDir, INVERSA_BIND: `127.0.0.1:${apiPort}`, INVERSA_SOURCES: "off", INGEST_HOOK_SECRET: secret };
+  if (opts.offlinePollers) {
+    // A port nothing listens on: reqwest honours the proxy variables, so every poll fails at connect.
+    const dead = `http://127.0.0.1:${freePort()}`;
+    Object.assign(axumEnv, { INVERSA_SOURCES: "on", HTTP_PROXY: dead, HTTPS_PROXY: dead, ALL_PROXY: dead, http_proxy: dead, https_proxy: dead, all_proxy: dead, NO_PROXY: "", no_proxy: "" });
+  }
 
   if (!existsSync(API_BIN)) throw new Error(`no Axum binary at ${API_BIN}; call buildApi first`);
   for (const id of opts.apps ?? [app]) {
@@ -325,14 +370,14 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin, app, pinApp: opts.pinApp ?? true, apiPaths });
     log(`axum ${api} (data ${dataDir}), next ${nextOrigin}, signal ${signalOrigin}, page origin ${origin}`);
 
-    const hookRaw = async (body: string) => {
+    const hookRaw = async (source: string, payload: unknown, meta: HookMeta = {}) => {
+      const body = typeof payload === "string" ? payload : JSON.stringify(payload);
       const ts = Math.floor(Date.now() / 1000);
       const signature = createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
-      const res = await fetch(`${api}/v1/${app}/ingest/hook/web`, {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-timestamp": String(ts), "x-signature": signature },
-        body,
-      });
+      const headers: Record<string, string> = { "content-type": meta.contentType ?? "application/json", "x-timestamp": String(ts), "x-signature": signature };
+      if (meta.sourceUrl) headers["x-source-url"] = meta.sourceUrl;
+      if (meta.fetchedAt !== undefined) headers["x-fetched-at"] = String(meta.fetchedAt);
+      const res = await fetch(`${api}/v1/${app}/ingest/hook/${encodeURIComponent(source)}`, { method: "POST", headers, body });
       return { status: res.status, text: await res.text() };
     };
     return {
@@ -342,9 +387,9 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
       apiPaths,
       graphql,
       hookRaw,
-      async hook(rows) {
-        const { status, text } = await hookRaw(JSON.stringify(rows));
-        if (status !== 202) throw new Error(`hook answered ${status}: ${text}`);
+      async hook(source, body, meta) {
+        const { status, text } = await hookRaw(source, body, meta);
+        if (status !== 202) throw new Error(`hook ${source} answered ${status}: ${text}`);
         return JSON.parse(text) as Record<string, unknown>;
       },
       logs: tail,

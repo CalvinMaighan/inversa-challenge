@@ -78,7 +78,7 @@ git push origin pivot/three-apps          # then open a PR into main, or push ma
 | `CESIUM_ION_TOKEN` | globe imagery (inlined at build) | `release.yml` fails |
 | `OPENROUTER_API_KEY` | the agent | agent 503, chat says unavailable |
 | `XAI_API_KEY` | voice mode | voice says unavailable |
-| `INGEST_HOOK_SECRET` (32+ random bytes: `openssl rand -hex 32`) | signed ingest hook, the `web` feed | hook 503, `web` feed chip down |
+| `INGEST_HOOK_SECRET` (32+ random bytes: `openssl rand -hex 32`) | signed ingest hook (`/v1/{app}/ingest/hook/{source}`, any poll source the app runs) | hook answers 503 |
 | `INGEST_NUDGE_TOKEN` (`openssl rand -hex 24`) | provider nudges (step 10, 11) | nudges 503; feeds still poll on their backstop cadence |
 | `SIGNAL_WORKER_URL` (the `https://…workers.dev` origin from step 3.5) | Caddy `/signal/*` and `/api/health` | `/signal/*` 502, Worker reported down |
 | `GOES_SQS_URL` (or `GOES_SQS_URL_LIONFISH`, `GOES_SQS_URL_PYTHON`), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | GOES-19 push (step 7) | `goes19` / `goes19-sst` chips down with the reason |

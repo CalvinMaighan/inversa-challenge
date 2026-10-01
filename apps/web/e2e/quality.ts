@@ -1,22 +1,36 @@
 /**
  * Data quality in the UI (gates/leaf-T27.md G3, PRD §7) on the real stack (e2e/stack.ts): Axum over the fixture
  * backfill, `next start`, the signal Worker and the front proxy. Each case is seeded through the real pipeline
- * (fixtures, or the signed hook), found through GraphQL, then opened in the ops page the way a user does: a feed
- * chip click or a share link with `e=<evidence id>`. Each screenshot is checked for the badge it must show.
+ * (fixtures, or a raw provider payload delivered through the signed hook to the adapter that reads it), found
+ * through GraphQL, then opened in the ops page the way a user does: a feed row click or a share link with
+ * `e=<evidence id>`. Each screenshot is checked for the badge it must show.
+ *
+ * The stack runs its pollers offline (`offlinePollers`: every request goes to a dead proxy and fails), because
+ * with `INVERSA_SOURCES=off` every hook-able feed is `down` (disabled), which outranks `stale`. Feed health then
+ * follows the stored rows.
  *
  *   bun run e2e:quality          build, run, write docs/evidence/quality/*.png, print QUALITY lines
  *   E2E_SKIP_BUILD=1 …           reuse the last e2e build
  *
  * Cases and what must be on screen:
- * - stale:     a pushed sighting observed 3 days ago makes the `web` feed (max latency 1 d) stale: its row in the
- *              About popover's data sources (T41) is `data-state=stale` with the note, and its name opens the fetch
- *              run, whose summary says "WEB data out of date".
+ * - stale:     an iNaturalist observations page delivered to the `inat` hook holds a python sighting observed 3 days
+ *              ago, which becomes the `inat` feed's newest observation (the fixture ones are older): past its 6 h
+ *              max latency, the feed is stale. An old row cannot make a fresher feed stale (freshness is the newest
+ *              row), so what this proves is that the pushed row is what the feed is judged on: the note says
+ *              "newest observation is 3d old". Its row in the About popover's data sources (T41) is
+ *              `data-state=stale` with the note, and its name opens the latest fetch run, whose summary says
+ *              "iNat data out of date".
  * - missing:   the fixture GOES scan's cloud and bad-DQF pixels are hatched on the LST layer (the layer's own
- *              gap count > 0); a cloud pixel's drawer says MISSING · CLOUD. A hook body that does not
- *              normalize is a failed fetch: its drawer says FETCH FAILED.
+ *              gap count > 0); a cloud pixel's drawer says MISSING · CLOUD. An `inat` hook body that does not
+ *              normalize (an observation whose id is not a number) is a 422 and a failed fetch: its drawer says
+ *              Data check failed and names `normalize`.
  * - duplicate: a GBIF record mirroring an iNaturalist one: DUPLICATE OF with the link to the iNat record.
- * - conflict:  the iNat ID flip (REVISION + CONFLICT, old → new taxon) and a satellite SST pixel 2 km from buoy
- *              41122 reading 2.4 °C warmer (CONFLICT, linked both ways).
+ * - conflict:  the iNat ID flip (REVISION + CONFLICT, old → new taxon) and an air temperature at NDBC station GBIF1
+ *              (Gunboat Island) 6 °C above the GOES land-surface temperature of its own cell at the fixture scan
+ *              (an NDBC realtime2 file delivered to the `ndbc` hook): skin more than 5 °C below air is outside the
+ *              plausible band, so both readings are CONFLICT, linked both ways. (The original case, a satellite
+ *              SST pixel next to buoy 41122, has no hook route: only `goes19` carries satellite SST, it is a push
+ *              source that takes NetCDF from S3 and is not offered by the hook, and the fixture scan has no SST.)
  * - late:      the newest NAS record, stored months after it was observed: LATE badge and the ingest-lag line.
  */
 import { mkdirSync } from "node:fs";
@@ -24,12 +38,16 @@ import path from "node:path";
 
 import { chromium, type Page } from "playwright";
 
-import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
+import { buildApi, buildWeb, inatPage, REPO_DIR, startStack, type Stack } from "./stack";
 
 const OUT = path.join(REPO_DIR, "docs/evidence/quality");
 const DAY = 86_400_000;
 const LOAD_TIMEOUT_MS = 120_000;
 const REGION = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
+/** NDBC GBIF1, Gunboat Island (api/src/ingest/poll/ndbc.rs STATIONS): its 0.01° cell holds a clear LST pixel of the fixture scan. */
+const GBIF1 = { id: "GBIF1", lat: 25.378, lon: -81.029 };
+/** The python app's scoring cell (0.01°, from the region's south-west corner) of a point. */
+const cellOf = (lat: number, lon: number) => `${Math.floor((lon - REGION.west) / 0.01 + 1e-9)}:${Math.floor((lat - REGION.south) / 0.01 + 1e-9)}`;
 
 const log = (...a: unknown[]) => console.error("[e2e:quality]", ...a);
 /** Screenshots written. */
@@ -94,32 +112,14 @@ async function main() {
   buildApi(log);
   buildWeb(log);
   mkdirSync(OUT, { recursive: true });
-  const stack = await startStack({ name: "quality" });
+  const stack = await startStack({ name: "quality", offlinePollers: true });
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const results: string[] = [];
   try {
     const now = Date.now();
 
-    // ---- seed the stale observation through the signed hook. It must be the `web` feed's newest row, so the SST
-    //      pixel (observed hours ago, same feed) is pushed only after the stale case is on screen.
-    const stale = await stack.hook([
-      {
-        Sighting: {
-          ext_id: "t27-stale-1",
-          taxon: { scientific_name: "Python bivittatus", common_name: "Burmese python" },
-          lat: 25.7602,
-          lon: -80.7715,
-          accuracy_m: 10,
-          observed_at: now - 3 * DAY,
-          quality: "curated",
-          photo_url: null,
-        },
-      },
-    ]);
-    const buoy = (await stack.graphql<{ readings: Reading[] }>(READINGS, { b: around(26.001, -80.096), f: iso(now - 30 * DAY), t: iso(now), p: ["SST_C"] })).readings
-      .filter((r) => r.station.source === "ndbc" && r.origin === "MEASURED" && r.flag === "OK" && r.value !== null)
-      .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
-    if (!buoy) throw new Error("no measured SST at buoy 41122 in the fixtures");
+    // ---- seed the stale observation: an iNat observations page with a python seen 3 days ago, through the hook.
+    const stale = await stack.hook("inat", await inatPage({ id: 900_000_000 + (now % 99_999_999), lat: 25.7602, lon: -80.7715, observedAt: now - 3 * DAY }));
     log(`seeded: stale sighting (run ${String(stale.fetchRunId)})`);
 
     // ---- find the fixture cases through GraphQL
@@ -136,7 +136,8 @@ async function main() {
     const centre = { lat: mid(cloudy.map((r) => r.station.lat)), lon: mid(cloudy.map((r) => r.station.lon)) };
     const cloud = cloudy.sort((a, b) => Math.hypot(a.station.lat - centre.lat, a.station.lon - centre.lon) - Math.hypot(b.station.lat - centre.lat, b.station.lon - centre.lon))[0]!;
 
-    const sightings = await allSightings(stack, 400);
+    // Two years back: the K1 ID-flip fixture (inat/idflip-p1.json) was observed on 2025-01-22.
+    const sightings = await allSightings(stack, 730);
     const byId = new Map(sightings.map((s) => [s.id, s]));
     const dup = sightings.find((s) => s.source === "gbif" && s.canonicalId && byId.get(s.canonicalId)?.source === "inat");
     const flip = sightings.find((s) => s.source === "inat" && s.conflict && Number(s.taxon.id) <= 4);
@@ -144,20 +145,27 @@ async function main() {
     const late = sightings.filter((s) => s.source === "nas" && lag(s) > DAY).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
     if (!dup || !flip || !late) throw new Error(`fixtures: duplicate ${dup?.id}, flip ${flip?.id}, late ${late?.id}`);
 
-    // ---- stale: the web feed's row in the About popover (T41), then its fetch run in the drawer
+    // ---- stale: the inat feed's row in the About popover (T41), then its fetch run in the drawer
     const page = await openPage(browser, stack.origin, `#v=1&c=25.70000,-80.60000,160000,0,-90&l=sightings,hotspots`);
-    // FEEDS comes over the `feeds` subscription, published every 15 s.
-    await page.waitForFunction(() => ((window.__inversa!.state("FEEDS") as { source: string; state: string }[] | undefined) ?? []).some((f) => f.source === "web" && f.state === "stale"), undefined, { timeout: 60_000 });
+    // FEEDS comes over the `feeds` subscription, published every 15 s; the note names the pushed row's age.
+    await page.waitForFunction(
+      () =>
+        ((window.__inversa!.state("FEEDS") as { source: string; state: string; note: string | null }[] | undefined) ?? []).some(
+          (f) => f.source === "inat" && f.state === "stale" && /newest observation is 3d old/.test(f.note ?? ""),
+        ),
+      undefined,
+      { timeout: 60_000 },
+    );
     await page.click("[data-testid=status-button]");
     await page.click("[data-testid=data-sources] > summary");
-    const row = page.locator("[data-testid=status-popover] [data-feed=web][data-state=stale]");
+    const row = page.locator("[data-testid=status-popover] [data-feed=inat][data-state=stale]");
     await row.waitFor();
     await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await page.locator("[data-testid=status-popover]").screenshot({ path: path.join(OUT, "stale-feed-row.png") });
     shots += 1;
     const rowText = `${(await row.getAttribute("title")) ?? ""} ${(await row.textContent()) ?? ""}`;
-    if (!/stale/.test(rowText) || !/max latency is 1d/.test(rowText)) throw new Error(`web feed row: ${rowText}`);
+    if (!/stale/.test(rowText) || !/newest observation is 3d old; max latency is 6h/.test(rowText)) throw new Error(`inat feed row: ${rowText}`);
     await row.locator("button").click();
     await page.waitForFunction(() => /^fetch:/.test(document.querySelector("[data-testid=hud-drawer-id]")?.textContent ?? ""), undefined, { timeout: 30_000 });
     await page.waitForFunction(() => Boolean(document.querySelector("[data-testid=hud-drawer-quality]")), undefined, { timeout: 30_000 });
@@ -167,8 +175,8 @@ async function main() {
     await page.locator("[data-testid=hud-drawer]").screenshot({ path: path.join(OUT, "stale-drawer.png") });
     shots += 1;
     const staleText = (await page.locator("[data-testid=hud-drawer]").textContent()) ?? "";
-    if (!/WEB data out of date/.test(staleText) || !/max latency is 1d/.test(staleText)) throw new Error(`stale drawer: ${staleText.slice(0, 800)}`);
-    results.push(`stale=web feed row+drawer`);
+    if (!/iNat data out of date/.test(staleText) || !/max latency is 6h/.test(staleText)) throw new Error(`stale drawer: ${staleText.slice(0, 800)}`);
+    results.push(`stale=inat feed row+drawer`);
 
     // ---- missing (1): cloud hatching on the LST layer at the frame after the scan, then a cloud pixel
     const frameAt = Math.floor(scanAt / 3_600_000) * 3_600_000 + 3_600_000;
@@ -196,8 +204,9 @@ async function main() {
     await drawer(globePage, readingId(cloud), "missing-cloud-drawer.png", [/Cloud cover — no reading/, /GOES/]);
     await drawer(globePage, readingId(bad[0]!), "missing-bad-dqf-drawer.png", [/Bad satellite data — no reading/]);
 
-    // ---- missing (2): a push that does not normalize is a failed fetch
-    const failed = await stack.hookRaw(JSON.stringify([{ Reading: { station: { ext_id: "broken" } } }]));
+    // ---- missing (2): a delivery that does not normalize is a failed fetch (an iNat page whose observation id is
+    //      not a number)
+    const failed = await stack.hookRaw("inat", { total_results: 1, page: 1, per_page: 200, results: [{ id: "broken" }] });
     if (failed.status !== 422) throw new Error(`broken hook body answered ${failed.status}: ${failed.text}`);
     const failedRun = (JSON.parse(failed.text) as { fetchRunId: number }).fetchRunId;
     await drawer(globePage, `fetch:${failedRun}`, "missing-fetch-failed-drawer.png", [/Data check failed/, /normalize/], true);
@@ -208,24 +217,31 @@ async function main() {
     await drawer(globePage, `sighting:${dup.canonicalId}`, "duplicate-canonical-drawer.png", [/Also reported once more elsewhere/, new RegExp(`sighting:${dup.id}`)]);
     results.push(`duplicate=sighting:${dup.id}->sighting:${dup.canonicalId}`);
     await drawer(globePage, `sighting:${flip.id}`, "conflict-idflip-drawer.png", [/Sources disagree/, /REVISION/, /taxon:/], true);
-    // The SST pixel next to buoy 41122, 2.4 °C warmer.
-    const pixelAt = Date.parse(buoy.observedAt) + 10 * 60_000;
-    await stack.hook([
-      {
-        Reading: {
-          station: { ext_id: "t27-sst-pixel", name: "SST pixel 2 km north of 41122", lat: buoy.station.lat + 0.018, lon: buoy.station.lon, kind: "goes_cell" },
-          param: "sst_c",
-          value: buoy.value! + 2.4,
-          flag: "ok",
-          observed_at: pixelAt,
-          origin: "satellite",
-        },
-      },
-    ]);
-    log(`seeded: SST pixel at ${iso(pixelAt)} next to ${buoy.station.name} ${buoy.value} °C`);
-    const buoyId = readingId(buoy);
-    await drawer(globePage, buoyId, "conflict-sst-drawer.png", [/Sources disagree/, /1 CONFLICT/, /:sst_c:/], true);
-    results.push(`conflict=sighting:${flip.id} ${buoyId}`);
+    // Air temperature at GBIF1 6 °C above the clear LST pixel of its own cell, at the top of the scan's hour: an
+    // NDBC realtime2 file for the `ndbc` adapter (the URL names the station; the fetch time keeps the row inside
+    // the adapter's 4-day window).
+    const pixel = lst.find((r) => r.flag === "OK" && r.value !== null && cellOf(r.station.lat, r.station.lon) === cellOf(GBIF1.lat, GBIF1.lon));
+    if (!pixel) throw new Error(`no clear LST pixel in GBIF1's cell ${cellOf(GBIF1.lat, GBIF1.lon)} at ${iso(scanAt)}`);
+    const airAt = Math.floor(scanAt / 3_600_000) * 3_600_000;
+    const air = (pixel.value! + 6).toFixed(1);
+    const d = new Date(airAt);
+    const stamp = [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes()].map((n) => String(n).padStart(2, "0")).join(" ");
+    const realtime2 = [
+      "#YY  MM DD hh mm WDIR WSPD GST  WVHT   DPD   APD MWD   PRES  ATMP  WTMP  DEWP  VIS PTDY  TIDE",
+      "#yr  mo dy hr mn degT m/s  m/s     m   sec   sec degT   hPa  degC  degC  degC  nmi  hPa    ft",
+      `${stamp}  MM   MM   MM    MM    MM    MM  MM     MM  ${air.padStart(4)}    MM    MM   MM   MM    MM`,
+      "",
+    ].join("\n");
+    await stack.hook("ndbc", realtime2, { sourceUrl: `https://www.ndbc.noaa.gov/data/realtime2/${GBIF1.id}.txt`, fetchedAt: airAt + 50 * 60_000, contentType: "text/plain" });
+    log(`seeded: ${GBIF1.id} air ${air} °C at ${iso(airAt)}; LST ${pixel.value} °C at ${pixel.station.name}`);
+    const airReading = (await stack.graphql<{ readings: Reading[] }>(READINGS, { b: around(GBIF1.lat, GBIF1.lon), f: iso(airAt), t: iso(airAt), p: ["AIR_C"] })).readings.find(
+      (r) => r.station.source === "ndbc" && r.origin === "MEASURED",
+    );
+    if (!airReading) throw new Error(`the ${GBIF1.id} air reading did not land`);
+    const airId = readingId(airReading);
+    await drawer(globePage, airId, "conflict-lst-air-drawer.png", [/Sources disagree/, /1 CONFLICT/, /:lst_c:/], true);
+    await drawer(globePage, readingId(pixel), "conflict-lst-pixel-drawer.png", [/Sources disagree/, /:air_c:/], true);
+    results.push(`conflict=sighting:${flip.id} ${airId}`);
     const lateDays = Math.floor(lag(late) / DAY);
     await drawer(globePage, `sighting:${late.id}`, "late-drawer.png", [new RegExp(`Late report — reached us ${lateDays}d`), new RegExp(`Ingest lag${lateDays}d`)]);
     results.push(`late=sighting:${late.id} ${lateDays}d`);
