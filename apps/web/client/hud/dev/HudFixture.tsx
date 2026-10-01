@@ -8,6 +8,7 @@ import type { FeedState } from "shared/feed-state";
 import { QUALITY_CODES } from "shared/frames";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
+import AgentColumn from "client/agent";
 import { AGENT_CHAT, type AgentChatState } from "client/state/agent";
 import { FEEDS } from "client/state/feeds";
 import { SELECTION } from "client/state/selection";
@@ -236,10 +237,8 @@ export default function HudFixture() {
   if ("error" in ready) return <Message role="alert">Fixture failed: {ready.error}</Message>;
   return (
     <AppShell
-      globe={<FixtureGlobe grid={ready.grid} />}
-      hud={
-        <Hud
-          sync={false}
+      side={
+        <AgentColumn
           missions={
             <MissionList>
               <li>
@@ -254,6 +253,8 @@ export default function HudFixture() {
           }
         />
       }
+      globe={<FixtureGlobe grid={ready.grid} />}
+      hud={<Hud sync={false} />}
     />
   );
 }

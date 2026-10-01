@@ -1,13 +1,14 @@
 /**
  * Team realtime browser gates (gates/leaf-T21.md G2, G3) against the real stack:
  *
- *   - `wrangler dev --local` for the signal Worker on 8799 (its dev env allows origin 127.0.0.1:3050);
+ *   - `wrangler dev --local` for the signal Worker on a free port, allowing the page's origin;
  *   - a real Axum (`cargo run --release`) on a free port with a temp INVERSA_DATA_DIR and INVERSA_SOURCES=off,
  *     so `applyOps`, `opsSince` and the `ops` subscription are the production code;
- *   - `next dev` on 3050 proxying /v1 to it.
+ *   - `next dev` on a free port proxying /v1 to it.
  *
- * Two Playwright contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops
- * page. A edits through the panel, B is watched by a MutationObserver; both timestamps come from the same
+ * Free ports throughout, so a developer's own `bun run dev` (3050, 8799) keeps running. Two Playwright
+ * contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops page and switch
+ * the chat column to its Missions tab. A edits through the panel, B is watched by a MutationObserver; both timestamps come from the same
  * machine clock. 20 chat lines over RTC, then 20 more with peer traffic blocked (`window.__team.blockRtc`)
  * so they ride applyOps → Axum → the WebSocket. Then concurrent removal logging from both contexts must sum,
  * and an edit made while B is offline must converge after it reconnects.
@@ -25,8 +26,9 @@ const APP_DIR = join(import.meta.dir, "..");
 const REPO_DIR = join(APP_DIR, "../..");
 const SIGNAL_DIR = join(REPO_DIR, "apps/signal-worker");
 const WRANGLER = "wrangler@4.145.0";
-const SIGNAL_PORT = 8799;
-const NEXT_PORT = 3050;
+/** Free ports, never the developer's own `bun run dev` (next on 3050, the signal Worker on 8799). */
+const SIGNAL_PORT = freePort();
+const NEXT_PORT = freePort(SIGNAL_PORT);
 const SIGNAL_URL = `http://127.0.0.1:${SIGNAL_PORT}`;
 const PAGE = `http://127.0.0.1:${NEXT_PORT}/`;
 const EDITS = 20;
@@ -44,11 +46,14 @@ function fail(msg: string): never {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function freePort(): number {
-  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-  const port = probe.port!;
-  probe.stop(true);
-  return port;
+/** A port the OS says is free, other than `not`. */
+function freePort(not?: number): number {
+  for (;;) {
+    const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
+    const port = probe.port!;
+    probe.stop(true);
+    if (port !== not) return port;
+  }
 }
 
 async function portBusy(port: number): Promise<boolean> {
@@ -109,7 +114,7 @@ async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: n
 }
 
 async function startSignal(): Promise<Proc> {
-  const p = start("signal", "bunx", [WRANGLER, "dev", "--local", "--env", "dev", "--port", String(SIGNAL_PORT), "--ip", "127.0.0.1", "--persist-to", join(scratch, "wrangler-state")], SIGNAL_DIR, {
+  const p = start("signal", "bunx", [WRANGLER, "dev", "--local", "--env", "dev", "--port", String(SIGNAL_PORT), "--ip", "127.0.0.1", "--persist-to", join(scratch, "wrangler-state"), "--var", `ALLOWED_ORIGIN:http://127.0.0.1:${NEXT_PORT}`], SIGNAL_DIR, {
     WRANGLER_SEND_METRICS: "false",
   });
   await waitFor(
@@ -203,6 +208,8 @@ async function open(ctx: BrowserContext, name: string): Promise<Page> {
     if (/relaying through main/.test(m.text())) relayed.add(name);
   });
   await page.goto(PAGE, { waitUntil: "domcontentloaded" });
+  // The board lives in the chat column's Missions tab (T40); the session starts with the page either way.
+  await page.click('[data-tab="board"]', { timeout: 120_000 });
   await page.waitForFunction(() => Boolean(window.__team) && document.querySelector('[data-testid="team-panel"][data-ready="1"]') !== null, null, { timeout: 120_000 });
   return page;
 }

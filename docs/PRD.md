@@ -377,7 +377,7 @@ The voice path is ported from deedee `client/voice/*`, `server/voice/*` and `sha
 ### Theme and state
 
 - **Theme:** `active-theme` with `light`, `dark` and `tactical` modes. Palettes are ported from big-value `client/themes/tokens.ts`, and a pre-paint `data-theme` bootstrap avoids flash.
-- **State:** `@calvinjs/active-state` keys: `TIME`, `VIEW`, `LAYERS`, `SELECTION`, `FEEDS`, `MISSIONS`, `PEERS`, `ME`, `AGENT_CARD` (orb/card, open, position), `AGENT_CHAT`, `VOICE`. The key pattern follows deedee `SHELL_CHAT.ts`.
+- **State:** `@calvinjs/active-state` keys: `TIME`, `VIEW`, `LAYERS`, `SELECTION`, `FEEDS`, `MISSIONS`, `PEERS`, `ME`, `AGENT_CARD` (the chat column: tab, phone sheet height, unread dots; the orb it was named for was replaced by the column in T40), `AGENT_CHAT`, `VOICE`. The key pattern follows deedee `SHELL_CHAT.ts`.
 
 ### New tech 1: threaded active-state (`packages/active-state`, `./threads`)
 

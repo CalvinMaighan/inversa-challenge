@@ -17,7 +17,7 @@ const Frame = styled(Surface)<{ $side: Side; $width: number }>`
   top: var(--hud-top);
   bottom: var(--hud-bottom);
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
-  width: min(${(p) => p.$width}px, calc(100vw - 2 * var(--gap-m)));
+  width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-m);

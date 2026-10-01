@@ -466,3 +466,57 @@ export const SendButton = styled(IconButton)`
     color: var(--accent-fg);
   }
 `;
+
+/** Mic in the composer; pulses while voice listens or speaks. */
+export const MicButton = styled(IconButton)<{ $live: boolean; $pulse: boolean }>`
+  width: 36px;
+  height: 36px;
+  border: 1px solid ${({ $live }) => ($live ? "var(--accent)" : "var(--border)")};
+  animation: ${pulse} 1.2s ease-in-out infinite;
+  animation-play-state: ${({ $pulse }) => ($pulse ? "running" : "paused")};
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+`;
+
+/** First-visit hint above the composer: one line plus example questions as chips. */
+export const Hint = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: var(--gap-s) var(--gap-s) 0;
+  font: 400 var(--font-xs) / 1.4 var(--font-ui);
+  color: var(--muted);
+
+  p {
+    flex: 1 1 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-xs);
+    margin: 0;
+  }
+
+  p span {
+    flex: 1;
+  }
+`;
+
+export const HintChip = styled.button`
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
+  border-radius: var(--radius-round);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  color: var(--text);
+  font: 500 var(--font-xs) / 1.3 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 18%, transparent);
+  }
+`;

@@ -4,7 +4,7 @@ import { useLayoutEffect, useMemo, useRef, type MouseEvent } from "react";
 
 import type { AgentCitation } from "client/state/agent";
 
-import { Body } from "../card.styled";
+import { Body } from "../chat.styled";
 import { EVIDENCE_ATTR, mountStreamMarkdown, type CiteIndex } from "./mount";
 
 export function citeIndex(citations: readonly AgentCitation[]): CiteIndex {

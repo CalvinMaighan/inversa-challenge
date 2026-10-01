@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
+import { EXAMPLE_QUESTIONS, FIRST_VISIT_HINT } from "client/hud/help/content";
 import type { VoiceState } from "client/state/voice";
 
 import {
@@ -10,8 +11,11 @@ import {
   Empty,
   ErrorLine,
   Header,
+  Hint,
+  HintChip,
   IconButton,
   Input,
+  MicButton,
   Note,
   PhaseLine,
   Reasoning,
@@ -26,22 +30,22 @@ import {
   VoiceDot,
   VoiceLine,
   VoiceTag,
-} from "./card.styled";
+} from "./chat.styled";
 import ActionTimeline from "./chat/ActionTimeline";
 import { formatWorkDuration } from "./chat/tools";
 import type { AgentThread, AgentTurn } from "./chat/thread";
 import { ClearIcon, CloseIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
-import { ORB_LABELS, voiceIsLive, type OrbPhase } from "./orb-phase";
 import DataPanels from "./panels/DataPanels";
 import ExpandedPanels from "./panels/ExpandedPanels";
+import { PHASE_LABELS, voiceIsLive, type AgentPhase } from "./phase";
 
 /** Route limit (app/api/agent/stream: MAX_QUESTION_CHARS). */
 const MAX_QUESTION_CHARS = 4_000;
 /** Distance from the bottom that still counts as "following" the stream. */
 const STICK_PX = 48;
 
-export type CardVoice = Partial<VoiceState>;
+export type ChatVoice = Partial<VoiceState>;
 
 const PHASE_TEXT: Record<NonNullable<AgentTurn["phase"]>, string> = {
   thinking: "Thinking…",
@@ -111,7 +115,7 @@ const AssistantTurn = memo(function AssistantTurn({
   );
 });
 
-function VoiceStrip({ voice }: { voice: CardVoice | undefined }) {
+function VoiceStrip({ voice }: { voice: ChatVoice | undefined }) {
   if (!voice || (voice.status !== "live" && voice.status !== "connecting" && !(voice.status === "error" && voice.error))) return null;
   if (voice.status === "error") {
     return (
@@ -131,42 +135,52 @@ function VoiceStrip({ voice }: { voice: CardVoice | undefined }) {
   );
 }
 
-export type AgentCardProps = {
+export type ChatPaneProps = {
   thread: AgentThread;
   asking: boolean;
-  phase: OrbPhase;
-  voice: CardVoice | undefined;
+  phase: AgentPhase;
+  voice: ChatVoice | undefined;
   selected: string | null;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  /** First visit: show the hint line with example questions above the composer. */
+  showHint: boolean;
+  onDismissHint: () => void;
   onSend: (question: string) => Promise<boolean>;
   onStop: () => void;
   onClear: () => void;
   onCite: (id: string) => void;
   onToggleVoice: () => void;
-  onClose: () => void;
+  /** Focus in the composer (phones grow the sheet so the thread shows). */
+  onComposerFocus?: () => void;
+  /** Collapsed phone sheet: the composer bar alone. */
+  compact?: boolean;
 };
 
-/** Chat card body: header, transcript, composer. The morph portal owns placement. */
-export default function AgentCard({
+/** The Agent tab: status line, transcript with data panels and citations, the first-visit hint, and the composer. */
+export default function ChatPane({
   thread,
   asking,
   phase,
   voice,
   selected,
   inputRef,
+  showHint,
+  onDismissHint,
   onSend,
   onStop,
   onClear,
   onCite,
   onToggleVoice,
-  onClose,
-}: AgentCardProps) {
+  onComposerFocus,
+  compact = false,
+}: ChatPaneProps) {
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const closeExpanded = useCallback(() => setExpanded(null), []);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const live = voiceIsLive(voice);
+  const pulsing = phase === "listening" || phase === "speaking";
 
   // Follow the stream while the reader is at the bottom; leave them alone once they scroll up.
   useLayoutEffect(() => {
@@ -174,14 +188,20 @@ export default function AgentCard({
     if (el && stick.current) el.scrollTop = el.scrollHeight;
   }, [thread.messages]);
 
+  const ask = async (question: string) => {
+    if (!question || asking) return;
+    stick.current = true;
+    onDismissHint();
+    const sent = await onSend(question);
+    if (!sent) setDraft(question);
+  };
+
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
     const question = draft.trim();
     if (!question || asking) return;
     setDraft("");
-    stick.current = true;
-    const sent = await onSend(question);
-    if (!sent) setDraft(question);
+    await ask(question);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -190,20 +210,57 @@ export default function AgentCard({
     void submit();
   };
 
+  const composer = (
+    <Composer onSubmit={submit} data-composer="">
+      <Input
+        ref={inputRef}
+        rows={1}
+        value={draft}
+        maxLength={MAX_QUESTION_CHARS}
+        placeholder="Ask the field agent…"
+        aria-label="Question"
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={onKeyDown}
+        onFocus={onComposerFocus}
+      />
+      <MicButton
+        type="button"
+        $live={live}
+        $pulse={pulsing}
+        aria-label={live ? "Stop voice" : "Start voice"}
+        aria-pressed={live}
+        title={live ? "Stop voice" : "Talk to the agent"}
+        data-voice-phase={phase}
+        onClick={onToggleVoice}
+      >
+        <MicIcon />
+      </MicButton>
+      {asking ? (
+        <SendButton type="button" aria-label="Stop answer" onClick={onStop}>
+          <StopIcon />
+        </SendButton>
+      ) : (
+        <SendButton type="submit" aria-label="Send question" disabled={!draft.trim()}>
+          <SendIcon />
+        </SendButton>
+      )}
+    </Composer>
+  );
+
+  // One slot for the thread, one for the composer: collapsing the phone sheet never remounts the composer, so
+  // it keeps focus and the draft.
   return (
     <>
-      <Header>
+      {compact ? null : (
+        <>
+      <Header data-chat-header="">
         <Title>
-          Agent <Status aria-live="polite">· {ORB_LABELS[phase].toLowerCase()}</Status>
+          <Status aria-live="polite" data-agent-phase={phase}>
+            {PHASE_LABELS[phase]}
+          </Status>
         </Title>
-        <IconButton type="button" aria-label={live ? "Stop voice" : "Start voice"} aria-pressed={live} onClick={onToggleVoice}>
-          <MicIcon />
-        </IconButton>
-        <IconButton type="button" aria-label="Clear conversation" disabled={asking || thread.messages.length === 0} onClick={onClear}>
+        <IconButton type="button" aria-label="Clear conversation" title="Clear conversation" disabled={asking || thread.messages.length === 0} onClick={onClear}>
           <ClearIcon />
-        </IconButton>
-        <IconButton type="button" aria-label="Close agent chat" onClick={onClose}>
-          <CloseIcon />
         </IconButton>
       </Header>
       <VoiceStrip voice={voice} />
@@ -217,7 +274,8 @@ export default function AgentCard({
         }}
       >
         {thread.messages.length === 0 ? (
-          <Empty>Ask about sightings, hotspots, conditions or alerts in view. Answers cite their evidence.</Empty>
+          // The first-visit hint says the same thing with examples; the empty line is for later visits.
+          showHint ? null : <Empty>Ask about sightings, hotspots, conditions or alerts in view. Answers cite their evidence and fly the globe.</Empty>
         ) : (
           thread.messages.map((turn) =>
             turn.role === "user" ? (
@@ -238,27 +296,24 @@ export default function AgentCard({
         )}
       </Thread>
       {expanded && thread.messages.some((m) => m.id === expanded) ? <ExpandedPanels turnId={expanded} onClose={closeExpanded} /> : null}
-      <Composer onSubmit={submit}>
-        <Input
-          ref={inputRef}
-          rows={1}
-          value={draft}
-          maxLength={MAX_QUESTION_CHARS}
-          placeholder="Ask the field agent…"
-          aria-label="Question"
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        {asking ? (
-          <SendButton type="button" aria-label="Stop answer" onClick={onStop}>
-            <StopIcon />
-          </SendButton>
-        ) : (
-          <SendButton type="submit" aria-label="Send question" disabled={!draft.trim()}>
-            <SendIcon />
-          </SendButton>
-        )}
-      </Composer>
+      {showHint ? (
+        <Hint data-chat-hint="" aria-label="Example questions">
+          <p>
+            <span>{FIRST_VISIT_HINT}</span>
+            <IconButton type="button" aria-label="Dismiss hint" onClick={onDismissHint}>
+              <CloseIcon />
+            </IconButton>
+          </p>
+          {EXAMPLE_QUESTIONS.map((q) => (
+            <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
+              {q}
+            </HintChip>
+          ))}
+        </Hint>
+      ) : null}
+        </>
+      )}
+      {composer}
     </>
   );
 }

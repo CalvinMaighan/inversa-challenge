@@ -1,4 +1,4 @@
-/** Stroke icons for the orb and card, 24-unit grid, currentColor. */
+/** Stroke icons for the chat column, 24-unit grid, currentColor. */
 
 const base = {
   viewBox: "0 0 24 24",

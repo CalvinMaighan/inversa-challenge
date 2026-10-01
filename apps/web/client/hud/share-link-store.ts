@@ -59,7 +59,7 @@ export function applyShareState(state: ShareState): () => void {
         ? (Object.fromEntries(LAYER_IDS.map((id) => [id, visibleIds.has(id)])) as LayersState["visible"])
         : prev.visible,
       species: speciesIds
-        ? (Object.fromEntries(SPECIES_IDS.map((id) => [id, speciesIds.has(id)])) as LayersState["species"])
+        ? (Object.fromEntries(SPECIES_IDS.map((id) => [id, speciesIds.has(id)])) as Record<(typeof SPECIES_IDS)[number], boolean>)
         : prev.species,
     }));
   }

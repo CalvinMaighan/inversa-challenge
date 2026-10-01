@@ -63,15 +63,74 @@ Put keys in a `.env.local` at the repo root. Bun loads it for `bun run dev` and 
 
 The agent always calls a real model: `openai/gpt-6-luna` on OpenRouter (`https://openrouter.ai/api/v1`), with `reasoning: {effort: "low"}`. There is no mock mode. `bun run dev` downloads the Doppler `inversa`/`dev` secrets into the child processes' environment without printing them. When doppler is missing or not logged in, it warns and uses the plain environment. A variable already set in your shell wins over Doppler.
 
-Without `OPENROUTER_API_KEY`, `POST /api/agent/stream` answers 503 with `{"error":"agent unavailable: OPENROUTER_API_KEY not set"}`. The chat card shows that error. Nothing falls back to scripted answers.
+Without `OPENROUTER_API_KEY`, `POST /api/agent/stream` answers 503 with `{"error":"agent unavailable: OPENROUTER_API_KEY not set"}`. The chat column shows that error. Nothing falls back to scripted answers.
 
 The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/M input and $0.50/M output that is about $1.50 a day, and never more than $5.
+
+## UI
+
+![The chat column with an answer and its data panels, the globe framed and bracketed beside it](docs/evidence/layout-desktop.png)
+
+The page has two panes. The **chat column** sits on the left: always open, full height and 420 px wide. Drag its right edge to make it anywhere from 360 to 560 px wide, and your browser keeps that width. It has two tabs:
+- **Agent**: the thread and the composer, with a mic button for voice and a send button.
+- **Missions**: the team board.
+
+A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the top bar, the timeline and the evidence drawer inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
+
+On a first visit, a hint above the composer offers example questions you can click, such as "Iguana sightings near Homestead and water levels" and "Where should python crews go tonight?".
+
+### What the colours on the globe mean
+
+**Layers**, at the top right of the globe, opens the same legend on screen. It has a switch for each layer and species and shows how many items each layer is drawing right now.
+
+| Mark | Meaning |
+|---|---|
+| Squares: blue `#4fb3ff`, teal `#3fd6c6`, violet `#c89bff` | In-situ stations that reported in the two hours before the cursor: a USGS water gauge, an NDBC buoy, or a NOAA (CO-OPS) tide gauge. |
+| Dots: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python, Argentine tegu, green iguana and red lionfish. Grey `#b8c0cc` dots are other introduced species. Dots fade over 24 h. A red ring means the IDs conflict. Zoom in to see species badges. |
+| Haze from violet to yellow | Hotspots, on a heuristic score from low to high. Layers can pin the haze to a single species. |
+| Ramp from blue to red | Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). Both are off by default. |
+| Outlined areas: red, orange, amber, teal | NWS alerts in effect at the cursor, coloured by severity: extreme, severe, moderate, minor. |
+| Diamonds: yellow, orange, green | Missions on the team board that are planned, in progress or done. |
+| Small coloured dots with callsigns | Team cursors: teammates on the same board. |
+| Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline, red means no data, amber means cloud, and grey means quiet: no sightings for 12 h or more. |
+| Brackets with labels | What the agent cited or highlighted, and the current selection. |
+
+Hover any marker to see what it is and its key value, for example "USGS gauge · Shark River · stage 1.21 m · 12 min ago". Click a marker to open its record.
+
+### Controls
+
+The **?** button in the top bar opens a help sheet that lists every control. Its content comes from one file, [`apps/web/client/hud/help/content.ts`](apps/web/client/hud/help/content.ts). A unit test fails when this table and that file disagree.
+
+| Where | Control | What it does |
+|---|---|---|
+| Top bar | Feed chips | One chip per data source. The colour shows health: green is nominal, amber is lagging, dashed amber is stale, and red is down. Each chip also shows whether the source pushes or is polled, and its lag. |
+| Top bar | LIVE / REPLAY | LIVE means the cursor is at the live edge. REPLAY means you are looking at the past. |
+| Top bar | Clocks and CURSOR | Shows the cursor's time in UTC and in Miami time, and the latitude and longitude under the pointer. |
+| Top bar | Focus | Dims the globe outside a circle around the selection. |
+| Top bar | Theme: light / dark / tac | Switches the colour mode and remembers your choice. |
+| Top bar | ? | Opens the help sheet. |
+| Globe | Layers | Layer and species switches, the legend, and live counts. |
+| Globe | Hover a marker | Shows a tooltip with the marker's name and key value. |
+| Globe | Evidence drawer | Opens the record behind a marker, citation or bracket, with the raw payload, source feed, links and revisions. |
+| Globe | Share links | The address bar always holds the camera, time, layers, species and selection. |
+| Timeline | Play / pause (Space) | Plays the frames forward at the chosen speed. |
+| Timeline | Step ◂ ▸ | Moves one 15-minute frame. |
+| Timeline | Speed | Sets playback speed in frames per second. |
+| Timeline | Live | Jumps back to now. |
+| Timeline | Date jump | Loads any UTC day, including days outside the 30-day window. |
+| Timeline | Scrubber | Drag through time. The line is sightings, amber bands are alerts, and hatching marks gaps. |
+| Chat column | Agent tab | Ask the agent. Answers cite evidence, show their tool rows and data panels, and fly the globe. |
+| Chat column | Missions tab | Plan missions, log removals, add notes, chat with the team and see who is online. |
+| Chat column | Mic | Talk instead of typing. Press it again to stop. |
+| Chat column | Citations [1] [2] … | Open the cited record in the evidence drawer. |
+| Chat column | Data panels and Expand | Show the tables and charts behind an answer. Expand opens them wide next to the column. |
+| Chat column | Column edge | Drag it, or use the arrow keys, to resize the column. On phones, drag the sheet's handle instead. |
 
 ## Architecture
 
 ```
  Browser
-   main: React HUD, CesiumJS globe, agent orb and chat card, mic and playback
+   main: chat column (Agent | Missions), CesiumJS globe and HUD, mic and playback
    workers: gql (GraphQL HTTP + WS), db (sqlite-wasm OPFS, CRDT, frame cache)
    SharedArrayBuffer rings between them (@calvinjs/active-state/threads)
         |  /v1/*  GraphQL, WS, frames, media        |  /api/agent/*, /api/voice/*  NDJSON
@@ -190,6 +249,7 @@ The agent also strips any `[e:<id>]` citation whose id no tool returned in that 
 | `bun run eval` | 15 golden questions to the live model (under doppler) with tools answering from a fixture GraphQL stub; checks tools called, citation validity, citations per evidence kind and required phrases | varies run to run: 15/15, 15/15, 14/15 and 14/15 over four runs (quality 5/5, 5/5, 5/5, 4/5), about $0.02 a run |
 | `bun run check` | lint, typecheck, `bun run test`, `bun run test:api`; prints `CHECK-OK` | `CHECK-OK` |
 | `bun run --cwd apps/web e2e:agent`, `e2e:globe`, `e2e:scrub`, `e2e:dbworker` | Playwright against a production build; `e2e:agent` runs `next dev` with the live model under doppler | see the leaf gates below |
+| `bun run --cwd apps/web e2e:layout` | Playwright on the real stack, on free ports. It checks the chat column on the left and the globe on the right (bounding boxes), the resize and its persistence, the legend's switches against `LAYERS` and the globe's layer stats, a hover tooltip over a real station, the Missions tab and its unread dot, the help sheet, contrast in all three themes, and the phone sheet at 375 px | `gates/leaf-T40.md` G6, G18 |
 | `bun run --cwd apps/signal-worker e2e` | two peers against `wrangler dev --local`; prints `EXCHANGE-OK` | `gates/leaf-T20.md` G3 |
 
 Gate ledgers: every task has a gates file under [gates/](gates/), with a runnable `CHECK`, an `EXPECT` and the recorded `EVIDENCE`. The root file is [GATES.md](GATES.md). To re-run one:
