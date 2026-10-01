@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import type { LayerStats } from "client/globe/layers/types";
 import { HEAT_STOPS, TEMP_STOPS } from "client/globe/ramp";
-import { OTHER_TAXON_COLOR, SPECIES_COLORS } from "client/globe/species";
-import { formatCount, GAP_SWATCHES, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
+import { NEUTRAL_COLOR, SPECIES_COLORS, TAXON_PALETTE } from "client/globe/species";
+import { formatCount, GAP_SWATCHES, groupCounts, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
+import type { TaxonInfo } from "client/state/taxa";
 import { statsSignature } from "client/hud/legend/useGlobeStats";
 import { LAYERS, type LayersState } from "client/state/layers";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
@@ -29,14 +30,22 @@ describe("legend", () => {
     expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].sort());
   });
 
-  test("sightings: a row per focus species in the layer's own colours, plus other species, with live counts", () => {
-    const stats = [stat(SIGHTINGS, 9, { python: 2, tegu: 0, iguana: 6, lionfish: 0, other: 1 })];
-    const row = legendRows(layers(), stats).find((r) => r.layer === SIGHTINGS)!;
+  test("sightings: a row per focus species in the layer's own colours, plus the animal, plant and insect groups, with live counts", () => {
+    const taxon = (id: number, iconicGroup: string): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup, summary: null, photoUrl: null, pageUrl: null });
+    const taxa = { "42": taxon(42, "Reptilia"), "43": taxon(43, "Plantae"), "44": taxon(44, "Insecta") };
+    const breakdown = { "1": 2, "2": 0, "3": 6, "4": 0, "42": 1, "43": 3, "44": 2, "45": 1 };
+    const stats = [stat(SIGHTINGS, 9, breakdown)];
+    const row = legendRows(layers(), stats, taxa).find((r) => r.layer === SIGHTINGS)!;
     expect(row.count).toBe(9);
-    expect(row.swatches.map((s) => s.label)).toEqual(["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish", "Other introduced species"]);
-    expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, OTHER_TAXON_COLOR]);
-    expect(row.swatches.map((s) => s.count)).toEqual([2, 0, 6, 0, 1]);
-    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, "other"]);
+    expect(row.swatches.map((s) => s.label)).toEqual(["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish", "Other introduced animals", "Plants", "Insects & others"]);
+    // Animals on in a palette colour; plants and insects off read neutral.
+    expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, TAXON_PALETTE[0]!, NEUTRAL_COLOR, NEUTRAL_COLOR]);
+    // 45 is not loaded yet: counted as an animal.
+    expect(row.swatches.map((s) => s.count)).toEqual([2, 0, 6, 0, 2, 3, 2]);
+    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, "animals", "plants", "others"]);
+    expect(row.swatches.map((s) => s.on)).toEqual([true, true, true, true, true, false, false]);
+    expect(groupCounts(undefined, taxa)).toBeNull();
+    expect(row.note).toContain("last 7 days");
   });
 
   test("species toggles reflect the LAYERS filter", () => {

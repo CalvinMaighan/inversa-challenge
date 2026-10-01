@@ -31,6 +31,7 @@
     "e2e:layout": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/layout.ts",
     "e2e:species": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/species.ts",
     "e2e:firstload": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/firstload.ts",
+    "e2e:speciescard": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/speciescard.ts",
     "e2e:quality": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/quality.ts",
     "e2e:perf": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/perf.ts",
     "perf:poll": "bun e2e/perf-poll.ts"

@@ -36,6 +36,42 @@ function sightings(v: Vars) {
     .map((row) => ({ ...row, taxon: fixture.taxa[row.taxon as keyof typeof fixture.taxa] }));
 }
 
+type FixtureTaxon = (typeof fixture.taxa)[keyof typeof fixture.taxa];
+
+const norm = (s: string) => s.trim().toLowerCase();
+
+/** `taxa(ids, q)`: by id, or by a name fragment inside the common or scientific name, focus first then by id. */
+function taxa(v: Vars) {
+  const ids = list(v.ids);
+  const q = typeof v.q === "string" ? norm(v.q) : null;
+  return (Object.values(fixture.taxa) as FixtureTaxon[])
+    .filter((t) => !ids || ids.includes(t.id))
+    .filter((t) => !q || norm(t.commonName).includes(q) || norm(t.scientificName).includes(q))
+    .sort((a, b) => Number(b.focus) - Number(a.focus) || Number(a.id) - Number(b.id));
+}
+
+/** `speciesCounts`: distinct sightings per taxon in the box and window, most first, by iconic group. */
+function speciesCounts(v: Vars) {
+  const bbox = v.bbox as BBox;
+  const groups = list(v.groups);
+  const top = typeof v.top === "number" ? v.top : 50;
+  const byTaxon = new Map<string, { count: number; latest: { id: string; observedAt: string } }>();
+  for (const row of fixture.sightings) {
+    if (row.canonicalId || !inBox(bbox, row.lat, row.lon) || !inWindow(row.observedAt, v.from, v.to)) continue;
+    const taxon = fixture.taxa[row.taxon as keyof typeof fixture.taxa] as FixtureTaxon;
+    const group = taxon.iconicGroup ?? null;
+    if (groups && !(groups.includes(group ?? "") || (group === null && groups.includes("other")))) continue;
+    const cur = byTaxon.get(row.taxon) ?? { count: 0, latest: { id: row.id, observedAt: row.observedAt } };
+    cur.count += 1;
+    if (Date.parse(row.observedAt) > Date.parse(cur.latest.observedAt)) cur.latest = { id: row.id, observedAt: row.observedAt };
+    byTaxon.set(row.taxon, cur);
+  }
+  return [...byTaxon.entries()]
+    .sort((a, b) => b[1].count - a[1].count || Number(a[0]) - Number(b[0]))
+    .slice(0, top)
+    .map(([id, { count, latest }]) => ({ taxon: fixture.taxa[id as keyof typeof fixture.taxa], count, latestSightingId: latest.id }));
+}
+
 function readings(v: Vars) {
   const bbox = v.bbox as BBox;
   const params = list(v.params);
@@ -92,6 +128,8 @@ const RESOLVERS: Record<string, (v: Vars) => Record<string, unknown>> = {
   AgentFeeds: () => ({ feeds: feeds() }),
   AgentFeedState: () => ({ feeds: feeds() }),
   AgentSightings: (v) => ({ sightings: sightings(v), feeds: feeds() }),
+  AgentTaxa: (v) => ({ taxa: taxa(v) }),
+  AgentSpeciesCounts: (v) => ({ speciesCounts: speciesCounts(v), feeds: feeds() }),
   AgentReadings: (v) => ({ readings: readings(v), feeds: feeds() }),
   AgentAlerts: (v) => ({ alerts: alerts(v), feeds: feeds() }),
   AgentHotspots: (v) => ({ hotspots: hotspots(v), feeds: feeds() }),

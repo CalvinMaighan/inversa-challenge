@@ -8,8 +8,11 @@
  * Pure over the layer's `HoverFacts`, the time cursor and, for sightings, the record the evidence cache may
  * already hold (source and exact time).
  */
+import { get } from "@calvinjs/active-state";
+
 import type { AlertFacts, HoverFacts, HotspotFacts, NoteFacts, SightingFacts, StationFacts } from "client/globe/hover";
 import { speciesIndexOfTaxon } from "client/globe/species";
+import { TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { QUALITY_CODES } from "shared/frames";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
@@ -37,7 +40,8 @@ export const NETWORK_LABELS: Record<string, string> = {
 
 /** Display names, indexed like SPECIES_IDS. */
 export const SPECIES_NAMES: readonly string[] = ["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish"];
-export const OTHER_SPECIES_NAME = "Other introduced species";
+/** Only while a taxon's name has not arrived from the API yet (T44: every taxon has a name once TAXA loads). */
+export const OTHER_SPECIES_NAME = "Introduced species";
 
 /** Quality codes as the tooltip shows them, indexed like QUALITY_CODES (`needs_id` reads "needs ID"). */
 const QUALITY_LABELS: readonly string[] = QUALITY_CODES.map((code) => code.replace(/_id$/, " ID").replace(/_/g, " "));
@@ -68,10 +72,17 @@ export function ago(ms: number, atMs: number): string {
   return future ? `in ${text}` : `${text} ago`;
 }
 
-export function speciesName(taxon: number, commonName?: string | null): string {
+/**
+ * The species name for a taxon id: the focus names, else the evidence record's common name when given, else
+ * what the TAXA store knows (common name in sentence case, or the scientific name), else a plain placeholder.
+ */
+export function speciesName(taxon: number, commonName?: string | null, byId: Readonly<Record<string, TaxonInfo>> = get<TaxaState>(TAXA)?.byId ?? {}): string {
   const s = speciesIndexOfTaxon(taxon);
   if (s >= 0) return SPECIES_NAMES[s]!;
-  return commonName?.trim() || OTHER_SPECIES_NAME;
+  const given = commonName?.trim();
+  if (given) return taxonName({ commonName: given, scientificName: "" });
+  const info = byId[String(taxon)];
+  return info ? taxonName(info, OTHER_SPECIES_NAME) : OTHER_SPECIES_NAME;
 }
 
 export function formatReading(param: string, value: number | null): string | null {

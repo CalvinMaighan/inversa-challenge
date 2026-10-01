@@ -29,7 +29,9 @@ export type TaxaState = {
   version: number;
 };
 
-export const TAXA = key<TaxaState>("TAXA", { byId: {}, version: 0 });
+const defaults: TaxaState = { byId: {}, version: 0 };
+
+export const TAXA = key("TAXA", defaults);
 
 /** iNat groups that count as animals for the bar and the `animals` filter key. */
 export const ANIMAL_GROUPS: readonly string[] = ["Reptilia", "Amphibia", "Aves", "Mammalia", "Actinopterygii", "Mollusca"];

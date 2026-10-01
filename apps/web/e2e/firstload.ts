@@ -10,7 +10,8 @@
  * 1. Clutter at load: interactive controls and elements with their own visible text, in the globe pane and on
  *    the whole page (text drawn on canvases is not counted). `SIMPLIFY pane_controls=… page_labels=…`.
  * 2. Only sightings on the globe: stations, alerts and hotspots draw nothing, and the sightings layer draws
- *    exactly the distinct (non-duplicate) sightings Axum holds for the same 48 h window of frames.
+ *    exactly the distinct (non-duplicate) animal sightings Axum holds for the same window of frames (7 days by
+ *    default since T44; plants and insects sit behind their own chips, off).
  *    `FIRSTLOAD sightings>0 stations=0 alerts=0 hotspots=0 window=<drawn> api=<count>`.
  * 3. No always-visible top bar text: the chrome is two icon buttons. `CHROME icons=2 visible_text_labels=0`.
  * 4. The globe's data attribution is clickable (the element at its centre is the link). `ATTRIBUTION clickable=1`.
@@ -31,7 +32,10 @@ const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
 const LOAD_TIMEOUT_MS = 120_000;
 const REGION = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
-const WINDOW_HOURS = 48;
+/** The default sightings window (T44: 7 days; the selector offers 2, 7 and 30). */
+const WINDOW_HOURS = 168;
+/** What draws by default: every introduced animal; plants and insects sit behind their own chips. */
+const ANIMAL_GROUPS = ["Reptilia", "Amphibia", "Aves", "Mammalia", "Actinopterygii", "Mollusca"];
 
 const log = (...a: unknown[]) => console.error("[e2e:firstload]", ...a);
 
@@ -51,6 +55,17 @@ async function ready(page: Page, origin: string): Promise<void> {
   });
   await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
   await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+  // The TAXA store knows every taxon on the frames (T44), so the group filter has settled.
+  await page.waitForFunction(
+    () => {
+      const b = window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.breakdown ?? {};
+      const taxa = (window.__inversa?.state("TAXA") as { byId: Record<string, unknown> } | undefined)?.byId ?? {};
+      const ids = Object.keys(b);
+      return ids.length > 0 && ids.every((id) => id in taxa);
+    },
+    undefined,
+    { timeout: LOAD_TIMEOUT_MS },
+  );
   // Imagery, the stats sampler and the feed subscription settle.
   await page.waitForTimeout(4_000);
 }
@@ -99,7 +114,10 @@ async function chrome(page: Page): Promise<{ icons: number; text: number }> {
   });
 }
 
-/** Distinct sightings Axum holds for the frames the sightings layer draws (the trailing 48 h of frames). */
+/**
+ * Distinct animal sightings Axum holds for the frames the sightings layer draws (the trailing window of frames,
+ * 7 days by default), summed over `speciesCounts` for the animal groups: what the globe draws by default.
+ */
 async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<{ count: number; from: string; to: string }> {
   const meta = (await page.evaluate(() => window.__inversa!.snapshot().meta)) ?? fail("no frame meta");
   const step = meta.stepMinutes * 60_000;
@@ -108,11 +126,11 @@ async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<
   const from = new Date(meta.frame0UnixMs + first * step).toISOString();
   // Frames hold [start, start + step); the API's window is inclusive at both ends.
   const to = new Date(meta.frame0UnixMs + (frame + 1) * step - 1).toISOString();
-  const { sightings } = await stack.graphql<{ sightings: { id: string; canonicalId: string | null }[] }>(
-    "query($bbox: BBox!, $from: Time!, $to: Time!) { sightings(bbox: $bbox, from: $from, to: $to) { id canonicalId } }",
-    { bbox: REGION, from, to },
+  const { speciesCounts } = await stack.graphql<{ speciesCounts: { count: number }[] }>(
+    "query($bbox: BBox!, $from: Time!, $to: Time!, $groups: [String!]) { speciesCounts(bbox: $bbox, from: $from, to: $to, groups: $groups, top: 500) { count } }",
+    { bbox: REGION, from, to, groups: ANIMAL_GROUPS },
   );
-  return { count: sightings.filter((s) => s.canonicalId === null).length, from, to };
+  return { count: speciesCounts.reduce((n, r) => n + r.count, 0), from, to };
 }
 
 async function popovers(page: Page): Promise<string> {
@@ -165,7 +183,7 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   log(`sightings layer frame ${sightings.frame}: ${sightings.count} drawn ${JSON.stringify(sightings.breakdown)}; Axum ${api.count} distinct in ${api.from}..${api.to}`);
   log(`layers: ${stats.map((l) => `${l.id}=${l.enabled ? l.count : "off"}`).join(" ")}`);
   if (!(sightings.enabled && sightings.count > 0)) fail("no sightings drawn at first load");
-  if (sightings.count !== api.count) fail(`globe draws ${sightings.count} sightings, Axum has ${api.count} in the same window`);
+  if (sightings.count !== api.count) fail(`globe draws ${sightings.count} sightings, Axum has ${api.count} distinct animal sightings in the same window`);
   const [stations, alerts, hotspots] = [drawn("stations"), drawn("alerts"), drawn("hotspots")];
   lines.push(`FIRSTLOAD sightings>0 stations=${stations} alerts=${alerts} hotspots=${hotspots} window=${sightings.count} api=${api.count}`);
 

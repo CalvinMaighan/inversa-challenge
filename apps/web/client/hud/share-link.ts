@@ -8,7 +8,10 @@
  * - `c`: lat, lon (5 decimals, about 1 m), altitude in metres, heading and pitch in degrees (1 decimal).
  * - `t`: the TIME cursor, UTC to the minute (frames are 15-minute steps, so nothing finer exists).
  * - `l`: visible layers, explicit, so layers hidden by default come back on too. Empty means none visible.
- * - `sp`: species filter (the four focus species and `other`), omitted when every species is on.
+ * - `sp`: species filter keys shown (the four focus species and the groups `animals`, `plants`, `others`),
+ *   omitted when it is the default (every focus species and animals on, plants and others off).
+ * - `st`: taxon overrides on top of the groups (T44): taxon ids shown, hidden ones with a leading `-`.
+ * - `w`: the sightings window in hours (48, 168 or 720), omitted at the default.
  * - `e`: selected evidence id (PLAN.md C14).
  *
  * Decoding is defensive: a link is untrusted input, so each field is validated and clamped, and a bad field is
@@ -17,8 +20,9 @@
  */
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { SPECIES_FILTER_IDS, type SpeciesFilterId } from "client/state/layers";
+import { isWindowHours, LAYERS, SPECIES_FILTER_IDS, type SpeciesFilterId } from "client/state/layers";
 import { parseEvidenceId } from "client/state/selection";
+import type { SightingWindowHours } from "shared/frames";
 
 export type LayerId = (typeof LAYER_IDS)[number];
 export type SpeciesId = SpeciesFilterId;
@@ -31,10 +35,19 @@ export type ShareState = {
   at?: string;
   /** Visible layers. */
   layers?: LayerId[];
-  /** Species shown; absent means all. */
+  /** Species filter keys shown; absent means the default filter. */
   species?: SpeciesId[];
+  /** Taxon overrides: `[taxon id, shown]`, sorted by id. */
+  taxa?: [number, boolean][];
+  /** Sightings window, hours. */
+  hours?: SightingWindowHours;
   evidenceId?: string | null;
 };
+
+/** The default species filter as a shown-key list. */
+export const DEFAULT_SPECIES: readonly SpeciesId[] = SPECIES_FILTER_IDS.filter((id) => LAYERS.defaults.species[id]);
+
+const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v) => b.includes(v));
 
 export const SHARE_LINK_VERSION = 1;
 const MAX_ALTITUDE_M = 20_000_000;
@@ -74,9 +87,13 @@ export function encodeShareLink(state: ShareState): string {
     if (t) params.set("t", t);
   }
   if (state.layers) params.set("l", LAYER_IDS.filter((id) => state.layers!.includes(id)).join(","));
-  if (state.species && state.species.length < SPECIES_FILTER_IDS.length) {
+  if (state.species && !sameList(state.species, DEFAULT_SPECIES)) {
     params.set("sp", SPECIES_FILTER_IDS.filter((id) => state.species!.includes(id)).join(","));
   }
+  if (state.taxa && state.taxa.length > 0) {
+    params.set("st", [...state.taxa].sort((a, b) => a[0] - b[0]).map(([id, shown]) => `${shown ? "" : "-"}${id}`).join(","));
+  }
+  if (state.hours !== undefined && state.hours !== LAYERS.defaults.sightingHours) params.set("w", String(state.hours));
   if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
   // link stays readable.
@@ -118,6 +135,17 @@ export function decodeShareLink(hash: string): ShareState {
   if (layers) out.layers = layers;
   const species = decodeList(params.get("sp"), SPECIES_FILTER_IDS);
   if (species) out.species = species;
+  const st = params.get("st");
+  if (st !== null) {
+    const seen = new Map<number, boolean>();
+    for (const item of st.split(",")) {
+      const m = /^(-?)(\d{1,9})$/.exec(item.trim());
+      if (m && Number(m[2]) > 0 && !seen.has(Number(m[2]))) seen.set(Number(m[2]), m[1] === "");
+    }
+    if (seen.size > 0) out.taxa = [...seen].sort((a, b) => a[0] - b[0]);
+  }
+  const w = Number(params.get("w"));
+  if (isWindowHours(w)) out.hours = w;
   const e = params.get("e");
   if (e && parseEvidenceId(e)) out.evidenceId = e;
   return out;

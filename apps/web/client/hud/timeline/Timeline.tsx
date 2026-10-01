@@ -4,8 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { enabledSpecies, otherTaxaShown } from "client/globe/species";
 import { LAYERS, type LayersState } from "client/state/layers";
+import { TAXA, type TaxaState } from "client/state/taxa";
 import { THEME } from "client/state/theme";
 import { retime, TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
@@ -212,9 +212,9 @@ function togglePlay() {
 }
 
 /** The sparkline's per-frame counts under the species filter, or null without sighting sections. */
-function sparkCounts(sightings: FrameSightings | null, filter: LayersState["species"]): Uint32Array | null {
+function sparkCounts(sightings: FrameSightings | null, filter: LayersState["species"], taxa: TaxaState["byId"]): Uint32Array | null {
   if (!sightings) return null;
-  return filteredCounts(sightings.counts.length, (i) => sightings.records(i), enabledSpecies(filter, SIGHTINGS), otherTaxaShown(filter, SIGHTINGS));
+  return filteredCounts(sightings.counts.length, (i) => sightings.records(i), filter, taxa);
 }
 
 /** Advance TIME.at by one step every `1000 / speed` ms while playing; stop on the live edge. */
@@ -254,6 +254,7 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   const { grid, meta, version } = useFrameGrid();
   const sightings = useFrameSightings();
   const species = useActiveState<LayersState, LayersState["species"]>(LAYERS, (l) => l.species)[0] ?? LAYERS.defaults.species;
+  const taxa = useActiveState<TaxaState, TaxaState["byId"]>(TAXA, (t) => t.byId)[0] ?? TAXA.defaults.byId;
   const at = useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? "";
   const steps = windowSteps(from, to);
 
@@ -261,7 +262,7 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   const counts = sightings && meta && sightings.counts.length === meta.frameCount ? sightings.counts : null;
   // The line follows the species filter, as the globe does; the gap lane keeps every sighting (a quiet stretch
   // is a gap in the data, whatever is filtered).
-  const shown = useMemo(() => sparkCounts(counts ? sightings : null, species), [counts, sightings, species]);
+  const shown = useMemo(() => sparkCounts(counts ? sightings : null, species, taxa), [counts, sightings, species, taxa]);
   // Recomputed per grid write, not per scrub step. `version` is the dependency that tracks SAB writes.
   const flags = useMemo(
     () => (grid && meta ? frameGapFlags(grid, counts, meta.stepMinutes * 60_000) : null),

@@ -91,6 +91,7 @@ function primeEvidence(frame0Ms: number, hotspotId: string, sightingId: string) 
     ingestLagSeconds: 0,
     feed: null,
     links: [{ id: sightingId, relation: "supporting_sighting", source: "inat" }],
+    degraded: [],
   };
   const sighting: Evidence = {
     id: sightingId,
@@ -133,6 +134,7 @@ function primeEvidence(frame0Ms: number, hotspotId: string, sightingId: string) 
       { id: "fetch:9004", relation: "fetch", source: "inat" },
       { id: "reading:ndbc_vakf1:water_c:1727700000000:measured", relation: "conflict", source: "ndbc" },
     ],
+    degraded: [],
   };
   const explain: HotspotExplain = {
     cell: "230:125",

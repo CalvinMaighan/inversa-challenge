@@ -22,7 +22,9 @@ const sample: ShareState = {
   camera: { lat: 25.7617, lon: -80.1918, altitudeM: 45000, heading: 12.5, pitch: -62 },
   at: "2026-09-30T20:30:00.000Z",
   layers: [SIGHTINGS, HOTSPOTS, LST, ALERTS],
-  species: [PYTHON, IGUANA, "other"],
+  species: [PYTHON, IGUANA, "animals", "plants"],
+  taxa: [[24382, false], [116461, true]],
+  hours: 48,
   evidenceId: "reading:ndbc_vakf1:water_c:1727700000000:measured",
 };
 
@@ -54,12 +56,18 @@ describe("share link encode/decode", () => {
     expect(decodeShareLink(encodeShareLink({})).layers).toBeUndefined();
   });
 
-  test("share link omits the species filter when every species is on", () => {
-    const hash = encodeShareLink({ species: [...SPECIES_FILTER_IDS] });
+  test("share link omits the species filter at its default (focus species and animals on, plants and others off), and the window at 7 days", () => {
+    const hash = encodeShareLink({ species: [...SPECIES_IDS, "animals"], hours: 168, taxa: [] });
     expect(new URLSearchParams(hash).has("sp")).toBe(false);
-    // The four focus species without `other` is a filter: it travels.
+    expect(new URLSearchParams(hash).has("w")).toBe(false);
+    expect(new URLSearchParams(hash).has("st")).toBe(false);
+    // The four focus species without the animals is a filter: it travels. So is every key on.
     expect(decodeShareLink(encodeShareLink({ species: [...SPECIES_IDS] })).species).toEqual([...SPECIES_IDS]);
+    expect(decodeShareLink(encodeShareLink({ species: [...SPECIES_FILTER_IDS] })).species).toEqual([...SPECIES_FILTER_IDS]);
     expect(decodeShareLink(hash).species).toBeUndefined();
+    // Taxon overrides and the window read back; a bad window is dropped.
+    expect(decodeShareLink("v=1&st=116461,-24382,-24382,x&w=720")).toEqual({ taxa: [[24382, false], [116461, true]], hours: 720 });
+    expect(decodeShareLink("v=1&w=100")).toEqual({});
   });
 
   test("share link decode drops invalid fields and keeps the valid ones", () => {
@@ -113,6 +121,9 @@ describe("share link store", () => {
     const layers = get<LayersState>(LAYERS)!;
     expect(LAYER_IDS.filter((id) => layers.visible[id])).toEqual(sample.layers!);
     expect(SPECIES_FILTER_IDS.filter((id) => layers.species[id])).toEqual(sample.species!);
+    expect(layers.species.t24382).toBe(false);
+    expect(layers.species.t116461).toBe(true);
+    expect(layers.sightingHours).toBe(48);
     const selection = get<HudSelection>(SELECTION)!;
     expect(selection.evidenceId).toBe(sample.evidenceId!);
     expect(selection.drawerOpen).toBe(true);

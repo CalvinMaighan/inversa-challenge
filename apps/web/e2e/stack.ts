@@ -37,6 +37,12 @@ export type StackOptions = {
   name: string;
   /** Command prefix for the Next server, e.g. `doppler run ... --` to hand it secrets without printing them. */
   nextPrefix?: string[];
+  /**
+   * Also run a network backfill of this many days of iNaturalist (with a one-year NAS and GBIF baseline) on top
+   * of the fixtures, so the stack holds real, current sightings of every introduced species (T44). Needs the
+   * network; the taxon enrichment runs with it.
+   */
+  backfillDays?: number;
 };
 
 export type Stack = {
@@ -210,6 +216,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   if (!existsSync(API_BIN)) throw new Error(`no Axum binary at ${API_BIN}; call buildApi first`);
   backfill(["--fixtures"], axumEnv, log);
   if (opts.scene) backfill(["--scene", COLD_SNAP_SCENE], axumEnv, log);
+  if (opts.backfillDays) backfill(["--days", String(opts.backfillDays), "--baseline-years", "1"], axumEnv, log);
 
   const axumLog: string[] = [];
   const nextLog: string[] = [];

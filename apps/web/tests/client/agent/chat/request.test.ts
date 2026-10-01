@@ -25,13 +25,16 @@ describe("agent request view", () => {
         bbox: { west: -81, south: 25, east: -80, north: 26 },
         time: "2026-01-15T03:00:00.000Z",
         layers: ["sightings", "hotspots", "stations"],
+        windowHours: 168,
         selection: "hotspot:python:243:145:1768446000000",
       },
     });
   });
 
-  test("missing or unusable fields fall back to the region, the wall clock and nothing selected", () => {
-    expect(agentView({}, NOW)).toEqual({ bbox: { ...REGION_BBOX }, time: "2026-09-30T12:00:00.000Z", layers: [], selection: null });
+  test("missing or unusable fields fall back to the region, the wall clock, the default window and nothing selected", () => {
+    expect(agentView({}, NOW)).toEqual({ bbox: { ...REGION_BBOX }, time: "2026-09-30T12:00:00.000Z", layers: [], windowHours: 168, selection: null });
+    expect(agentView({ layers: { sightingHours: 48 } }, NOW).windowHours).toBe(48);
+    expect(agentView({ layers: { sightingHours: 99 } }, NOW).windowHours).toBe(168);
     // Voice's TIME shape uses at: null for "live".
     expect(agentView({ time: { at: null }, view: { bbox: { west: -80, south: 25, east: -81, north: 26 } } }, NOW)).toMatchObject({
       bbox: { ...REGION_BBOX },
@@ -39,12 +42,16 @@ describe("agent request view", () => {
     });
   });
 
-  test("the species filter travels only when it hides something", () => {
-    const all = { python: true, tegu: true, iguana: true, lionfish: true, other: true };
+  test("the species filter travels only when it hides an animal", () => {
+    const all = { python: true, tegu: true, iguana: true, lionfish: true, animals: true, plants: false, others: false };
     expect(agentView({ layers: { visible: { sightings: true }, species: all } }, NOW).species).toBeUndefined();
-    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, python: false, tegu: false, lionfish: false, other: false } } }, NOW).species).toEqual([
+    // Switching plants on hides nothing: no filter travels.
+    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, plants: true } } }, NOW).species).toBeUndefined();
+    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, python: false, tegu: false, lionfish: false, animals: false } } }, NOW).species).toEqual([
       "iguana",
     ]);
+    // One animal chip hidden on its own counts as a filter too.
+    expect(agentView({ layers: { species: { ...all, t116461: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", "animals"]);
     // A hotspot pin is not a species.
     expect(agentView({ layers: { species: { ...all, hotspots: "python" } } }, NOW).species).toBeUndefined();
   });

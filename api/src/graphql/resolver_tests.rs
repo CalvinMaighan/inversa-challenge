@@ -317,6 +317,94 @@ async fn resolver_backtest() {
     assert!(error_message(&body).contains("days"), "{body}");
 }
 
+/// T44: `taxa` by id and by name, `speciesCounts` by group, and the taxon card fields on `sightings` and
+/// `evidence`, over rows the recorded `/v1/taxa` fixture enriched.
+#[tokio::test]
+async fn resolver_taxon_info_taxa_and_species_counts() {
+    let state = seeded().await;
+    let t = ms(2026, 9, 1, 12);
+    state
+        .obs
+        .write(|tx| {
+            tx.execute("insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group) values ('Anolis sagrei', '', 0, 116461, 'Reptilia')", [])?;
+            tx.execute("insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group) values ('Nerium oleander', 'oleander', 0, 47563, 'Plantae')", [])?;
+            tx.execute("insert into taxa (scientific_name, common_name, focus) values ('Mysterius nobodyi', '', 0)", [])
+        })
+        .await
+        .unwrap();
+    let anole: i64 = state.obs.read(|c| c.query_row("select id from taxa where scientific_name = 'Anolis sagrei'", [], |r| r.get(0))).await.unwrap();
+    let oleander: i64 = state.obs.read(|c| c.query_row("select id from taxa where scientific_name = 'Nerium oleander'", [], |r| r.get(0))).await.unwrap();
+    let mystery: i64 = state.obs.read(|c| c.query_row("select id from taxa where scientific_name = 'Mysterius nobodyi'", [], |r| r.get(0))).await.unwrap();
+    let fixture = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/fixtures/inat/taxa-p1.json")).unwrap();
+    assert_eq!(crate::taxon_info::apply_page(&state, &fixture).await.unwrap(), 6);
+
+    // Three anoles (one a GBIF duplicate), one iguana, one plant, one ungrouped, in and out of the window.
+    let a1 = insert_sighting(&state.obs, "inat", anole, 25.5, -80.9, t, "research", None).await;
+    insert_sighting(&state.obs, "gbif", anole, 25.5, -80.9, t, "research", Some(a1)).await;
+    let a2 = insert_sighting(&state.obs, "inat", anole, 25.6, -80.8, t + HOUR, "needs_id", None).await;
+    insert_sighting(&state.obs, "inat", 3, 25.6, -80.8, t, "research", None).await;
+    insert_sighting(&state.obs, "inat", oleander, 25.6, -80.8, t, "casual", None).await;
+    insert_sighting(&state.obs, "inat", mystery, 25.6, -80.8, t, "casual", None).await;
+    insert_sighting(&state.obs, "inat", anole, 25.6, -80.8, t - 3 * DAY, "research", None).await;
+
+    let body = gql(&state, "query($ids: [ID!]) { taxa(ids: $ids) { id scientificName commonName focus inatTaxonId iconicGroup summary photoUrl pageUrl } }", json!({"ids": [anole.to_string(), "python"]})).await;
+    let rows = body["data"]["taxa"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "{body}");
+    assert_eq!(rows[0]["scientificName"], "Python bivittatus", "focus first: {body}");
+    assert_eq!(rows[0]["pageUrl"], "https://www.inaturalist.org/taxa/238252");
+    let a = &rows[1];
+    assert_eq!(a["commonName"], "Brown Anole");
+    assert_eq!(a["inatTaxonId"], "116461");
+    assert_eq!(a["iconicGroup"], "Reptilia");
+    assert!(a["summary"].as_str().unwrap().starts_with("The brown anole"), "{a}");
+    assert_eq!(a["photoUrl"], format!("/v1/media/taxon/{anole}"));
+    assert_eq!(a["pageUrl"], "https://www.inaturalist.org/taxa/116461");
+
+    // By name, case-insensitively, inside either name; `%` is not a wildcard for the caller.
+    let body = gql(&state, "{ taxa(q: \"brown ANOLE\") { scientificName } }", json!({})).await;
+    assert_eq!(body["data"]["taxa"], json!([{"scientificName": "Anolis sagrei"}]), "{body}");
+    let body = gql(&state, "{ taxa(q: \"sagrei\") { commonName } }", json!({})).await;
+    assert_eq!(body["data"]["taxa"][0]["commonName"], "Brown Anole");
+    let body = gql(&state, "{ taxa(q: \"%\") { id } }", json!({})).await;
+    assert_eq!(body["data"]["taxa"].as_array().unwrap().len(), 0, "{body}");
+    let body = gql(&state, "{ taxa { id } }", json!({})).await;
+    assert!(error_message(&body).contains("ids"), "{body}");
+
+    // Counts: distinct sightings per taxon in the window, most first, plants and the ungrouped filtered by group.
+    let window = format!("from: \"{}\", to: \"{}\"", iso(t - DAY), iso(t + DAY));
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}) {{ taxon {{ id commonName iconicGroup }} count latestSightingId }} }}"), json!({})).await;
+    let rows = body["data"]["speciesCounts"].as_array().unwrap();
+    assert_eq!(rows.len(), 4, "{body}");
+    assert_eq!(rows[0]["taxon"]["id"], anole.to_string());
+    assert_eq!(rows[0]["count"], 2, "the GBIF duplicate is not counted and the old one is outside the window");
+    assert_eq!(rows[0]["latestSightingId"], a2.to_string());
+    assert_eq!(rows[1]["taxon"]["id"], "3");
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Reptilia\", \"Aves\"]) {{ taxon {{ scientificName }} count }} }}"), json!({})).await;
+    assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"scientificName": "Anolis sagrei"}, "count": 2}, {"taxon": {"scientificName": "Iguana iguana"}, "count": 1}]), "{body}");
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"other\"]) {{ taxon {{ scientificName iconicGroup }} count }} }}"), json!({})).await;
+    assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"scientificName": "Mysterius nobodyi", "iconicGroup": null}, "count": 1}]), "`other` also matches taxa with no group: {body}");
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Plantae\"], top: 1) {{ taxon {{ commonName }} }} }}"), json!({})).await;
+    assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"commonName": "oleander"}}]), "{body}");
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Dragons\"]) {{ count }} }}"), json!({})).await;
+    assert!(error_message(&body).contains("unknown group"), "{body}");
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, top: 0) {{ count }} }}"), json!({})).await;
+    assert!(error_message(&body).contains("`top`"), "{body}");
+
+    // The card fields ride on `sightings` and inside the evidence record.
+    let body = gql(&state, &format!("{{ sightings(bbox: {REGION}, {window}, taxa: [\"{anole}\"]) {{ id taxon {{ commonName iconicGroup summary photoUrl pageUrl }} }} }}"), json!({})).await;
+    let s = &body["data"]["sightings"][0]["taxon"];
+    assert_eq!(s["iconicGroup"], "Reptilia", "{body}");
+    assert_eq!(s["pageUrl"], "https://www.inaturalist.org/taxa/116461");
+    let body = gql(&state, "query($id: ID!) { evidence(id: $id) { record } }", json!({"id": format!("sighting:{a1}")})).await;
+    let taxon = &body["data"]["evidence"]["record"]["taxon"];
+    assert_eq!(taxon["commonName"], "Brown Anole", "{body}");
+    assert_eq!(taxon["focus"], false);
+    assert_eq!(taxon["inatTaxonId"], "116461");
+    assert_eq!(taxon["photoUrl"], format!("/v1/media/taxon/{anole}"));
+    assert_eq!(taxon["pageUrl"], "https://www.inaturalist.org/taxa/116461");
+    assert!(taxon["summary"].as_str().unwrap().starts_with("The brown anole"));
+}
+
 #[tokio::test]
 async fn resolver_evidence() {
     let state = seeded().await;

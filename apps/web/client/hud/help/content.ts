@@ -4,10 +4,12 @@
  * descriptions and README's UI section: `tests/client/hud/help/content.test.ts` fails when README drifts from
  * this list. Plain data, no React, so docs tooling can import it too.
  */
-import { SIGHTING_WINDOW_HOURS } from "shared/frames";
+import { SIGHTING_WINDOW_HOURS, windowLabel } from "shared/frames";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 const [PYTHON, TEGU, IGUANA, LIONFISH] = SPECIES_IDS;
+/** The default window in words ("7 days"); the selector can set 2, 7 or 30 days. */
+export const DEFAULT_WINDOW = windowLabel(SIGHTING_WINDOW_HOURS);
 
 export type HelpGroup = "Map" | "Timeline" | "Chat column";
 
@@ -28,19 +30,25 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "species",
     group: "Map",
     control: "Species chips",
-    what: `Top left. One chip per animal with its colour and how many were seen in the last ${SIGHTING_WINDOW_HOURS} hours. Click to show or hide it; Alt-click (or press and hold) to show only that one; All brings every species back.`,
+    what: `Top left. Python, tegu, iguana and lionfish first, then the animals seen most in the window, each with its colour and count; Plants and Insects & others are off until you switch them on. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back.`,
+  },
+  {
+    id: "window",
+    group: "Map",
+    control: "Sightings window",
+    what: `Next to the chips: last 2, 7 or 30 days (${DEFAULT_WINDOW} to start). Most people upload sightings a few days after they see them, so 7 days shows the most.`,
   },
   {
     id: "dots",
     group: "Map",
     control: "Sighting dots",
-    what: `Each dot is one animal someone reported in the last ${SIGHTING_WINDOW_HOURS} hours, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
+    what: `Each dot is one animal someone reported in the window, in its species' colour, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
   },
   {
     id: "drawer",
     group: "Map",
     control: "Evidence card",
-    what: "Opens on the right when you click a dot, a citation or a label: what was seen, where, when and how sure, with the photo when there is one. The raw record sits under Details for experts.",
+    what: "Opens on the right when you click a dot, a citation or a label: what was seen, where, when and how sure, the species' Latin name, a line about it and its iNaturalist page, with the photo when there is one. The raw record sits under Details for experts.",
   },
   {
     id: "about",
@@ -156,19 +164,31 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
 export const ABOUT_SENTENCE =
   "A live map of invasive animals in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.";
 
+/** Why the window defaults to a week; shown in About and on the window selector. */
+export const WINDOW_NOTE = `Most people upload sightings a few days after they see them, so the last ${DEFAULT_WINDOW} shows the most.`;
+
 /** First-visit welcome: two sentences at most. */
 export const WELCOME =
-  `Each dot is an invasive animal someone reported in South Florida in the last ${SIGHTING_WINDOW_HOURS} hours; click one to see it. ` +
+  `Each dot is an invasive animal someone reported in South Florida in the last ${DEFAULT_WINDOW}; click one to see what it is. ` +
   "Filter by species at the top of the map, or ask the agent below.";
 
-/** The species chips: short name, full name and one plain line each. Keys follow SPECIES_FILTER_IDS. */
+/**
+ * The species chips: short name, full name and one plain line each. The four focus species, then the other
+ * animals (ids follow SPECIES_FILTER_IDS; the plant and insect groups are in GROUP_GUIDE).
+ */
 export const SPECIES_GUIDE: readonly { id: string; name: string; full: string; line: string }[] = [
   { id: PYTHON, name: "Python", full: "Burmese python", line: "giant constrictor eating Everglades wildlife" },
   { id: TEGU, name: "Tegu", full: "Argentine tegu", line: "big lizard that raids the nests of birds, turtles and alligators" },
   { id: IGUANA, name: "Iguana", full: "Green iguana", line: "tree-climbing lizard that burrows into seawalls and canal banks" },
   { id: LIONFISH, name: "Lionfish", full: "Red lionfish", line: "venomous reef fish that eats young native fish" },
-  { id: "other", name: "Other", full: "Other introduced species", line: "other non-native animals people reported" },
+  { id: "animals", name: "Other animals", full: "Other introduced animals", line: "every other non-native animal people reported, each in its own colour, the most seen as chips" },
 ];
+
+/** The group chips after the animals: off until switched on. */
+export const GROUP_GUIDE: Record<"plants" | "others", { name: string; full: string; line: string }> = {
+  plants: { name: "Plants", full: "Introduced plants", line: "non-native plants and fungi people reported; off until you switch them on" },
+  others: { name: "Insects & others", full: "Insects and everything else", line: "non-native insects, spiders and anything not yet grouped; off until you switch them on" },
+};
 
 /** Example questions for the welcome. Each works against the fixtures and live data. */
 export const EXAMPLE_QUESTIONS: readonly string[] = [

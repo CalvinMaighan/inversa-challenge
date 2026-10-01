@@ -18,12 +18,36 @@ const emitted: AgentStreamEvent[] = [];
 const ctx: CapabilityContext = { now: NOW, emit: (event) => emitted.push(event) };
 const registry = buildAgentRegistry();
 const BISCAYNE = { west: -80.35, south: 25.35, east: -80.05, north: 25.9 };
+const HOMESTEAD = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
+
+/**
+ * iNaturalist's autocomplete, answered locally: the tests never leave the machine. `dodo` is unknown; a spelling
+ * the database lacks ("cuban treefrog") comes back with the Latin name the database does hold.
+ */
+const realFetch = globalThis.fetch;
+const inatCalls: string[] = [];
+const INAT_ANSWERS: Record<string, unknown[]> = {
+  "cuban treefrog": [{ id: 24382, name: "Osteopilus septentrionalis", preferred_common_name: "Cuban Tree Frog", iconic_taxon_name: "Amphibia" }],
+  "nile monitor": [{ id: 34110, name: "Varanus niloticus", preferred_common_name: "Nile Monitor", iconic_taxon_name: "Reptilia" }],
+};
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+  if (url.startsWith("https://api.inaturalist.org/v1/taxa/autocomplete")) {
+    const q = new URL(url).searchParams.get("q") ?? "";
+    inatCalls.push(q);
+    return Promise.resolve(Response.json({ results: INAT_ANSWERS[q.toLowerCase()] ?? [] }));
+  }
+  return realFetch(input, init);
+}) as typeof fetch;
 
 beforeAll(() => {
   env = setupAgentEnv();
 });
 
-afterAll(() => env.cleanup());
+afterAll(() => {
+  env.cleanup();
+  globalThis.fetch = realFetch;
+});
 
 beforeEach(() => {
   env.stub.requests.length = 0;
@@ -37,8 +61,71 @@ async function run(name: string, input: unknown): Promise<CapabilityOutput> {
 }
 
 describe("capability tools", () => {
-  test("registry exposes the ten tools", () => {
-    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "notes", "set_view"]);
+  test("registry exposes the eleven tools", () => {
+    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "notes", "set_view"]);
+  });
+
+  test("species_counts (T44): the most-seen introduced animals in the box and window, each row citing its newest sighting, as a C17 table with the iNat page as its link", async () => {
+    const out = await run("species_counts", { bbox: HOMESTEAD });
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentSpeciesCounts"]);
+    expect(env.stub.requests[0]!.variables.groups).toEqual(["Reptilia", "Amphibia", "Aves", "Mammalia", "Actinopterygii", "Mollusca"]);
+    const rows = out.data.rows as { species: string; count: number; cite: string; group: string }[];
+    // Most seen first; a tie goes to the lower taxon id (the tegu, a focus species).
+    expect(rows.map((r) => [r.species, r.count])).toEqual([
+      ["Argentine black and white tegu", 3],
+      ["Brown anole", 3],
+      ["Green iguana", 2],
+      ["Cuban tree frog", 1],
+    ]);
+    expect(rows[1]!.cite).toBe("[e:sighting:5001]");
+    expect(out.evidence.map((e) => e.id)).toContain("sighting:5001");
+    expect(out.count).toBe(4);
+    // The oleander is a plant: not an animal, so not counted unless asked.
+    expect(JSON.stringify(out.data)).not.toContain("oleander");
+    const plants = await run("species_counts", { bbox: HOMESTEAD, groups: ["plants"] });
+    expect((plants.data.rows as { species: string }[]).map((r) => r.species)).toEqual(["Oleander"]);
+    const table = viewOf(out)!.result as TableView;
+    expect(table.columns.map((c) => c.key)).toEqual(["species", "scientific", "group", "count", "latest"]);
+    expect(table.rows[1]).toMatchObject({ evidenceId: "sighting:5001", species: "Brown anole", scientific: "Anolis sagrei", count: 3, sourcePageUrl: "https://www.inaturalist.org/taxa/116461" });
+    expect(viewOf(out)!.highlight).toEqual(["sighting:2002", "sighting:5001", "sighting:3002", "sighting:6001"]);
+  });
+
+  test("sightings (T44) takes any species name: focus keys cost no lookup, other names resolve through taxa(q), unknown ones are reported, never substituted", async () => {
+    const anoles = await run("sightings", { bbox: HOMESTEAD, species: ["brown anole"] });
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentTaxa", "AgentSightings"]);
+    expect(env.stub.requests[1]!.variables.taxa).toEqual(["5"]);
+    expect(anoles.data.total).toBe(3);
+    expect((anoles.data.rows as { species: string }[])[0]!.species).toBe("Brown anole");
+    expect((viewOf(anoles)!.result as TableView).title).toBe("Brown anole sightings · last 7 days");
+    env.stub.requests.length = 0;
+    const latin = await run("sightings", { bbox: HOMESTEAD, species: ["Osteopilus septentrionalis", "Tegus"] });
+    expect(env.stub.requests[1]!.variables.taxa).toEqual(["6", "2"]);
+    expect(latin.data.bySpecies).toEqual({ "Cuban tree frog": 1, "Argentine black and white tegu": 3 });
+    env.stub.requests.length = 0;
+    const focus = await run("sightings", { bbox: HOMESTEAD, species: ["Green iguana", "iguanas"] });
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentSightings"]);
+    expect(env.stub.requests[0]!.variables.taxa).toEqual(["3"]);
+    expect(focus.data.total).toBe(2);
+    // A spelling the database lacks: iNaturalist names it, and the database is asked again by that name.
+    env.stub.requests.length = 0;
+    inatCalls.length = 0;
+    const frogs = await run("sightings", { bbox: HOMESTEAD, species: ["cuban treefrog"] });
+    expect(inatCalls).toEqual(["cuban treefrog"]);
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentTaxa", "AgentTaxa", "AgentSightings"]);
+    expect(env.stub.requests[2]!.variables.taxa).toEqual(["6"]);
+    expect(frogs.data.total).toBe(1);
+    // Known to iNaturalist but never reported here: said plainly, with iNat's name, never another species.
+    env.stub.requests.length = 0;
+    const monitor = await run("sightings", { bbox: HOMESTEAD, species: ["Nile monitor"] });
+    expect(monitor.data.total).toBe(0);
+    expect(monitor.data.unresolvedSpecies).toEqual(["Nile monitor (iNaturalist knows it as Nile Monitor (Varanus niloticus, iNaturalist taxon 34110), but no sighting of it is stored)"]);
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentTaxa", "AgentTaxa"]);
+    // Unknown everywhere.
+    env.stub.requests.length = 0;
+    const none = await run("sightings", { bbox: HOMESTEAD, species: ["dodo"] });
+    expect(none.data.total).toBe(0);
+    expect(none.data.unresolvedSpecies).toEqual(["dodo (no such species in the data or at iNaturalist)"]);
+    expect(env.stub.requests.map((r) => r.operationName)).toEqual(["AgentTaxa"]);
   });
 
   test("notes (T43): one board query, filtered by bbox and window, newest first, as a C17 table with note:<id> ids", async () => {

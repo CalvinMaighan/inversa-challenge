@@ -8,12 +8,13 @@ import { createHotspotLayer } from "client/globe/layers/hotspots";
 import { createMissionsLayer, MISSION_ID_PREFIX, missionMark } from "client/globe/layers/missions";
 import { createNotesLayer, pinsKey } from "client/globe/layers/notes";
 import { createPeersLayer, cursorPeers } from "client/globe/layers/peers";
-import { createSightingsLayer, SIGHTING_TRAIL_MS, sightingWindowIndex, trailAlpha, visibleRecords, windowRecords } from "client/globe/layers/sightings";
+import { createSightingsLayer, SIGHTING_TRAIL_MS, sightingWindowIndex, trailAlpha, trailMs, visibleRecords, windowRecords } from "client/globe/layers/sightings";
 import { createStationsLayer, latestPerStation, stationBreakdown, stationBucket } from "client/globe/layers/stations";
 import { createLstLayer } from "client/globe/layers/env-raster";
 import type { GlobeLayer } from "client/globe/layers/types";
 import { LAYERS } from "client/state/layers";
 import { MISSIONS } from "client/state/missions";
+import type { TaxonInfo } from "client/state/taxa";
 import { ENV_MISSING, SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
@@ -27,6 +28,8 @@ afterAll(() => restore());
 
 const STEP = 60 * 60_000;
 const T0 = Date.parse("2026-09-30T00:00:00Z");
+
+const taxon = (id: number, iconicGroup: string): TaxonInfo => ({ id, scientificName: `Taxon ${id}`, commonName: "", focus: false, iconicGroup, summary: null, photoUrl: null, pageUrl: null });
 
 const rec = (over: Partial<SightingRecord> = {}): SightingRecord => ({ id: 1, lon: -80.9, lat: 25.6, taxon: 1, quality: 0, flags: 0, ...over });
 
@@ -166,41 +169,55 @@ describe("LST raster", () => {
 });
 
 describe("sightings", () => {
-  test("48h sighting window: frames across 48 h merged, oldest first, aged by whole frames", () => {
-    expect(SIGHTING_WINDOW_HOURS).toBe(48);
-    expect(SIGHTING_TRAIL_MS).toBe(48 * STEP);
+  test("48h sighting window: frames across 48 h merged, oldest first, aged by whole frames (the window is LAYERS state, 48 h here; 7 days by default)", () => {
+    expect(SIGHTING_WINDOW_HOURS).toBe(168);
+    expect(SIGHTING_TRAIL_MS).toBe(168 * STEP);
+    expect(trailMs(48)).toBe(48 * STEP);
     const one = (f: number) => [rec({ id: f, taxon: (f % 4) + 1 })];
-    const short = windowRecords(sightingWindowIndex(one, 10, STEP), 5);
+    const short = windowRecords(sightingWindowIndex(one, 10, STEP), 5, 48);
     expect(short.map((r) => r.id)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(short.map((r) => r.ageMs)).toEqual([5, 4, 3, 2, 1, 0].map((n) => n * STEP));
     // 500 hourly frames: frame 499 sees frames 452..499, the 48 that start less than 48 h before it.
     const index = sightingWindowIndex(one, 500, STEP);
-    const at499 = windowRecords(index, 499);
+    const at499 = windowRecords(index, 499, 48);
     expect(at499.length).toBe(48);
     expect(at499[0]!.id).toBe(452);
     expect(at499.at(-1)!.id).toBe(499);
+    // The default window (7 days) and the 30-day one slice the same index without re-merging.
+    expect(windowRecords(index, 499).length).toBe(168);
+    expect(windowRecords(index, 499, 720).length).toBe(500);
     // 15-minute frames: 192 of them make 48 h.
-    expect(windowRecords(sightingWindowIndex(() => [rec()], 500, 15 * 60_000), 499).length).toBe(192);
+    expect(windowRecords(sightingWindowIndex(() => [rec()], 500, 15 * 60_000), 499, 48).length).toBe(192);
   });
 
   test("48h sighting window: the boundary is exclusive at 48 h, and the newest dot is the brightest", () => {
     const index = sightingWindowIndex((f) => (f === 0 || f === 1 ? [rec({ id: f })] : []), 60, STEP);
     // At frame 48, frame 0 is exactly 48 h back: out. Frame 1 (47 h back) is in.
-    expect(windowRecords(index, 48).map((r) => r.id)).toEqual([1]);
-    expect(windowRecords(index, 47).map((r) => r.id)).toEqual([0, 1]);
+    expect(windowRecords(index, 48, 48).map((r) => r.id)).toEqual([1]);
+    expect(windowRecords(index, 47, 48).map((r) => r.id)).toEqual([0, 1]);
     // Frames past the grid clamp to its last frame; before the first, nothing.
-    expect(windowRecords(index, 1000)).toEqual([]);
-    expect(windowRecords(index, -1)).toEqual([]);
+    expect(windowRecords(index, 1000, 48)).toEqual([]);
+    expect(windowRecords(index, -1, 48)).toEqual([]);
     expect(trailAlpha(0)).toBe(1);
     expect(trailAlpha(STEP)).toBeLessThan(trailAlpha(0));
     expect(trailAlpha(SIGHTING_TRAIL_MS)).toBeCloseTo(0.3);
+    expect(trailAlpha(trailMs(48), trailMs(48))).toBeCloseTo(0.3);
   });
 
-  test("duplicates hidden, species filter applied, other taxa follow the `other` key", () => {
-    const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ taxon: 3 }), rec({ taxon: 42 })].map((r) => ({ ...r, ageMs: 0 }));
-    expect(visibleRecords(records, [0]).map((r) => r.taxon)).toEqual([1, 42]);
-    expect(visibleRecords(records, [0], false).map((r) => r.taxon)).toEqual([1]);
-    expect(visibleRecords(records, [2], true).map((r) => r.taxon)).toEqual([3, 42]);
+  test("duplicates hidden, species filter applied, other taxa follow their group or their own override", () => {
+    const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ taxon: 3 }), rec({ taxon: 42 }), rec({ taxon: 43 })].map((r) => ({ ...r, ageMs: 0 }));
+    const taxa = { "42": taxon(42, "Reptilia"), "43": taxon(43, "Plantae") };
+    const only = (keys: Record<string, unknown>) => ({ ...LAYERS.defaults.species, ...keys });
+    // Python on, animals on (default): the anole draws, the plant does not.
+    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false }), taxa).map((r) => r.taxon)).toEqual([1, 42]);
+    // Animals off: only the focus python.
+    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false, animals: false }), taxa).map((r) => r.taxon)).toEqual([1]);
+    // Plants on: the plant draws too; a taxon override hides the anole alone.
+    expect(visibleRecords(records, only({ python: false, tegu: false, lionfish: false, plants: true, t42: false }), taxa).map((r) => r.taxon)).toEqual([3, 43]);
+    // 'Only this one': every key off, one override on.
+    expect(visibleRecords(records, only({ python: false, tegu: false, iguana: false, lionfish: false, animals: false, t43: true }), taxa).map((r) => r.taxon)).toEqual([43]);
+    // A taxon not loaded yet draws as an animal.
+    expect(visibleRecords(records, only({}), {}).map((r) => r.taxon)).toEqual([1, 3, 42, 43]);
   });
 
   test("draws the frame's records as points plus focus-species icons, each carrying sighting:<id>", () => {
@@ -225,7 +242,7 @@ describe("sightings", () => {
     const base = fakeContext({
       meta: fakeMeta(T0, 4),
       sightings: (f) => (f === 3 ? [rec({ id: 1, taxon: 3 }), rec({ id: 2, taxon: 1 }), rec({ id: 3, taxon: 77 })] : []),
-      layers: { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, python: false, other: false } },
+      layers: { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, python: false, animals: false } },
     });
     const ctx = { ...base, selection: () => "sighting:1" };
     const viewer = fakeViewer();
@@ -237,7 +254,8 @@ describe("sightings", () => {
     expect(points.length).toBe(1);
     expect(points.get(0).id).toBe("sighting:1");
     expect(points.get(0).pixelSize).toBeGreaterThan(10);
-    expect(layer.stats()).toMatchObject({ count: 1, breakdown: { python: 1, tegu: 0, iguana: 1, lionfish: 0, other: 1 } });
+    // The breakdown is per taxon id (the four focus ids always present), counted before the filter.
+    expect(layer.stats()).toMatchObject({ count: 1, breakdown: { "1": 1, "2": 0, "3": 1, "4": 0, "77": 1 } });
   });
 
   test("no frame (outside the grid) or no meta clears the dots; no network is used", () => {

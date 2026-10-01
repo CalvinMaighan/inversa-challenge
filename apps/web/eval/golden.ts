@@ -75,6 +75,13 @@ export const GOLDEN: Golden[] = [
     expect: { tools: ["geocode", "sightings"], phrases: [/duplicate/i], minCitations: 2, cites: { sighting: 2 } },
   },
   {
+    id: "homestead-species-counts",
+    question: "What invasive animals were seen near Homestead this week?",
+    quality: false,
+    // T44: species beyond the focus four, named with counts and a sighting citation per species.
+    expect: { tools: ["geocode", "species_counts"], phrases: [/brown anole/i, /tegu/i, /iguana/i, /cuban tree ?frog/i, /\b3\b/], minCitations: 3, cites: { sighting: 3 } },
+  },
+  {
     id: "flamingo-view",
     question: "Take me to Flamingo.",
     quality: false,

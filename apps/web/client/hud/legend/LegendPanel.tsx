@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState, type SpeciesId } from "client/state/layers";
+import { TAXA, type TaxaState } from "client/state/taxa";
 import styled from "client/styled";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
@@ -249,7 +250,8 @@ function GapsRow() {
 export default function LegendBody({ active }: { active: boolean }) {
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
   const stats = useGlobeStats(active);
-  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats), [layers, stats]);
+  const taxa = useActiveState<TaxaState, TaxaState["byId"]>(TAXA, (t) => t.byId)[0] ?? TAXA.defaults.byId;
+  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, taxa), [layers, stats, taxa]);
   return (
     <section aria-label="Layers and legend" data-testid="layers-legend">
       {rows.map((row) => (

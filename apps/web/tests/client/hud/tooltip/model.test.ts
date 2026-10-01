@@ -38,8 +38,14 @@ describe("tooltip text", () => {
     expect(tooltipLine(tooltipText({ ...facts, quality: 1, ageMs: 0, conflict: true }, NOW))).toBe("Green iguana · needs ID · this hour · IDs conflict");
     // A taxon outside the focus four takes its common name from the record.
     expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW, { taxon: { commonName: "Cuban treefrog" } }))).toBe("Cuban treefrog · research · 2 h ago");
-    expect(speciesName(99)).toBe("Other introduced species");
+    // No record and nothing in the TAXA store yet: a plain placeholder, never "Other introduced species".
+    expect(speciesName(99)).toBe("Introduced species");
     expect(speciesName(1)).toBe("Burmese python");
+    // Once the TAXA store knows the taxon, the dot is named before its evidence loads; iNat's Title Case reads in sentence case.
+    const anole = { id: 99, scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false, iconicGroup: "Reptilia", summary: null, photoUrl: null, pageUrl: null };
+    expect(speciesName(99, null, { "99": anole })).toBe("Brown anole");
+    expect(speciesName(99, null, { "99": { ...anole, commonName: "" } })).toBe("Anolis sagrei");
+    expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW, { taxon: { commonName: "Cuban Tree Frog" } }))).toBe("Cuban tree frog · research · 2 h ago");
   });
 
   test("alert: event until its expiry in Miami time, then severity", () => {

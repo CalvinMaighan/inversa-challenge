@@ -5,7 +5,7 @@
  *   bun run e2e:species             build, run, print the SPECIES line
  *   E2E_SKIP_BUILD=1 …              reuse the last e2e build
  *
- * 1. A share link to 2026-09-09T20:00Z with no layer list, so the defaults apply (sightings first). The 48 h
+ * 1. A share link to 2026-09-09T20:00Z with no layer list, so the defaults apply (sightings first). The 7-day
  *    window before it holds the fixtures' iNaturalist green iguanas and Burmese pythons around Miami.
  * 2. The species bar's chip counts equal the globe's own sightings stats (GlobeApi stats breakdown), chip by chip.
  * 3. Alt-click on the iguana chip shows only iguana: LAYERS keeps iguana alone, the globe draws iguana sightings
@@ -27,16 +27,20 @@ import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
 /** The Axum fixtures were recorded 2026-09-30T20:40Z; the browser clock sits just after them. */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
-/** In the fixtures' 30-day window, with iguanas and pythons reported in the 48 h before it. */
+/** In the fixtures' 30-day window, with iguanas and pythons reported in the 7 days before it. */
 const AT = "2026-09-09T20:00:00.000Z";
 const LINK = "#v=1&c=25.70000,-80.40000,160000,0,-90&t=2026-09-09T20:00Z";
-const WINDOW_MS = 48 * 3_600_000;
+/** The default sightings window (T44: 7 days). */
+const WINDOW_MS = 168 * 3_600_000;
 const REGION = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
 const LOAD_TIMEOUT_MS = 120_000;
 const IGUANA = "iguana";
 /** `taxa.id` of green iguana (1-based in SPECIES_IDS order, PLAN.md C4). */
 const IGUANA_TAXON = "3";
-const SPECIES_KEYS = ["python", "tegu", "iguana", "lionfish", "other"] as const;
+/** The focus chips and their `taxa.id`s; the breakdown is keyed by taxon id (T44). */
+const FOCUS_KEYS = ["python", "tegu", "iguana", "lionfish"] as const;
+/** Every species filter key: the focus four and the three groups. */
+const FILTER_KEYS = [...FOCUS_KEYS, "animals", "plants", "others"] as const;
 
 const log = (...a: unknown[]) => console.error("[e2e:species]", ...a);
 
@@ -51,13 +55,23 @@ const sightingsStat = (page: Page) =>
 
 const speciesFilter = (page: Page) => page.evaluate(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species);
 
-/** Chip counts as the species bar shows them. */
+/** Chip counts as the species bar shows them, by chip key (`python`, `t116461`, `plants`, …). */
 async function chipCounts(page: Page): Promise<Record<string, number>> {
-  return page.evaluate((keys) => {
+  return page.evaluate(() => {
     const out: Record<string, number> = {};
-    for (const k of keys) out[k] = Number((document.querySelector(`[data-species-chip="${k}"] [data-species-count]`)?.textContent ?? "NaN").replace(/,/g, ""));
+    for (const chip of document.querySelectorAll<HTMLElement>("[data-species-chip]")) {
+      out[chip.dataset.speciesChip!] = Number((chip.querySelector("[data-species-count]")?.textContent ?? "NaN").replace(/,/g, ""));
+    }
     return out;
-  }, [...SPECIES_KEYS]);
+  });
+}
+
+/** What a chip's count must equal in the globe's per-taxon breakdown: a focus key maps to its taxon id, `t<id>` to that id. */
+function expectedCount(key: string, breakdown: Record<string, number>): number | null {
+  const focus = FOCUS_KEYS.indexOf(key as (typeof FOCUS_KEYS)[number]);
+  if (focus >= 0) return breakdown[String(focus + 1)] ?? 0;
+  const m = /^t(\d+)$/.exec(key);
+  return m ? (breakdown[m[1]!] ?? 0) : null;
 }
 
 /** Fly the camera through the share link and wait for VIEW to settle there. */
@@ -88,7 +102,7 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   await page.waitForFunction(
     () => {
       const s = window.__inversa?.globe()?.layers.find((l) => l.id === "sightings");
-      return (s?.breakdown?.iguana ?? 0) > 0 && (s?.breakdown?.python ?? 0) > 0;
+      return (s?.breakdown?.["3"] ?? 0) > 0 && (s?.breakdown?.["1"] ?? 0) > 0;
     },
     undefined,
     { timeout: LOAD_TIMEOUT_MS },
@@ -104,7 +118,8 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   const matches = async () => {
     const stat = (await sightingsStat(page)) ?? fail("no sightings stats");
     const chips = await chipCounts(page);
-    return { ok: SPECIES_KEYS.every((k) => chips[k] === (stat.breakdown?.[k] ?? -1)), chips, stat };
+    const checked = Object.entries(chips).filter(([k]) => expectedCount(k, stat.breakdown ?? {}) !== null);
+    return { ok: checked.length >= FOCUS_KEYS.length && checked.every(([k, n]) => n === expectedCount(k, stat.breakdown ?? {})), chips, stat };
   };
   let check = await matches();
   for (let i = 0; i < 20 && !check.ok; i++) {
@@ -118,13 +133,16 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
 
   // Alt-click: iguana only.
   await page.locator(`[data-species-chip="${IGUANA}"]`).click({ modifiers: ["Alt"] });
-  await page.waitForFunction((keep) => {
-    const sp = (window.__inversa?.state("LAYERS") as { species: Record<string, unknown> }).species;
-    return ["python", "tegu", "iguana", "lionfish", "other"].every((k) => (sp[k] !== false) === (k === keep));
-  }, IGUANA);
+  await page.waitForFunction(
+    ([keep, keys]) => {
+      const sp = (window.__inversa?.state("LAYERS") as { species: Record<string, unknown> }).species;
+      return keys.every((k) => (sp[k] !== false) === (k === keep));
+    },
+    [IGUANA, [...FILTER_KEYS]] as const,
+  );
   await page.waitForFunction(() => {
     const s = window.__inversa?.globe()?.layers.find((l) => l.id === "sightings");
-    return !!s && s.count > 0 && s.count === (s.breakdown?.iguana ?? -1);
+    return !!s && s.count > 0 && s.count === (s.breakdown?.["3"] ?? -1);
   });
   const n = (await sightingsStat(page))!.count;
   log(`iguana only: globe ${n} drawn; filter ${JSON.stringify(await speciesFilter(page))}`);
@@ -132,7 +150,7 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   await page.locator('[data-testid="species-all"]').waitFor({ timeout: 5_000 });
   const chipsOnly = await chipCounts(page);
   if (chipsOnly[IGUANA] !== n) fail(`iguana chip ${chipsOnly[IGUANA]} while the globe draws ${n}`);
-  for (const k of SPECIES_KEYS) {
+  for (const k of Object.keys(chipsOnly)) {
     const pressed = await page.locator(`[data-species-chip="${k}"]`).getAttribute("aria-pressed");
     if (pressed !== String(k === IGUANA)) fail(`${k} chip aria-pressed=${pressed}`);
   }
@@ -182,7 +200,7 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   await page.locator('[data-testid="species-all"]').click();
   await page.waitForFunction(() => {
     const sp = (window.__inversa?.state("LAYERS") as { species: Record<string, unknown> }).species;
-    return ["python", "tegu", "iguana", "lionfish", "other"].every((k) => sp[k] !== false);
+    return ["python", "tegu", "iguana", "lionfish", "animals"].every((k) => sp[k] !== false);
   });
   if (errors.length) fail(`page errors: ${errors.join(" | ")}`);
   await context.close();

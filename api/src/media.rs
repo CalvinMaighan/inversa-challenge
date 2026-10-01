@@ -455,6 +455,32 @@ mod tests {
         (status, headers, String::from_utf8_lossy(&body).into_owned(), state, id)
     }
 
+    /// T44: a taxon's default photo is served through the same proxy and policy, cached under `media/taxon/<id>`.
+    #[tokio::test]
+    async fn taxon_info_media_serves_the_taxon_photo() {
+        let (addr, server) = upstream().await;
+        let state = test_state();
+        let url = format!("http://static.inaturalist.org:{}/photo.jpg", addr.port());
+        state.obs.write(move |tx| tx.execute("update taxa set photo_url = ?1 where id = 3", [url])).await.unwrap();
+        let (status, headers, body) = get_media(&state, test_policy(addr.port()), "taxon/3").await;
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
+        assert_eq!(body, JPEG);
+        assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
+        assert_eq!(state.archive.get("media/taxon/3").await.unwrap(), JPEG);
+        // No photo, no taxon, bad id.
+        let (status, _, body) = get_media(&state, test_policy(addr.port()), "taxon/1").await;
+        assert_eq!((status, String::from_utf8_lossy(&body).as_ref()), (StatusCode::NOT_FOUND, "taxon 1 has no photo"));
+        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/999").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/x").await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        // A photo on a host outside the allowlist is refused, as for sightings.
+        state.obs.write(move |tx| tx.execute("update taxa set photo_url = 'https://evil.example.com/photo.jpg' where id = 2", [])).await.unwrap();
+        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/2").await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        server.abort();
+    }
+
     #[tokio::test]
     async fn media_allowlisted_photo_is_served_with_corp_and_cached() {
         let (addr, server) = upstream().await;

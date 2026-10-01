@@ -7,9 +7,11 @@
  * Pure over the evidence record (C14 shapes from Axum) and the time cursor. Never shows raw coordinates or ids;
  * those stay under "Details for experts".
  */
+import { GROUP_WORDS, isFocusTaxon, taxonName } from "client/state/taxa";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
 
+import { SPECIES_GUIDE } from "../help/content";
 import { feedLabel } from "../topbar/feed-chips";
 import { ago, formatReading, NETWORK_LABELS } from "../tooltip/model";
 
@@ -20,9 +22,48 @@ export type PlainSummary = {
   title: string;
   /** The rest of the line, in order. */
   parts: string[];
-  /** Same-origin photo (`/v1/media/<id>`), when the record has one. */
+  /** Same-origin photo: the observation's (`/v1/media/<id>`), else the species' (`/v1/media/taxon/<id>`). */
   photo: string | null;
+  /** The species card (T44), for sightings only. */
+  species?: SpeciesCard;
 };
+
+/** What a sighting's card says about its species: every taxon gets one, not only the focus four. */
+export type SpeciesCard = {
+  /** Common name in sentence case, or the scientific name when there is none. */
+  name: string;
+  /** Latin name, shown in italics; null when it is the name already. */
+  scientificName: string | null;
+  /** "introduced species", with the group in plain words when known ("introduced reptile"). */
+  status: string;
+  /** One About line: Inversa's one-liner for a focus species, else the plain Wikipedia summary. */
+  about: string | null;
+  /** "More about <name> on iNaturalist" target, opened in a new tab. */
+  moreUrl: string | null;
+  moreLabel: string | null;
+};
+
+/** The species card of a sighting record's `taxon` (the API's Taxon JSON, T44), or a bare one for an old API. */
+export function speciesCard(taxon: Record<string, unknown>): SpeciesCard {
+  const id = Number(taxon.id);
+  const common = str(taxon.commonName);
+  const sci = str(taxon.scientificName);
+  const name = taxonName({ commonName: common ?? "", scientificName: sci ?? "" }, "Unnamed species");
+  const focusIndex = isFocusTaxon(id) ? id - 1 : -1;
+  const guide = focusIndex >= 0 ? SPECIES_GUIDE[focusIndex] : undefined;
+  const group = str(taxon.iconicGroup);
+  const word = group ? GROUP_WORDS[group] : undefined;
+  const summary = str(taxon.summary);
+  const pageUrl = str(taxon.pageUrl);
+  return {
+    name,
+    scientificName: sci && sci !== name ? sci : null,
+    status: word ? `introduced ${word}` : "introduced species",
+    about: guide ? sentence(guide.line) + "." : summary,
+    moreUrl: pageUrl && /^https:\/\/www\.inaturalist\.org\/taxa\/\d+$/.test(pageUrl) ? pageUrl : null,
+    moreLabel: pageUrl ? `More about ${name} on iNaturalist` : null,
+  };
+}
 
 
 /** Quality grade in plain words; research grade names the community that confirmed it when known. */
@@ -66,19 +107,26 @@ const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null
 const when = (iso: unknown, atMs: number) => (typeof iso === "string" && Number.isFinite(Date.parse(iso)) ? ago(Date.parse(iso), atMs) : null);
 const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-function build(title: string, parts: (string | null)[], photo: string | null = null): PlainSummary {
+function build(title: string, parts: (string | null)[], photo: string | null = null, species?: SpeciesCard): PlainSummary {
   const kept = parts.filter((p): p is string => !!p);
-  return { title, parts: kept, line: [title, ...kept].join(" · "), photo };
+  return { title, parts: kept, line: [title, ...kept].join(" · "), photo, ...(species ? { species } : {}) };
 }
+
+/** A same-origin media path, never a remote URL. */
+const local = (v: unknown) => {
+  const s = str(v);
+  return s && s.startsWith("/") ? s : null;
+};
 
 /** Plain summary for an evidence record, or null for kinds whose panel says it already (backtests). */
 export function plainSummary(kind: string, record: Record<string, unknown>, atMs: number): PlainSummary | null {
   switch (kind) {
     case "sighting": {
       const taxon = (record.taxon ?? {}) as Record<string, unknown>;
-      const name = sentence(str(taxon.commonName) ?? str(taxon.scientificName) ?? "An animal");
-      const media = str(record.mediaUrl);
-      return build(`${name} spotted ${placeWords(record.lat, record.lon)}`, [when(record.observedAt, atMs), qualityWords(record.quality, record.source)], media && media.startsWith("/") ? media : null);
+      const species = speciesCard(taxon);
+      // The observation's own photo first; the species' photo stands in when the observer took none.
+      const photo = local(record.mediaUrl) ?? local(taxon.photoUrl);
+      return build(`${species.name} spotted ${placeWords(record.lat, record.lon)}`, [when(record.observedAt, atMs), qualityWords(record.quality, record.source)], photo, species);
     }
     case "reading": {
       const station = (record.station ?? {}) as Record<string, unknown>;

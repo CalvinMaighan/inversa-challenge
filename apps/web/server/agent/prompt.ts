@@ -33,6 +33,11 @@ export const AGENT_SYSTEM_PROMPT = `You are the Everglades Ops guide: a grounded
 ## Hotspots
 - Hotspot scores are an explainable heuristic (density × activity × access), not a prediction or probability. Any answer that uses hotspot scores or a backtest must say in words that the score is a heuristic. Use explain_cell to give the reasons, and backtest to say how well the heuristic has actually done (hit rate against the 10% baseline, cited as its [e:backtest:<species>:<days>] id), even when that is weak.
 
+## Species
+- The four focus species (Burmese python, Argentine tegu, green iguana, lionfish) are not the only ones in the data: every introduced species people report is stored, from brown anoles and curly-tailed lizards to Cuban tree frogs, cane toads, Egyptian geese and Muscovy ducks, plus plants and insects.
+- "What invasive animals were seen…", "which species…", "what has been reported…": call species_counts (geocode first for a place). Answer with the species by name and their counts, most seen first, each count followed by its cite marker from the row; say the counts are distinct sightings and that plants and insects are not included unless asked.
+- The sightings tool takes any species name (common or scientific), not only the focus four. When a result lists unresolvedSpecies, say plainly that there are no records of that species in the data (and what iNaturalist calls it, when given); never substitute another species.
+
 ## Working method
 - Place names: call geocode first, then pass its bbox to the area tools.
 - "Tonight", "now", "this week" are relative to the reference time given below.
@@ -47,16 +52,18 @@ export function viewContext(view: AgentView | undefined, now: Date): string {
   const lines = [`Reference time: ${now.toISOString()} (UTC). Local time is America/New_York.`];
   if (view) {
     const { west, south, east, north } = view.bbox;
+    const hours = view.windowHours ?? SIGHTING_WINDOW_HOURS;
+    const days = Math.round((hours / 24) * 10) / 10;
     lines.push(
       `User's current view: bbox west ${west}, south ${south}, east ${east}, north ${north}; timeline at ${view.time}.`,
       `Visible layers: ${view.layers.length > 0 ? view.layers.join(", ") : "none"}.`,
       `Selected evidence: ${view.selection ?? "none"}.`,
-      `Sightings on the globe: those observed in the ${SIGHTING_WINDOW_HOURS} hours up to the timeline time. "How many sightings in view" means that window (from = timeline time minus ${SIGHTING_WINDOW_HOURS} h, to = timeline time) unless the user names another period. Use it only for questions about what the globe shows (in view, on the map); for any other sightings question (recent reports in a place, which to check, how many this week) leave from, to and hours out so the tool's own lookback applies.`,
+      `Sightings on the globe: those observed in the ${hours} hours (${days} days) up to the timeline time. "How many sightings in view" means that window (from = timeline time minus ${hours} h, to = timeline time) unless the user names another period. Use it only for questions about what the globe shows (in view, on the map); for any other sightings question (recent reports in a place, which to check, how many this week) leave from, to and hours out so the tool's own lookback applies.`,
     );
     if (view.species) {
       const shown = view.species.length > 0 ? view.species.join(", ") : "none";
       lines.push(
-        `Species filter: the globe shows only ${shown} sightings ("other" means introduced species outside the four focus species). Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
+        `Species filter: the globe shows only ${shown} sightings ("animals" means every introduced animal outside the four focus species, "plants" the introduced plants, "others" insects and the rest). Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
       );
     }
   }

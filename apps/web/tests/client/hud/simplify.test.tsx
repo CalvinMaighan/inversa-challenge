@@ -7,8 +7,9 @@ import { init } from "@calvinjs/active-state";
 import type { FeedState } from "shared/feed-state";
 
 import { ExpertDetails, Summary } from "client/hud/drawer/EvidenceDrawer";
-import type { Evidence } from "client/hud/drawer/evidence";
-import { placeWords, plainSummary, qualityWords } from "client/hud/drawer/summary";
+import { evidenceQuery, fetchEvidence, OPTIONAL_EVIDENCE_FIELDS, resetSchemaProbe, unknownOptionalField, type Evidence } from "client/hud/drawer/evidence";
+import { placeWords, plainSummary, qualityWords, speciesCard } from "client/hud/drawer/summary";
+import { GqlError } from "client/threads/api";
 import { freshnessLines } from "client/hud/topbar/freshness";
 import { AboutContent, ThemeChoices, TopBarView } from "client/hud/topbar/TopBar";
 import { state } from "client/state";
@@ -110,6 +111,30 @@ const sighting: Evidence = {
   ingestLagSeconds: 540,
   feed: null,
   links: [],
+  degraded: [],
+};
+
+/** A non-focus sighting as the T44 API returns it: the taxon carries its card. */
+const anole: Evidence = {
+  ...sighting,
+  id: "sighting:18598",
+  record: {
+    ...sighting.record,
+    id: "18598",
+    taxon: {
+      id: "17",
+      scientificName: "Anolis sagrei",
+      commonName: "Brown Anole",
+      focus: false,
+      inatTaxonId: "116461",
+      iconicGroup: "Reptilia",
+      summary: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
+      photoUrl: "/v1/media/taxon/17",
+      pageUrl: "https://www.inaturalist.org/taxa/116461",
+    },
+    photoUrl: null,
+    mediaUrl: null,
+  },
 };
 
 describe("plain evidence summary", () => {
@@ -151,5 +176,89 @@ describe("plain evidence summary", () => {
     expect(expert).toContain('aria-label="Normalized record"');
     expect(expert).toContain('aria-label="Raw payload"');
     expect(expert).toContain("raw/inat/2026/09/30/0412.json.gz");
+  });
+
+  test("plain evidence summary: every species gets a card, with the Latin name, its status, an About line, the taxon photo and its iNaturalist page", () => {
+    const s = plainSummary("sighting", anole.record, NOW)!;
+    expect(s.title).toBe("Brown anole spotted near Coral Gables");
+    expect(s.species).toEqual({
+      name: "Brown anole",
+      scientificName: "Anolis sagrei",
+      status: "introduced reptile",
+      about: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
+      moreUrl: "https://www.inaturalist.org/taxa/116461",
+      moreLabel: "More about Brown anole on iNaturalist",
+    });
+    // No observation photo: the species photo stands in. The observation's own photo wins when there is one.
+    expect(s.photo).toBe("/v1/media/taxon/17");
+    expect(plainSummary("sighting", { ...anole.record, mediaUrl: "/v1/media/18598" }, NOW)!.photo).toBe("/v1/media/18598");
+    // A focus species keeps Inversa's one-liner as its About line.
+    expect(plainSummary("sighting", sighting.record, NOW)!.species).toMatchObject({ name: "Green iguana", scientificName: "Iguana iguana", about: "Tree-climbing lizard that burrows into seawalls and canal banks." });
+    // Never a placeholder title: a taxon with no common name reads by its Latin name; an unsafe page URL is dropped.
+    expect(speciesCard({ id: "9", scientificName: "Agama picticauda", commonName: "", pageUrl: "https://evil.example/taxa/1" })).toMatchObject({ name: "Agama picticauda", scientificName: null, status: "introduced species", moreUrl: null });
+    expect(speciesCard({ id: "9" }).name).toBe("Unnamed species");
+    expect(speciesCard({ id: "9" }).name).not.toContain("Other");
+
+    const lead = html(<Summary kind="sighting" evidence={anole} atMs={NOW} />);
+    expect(lead).toContain("<h3>Brown anole spotted near Coral Gables</h3>");
+    expect(lead).toContain('<i lang="la">Anolis sagrei</i>');
+    expect(lead).toContain("introduced reptile");
+    expect(lead).toContain('src="/v1/media/taxon/17"');
+    expect(lead).toMatch(/data-testid="species-about"[^>]*>The brown anole/);
+    expect(lead).toMatch(/<a[^>]*href="https:\/\/www\.inaturalist\.org\/taxa\/116461"[^>]*target="_blank"[^>]*rel="[^"]*noopener[^"]*"/);
+    expect(textOf(lead)).toContain("More about Brown anole on iNaturalist");
+    expect(textOf(lead)).not.toContain("Other introduced species");
+  });
+});
+
+describe("schema tolerant evidence", () => {
+  const raw = { ...sighting, record: sighting.record, feed: null, links: [] } as unknown as Record<string, unknown>;
+
+  test("schema tolerant evidence: an API without sourcePageUrl answers Unknown field; the query is retried without it and the card still shows", async () => {
+    resetSchemaProbe();
+    const asked: string[] = [];
+    const oldApi = async <T,>(query: string): Promise<T> => {
+      asked.push(query);
+      if (query.includes("sourcePageUrl")) throw new GqlError('Unknown field "sourcePageUrl" on type "Evidence".', []);
+      return { evidence: Object.fromEntries(Object.entries(raw).filter(([k]) => k !== "sourcePageUrl")) } as T;
+    };
+    const ev = await fetchEvidence("sighting:48213", oldApi);
+    expect(asked.length).toBe(2);
+    expect(asked[0]).toContain("sourcePageUrl");
+    expect(asked[1]).not.toContain("sourcePageUrl");
+    expect(ev.record.taxon).toEqual(sighting.record.taxon);
+    expect(ev.sourcePageUrl).toBeNull();
+    expect(ev.degraded).toEqual(["sourcePageUrl"]);
+    // The card renders, and the expert details say what to do.
+    expect(html(<Summary kind="sighting" evidence={ev} atMs={NOW} />)).toContain("<h3>Green iguana spotted near Coral Gables</h3>");
+    const expert = textOf(html(<ExpertDetails id={ev.id} evidence={ev} />));
+    expect(expert).toContain("Restart the API to see links");
+    // The next load leaves the field out from the start: one request, no error.
+    asked.length = 0;
+    await fetchEvidence("sighting:48214", oldApi);
+    expect(asked.length).toBe(1);
+    expect(asked[0]).not.toContain("sourcePageUrl");
+    resetSchemaProbe();
+  });
+
+  test("schema tolerant evidence: only our optional fields are retried; other errors surface as before", async () => {
+    resetSchemaProbe();
+    expect(unknownOptionalField('Unknown field "sourcePageUrl" on type "Evidence".')).toBe("sourcePageUrl");
+    expect(unknownOptionalField('Unknown field "record" on type "Evidence".')).toBeNull();
+    expect(unknownOptionalField("HTTP 502")).toBeNull();
+    expect(evidenceQuery()).toContain("sourcePageUrl");
+    expect(evidenceQuery(OPTIONAL_EVIDENCE_FIELDS)).not.toContain("sourcePageUrl");
+    let calls = 0;
+    const broken = async <T,>(): Promise<T> => {
+      calls += 1;
+      throw new GqlError('Unknown field "record" on type "Evidence".', []);
+    };
+    await expect(fetchEvidence("sighting:1", broken)).rejects.toThrow('Unknown field "record"');
+    expect(calls).toBe(1);
+    const current = async <T,>(): Promise<T> => ({ evidence: raw }) as T;
+    const ev = await fetchEvidence("sighting:48213", current);
+    expect(ev.degraded).toEqual([]);
+    expect(ev.sourcePageUrl).toBe("https://www.inaturalist.org/observations/335508189");
+    expect(textOf(html(<ExpertDetails id={ev.id} evidence={ev} />))).not.toContain("Restart the API");
   });
 });

@@ -23,10 +23,12 @@ describe("agent system prompt", () => {
     expect(AGENT_SYSTEM_PROMPT).toMatch(/Cite every factual claim/);
   });
 
-  test("the view context gives the 48 h sightings window and the species filter when one is set", () => {
+  test("the view context gives the globe's sightings window (7 days by default, else what the view says) and the species filter when one is set", () => {
     const view = { bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2026-02-01T17:00:00.000Z", layers: ["sightings"], selection: null };
     const plain = viewContext(view, new Date("2026-02-01T17:00:00Z"));
-    expect(plain).toContain("observed in the 48 hours up to the timeline time");
+    expect(plain).toContain("observed in the 168 hours (7 days) up to the timeline time");
+    expect(plain).toContain("Use it only for questions about what the globe shows");
+    expect(viewContext({ ...view, windowHours: 48 }, new Date("2026-02-01T17:00:00Z"))).toContain("observed in the 48 hours (2 days) up to the timeline time");
     expect(plain).not.toContain("Species filter");
     const filtered = viewContext({ ...view, species: ["iguana"] }, new Date("2026-02-01T17:00:00Z"));
     expect(filtered).toContain("Species filter: the globe shows only iguana sightings");

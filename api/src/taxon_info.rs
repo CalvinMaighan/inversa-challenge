@@ -76,7 +76,6 @@ struct Page {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TaxonInfo {
     pub id: i64,
-    pub name: String,
     pub preferred_common_name: Option<String>,
     pub iconic_taxon_name: Option<String>,
     pub wikipedia_url: Option<String>,
@@ -410,7 +409,6 @@ mod tests {
         let infos = parse_page(&fixture()).unwrap();
         assert_eq!(infos.len(), 20);
         let anole = infos.iter().find(|t| t.id == 116461).unwrap();
-        assert_eq!(anole.name, "Anolis sagrei");
         assert_eq!(anole.preferred_common_name.as_deref(), Some("Brown Anole"));
         assert_eq!(anole.iconic_taxon_name.as_deref(), Some("Reptilia"));
         assert_eq!(anole.photo_url().unwrap(), "https://inaturalist-open-data.s3.amazonaws.com/photos/22869683/medium.jpg");
@@ -477,7 +475,7 @@ mod tests {
         assert!(lionfish_photo.is_some());
         // Nothing left to fetch until REFRESH passes; then everything is due again.
         assert!(pending_ids(&state, now).await.unwrap().is_empty());
-        assert_eq!(pending_ids(&state, now + REFRESH.as_millis() as i64 + 1).await.unwrap().len(), 5);
+        assert_eq!(pending_ids(&state, fetched + REFRESH.as_millis() as i64 + 1).await.unwrap().len(), 5);
     }
 
     #[tokio::test]

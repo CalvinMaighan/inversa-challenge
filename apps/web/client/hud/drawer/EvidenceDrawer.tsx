@@ -330,6 +330,29 @@ const Lead = styled.section`
     font: 400 13px / 1.45 var(--font-ui);
   }
 
+  /* The species line: Latin name in italics, then its status in plain words. */
+  p.species {
+    margin-bottom: 2px;
+    i {
+      color: var(--text);
+    }
+  }
+
+  /* The About line reads as body text, and the iNat link sits under it. */
+  p.about {
+    margin-top: var(--gap-s);
+    color: var(--text);
+  }
+
+  a.more {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    color: var(--accent);
+    font: 600 12px / 1.4 var(--font-ui);
+  }
+
   img {
     display: block;
     width: 100%;
@@ -363,21 +386,45 @@ export function ExpertDetails({ id, evidence }: { id: string | null; evidence: E
           {id}
         </Mono>
       </Section>
+      {evidence && evidence.degraded.length > 0 ? (
+        <Note data-testid="schema-degraded">Restart the API to see links: this one is older than the app and has no {evidence.degraded.join(", ")}.</Note>
+      ) : null}
       {evidence ? <Record evidence={evidence} /> : null}
     </Expert>
   );
 }
 
-/** The plain-language lead: what, where, when, how sure, and the photo when there is one. */
+/**
+ * The plain-language lead: what, where, when, how sure, and the photo when there is one. A sighting adds its
+ * species card (T44): the Latin name and status, one About line, and the iNaturalist page in a new tab.
+ */
 export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evidence; atMs: number }) {
   const s = plainSummary(kind, evidence.record, atMs);
   if (!s) return null;
+  const sp = s.species;
   return (
     <Lead aria-label="Summary" data-testid="evidence-summary">
       <h3>{s.title}</h3>
+      {sp ? (
+        <p className="species" data-testid="species-status">
+          {sp.scientificName ? <i lang="la">{sp.scientificName}</i> : null}
+          {sp.scientificName ? " · " : null}
+          {sp.status}
+        </p>
+      ) : null}
       {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
       {/* eslint-disable-next-line @next/next/no-img-element -- same-origin media proxy (/v1/media), already sized and cached; the image optimizer would fetch it again */}
-      {s.photo ? <img src={s.photo} alt={`Photo: ${s.title}`} loading="lazy" /> : null}
+      {s.photo ? <img src={s.photo} alt={`Photo: ${s.title}`} loading="lazy" data-testid="evidence-photo" /> : null}
+      {sp?.about ? (
+        <p className="about" data-testid="species-about">
+          {sp.about}
+        </p>
+      ) : null}
+      {sp?.moreUrl ? (
+        <ExternalLink className="more" href={sp.moreUrl} data-testid="species-more">
+          {sp.moreLabel} <Icon name="external" />
+        </ExternalLink>
+      ) : null}
     </Lead>
   );
 }

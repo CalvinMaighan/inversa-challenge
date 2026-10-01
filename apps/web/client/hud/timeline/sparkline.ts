@@ -4,24 +4,29 @@
  * every frame lands in exactly one bucket and the buckets add up to the total. With more buckets than frames,
  * a frame spans several buckets and each shows that frame's count, so no bucket reads empty between frames.
  */
-import { speciesIndexOfTaxon } from "client/globe/species";
+import { enabledSpecies, speciesIndexOfTaxon, taxonShown } from "client/globe/species";
+import type { TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, type SightingRecord } from "shared/frames";
+import { LAYER_IDS } from "shared/voice/ui-tools";
+
+const [SIGHTINGS] = LAYER_IDS;
 
 export type Buckets = { values: Float64Array; max: number; total: number };
 
 /**
  * Per-frame sightings the globe would draw: duplicates left out (their canonical record stands for them), focus
- * species by the filter's indices, other taxa by `other`. The sparkline follows the species bar with this.
+ * species by the filter's keys, other taxa by their group or own override (T44). The sparkline follows the
+ * species bar with this.
  */
-export function filteredCounts(frameCount: number, records: (frame: number) => readonly SightingRecord[], species: readonly number[], other: boolean): Uint32Array {
-  const on = new Set(species);
+export function filteredCounts(frameCount: number, records: (frame: number) => readonly SightingRecord[], filter: Readonly<Record<string, unknown>> | undefined, taxa: Readonly<Record<string, TaxonInfo>> = {}): Uint32Array {
+  const on = new Set(enabledSpecies(filter, SIGHTINGS));
   const out = new Uint32Array(Math.max(0, frameCount));
   for (let f = 0; f < out.length; f++) {
     let n = 0;
     for (const r of records(f)) {
       if (r.flags & SIGHTING_FLAG.duplicate) continue;
       const s = speciesIndexOfTaxon(r.taxon);
-      if (s < 0 ? other : on.has(s)) n += 1;
+      if (s < 0 ? taxonShown(filter, r.taxon, taxa, SIGHTINGS) : on.has(s)) n += 1;
     }
     out[f] = n;
   }

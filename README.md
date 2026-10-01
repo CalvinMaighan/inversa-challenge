@@ -32,7 +32,7 @@ bun run dev       # Axum on 127.0.0.1:4041, Next on http://localhost:3050, signa
 
 Open http://localhost:3050 (http://127.0.0.1:3050 works too).
 
-- `bun run data` defaults to 2 days of iNaturalist plus a 5-year NAS and GBIF baseline. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline is about 14,500 records and dominates the run time.
+- `bun run data` defaults to 7 days of iNaturalist plus a 5-year NAS and GBIF baseline. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline is about 14,500 records and dominates the run time. After the walk it asks iNaturalist for every taxon it stored (`/v1/taxa`, 30 ids per request, one request a second) and keeps each one's common name, group, a two-sentence plain summary, a photo and its iNaturalist page (`api/src/taxon_info.rs`); the running API repeats that sweep every 10 minutes for taxa the pollers add.
 - `INVERSA_DATA_DIR=/some/dir` moves the databases and the raw archive. Every script defaults it to `./data`, which git ignores.
 - `bun run dev` needs ports 4041, 3050 and 8799 free. The ports are fixed in `scripts/dev.ts` and `apps/web/package.json`, and a second checkout running `bun run dev` blocks them. The signal Worker runs `wrangler dev --local --env dev` from `apps/signal-worker`, the env that allows origin localhost:3050; Ctrl-C stops all three processes.
 - The running API polls the live feeds on its own. Set `INVERSA_SOURCES=off` to stop all fetching and work from what is already in the databases.
@@ -71,7 +71,7 @@ The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/
 
 ![First load: the chat column with its welcome on the left, sightings on the globe, the species chips top left and two icon buttons top right](docs/evidence/simplify-after.png)
 
-The UI puts sightings first and is written for someone new to the field. On first load the globe shows only sightings: one dot per invasive animal reported in the last 48 hours. Weather stations, alerts, hotspots and temperature layers are off and sit under About, in **More data (for experts)**. An alert the agent cites still shows as a bracket.
+The UI puts sightings first and is written for someone new to the field. On first load the globe shows only sightings: one dot per invasive animal reported in the last 7 days, every species in its own colour. A selector next to the species chips switches the window to the last 2, 7 or 30 days; most people upload sightings a few days after they see them, so 7 days shows the most. Weather stations, alerts, hotspots and temperature layers are off and sit under About, in **More data (for experts)**. An alert the agent cites still shows as a bracket.
 
 The page has two panes. The **chat column** sits on the left: always open, full height and 420 px wide. Drag its right edge to make it anywhere from 360 to 560 px wide, and your browser keeps that width. It has two tabs:
 - **Agent**: the thread and the composer, with a mic button for voice and a send button.
@@ -81,7 +81,7 @@ A dot on a tab means something new arrived there while you were on the other one
 
 On a first visit, a welcome above the composer says what the map is in two sentences, describes each species in one line ("Burmese python — giant constrictor eating Everglades wildlife"), and offers example questions you can click, such as "Iguana sightings near Homestead and water levels" and "Where should python crews go tonight?". Dismiss it and it stays dismissed.
 
-Click a dot and the evidence card opens with a plain summary first, for example "Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community", the photo when there is one, and "Open at iNaturalist ↗". The id, the normalized record, the raw payload, the source feed, links and revisions sit under a collapsed **Details for experts**.
+Click a dot and the evidence card opens with a plain summary first, for example "Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community", the photo when there is one, and "Open at iNaturalist ↗". Every species gets the same card, not only the focus four: a brown anole's reads "Brown anole spotted near Homestead", then *Anolis sagrei* · introduced reptile, the observer's photo (or the species' photo when there is none), one About line from Wikipedia ("The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas…") and "More about Brown anole on iNaturalist ↗" in a new tab. The id, the normalized record, the raw payload, the source feed, links and revisions sit under a collapsed **Details for experts**. An API binary older than the app degrades instead of failing: a field it does not know is retried without, and Details for experts says to restart the API.
 
 ![The species chips filtered to iguana, with the evidence card open on one sighting](docs/evidence/simplify-iguana.png)
 
@@ -91,7 +91,7 @@ The species chips at the top left carry the sighting colours. The full legend, w
 
 | Mark | Meaning |
 |---|---|
-| Dots: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python, Argentine tegu, green iguana and red lionfish. Grey `#b8c0cc` dots are other introduced species. Dots show the last 48 hours and fade with age, so the newest are brightest. A red ring means the IDs conflict, and a white ring marks the selected sighting. Zoom in to see species badges. |
+| Dots: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python, Argentine tegu, green iguana and red lionfish. Every other species has its own colour from a twelve-hue palette, fixed by its taxon id, so a brown anole is the same blue on the globe, in its chip and in the legend; nothing is grey. Dots show the selected window (2, 7 or 30 days) and fade with age, so the newest are brightest. A red ring means the IDs conflict, and a white ring marks the selected sighting. Zoom in to see the focus species' badges. |
 | Squares: blue `#4fb3ff`, teal `#3fd6c6`, violet `#c89bff` | Expert layer, off by default. In-situ stations that reported in the two hours before the cursor: a USGS water gauge, an NDBC buoy, or a NOAA (CO-OPS) tide gauge. |
 | Haze from violet to yellow | Expert layer, off by default. Hotspots, on a heuristic score from low to high. The legend can pin the haze to a single species. |
 | Ramp from blue to red | Expert layers, off by default. Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). |
@@ -102,7 +102,7 @@ The species chips at the top left carry the sighting colours. The full legend, w
 | Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline's thin bottom lane, red means no satellite data, amber means cloud, and grey means no sightings for 12 h or more; hover the timeline to see which. |
 | Brackets | What the agent cited or highlighted, and the current selection. Only the selection, the hovered row and citations get a text label, 12 at most. Station readings are bracketed only when cited. |
 
-Hover a sighting to see the species first, then how sure the ID is, for example "Green iguana · research · iNat · 2 h ago". Click it to open its record.
+Hover a sighting to see the species first, then how sure the ID is, for example "Green iguana · research · iNat · 2 h ago" or "Brown anole · needs ID · 3 h ago". Click it to open its record. The agent knows every species too: ask "what invasive animals were seen near Homestead this week?" and it answers with the species by name and their counts (`species_counts`), and "brown anole sightings near Homestead" works like the focus species do.
 
 ### Controls
 
@@ -110,16 +110,17 @@ Hover a sighting to see the species first, then how sure the ID is, for example 
 
 | Where | Control | What it does |
 |---|---|---|
-| Map | Species chips | Top left: one chip per animal with its colour and how many were seen in the last 48 hours. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every species back. The globe, the legend, the timeline line and the agent's view all follow it. |
-| Map | Sighting dots | One per animal reported in the last 48 hours, brightest when newest. Hover for the species and the ID's grade; click to open the record. |
-| Map | Evidence card | A plain summary (what, where, when, how sure), the photo, and the publisher link, with the raw record under Details for experts. |
+| Map | Species chips | Top left: Python, Tegu, Iguana and Lionfish pinned first (dimmed at 0), then the six animals seen most in the window, each with its colour and count, then Plants and Insects & others, off until switched on. Hover a chip for a one-line description. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. The globe, the legend, the timeline line and the agent's view all follow it. |
+| Map | Sightings window | Next to the chips: last 2, 7 or 30 days (7 days to start). The agent's view follows it. |
+| Map | Sighting dots | One per animal reported in the window, in its species' colour, brightest when newest. Hover for the species and the ID's grade; click to open the record. |
+| Map | Evidence card | A plain summary (what, where, when, how sure), the species' Latin name and a line about it, the photo, the species' iNaturalist page and the publisher link, with the raw record under Details for experts. |
 | Map | About (ⓘ) | Top right: what this map is, how fresh its data is in plain words, Focus, Help, Data sources and More data (for experts). A small dot on it shows the worst feed's colour when a source is delayed. |
 | Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale or down), push or poll, and lag, worst first. |
 | Map | More data (for experts) | Inside About: a switch, legend and live count for every layer, plus the data-gaps key. |
 | Map | Focus | Inside About: dims the globe outside a circle around the selection. |
 | Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
 | Map | Help | Inside About: opens the help sheet. |
-| Map | Share links | The address bar always holds the camera, time, layers, species and selection. |
+| Map | Share links | The address bar always holds the camera, time, layers, species (chips and window) and selection. |
 | Timeline | Play / pause (Space) | Plays time forward at the chosen speed. |
 | Timeline | Speed | Sets playback speed in frames per second. |
 | Timeline | LIVE / REPLAY | Shows whether you are looking at now or the past; click it while replaying to jump to now. |
@@ -182,7 +183,7 @@ Each feed answers a different part of the question.
 
 | Feed | Role | Mode |
 |---|---|---|
-| iNaturalist | where animals were seen, with photos and ID changes | poll every 2 min, at most 1 request a second |
+| iNaturalist | where animals were seen, with photos and ID changes; every introduced species in the region (351 taxa after a week), not only the focus four, plus each taxon's name, group, summary and photo from `/v1/taxa` | poll every 2 min, at most 1 request a second |
 | USGS NAS | curated history, weeks behind | poll daily |
 | GBIF | deep history, and a mirror of iNat research-grade records | poll daily |
 | GOES-19 ABI L2 (LSTC, SSTF, FDCC, ACMC) | land and sea surface temperature, fires, cloud | push over SQS |

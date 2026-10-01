@@ -5,7 +5,7 @@ import { cellAt, gridBounds } from "client/globe/geometry";
 import { polygonsOf } from "client/globe/layers/geojson";
 import { alertBucket, alertQueryTime } from "client/globe/layers/alerts";
 import { bucketOfKey, createKeyedFetch, dataKey } from "client/globe/layers/keyed-fetch";
-import { colorOfTaxon, enabledSpecies, OTHER_TAXON_COLOR, SPECIES_COLORS, speciesIndexOfTaxon } from "client/globe/species";
+import { colorOfTaxon, enabledSpecies, OTHER_TAXON_COLOR, SPECIES_COLORS, speciesIndexOfTaxon, TAXON_PALETTE } from "client/globe/species";
 import { parseEvidenceId } from "client/state/selection";
 
 import { flush } from "./fakes";
@@ -41,10 +41,15 @@ describe("grid geometry", () => {
 });
 
 describe("species", () => {
-  test("taxon ids 1–4 map to SPECIES_IDS order; others are grey", () => {
+  test("taxon ids 1–4 map to SPECIES_IDS order; every other taxon gets a stable palette colour, never grey", () => {
     expect([1, 2, 3, 4, 0, 5].map(speciesIndexOfTaxon)).toEqual([0, 1, 2, 3, -1, -1]);
     expect(colorOfTaxon(4)).toBe(SPECIES_COLORS[3]!);
-    expect(colorOfTaxon(17)).toBe(OTHER_TAXON_COLOR);
+    expect(colorOfTaxon(17)).toBe(colorOfTaxon(17));
+    expect(TAXON_PALETTE).toContain(colorOfTaxon(17));
+    expect(colorOfTaxon(17)).not.toBe(OTHER_TAXON_COLOR);
+    expect(SPECIES_COLORS).not.toContain(colorOfTaxon(17));
+    // Neighbouring ids spread over the palette.
+    expect(new Set([5, 6, 7, 8, 9, 10].map(colorOfTaxon)).size).toBeGreaterThanOrEqual(5);
   });
 
   test("filter: booleans per species, or a voice pin of one layer to one species", () => {

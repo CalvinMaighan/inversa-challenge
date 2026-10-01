@@ -26,6 +26,11 @@ export type Evidence = {
   ingestLagSeconds: number | null;
   feed: FeedState | null;
   links: EvidenceLink[];
+  /**
+   * Optional fields the running API does not know (it predates them): the card still shows, and "Details for
+   * experts" says to restart the API. Empty on a current API.
+   */
+  degraded: string[];
 };
 
 export type HotspotTerm = { name: string; value: number; rationale: string };
@@ -33,13 +38,31 @@ export type HotspotExplain = { cell: string; species: string; at: string; score:
 export type BacktestDay = { day: string; sightings: number; hits: number };
 export type Backtest = { species: string; days: number; hitRate: number; baseline: number; perDay: BacktestDay[] };
 
-export const EVIDENCE_QUERY = `query HudEvidence($id: ID!) {
+/**
+ * Evidence fields an older API may lack (added after the first release). A query the API rejects with
+ * `Unknown field "<name>"` is retried without that field, so a stale binary degrades the card instead of
+ * failing it (T44, G4).
+ */
+export const OPTIONAL_EVIDENCE_FIELDS: readonly string[] = ["sourcePageUrl"];
+
+export function evidenceQuery(without: readonly string[] = []): string {
+  const optional = OPTIONAL_EVIDENCE_FIELDS.filter((f) => !without.includes(f)).join(" ");
+  return `query HudEvidence($id: ID!) {
   evidence(id: $id) {
-    id kind record raw rawKey sourceUrl sourcePageUrl fetchedAt ingestLagSeconds
+    id kind record raw rawKey sourceUrl ${optional} fetchedAt ingestLagSeconds
     feed { ${FEED_FIELDS} }
     links { id relation source }
   }
 }`;
+}
+
+export const EVIDENCE_QUERY = evidenceQuery();
+
+/** The optional field an `Unknown field "x"` GraphQL error names, if it is one of ours. */
+export function unknownOptionalField(message: string): string | null {
+  const m = /Unknown field "([A-Za-z_][A-Za-z0-9_]*)"/.exec(message);
+  return m && OPTIONAL_EVIDENCE_FIELDS.includes(m[1]!) ? m[1]! : null;
+}
 
 export const EXPLAIN_QUERY = `query HudExplain($cell: ID!, $species: ID!, $at: Time!) {
   explainCell(cell: $cell, species: $species, at: $at) { cell species at score terms { name value rationale } }
@@ -80,9 +103,9 @@ export const evidenceKey = (id: string) => `evidence:${id}`;
 export const explainKey = (cell: string, species: string, at: string) => `explain:${species}:${cell}:${at}`;
 export const backtestKey = (species: string, days: number) => `backtest:${species}:${days}`;
 
-type RawEvidence = Omit<Evidence, "feed" | "record" | "links"> & { feed: unknown; record: unknown; links: EvidenceLink[] | null };
+type RawEvidence = Omit<Evidence, "feed" | "record" | "links" | "degraded" | "sourcePageUrl"> & { feed: unknown; record: unknown; links: EvidenceLink[] | null; sourcePageUrl?: string | null };
 
-export function normalizeEvidence(raw: RawEvidence): Evidence {
+export function normalizeEvidence(raw: RawEvidence, degraded: readonly string[] = []): Evidence {
   const record = raw.record && typeof raw.record === "object" && !Array.isArray(raw.record) ? (raw.record as Record<string, unknown>) : { value: raw.record };
   return {
     id: raw.id,
@@ -96,14 +119,40 @@ export function normalizeEvidence(raw: RawEvidence): Evidence {
     ingestLagSeconds: raw.ingestLagSeconds ?? null,
     feed: normalizeFeedState(raw.feed),
     links: raw.links ?? [],
+    degraded: [...degraded],
   };
 }
 
+/** Fields the running API rejected; once learned, later requests leave them out from the start. */
+const missingFields = new Set<string>();
+
+/** Test-only: forget which fields the API rejected. */
+export function resetSchemaProbe(): void {
+  missingFields.clear();
+}
+
+/**
+ * `evidence(id)` through `request` (the threads API by default). When the API answers `Unknown field "x"` for
+ * one of OPTIONAL_EVIDENCE_FIELDS, the query is sent again without it (once per field) and the result is
+ * marked `degraded`.
+ */
+export async function fetchEvidence(id: string, request: typeof gqlRequest = gqlRequest, signal?: AbortSignal): Promise<Evidence> {
+  for (let attempt = 0; attempt <= OPTIONAL_EVIDENCE_FIELDS.length; attempt++) {
+    const without = [...missingFields];
+    try {
+      const data = await request<{ evidence: RawEvidence }>(evidenceQuery(without), { id }, signal);
+      return normalizeEvidence(data.evidence, without);
+    } catch (err) {
+      const field = err instanceof Error ? unknownOptionalField(err.message) : null;
+      if (!field || missingFields.has(field)) throw err;
+      missingFields.add(field);
+    }
+  }
+  throw new Error(`evidence ${id}: the API rejected every optional field`);
+}
+
 export function loadEvidence(id: string, signal?: AbortSignal): Promise<Evidence> {
-  return cached(evidenceKey(id), async () => {
-    const data = await gqlRequest<{ evidence: RawEvidence }>(EVIDENCE_QUERY, { id }, signal);
-    return normalizeEvidence(data.evidence);
-  });
+  return cached(evidenceKey(id), () => fetchEvidence(id, gqlRequest, signal));
 }
 
 export function loadExplain(cell: string, species: string, at: string): Promise<HotspotExplain> {

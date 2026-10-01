@@ -42,7 +42,6 @@ export type LayersState = {
  */
 // eslint-disable-next-line inversa/prefer-catalog-constants -- typed as LayerId, so tsc checks them against LAYER_IDS.
 const HIDDEN_BY_DEFAULT: ReadonlySet<LayerId> = new Set<LayerId>(["stations", "alerts", "hotspots", "lst", "sst"]);
-// eslint-disable-next-line inversa/prefer-catalog-constants -- typed as SpeciesGroupId, so tsc checks them against SPECIES_GROUP_IDS.
 const GROUPS_OFF_BY_DEFAULT: ReadonlySet<SpeciesGroupId> = new Set<SpeciesGroupId>(["plants", "others"]);
 
 const defaults: LayersState = {

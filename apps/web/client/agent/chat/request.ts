@@ -1,4 +1,4 @@
-import { shownSpecies, SPECIES_FILTER_IDS } from "client/state/layers";
+import { isSpeciesFiltered, shownSpecies, sightingHoursOf, type LayersState } from "client/state/layers";
 import { REGION_BBOX } from "client/state/view";
 import type { AgentStreamRequest, BBox } from "shared/agent/events";
 
@@ -12,7 +12,7 @@ import type { AgentStreamRequest, BBox } from "shared/agent/events";
 export type ViewSnapshot = {
   view?: { bbox?: Partial<BBox> } | null;
   time?: { at?: string | null } | null;
-  layers?: { visible?: Record<string, boolean>; species?: Record<string, unknown> } | null;
+  layers?: { visible?: Record<string, boolean>; species?: Record<string, unknown>; sightingHours?: number } | null;
   selection?: { evidenceId?: string | null } | null;
 };
 
@@ -26,15 +26,17 @@ export function agentView(snapshot: ViewSnapshot, nowMs: number): NonNullable<Ag
   const bbox = snapshot.view?.bbox;
   const at = snapshot.time?.at;
   const atMs = typeof at === "string" ? Date.parse(at) : NaN;
-  // The species bar's filter, only when it hides something: "how many?" then counts what the globe shows.
-  const species = shownSpecies(snapshot.layers?.species);
+  // The species bar's filter, only when it hides an animal: "how many?" then counts what the globe shows.
+  const filter = snapshot.layers?.species;
+  const species = shownSpecies(filter);
   return {
     bbox: validBBox(bbox) ? { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north } : { ...REGION_BBOX },
     time: new Date(Number.isFinite(atMs) ? atMs : nowMs).toISOString(),
     layers: Object.entries(snapshot.layers?.visible ?? {})
       .filter(([, on]) => on === true)
       .map(([id]) => id),
-    ...(species.length < SPECIES_FILTER_IDS.length ? { species } : {}),
+    ...(isSpeciesFiltered(filter) ? { species } : {}),
+    windowHours: sightingHoursOf(snapshot.layers as Partial<LayersState> | undefined),
     selection: snapshot.selection?.evidenceId ?? null,
   };
 }

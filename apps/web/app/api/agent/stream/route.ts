@@ -26,7 +26,8 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z.object({
       bbox,
       time: z.string().refine((value) => Number.isFinite(Date.parse(value)), "time must be ISO 8601"),
       layers: z.array(z.string().max(64)).max(64),
-      species: z.array(z.enum([...SPECIES_IDS, "other"])).max(8).optional(),
+      species: z.array(z.enum([...SPECIES_IDS, "animals", "plants", "others", "other"])).max(8).optional(),
+      windowHours: z.number().int().min(1).max(24 * 31).optional(),
       selection: z.string().max(256).nullable(),
     })
     .optional(),

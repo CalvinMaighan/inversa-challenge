@@ -251,14 +251,17 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
     const l = window.__inversa?.globe()?.layers.find((x) => x.id === id);
     return (window.__inversa?.state("LAYERS") as { visible: Record<string, boolean> }).visible[id] === true && l?.enabled === true && l.count > 0;
   }, STATIONS);
-  // A species switch: the layer stops drawing that species (the breakdown still counts it, for the chips).
+  // A species switch: the layer stops drawing that species (the breakdown, per taxon id, still counts it, for the chips).
+  const sightingsAll = (await layerStat(page, SIGHTINGS)) ?? fail("no sightings stats");
   await page.click(`[data-testid="legend-species-${IGUANA}"]`);
   await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === false, IGUANA);
-  await page.waitForFunction((s) => {
-    const l = window.__inversa?.globe()?.layers.find((x) => x.id === "sightings");
-    const b = l?.breakdown ?? {};
-    return !!l && l.count === Object.entries(b).reduce((n, [k, v]) => (k === s ? n : n + v), 0);
-  }, IGUANA);
+  await page.waitForFunction(
+    ([before, iguanas]) => {
+      const l = window.__inversa?.globe()?.layers.find((x) => x.id === "sightings");
+      return !!l && l.count === before - iguanas;
+    },
+    [sightingsAll.count, sightingsAll.breakdown?.["3"] ?? 0] as const,
+  );
   if ((await page.getAttribute(`[data-species-chip="${IGUANA}"]`, "aria-pressed")) !== "false") fail("the species chip did not follow the legend's switch");
   await page.click(`[data-testid="legend-species-${IGUANA}"]`);
   await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === true, IGUANA);

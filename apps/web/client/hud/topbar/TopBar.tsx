@@ -12,7 +12,7 @@ import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
 import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
-import { ABOUT_SENTENCE } from "../help/content";
+import { ABOUT_SENTENCE, WINDOW_NOTE } from "../help/content";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
@@ -321,6 +321,7 @@ export function AboutContent({
   return (
     <>
       <p>{ABOUT_SENTENCE}</p>
+      <p data-testid="window-note">{WINDOW_NOTE}</p>
       <Fresh aria-label="Data freshness">
         {freshnessLines(list, now).map((line) => (
           <li key={line}>{line}</li>
