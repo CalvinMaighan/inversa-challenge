@@ -23,7 +23,8 @@ import SpeciesBar from "./species/SpeciesBar";
 import Sync from "./Sync";
 import Timeline from "./timeline/Timeline";
 import GlobeTooltip from "./tooltip/GlobeTooltip";
-import TopBar from "./topbar/TopBar";
+import { GUTTER_PX } from "./shell/geometry";
+import TopBar, { ROUND_PX, TOPBAR_WIDTH_CSS } from "./topbar/TopBar";
 
 /**
  * Fills the HUD slot of the globe pane. The slot hands pointer events to its direct children; this root gives
@@ -33,30 +34,28 @@ import TopBar from "./topbar/TopBar";
 const Root = styled.div`
   position: absolute;
   inset: 0;
-  --hud-top: calc(max(var(--gap-s), env(safe-area-inset-top)) + 46px);
-  --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 96px);
+  /* First-paint guesses, measured after (the top row by this root, the timeline by itself): the top row's bottom
+     plus a gutter, and the timeline's top plus a gutter, from the pane's bottom. */
+  --hud-top: calc(max(var(--gap-m), env(safe-area-inset-top)) + ${ROUND_PX}px + var(--gap-m));
+  --hud-bottom: calc(max(var(--gap-m), env(safe-area-inset-bottom)) + 84px + var(--gap-m));
   font-family: var(--font-ui);
 
   && {
     pointer-events: none;
   }
 
-  ${MOBILE} {
-    --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 88px);
-  }
-
   /* A conditions app (carp) has the taller stage timeline. */
   &[data-kind="conditions"] {
-    --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 236px);
+    --hud-bottom: calc(max(var(--gap-m), env(safe-area-inset-bottom)) + 220px + var(--gap-m));
     ${MOBILE} {
-      --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 210px);
+      --hud-bottom: calc(max(var(--gap-m), env(safe-area-inset-bottom)) + 194px + var(--gap-m));
     }
   }
 `;
 
 /**
  * The HUD's controls, clear of the chat card: on the stage layout the shell sets `--chat-inset` to the card's
- * right edge plus a gutter (0 on phones). Brackets and tooltips stay on the root, which matches the globe
+ * right edge (0 on phones), and each control keeps one gutter (`--gap-m`) from this box's edges. Brackets and tooltips stay on the root, which matches the globe
  * canvas pixel for pixel. A size container, so panels size against the room they really have.
  */
 const Chrome = styled.div`
@@ -66,26 +65,22 @@ const Chrome = styled.div`
 `;
 
 /**
- * Top row: the app selector and the species chip on the left, the three icon buttons (About, Theme, Developer)
- * pinned top right with room kept for them (120 px plus a gap); on a narrow pane the row wraps. The row lets the
- * pointer through; its surfaces take it back.
+ * Top row: the app selector and the species chip on the left, the four icon buttons (About, Theme, Look, Developer)
+ * pinned top right with room kept for them (their width plus a gutter); on a narrow pane the row wraps. One gutter
+ * from the pane's top and sides and between the controls. The row lets the pointer through; its surfaces take it
+ * back.
  */
 const TopRow = styled.div`
   position: absolute;
   z-index: 4;
-  top: max(var(--gap-s), env(safe-area-inset-top));
+  top: max(var(--gap-m), env(safe-area-inset-top));
   left: max(var(--gap-m), env(safe-area-inset-left));
   right: max(var(--gap-m), env(safe-area-inset-right));
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 6px;
-  padding-right: 126px;
-
-  ${MOBILE} {
-    left: var(--gap-s);
-    right: var(--gap-s);
-  }
+  gap: var(--gap-m);
+  padding-right: calc(${TOPBAR_WIDTH_CSS} + var(--gap-m));
 `;
 
 export type HudProps = {
@@ -132,7 +127,7 @@ function HudBody({ sync = true }: HudProps) {
     if (!root || !bar || typeof ResizeObserver !== "function") return;
     const apply = () => {
       const offset = bar.getBoundingClientRect().bottom - root.getBoundingClientRect().top;
-      if (offset > 0) root.style.setProperty("--hud-top", `${Math.ceil(offset + 8)}px`);
+      if (offset > 0) root.style.setProperty("--hud-top", `${offset + GUTTER_PX}px`);
     };
     const observer = new ResizeObserver(apply);
     observer.observe(bar);
@@ -152,7 +147,7 @@ function HudBody({ sync = true }: HudProps) {
       <DetectionOverlay focus={focus} layout={`${drawerOpen}:${helpOpen}`} />
       <GlobeTooltip />
       <Chrome data-hud-chrome="">
-        <TopRow ref={barRef}>
+        <TopRow ref={barRef} data-testid="hud-toprow">
           <AppSelect />
           {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
@@ -11,6 +11,7 @@ import styled from "client/styled";
 import { frameIndexAt, type FrameSightings } from "client/threads/api";
 
 import { Dot, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
+import { useHudBottom } from "../shell/use-hud-bottom";
 import { formatClocks, isLive } from "../topbar/clock";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
 import { stepAt, timeAtStep, windowSteps } from "./frames";
@@ -24,14 +25,12 @@ const Root = styled(Surface)`
   position: absolute;
   left: max(var(--gap-m), env(safe-area-inset-left));
   right: max(var(--gap-m), env(safe-area-inset-right));
-  bottom: max(var(--gap-s), env(safe-area-inset-bottom));
+  bottom: max(var(--gap-m), env(safe-area-inset-bottom));
   padding: 6px var(--gap-m) 8px;
   border-radius: var(--radius-m);
   z-index: 4;
 
   ${MOBILE} {
-    left: var(--gap-s);
-    right: var(--gap-s);
     padding: 6px var(--gap-s) 6px;
   }
 `;
@@ -421,22 +420,7 @@ export default function Timeline() {
     }
   };
   const ref = useRef<HTMLDivElement>(null);
-  // The globe's data attribution sits in the globe layer, under the HUD: lift it above the timeline, which would
-  // otherwise cover it and take its clicks (GlobeView reads --globe-credits-bottom).
-  useLayoutEffect(() => {
-    const el = ref.current;
-    const pane = el?.closest<HTMLElement>('[data-slot="globe-pane"]');
-    if (!el || !pane || typeof ResizeObserver !== "function") return;
-    const apply = () => pane.style.setProperty("--globe-credits-bottom", `${Math.ceil(pane.getBoundingClientRect().bottom - el.getBoundingClientRect().top + 4)}px`);
-    const observer = new ResizeObserver(apply);
-    observer.observe(el);
-    observer.observe(pane);
-    apply();
-    return () => {
-      observer.disconnect();
-      pane.style.removeProperty("--globe-credits-bottom");
-    };
-  }, []);
+  useHudBottom(ref);
   return (
     <Root as="section" ref={ref} data-hud-obstacle="" aria-label="Timeline" data-testid="hud-timeline" onKeyDown={onKeyDown}>
       <PlayControls />

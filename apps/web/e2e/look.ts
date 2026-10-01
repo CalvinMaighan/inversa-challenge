@@ -69,7 +69,7 @@ type LookState = {
   compiled: string[];
   errors: string[];
   lastFade: { requestedAt: number; startedAt: number | null; endedAt: number | null; ticks: number[] } | null;
-  scope: { on: boolean; feather: number };
+  scope: { on: boolean; shape: string; size: number; feather: number };
 };
 
 const lookState = (page: Page) => page.evaluate(() => window.__look!.state() as unknown as LookState);
@@ -174,6 +174,137 @@ function edgeAt(on: number[], off: number[]): number {
     if (o >= 24 && on[i]! / o < 0.5) return i;
   }
   return -1;
+}
+
+const SHAPE = (s: string) => `[data-testid=scope-shape] button[data-shape="${s}"]`;
+const SIZE = "[data-testid=scope-size]";
+/** Hides the HUD and the chat card while a window is measured, so only the masked globe is on the page. */
+const HIDE_HUD = '[data-slot="hud"], [data-slot="side"] { visibility: hidden !important; }';
+
+type WindowArea = { area: number; eligible: number; cx: number; cy: number };
+
+/**
+ * The visible window on a screenshot, against the same view with the window off: the sampled pixels (every 2 px) at
+ * least half as bright as unmasked, as an area in px², and the centre of their bounding box. Pixels too dark to
+ * judge (unmasked brightness under 24) are left out and counted.
+ */
+async function windowArea(page: Page, on: Buffer, off: Buffer): Promise<WindowArea> {
+  return page.evaluate(
+    async ({ a, b }) => {
+      const load = async (b64: string) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext("2d")!;
+        g.drawImage(img, 0, 0);
+        return { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data };
+      };
+      const on = await load(a);
+      const off = await load(b);
+      let visible = 0;
+      let judged = 0;
+      let total = 0;
+      let x0 = Infinity;
+      let x1 = -Infinity;
+      let y0 = Infinity;
+      let y1 = -Infinity;
+      for (let y = 0; y < on.h; y += 2) {
+        for (let x = 0; x < on.w; x += 2) {
+          const i = (y * on.w + x) * 4;
+          const o = Math.max(off.d[i]!, off.d[i + 1]!, off.d[i + 2]!);
+          total += 1;
+          if (o < 24) continue;
+          judged += 1;
+          if (Math.max(on.d[i]!, on.d[i + 1]!, on.d[i + 2]!) / o >= 0.5) {
+            visible += 1;
+            x0 = Math.min(x0, x);
+            x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+        }
+      }
+      return { area: visible * 4, eligible: judged / total, cx: (x0 + x1 + 2) / 2, cy: (y0 + y1 + 2) / 2 };
+    },
+    { a: on.toString("base64"), b: off.toString("base64") },
+  );
+}
+
+/**
+ * GE9 (gates/leaf-GE9.md G6): the four shapes give four different visible areas, size 50 about a quarter of size 100,
+ * feather 0 vs 60 only widens the edge, and every window is centred on the stage. Measured on screenshots with the
+ * HUD hidden. `SCOPE-SHAPE circle=<px²> oval=<px²> rounded=<px²> frame=<px²> size50_over_size100=<r>
+ * feather_edge0=<px> feather_edge60=<px> centred=1`.
+ */
+async function shapeChecks(page: Page, pane: Rect, setFeather: (pct: number) => Promise<void>): Promise<boolean> {
+  const vp = page.viewportSize()!;
+  const setSize = async (pct: number) => {
+    await openPopover(page);
+    await page.locator(SIZE).focus();
+    await page.keyboard.press("Home");
+    for (let s = 30; s < pct; s += 5) await page.keyboard.press("ArrowRight");
+    await page.waitForFunction((want) => window.__look!.state().scope.size === want, pct, { timeout: 10_000 });
+  };
+  const setShape = async (shape: string) => {
+    await openPopover(page);
+    await page.locator(SHAPE(shape)).click();
+    await page.waitForFunction((want) => window.__look!.state().scope.shape === want, shape, { timeout: 10_000 });
+  };
+  const shot = async (name?: string) => {
+    await closePopover(page);
+    const style = await page.addStyleTag({ content: HIDE_HUD });
+    await page.waitForTimeout(400);
+    const png = await page.screenshot(name ? { path: path.join(SHOT_DIR, `look-shape-${name}.png`) } : {});
+    await style.evaluate((el) => (el as HTMLElement).remove());
+    return png;
+  };
+  await openPopover(page);
+  await page.locator(SWITCH).click();
+  await page.waitForFunction(() => !window.__look!.state().scope.on, undefined, { timeout: 10_000 });
+  const off = await shot("off");
+  await openPopover(page);
+  await page.locator(SWITCH).click();
+  await page.waitForFunction(() => window.__look!.state().scope.on, undefined, { timeout: 10_000 });
+
+  const areas: Record<string, WindowArea> = {};
+  for (const shape of ["circle", "oval", "rounded", "frame"]) {
+    await setShape(shape);
+    areas[shape] = await windowArea(page, await shot(shape), off);
+  }
+  await setShape("circle");
+  await setSize(50);
+  const half = await windowArea(page, await shot("circle-size50"), off);
+  await setSize(100);
+  const cx = pane.x + pane.width / 2;
+  const cy = pane.y + pane.height / 2;
+  const all = { ...areas, size50: half };
+  const centred = Object.values(all).every((a) => Math.abs(a.cx - cx) <= 3 && Math.abs(a.cy - cy) <= 3);
+  for (const [k, a] of Object.entries(all)) log(`window ${k}: ${a.area} px² visible, centre (${a.cx.toFixed(1)}, ${a.cy.toFixed(1)}) vs stage (${cx}, ${cy}), ${(a.eligible * 100).toFixed(0)}% of the page bright enough to judge`);
+  const ratio = half.area / areas.circle!.area;
+
+  // The soft edge on the circle: feather 0 vs 60, along the rays right and up (the HUD hidden: nothing in the way).
+  const stage = await stageRect(page);
+  const ray = async (pct: number) => {
+    await openPopover(page);
+    await setFeather(pct);
+    return analyze(page, await shot(), pane, 30, stage);
+  };
+  const offRays = await analyze(page, off, pane, 30, stage);
+  const f0 = await ray(0);
+  const f60 = await ray(60);
+  const e0 = Math.max(edgeWidth(f0.rays[0]!, offRays.rays[0]!), edgeWidth(f0.rays[2]!, offRays.rays[2]!));
+  const e60 = Math.max(edgeWidth(f60.rays[0]!, offRays.rays[0]!), edgeWidth(f60.rays[2]!, offRays.rays[2]!));
+  await openPopover(page);
+  await setFeather(11);
+  const distinct = new Set(Object.values(areas).map((a) => Math.round(a.area / 1000))).size === 4;
+  console.log(
+    `SCOPE-SHAPE circle=${areas.circle!.area} oval=${areas.oval!.area} rounded=${areas.rounded!.area} frame=${areas.frame!.area} size50_over_size100=${ratio.toFixed(2)} feather_edge0=${e0} feather_edge60=${e60} centred=${centred ? 1 : 0}`,
+  );
+  log(`shapes distinct ${distinct}; viewport ${vp.width}×${vp.height}`);
+  return distinct && ratio >= 0.2 && ratio <= 0.3 && e60 > e0 && centred;
 }
 
 const median = (xs: number[]) => {
@@ -318,6 +449,9 @@ async function main() {
     if (!scopeOn || !scopeOff || e60 <= e0 || e0 > 4 || !centred) failed = true;
     await setFeather(11);
 
+    // ---- 3b. GE9: shape, size and soft edge as three controls -------------------------------------------------------
+    if (!(await shapeChecks(page, pane, setFeather))) failed = true;
+
     // ---- 4. keyboard --------------------------------------------------------------------------------------
     await closePopover(page);
     await page.locator(BUTTON).focus();
@@ -343,14 +477,23 @@ async function main() {
     // ---- 5. share link ------------------------------------------------------------------------------------
     await pick(page, "flir");
     await setFeather(60);
+    // GE9: a shape and a size ride along.
+    await page.locator(SHAPE("rounded")).click();
+    await page.locator(SIZE).focus();
+    await page.keyboard.press("Home");
+    for (let s = 30; s < 70; s += 5) await page.keyboard.press("ArrowRight");
     await page.locator(SWITCH).click();
-    await page.waitForFunction(() => /look=flir/.test(location.hash) && /scope=0/.test(location.hash) && /feather=60/.test(location.hash), undefined, { timeout: 10_000 });
+    await page.waitForFunction(
+      () => /look=flir/.test(location.hash) && /scope=0/.test(location.hash) && /feather=60/.test(location.hash) && /shape=rounded/.test(location.hash) && /size=70/.test(location.hash),
+      undefined,
+      { timeout: 10_000 },
+    );
     const hash = await page.evaluate(() => location.hash);
     await page.reload({ waitUntil: "load" });
     await page.waitForFunction(() => Boolean(window.__look) && window.__look!.state().shown === "flir", undefined, { timeout: LOAD_TIMEOUT_MS });
     const restored = await lookState(page);
-    const link = restored.target === "flir" && !restored.scope.on && restored.scope.feather === 60;
-    log(`share link ${hash.replace(/^#/, "").split("&").filter((f) => /^(look|scope|feather)=/.test(f)).join("&")} → reopened as ${restored.target}, scope ${restored.scope.on ? "on" : "off"}, feather ${restored.scope.feather}`);
+    const link = restored.target === "flir" && !restored.scope.on && restored.scope.feather === 60 && restored.scope.shape === "rounded" && restored.scope.size === 70;
+    log(`share link ${hash.replace(/^#/, "").split("&").filter((f) => /^(look|scope|shape|size|feather)=/.test(f)).join("&")} → reopened as ${restored.target}, scope ${restored.scope.on ? "on" : "off"}, shape ${restored.scope.shape}, size ${restored.scope.size}, feather ${restored.scope.feather}`);
     console.log(`LOOK link=${link ? "ok" : "fail"}`);
     if (!link) failed = true;
 
@@ -378,6 +521,28 @@ async function main() {
       failed = true;
     }
     await context.close();
+
+    // GE9 evidence: the four shapes at 1440×900 with the Look popover open top right (docs/evidence/ge9-shape-*.png).
+    const wide = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await wide.clock.install({ time: new Date(FIXTURE_CLOCK) });
+    for (const [name, extra] of [
+      ["circle", ""],
+      ["oval", "&shape=oval"],
+      ["rounded-70", "&shape=rounded&size=70"],
+      ["frame", "&shape=frame"],
+    ] as const) {
+      const shots = await wide.newPage();
+      await shots.goto(`${stack.origin}/?app=python${LINK}${extra}`, { waitUntil: "load" });
+      await shots.waitForFunction(() => Boolean(window.__look) && window.__inversa?.globe() !== null, undefined, { timeout: LOAD_TIMEOUT_MS });
+      await shots.waitForTimeout(5_000);
+      await shots.locator(BUTTON).click();
+      await shots.locator(POPOVER).waitFor({ timeout: 10_000 });
+      await shots.waitForTimeout(400);
+      await shots.screenshot({ path: path.join(SHOT_DIR, `ge9-shape-${name}-1440.png`) });
+      log(`screenshot ge9-shape-${name}-1440.png (${JSON.stringify((await lookState(shots)).scope)})`);
+      await shots.close();
+    }
+    await wide.close();
   } finally {
     await browser.close();
     await stack.stop();

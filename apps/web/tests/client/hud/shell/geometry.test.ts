@@ -26,7 +26,7 @@ describe("stage geometry", () => {
 
   test("1440×900: the stage fits between two narrowest cards", () => {
     expect(stageDiameter(1440, 900)).toBe(1440 - 2 * SIDE_ROOM_PX);
-    expect(stageDiameter(1440, 900)).toBe(656);
+    expect(stageDiameter(1440, 900)).toBe(672);
   });
 
   test("1920×1080: as tall as the screen less the gutters", () => {
@@ -38,7 +38,7 @@ describe("stage geometry", () => {
   });
 
   test("portrait tablet: bounded by the width", () => {
-    expect(stageDiameter(768, 1024)).toBe(768 - 2 * GUTTER_PX);
+    expect(stageDiameter(800, 1200)).toBe(800 - 2 * GUTTER_PX);
   });
 
   test("degenerate viewports give 0, never a negative size", () => {
@@ -53,11 +53,11 @@ describe("stage geometry", () => {
       expect(vw / 2 - right).toBe(CENTRE_CLEAR_PX);
     }
     expect(cardMaxWidth(10)).toBe(0);
-    expect(CARD_MAX_WIDTH_CSS).toBe("calc(50vw - 64px)");
+    expect(CARD_MAX_WIDTH_CSS).toBe("calc(50vw - 60px)");
   });
 
   test("the CSS mirrors the function", () => {
-    expect(STAGE_DIAMETER_CSS).toBe("min(100dvh - 32px, 100vw - 32px, max(100vw - 784px, 72dvh))");
+    expect(STAGE_DIAMETER_CSS).toBe("min(100dvh - 24px, 100vw - 24px, max(100vw - 768px, 72dvh))");
     expect(SCOPE_MASK_CSS).toContain(`var(--scope-feather, ${DEFAULT_FEATHER})`);
     expect(SCOPE_MASK_CSS.startsWith("radial-gradient(circle calc(")).toBe(true);
     expect(SCOPE_CLIP_CSS.startsWith("circle(calc(")).toBe(true);

@@ -117,8 +117,8 @@ Open the same app in two browser windows. In the **Notes** tab, pick a spot on t
 | Map | About (ⓘ) | Top right: what the map is, how fresh its data is, Focus, Help, Data sources and More data (for experts). |
 | Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale, down), push or poll, and lag. |
 | Map | More data (for experts) | Inside About: a switch, legend and live count for every expert layer (stations, alerts, hotspots, temperature grids, missions, cursors). |
-| Map | Look | Bottom of the map: seven looks (Normal, CRT, NVG, FLIR, Noir, Anime, Snow) and the scope, a round window with a Soft edge slider. Changes no data. |
-| Map | Layers | Bottom of the map, beside Look: sightings and field notes (on at first), Ships (carp and lionfish) and Water and weather, one plain line each; every layer follows the timeline. |
+| Map | Look | Top right, the eye: seven looks (Normal, CRT, NVG, FLIR, Noir, Anime, Snow) and the map window: on or off, its shape (circle, oval, rounded, frame), its size and its soft edge. Changes no data. |
+| Map | Layers | Bottom of the map, beside the place search: sightings and field notes (on at first), Ships (carp and lionfish) and Water and weather, one plain line each; every layer follows the timeline. |
 | Map (carp, lionfish) | Ships | Inside Layers: AIS ships by type with fading trails, moving with the timeline; a click opens the ship with its VesselFinder page in a new tab. |
 | Map | Focus | Inside About: dims the globe outside a circle around the selection. |
 | Map | Theme (◐) | Top right: light, dark or tactical, remembered. |

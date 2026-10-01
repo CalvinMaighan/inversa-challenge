@@ -7,6 +7,7 @@
 import { get } from "@calvinjs/active-state";
 
 import type { BBox } from "shared/agent/events";
+import { ROUNDED_CORNER_SHARE } from "client/hud/shell/scope";
 import { VIEW, type ViewState } from "client/state/view";
 
 import { getGlobe } from "./api";
@@ -14,8 +15,11 @@ import type { CameraPose } from "./camera";
 
 /** Pixels, relative to the pane's top-left corner. */
 export type Rect = { left: number; top: number; right: number; bottom: number };
-/** The visible disc of the stage, pane pixels: centre and the radius of its opaque part. */
-export type Circle = { cx: number; cy: number; r: number };
+/**
+ * The visible disc of the stage, pane pixels: centre and the radius of its opaque part. An oval window gives its
+ * vertical semi-axis as `ry` (`r` is then the horizontal one).
+ */
+export type Circle = { cx: number; cy: number; r: number; ry?: number };
 
 const METRES_PER_DEG = 111_320;
 /** Cesium's default field of view (60°) spans the larger of the canvas's two sides. */
@@ -104,6 +108,15 @@ export function freeRect(pane: Rect, obstacles: readonly Rect[]): Rect {
  */
 export function visibleRect(free: Rect, circle: Circle | null, aspect = 1): Rect {
   if (!circle) return free;
+  // An oval: squash the page vertically until the oval is a circle, search there, stretch the answer back.
+  if (circle.ry !== undefined && circle.ry > 0 && circle.r > 0 && Math.abs(circle.ry - circle.r) > 0.5) {
+    const k = circle.r / circle.ry;
+    const squash = (y: number) => circle.cy + (y - circle.cy) * k;
+    const stretch = (y: number) => circle.cy + (y - circle.cy) / k;
+    const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+    const r = visibleRect({ ...free, top: squash(free.top), bottom: squash(free.bottom) }, { cx: circle.cx, cy: circle.cy, r: circle.r }, a / k);
+    return { ...r, top: stretch(r.top), bottom: stretch(r.bottom) };
+  }
   const top0 = Math.max(free.top, circle.cy - circle.r);
   const bottom0 = Math.min(free.bottom, circle.cy + circle.r);
   const a = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
@@ -135,7 +148,10 @@ export function visibleRect(free: Rect, circle: Circle | null, aspect = 1): Rect
   return best ?? { left: circle.cx, top: circle.cy, right: circle.cx, bottom: circle.cy };
 }
 
-/** The live pane: its size, the free rect and the stage's opaque disc (null off the stage layout or scope off). */
+/**
+ * The live pane: its size, the free rect and the stage's opaque disc (null off the stage layout, with the window
+ * off, or for a rectangular window, whose opaque part then bounds the free rect instead).
+ */
 export function paneFrame(): { width: number; height: number; free: Rect; circle: Circle | null } | null {
   if (typeof document === "undefined") return null;
   const pane = document.querySelector<HTMLElement>('[data-slot="globe-pane"]');
@@ -145,19 +161,41 @@ export function paneFrame(): { width: number; height: number; free: Rect; circle
   // The top bar is no obstacle to clicks (its middle lets them through), but its buttons sit over the map.
   const obstacles = [...pane.querySelectorAll<HTMLElement>('[data-hud-obstacle], [data-testid="hud-topbar"]')].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
   const free = freeRect(p, obstacles);
-  return { width: p.width, height: p.height, free, circle: stageCircle(p) };
+  const win = stageWindow(p);
+  if (win && "left" in win) {
+    const clipped = { left: Math.max(free.left, win.left), top: Math.max(free.top, win.top), right: Math.min(free.right, win.right), bottom: Math.min(free.bottom, win.bottom) };
+    return { width: p.width, height: p.height, free: clipped.right > clipped.left && clipped.bottom > clipped.top ? clipped : free, circle: null };
+  }
+  return { width: p.width, height: p.height, free, circle: win };
 }
 
-/** `[data-stage]`'s disc in pane pixels, shrunk to its opaque part (the feather fades the rest to black). */
-function stageCircle(pane: DOMRect): Circle | null {
+/**
+ * `[data-stage]`'s window in pane pixels, shrunk to its opaque part (the soft edge fades the rest to black): a disc
+ * or an oval for the round shapes, a rect for `rounded` and `frame` (client/hud/shell/scope.ts). The soft edge is
+ * `--scope-feather` of half the window's shorter side.
+ */
+function stageWindow(pane: DOMRect): Circle | Rect | null {
   const shell = document.querySelector<HTMLElement>("[data-shell]");
   const stage = document.querySelector<HTMLElement>("[data-stage]");
   if (!shell || !stage || shell.dataset.scope === "off") return null;
   const s = stage.getBoundingClientRect();
   if (s.width < 50 || s.height < 50) return null;
-  const feather = Number.parseFloat(getComputedStyle(shell).getPropertyValue("--scope-feather"));
-  const opaque = 1 - (Number.isFinite(feather) ? Math.min(1, Math.max(0, feather)) : 0);
-  return { cx: s.left + s.width / 2 - pane.left, cy: s.top + s.height / 2 - pane.top, r: (s.width / 2) * opaque };
+  const share = Number.parseFloat(getComputedStyle(shell).getPropertyValue("--scope-feather"));
+  const short = Math.min(s.width, s.height);
+  const f = (Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0) * (short / 2);
+  const cx = s.left + s.width / 2 - pane.left;
+  const cy = s.top + s.height / 2 - pane.top;
+  const shape = shell.dataset.shape ?? "circle";
+  if (shape === "circle" || shape === "oval") {
+    const rx = Math.max(0, s.width / 2 - f);
+    const ry = Math.max(0, s.height / 2 - f);
+    return shape === "circle" ? { cx, cy, r: rx } : { cx, cy, r: rx, ry };
+  }
+  // A rounded corner's opaque arc cuts about 0.3 of its radius off the corner: keep that much clear too.
+  const corner = shape === "rounded" ? Math.max(0, short * ROUNDED_CORNER_SHARE - f) * 0.3 : 0;
+  const hw = Math.max(0, s.width / 2 - f - corner);
+  const hh = Math.max(0, s.height / 2 - f - corner);
+  return { left: cx - hw, top: cy - hh, right: cx + hw, bottom: cy + hh };
 }
 
 const inset = (r: Rect, px: number): Rect => {

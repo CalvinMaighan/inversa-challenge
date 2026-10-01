@@ -5,28 +5,33 @@ import { get, subscribe } from "@calvinjs/active-state";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
-import { featherOf, SCOPE_FEATHER, SCOPE_ON, scopeOnOf } from "client/state/look";
+import { featherOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf } from "client/state/look";
 import styled from "client/styled";
 
 import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_CLIP_CSS, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
+import { scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
 
 /**
- * The page frame (docs/GODS_EYE.md GC1). From 768 px up: a black page, the globe in a centred circular stage,
- * the chat card floating at the left, the HUD over the whole page (the sighting card at the right, the three
- * icon buttons top right, the timeline and the bottom bar). Under 768 px the phone docks of T40: a full-screen
- * globe, the chat as a bottom sheet, the evidence drawer as a bottom sheet.
+ * The page frame (docs/GODS_EYE.md GC1). From 768 px up: a black page, the globe in a centred window on the stage,
+ * the chat card floating at the left, the HUD over the whole page (the sighting card at the right, the four icon
+ * buttons top right, the timeline and the bottom bar). Under 768 px the phone docks of T40: a full-screen globe,
+ * the chat as a bottom sheet, the evidence drawer as a bottom sheet.
+ *
+ * Spacing (GE9): one unit, `--gap-m` (12 px, `GUTTER_PX` in maths), between the viewport edges, the cards, the bars
+ * and the buttons.
  *
  * - `side`: the chat card. On the stage layout it is a HUD obstacle inside the globe pane, so camera fits and
- *   label placement keep clear of it; the shell writes its right edge plus a gutter to `--chat-inset`, which
- *   the HUD chrome and the globe attribution start from.
- * - `globe`: fills the pane; on the stage layout its canvas is masked to the circle (feathered edge,
- *   `--scope-feather`) and clipped there for the pointer, so the black margin takes no clicks.
+ *   label placement keep clear of it; the shell writes its right edge to `--chat-inset`, where the HUD chrome
+ *   starts (each control then keeps one gutter from it).
+ * - `globe`: fills the pane; on the stage layout its canvas is masked to the map window (shape, size and soft
+ *   edge, client/hud/shell/scope.ts) and clipped there for the pointer, so the black margin takes no clicks.
  * - `hud`: fills the pane above the globe, a size container (`globe`) for the HUD's container queries. The
  *   layer lets the pointer through; its direct children take it back.
  *
- * `[data-stage]` marks the circle (layout only, nothing drawn). The circle is the app's one scope (GE7): the Look
- * popover's switch and slider write SCOPE_ON and SCOPE_FEATHER (client/state/look.ts), and the shell follows them
- * (`data-scope="off"` drops the mask, `--scope-feather` sets the soft edge as a share of the radius).
+ * `[data-stage]` marks the window's box (layout only, nothing drawn). It is the app's one scope (GE7): the Look
+ * popover writes SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE and SCOPE_FEATHER (client/state/look.ts), and the shell follows
+ * them (`data-scope="off"` drops the mask; `--scope-mask` and `--scope-clip` draw the window, `--scope-w`,
+ * `--scope-h` and `--scope-corner` size `[data-stage]`). Before hydration the CSS defaults draw the default circle.
  */
 export type StageShellSlots = {
   side?: ReactNode;
@@ -34,8 +39,8 @@ export type StageShellSlots = {
   hud?: ReactNode;
 };
 
-/** First-paint guess of the chat card's right edge plus a gutter (the 420 px default card); measured after. */
-const CHAT_INSET_GUESS_PX = GUTTER_PX + 420 + GUTTER_PX;
+/** First-paint guess of the chat card's right edge (the 420 px default card after its gutter); measured after. */
+const CHAT_INSET_GUESS_PX = GUTTER_PX + 420;
 
 const Main = styled.main`
   position: fixed;
@@ -64,7 +69,7 @@ const GlobePane = styled.div<{ $sheet: boolean }>`
   }
 `;
 
-/** The circle the globe shows through: centred on the page, as large as the cards allow. Nothing drawn. */
+/** The map window's box: centred on the page. Nothing drawn. */
 const Stage = styled.div`
   display: none;
 
@@ -73,12 +78,20 @@ const Stage = styled.div`
     position: absolute;
     left: 50%;
     top: 50%;
-    width: ${STAGE_DIAMETER_CSS};
-    height: ${STAGE_DIAMETER_CSS};
+    width: var(--scope-w, ${STAGE_DIAMETER_CSS});
+    height: var(--scope-h, ${STAGE_DIAMETER_CSS});
     transform: translate(-50%, -50%);
-    border-radius: 50%;
+    border-radius: var(--scope-corner, 50%);
     pointer-events: none;
   }
+`;
+
+/** The window mask and pointer clip on a page-sized element (the canvas, or a layer drawn in canvas pixels). */
+const SCOPE_RULES = `
+  mask-image: var(--scope-mask, ${SCOPE_MASK_CSS});
+  mask-repeat: no-repeat;
+  mask-position: 0 0;
+  clip-path: var(--scope-clip, ${SCOPE_CLIP_CSS});
 `;
 
 const GlobeLayer = styled.div`
@@ -90,26 +103,20 @@ const GlobeLayer = styled.div`
     & [data-globe] {
       background: #000;
     }
-    /* The attribution stays readable on the black page, right of the chat card. */
-    & [data-globe-credits] {
-      left: calc(var(--chat-inset) + 6px);
-    }
     [data-shell]:not([data-scope="off"]) & [data-globe] canvas {
-      mask-image: ${SCOPE_MASK_CSS};
-      clip-path: ${SCOPE_CLIP_CSS};
+      ${SCOPE_RULES}
     }
   }
 `;
 
 /**
- * For a layer drawn over the globe in canvas pixels (carp's site buttons, the lionfish overlay): the same circle
+ * For a layer drawn over the globe in canvas pixels (carp's site buttons, the lionfish overlay): the same window
  * mask and hit area as the canvas, so nothing of the map shows or takes clicks in the black margin.
  */
 export const STAGE_SCOPE_CSS = `
   ${STAGE_MEDIA} {
     [data-shell]:not([data-scope="off"]) & {
-      mask-image: ${SCOPE_MASK_CSS};
-      clip-path: ${SCOPE_CLIP_CSS};
+      ${SCOPE_RULES}
     }
   }
 `;
@@ -136,9 +143,9 @@ const SideSlot = styled.div`
 
   ${STAGE_MEDIA} {
     position: absolute;
-    top: ${GUTTER_PX}px;
-    bottom: ${GUTTER_PX}px;
-    left: max(${GUTTER_PX}px, env(safe-area-inset-left));
+    top: var(--gap-m);
+    bottom: var(--gap-m);
+    left: max(var(--gap-m), env(safe-area-inset-left));
     right: auto;
     z-index: 20;
   }
@@ -164,11 +171,23 @@ export function useStageLayout(): boolean {
   return useSyncExternalStore(subscribeStage, () => window.matchMedia(STAGE_QUERY).matches, () => false);
 }
 
-/** The circle on or off and its feather, from SCOPE_ON and SCOPE_FEATHER (0..100 percent of the radius). */
+/** The window on or off, and its shape, size and soft edge for the shell's size, from the four keys. */
 function applyScope(shell: HTMLElement): void {
   if (scopeOnOf(get(SCOPE_ON))) delete shell.dataset.scope;
   else shell.dataset.scope = "off";
-  shell.style.setProperty("--scope-feather", featherValue(featherOf(get(SCOPE_FEATHER)) / 100));
+  const vw = shell.clientWidth;
+  const vh = shell.clientHeight;
+  if (vw <= 0 || vh <= 0) return;
+  const win = scopeWindow(vw, vh, { shape: get(SCOPE_SHAPE), size: get(SCOPE_SIZE), feather: get(SCOPE_FEATHER) });
+  shell.dataset.shape = win.shape;
+  const style = shell.style;
+  style.setProperty("--scope-mask", scopeMaskCss(win, vw, vh));
+  style.setProperty("--scope-clip", scopeClipCss(win));
+  style.setProperty("--scope-w", `${win.width}px`);
+  style.setProperty("--scope-h", `${win.height}px`);
+  style.setProperty("--scope-corner", win.shape === "oval" ? "50%" : `${win.corner}px`);
+  // The soft edge as a share of half the shorter side: the first-paint circle and the camera framings read it.
+  style.setProperty("--scope-feather", featherValue(featherOf(get(SCOPE_FEATHER)) / 100));
 }
 
 export default function StageShell({ side, globe, hud }: StageShellSlots) {
@@ -179,21 +198,23 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
   const sideRef = useRef<HTMLDivElement>(null);
   const hasSide = side !== undefined && side !== null;
 
-  // The scope follows the Look keys (after hydration, so the server HTML never disagrees with the first paint).
+  // The window follows the Look keys and the page size (after hydration, so the server HTML never disagrees with
+  // the first paint).
   useLayoutEffect(() => {
     const main = mainRef.current;
     if (!main) return;
     const sync = () => applyScope(main);
     sync();
-    const offOn = subscribe(SCOPE_ON, sync);
-    const offFeather = subscribe(SCOPE_FEATHER, sync);
+    const offs = [SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER].map((k) => subscribe(k, sync));
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(sync) : null;
+    observer?.observe(main);
     return () => {
-      offOn();
-      offFeather();
+      for (const off of offs) off();
+      observer?.disconnect();
     };
   }, []);
 
-  // The chat card's right edge, for the HUD chrome and the attribution. It changes when the card is resized.
+  // The chat card's right edge, where the HUD chrome starts. It changes when the card is resized.
   useLayoutEffect(() => {
     const main = mainRef.current;
     const slot = sideRef.current;
@@ -203,7 +224,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
       if (stage && !slot) main.style.setProperty("--chat-inset", "0px");
       return;
     }
-    const apply = () => main.style.setProperty("--chat-inset", `${Math.ceil(slot.getBoundingClientRect().right + GUTTER_PX)}px`);
+    const apply = () => main.style.setProperty("--chat-inset", `${slot.getBoundingClientRect().right}px`);
     const observer = new ResizeObserver(apply);
     observer.observe(slot);
     apply();

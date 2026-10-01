@@ -6,14 +6,18 @@
  * the docked sheets (chat sheet at the bottom, evidence as a bottom sheet).
  */
 import { SHEET_BREAKPOINT_PX } from "client/agent/layout/geometry";
+import { GAP_M_PX } from "client/themes/palette";
 
 /** Stage layout from this viewport width up; the phone docks below it. Same edge as the chat sheet. */
 export const STAGE_MIN_PX = SHEET_BREAKPOINT_PX;
 export const STAGE_QUERY = `(min-width: ${STAGE_MIN_PX}px)`;
 export const STAGE_MEDIA = `@media ${STAGE_QUERY}`;
 
-/** Space between the viewport edge, the cards and the stage. */
-export const GUTTER_PX = 16;
+/**
+ * Space between the viewport edge, the cards, the bars and the stage (GE9): the `--gap-m` token, one unit everywhere.
+ * CSS on the stage chrome writes `var(--gap-m)`; maths uses this number.
+ */
+export const GUTTER_PX = GAP_M_PX;
 /** Room a side keeps for a card at its narrowest (360 px) plus a gutter each side of it. */
 export const SIDE_ROOM_PX = 360 + 2 * GUTTER_PX;
 /** Short screens: the stage keeps at least this share of the viewport height, cards then overlap its edges. */
@@ -51,7 +55,8 @@ export function featherValue(feather: number): string {
 }
 
 /**
- * The circular mask over the globe canvas: opaque inside, fading to transparent (the black page) over the
+ * The default window (circle, size 100) as CSS alone, for the first paint before the shell measures the page and
+ * sets `--scope-mask` (client/hud/shell/scope.ts): opaque inside, fading to transparent (the black page) over the
  * feather share of the radius, read from `--scope-feather` on the shell.
  */
 const STAGE_RADIUS_CSS = `calc(${STAGE_DIAMETER_CSS} / 2)`;

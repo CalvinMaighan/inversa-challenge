@@ -8,6 +8,7 @@ import { getGlobe } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
+import { GUTTER_PX } from "client/hud/shell/geometry";
 import { useStageLayout } from "client/hud/shell/StageShell";
 import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
 import { SELECTION, type SelectionState } from "client/state/selection";
@@ -33,7 +34,7 @@ const Banner = styled(Surface)`
   max-width: 640px;
   margin: 0 auto;
   display: flex;
-  gap: 10px;
+  gap: var(--gap-m);
   align-items: flex-start;
   padding: 8px 8px 8px 12px;
   border-left: 3px solid var(--warn);
@@ -45,8 +46,6 @@ const Banner = styled(Surface)`
     padding-left: 14px;
   }
   ${MOBILE} {
-    left: var(--gap-s);
-    right: var(--gap-s);
     font-size: 12px;
   }
   &[data-expanded="false"] {
@@ -88,14 +87,14 @@ const AsOf = styled(Surface)`
   position: absolute;
   z-index: 4;
   left: calc(50% + (var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)) / 2);
-  /* Above the bottom bar (Look, Layers). */
-  bottom: calc(var(--hud-bottom) + var(--gap-s) + 44px);
+  /* One gutter above the bottom bar (search, Layers: 32 px pills), itself a gutter above the timeline. */
+  bottom: calc(var(--hud-bottom) + 32px + var(--gap-m));
   transform: translateX(-50%);
   width: max-content;
   max-width: min(600px, calc(100cqw - 2 * var(--gap-m) - var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)));
   ${MOBILE} {
     left: 50%;
-    max-width: calc(100cqw - 2 * var(--gap-s));
+    max-width: calc(100cqw - 2 * var(--gap-m));
   }
   padding: 6px 12px;
   border: 1px solid color-mix(in oklch, var(--warn) 60%, transparent);
@@ -226,7 +225,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const panelOpen = view.panelOpen ?? !mobile;
   // Room the banner and the as-of chip keep for the open survey panel: on the left of the docked layout, on the
   // right of the stage layout, where the panel opens in the right card region (client/hud/Panel.tsx, GE7).
-  const panelRoom = panelOpen && !mobile ? `${PANEL_WIDTH + 12}px` : "0px";
+  const panelRoom = panelOpen && !mobile ? `${PANEL_WIDTH + GUTTER_PX}px` : "0px";
   const panelVars = { [stage ? "--lf-panel-r" : "--lf-panel-l"]: panelRoom } as Record<string, string>;
   const onHelp = (t: HelpTopic | "all") => setView({ help: t });
   const show = { reports: visible.sightings !== false, heat: view.heat, priority: visible.hotspots !== false, field: view.field && live };

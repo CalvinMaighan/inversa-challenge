@@ -8,8 +8,6 @@ import { Icon, IconButton, MOBILE, Surface } from "./primitives";
 import { useStageLayout } from "./shell/StageShell";
 
 type Side = "left" | "right";
-/** Height kept free under a left panel for the attribution line (10 px text, lifted 4 px above the timeline). */
-const CREDITS_ROOM_PX = 16;
 
 /**
  * Edge panel: a column along the left or right edge between the top bar and the timeline on desktop, a bottom
@@ -22,9 +20,9 @@ const CREDITS_ROOM_PX = 16;
  */
 const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
+  /* One gutter below the top row and one above the timeline (both measured by the HUD, GE9). */
   top: var(--hud-top);
-  /* A left panel stops a line short of the timeline: the globe's data attribution sits there, under the HUD. */
-  bottom: calc(var(--hud-bottom) + ${(p) => (p.$side === "left" ? CREDITS_ROOM_PX : 0)}px);
+  bottom: var(--hud-bottom);
   ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom)));` : "")}
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
   width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
@@ -70,7 +68,7 @@ const Header = styled.header`
       left: 50%;
       width: 36px;
       height: 4px;
-      margin-left: -18px;
+      transform: translateX(-50%);
       border-radius: 2px;
       background: var(--border);
     }
@@ -106,7 +104,7 @@ const Body = styled.div`
 /** Collapsed panel: a tab on the panel's edge (desktop), or a pill above the timeline (phone). */
 const Tab = styled(Surface.withComponent("button"))<{ $side: Side }>`
   position: absolute;
-  top: calc(var(--hud-top) + var(--gap-s));
+  top: var(--hud-top);
   ${(p) => p.$side}: 0;
   display: flex;
   align-items: center;
@@ -128,7 +126,7 @@ const Tab = styled(Surface.withComponent("button"))<{ $side: Side }>`
 
   ${MOBILE} {
     top: auto;
-    bottom: calc(var(--hud-bottom) + var(--gap-s));
+    bottom: var(--hud-bottom);
     ${(p) => p.$side}: var(--gap-m);
     writing-mode: horizontal-tb;
     padding: 8px 12px;
@@ -226,6 +224,7 @@ export default function Panel({ side: asked, title, open, onClose, onOpen, tabLa
       $side={side}
       $width={width}
       $maxHeight={maxHeight}
+      data-height-capped={maxHeight ? "" : undefined}
       aria-label={typeof title === "string" ? title : tabLabel}
       data-testid={rest["data-testid"]}
       // Esc closes the panel the keyboard is in, and only that one (the agent card has its own Esc).
