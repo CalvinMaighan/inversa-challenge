@@ -284,7 +284,12 @@ async function main(): Promise<number> {
     const noKey = await openApp(browser, stack, stub.origin, false, blocked);
     await noKey.page.locator("[data-testid=search-button]").click();
     await noKey.page.locator("[data-testid=search-input]").waitFor();
-    const noticeAtOpen = await noKey.page.locator("[data-testid=search-notice]").textContent();
+    const noticeAtOpen = await noKey.page
+      .locator("[data-testid=search-notice]")
+      .textContent({ timeout: 5_000 })
+      .catch(() =>
+        fail("no 'limited' notice without a stored key: this build has NEXT_PUBLIC_GOOGLE_MAPS_API_KEY baked in (an e2e build made under doppler, e.g. by e2e:a11y); run without E2E_SKIP_BUILD"),
+      );
     await noKey.page.keyboard.type("Florida Bay", { delay: 40 });
     await noKey.page.waitForFunction(() => document.querySelectorAll('[data-testid=search-results] [role=option][data-source="photon"]').length > 0, undefined, { timeout: 15_000 });
     const notice = await noKey.page.locator("[data-testid=search-notice]").textContent();
