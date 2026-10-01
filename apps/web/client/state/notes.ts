@@ -22,9 +22,22 @@ export type NotePin = {
   color: string;
 };
 
+/** A peer's unsaved edit of a note as it streams in (PLAN.md C-A7 `note.delta`). */
+export type NoteLive = {
+  /** The editor's node id (the channel's peer id, set by the rtc worker). */
+  from: string;
+  text: string;
+  /** The editor's caret, in UTF-16 code units of `text`. */
+  caret: number;
+  /** Last delta, ms since epoch. */
+  at: number;
+};
+
 export type NotesState = {
   /** Live (non-deleted) notes on the board, newest first. */
   pins: NotePin[];
+  /** Notes a peer is editing right now, by note id. */
+  live: Record<string, NoteLive>;
   /** "Pick on map" is armed: the next globe click lands in `pick` instead of selecting evidence. */
   picking: boolean;
   /** The last picked globe point, consumed by the composer. */
@@ -33,7 +46,7 @@ export type NotesState = {
   prefill: { lon: number; lat: number; sightingId: string } | null;
 };
 
-const defaults: NotesState = { pins: [], picking: false, pick: null, prefill: null };
+const defaults: NotesState = { pins: [], live: {}, picking: false, pick: null, prefill: null };
 
 export const NOTES = key("NOTES", defaults);
 
@@ -42,6 +55,19 @@ const same = (a: readonly NotePin[], b: readonly NotePin[]) => a.length === b.le
 /** Replace the pins; a no-op when nothing changed, so chat traffic does not redraw the globe. */
 export function setNotePins(pins: NotePin[]): void {
   set<NotesState>(NOTES, (prev = NOTES.defaults) => (same(prev.pins, pins) ? prev : { ...prev, pins }));
+}
+
+/** A peer's live edit of `noteId`, or null once it saved, cancelled or dropped off. */
+export function setNoteLive(noteId: string, live: NoteLive | null): void {
+  set<NotesState>(NOTES, (prev = NOTES.defaults) => {
+    if (live === null) {
+      if (!(noteId in prev.live)) return prev;
+      const next = { ...prev.live };
+      delete next[noteId];
+      return { ...prev, live: next };
+    }
+    return { ...prev, live: { ...prev.live, [noteId]: live } };
+  });
 }
 
 export function setNotePicking(picking: boolean): void {

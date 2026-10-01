@@ -18,7 +18,10 @@ const OBSERVATIONS: &[(&str, &str)] = &[
     ("0004_taxon_info", include_str!("../../migrations/observations/0004_taxon_info.sql")),
     ("0005_taxon_ancestry", include_str!("../../migrations/observations/0005_taxon_ancestry.sql")),
 ];
-const TEAM: &[(&str, &str)] = &[("0001_init", include_str!("../../migrations/team/0001_init.sql"))];
+const TEAM: &[(&str, &str)] = &[
+    ("0001_init", include_str!("../../migrations/team/0001_init.sql")),
+    ("0002_message_thread", include_str!("../../migrations/team/0002_message_thread.sql")),
+];
 
 pub fn migrations(name: &str) -> &'static [(&'static str, &'static str)] {
     match name {

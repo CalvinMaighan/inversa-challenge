@@ -150,6 +150,38 @@ pub struct MessageView {
     pub body: String,
     pub hlc: String,
     pub node_id: String,
+    /// Direct message (PLAN.md C-A7): the addressee and its thread; `None` for a team-wide message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread: Option<String>,
+}
+
+/// A message op's value: a plain string body, or `{body, to?, thread?}` for a direct message.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MessageValue {
+    body: String,
+    #[serde(default)]
+    to: Option<String>,
+    #[serde(default)]
+    thread: Option<String>,
+}
+
+fn message_value(value: &Value) -> Result<MessageValue, String> {
+    if let Some(body) = value.as_str() {
+        return Ok(MessageValue { body: body.to_string(), to: None, thread: None });
+    }
+    if !value.is_object() {
+        return Err("message body must be a string or {body, to, thread}".into());
+    }
+    let v: MessageValue = serde_json::from_value(value.clone()).map_err(|e| format!("message value: {e}"))?;
+    for (name, id) in [("to", &v.to), ("thread", &v.thread)] {
+        if id.as_ref().is_some_and(|s| s.is_empty() || s.len() > MAX_ID_BYTES) {
+            return Err(format!("message {name} must be 1..=256 bytes"));
+        }
+    }
+    Ok(v)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -232,9 +264,7 @@ fn validate_one<'a>(board_id: &str, op: &'a OpIn) -> Result<ValidOp<'a>, CrdtErr
             if op.field != "body" {
                 return Err(invalid("message field must be \"body\"".into()));
             }
-            if !op.value.is_string() {
-                return Err(invalid("message body must be a string".into()));
-            }
+            message_value(&op.value).map_err(invalid)?;
         }
         Entity::Removal => match op.value.as_i64() {
             Some(n) if (0..=MAX_COUNTER).contains(&n) => {}
@@ -315,12 +345,13 @@ fn materialize(tx: &Transaction, board_id: &str, v: &ValidOp<'_>) -> rusqlite::R
             if existing.as_deref().is_some_and(|cur| v.cmp_stored(cur) != Ordering::Greater) {
                 return Ok(());
             }
-            let body = op.value.as_str().unwrap_or_default();
+            let v = message_value(&op.value).unwrap_or_else(|_| MessageValue { body: String::new(), to: None, thread: None });
             tx.execute(
-                "insert into messages (id, board_id, body, hlc, node_id) values (?1, ?2, ?3, ?4, ?5)
-                 on conflict (id) do update set body = excluded.body, hlc = excluded.hlc, node_id = excluded.node_id
+                "insert into messages (id, board_id, body, hlc, node_id, to_node, thread) values (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 on conflict (id) do update set body = excluded.body, hlc = excluded.hlc, node_id = excluded.node_id,
+                 to_node = excluded.to_node, thread = excluded.thread
                  where messages.board_id = excluded.board_id",
-                params![op.entity_id, board_id, body, op.hlc, op.node_id],
+                params![op.entity_id, board_id, v.body, op.hlc, op.node_id, v.to, v.thread],
             )?;
         }
         Entity::Removal => {
@@ -404,9 +435,11 @@ pub fn board(conn: &Connection, board_id: &str) -> rusqlite::Result<BoardView> {
         }
     }
 
-    let mut stmt = conn.prepare("select id, body, hlc, node_id from messages where board_id = ?1")?;
+    let mut stmt = conn.prepare("select id, body, hlc, node_id, to_node, thread from messages where board_id = ?1")?;
     view.messages = stmt
-        .query_map([board_id], |r| Ok(MessageView { id: r.get(0)?, body: r.get(1)?, hlc: r.get(2)?, node_id: r.get(3)? }))?
+        .query_map([board_id], |r| {
+            Ok(MessageView { id: r.get(0)?, body: r.get(1)?, hlc: r.get(2)?, node_id: r.get(3)?, to: r.get(4)?, thread: r.get(5)? })
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     view.messages.sort_by(|a, b| compare_hlc(&a.hlc, &b.hlc).then_with(|| a.id.cmp(&b.id)));
 
@@ -483,7 +516,20 @@ mod tests {
         serde_json::json!({
             "missions": map(&view.missions),
             "notes": map(&view.notes),
-            "messages": view.messages.iter().map(|m| serde_json::json!({"id": m.id, "body": m.body, "hlc": m.hlc})).collect::<Vec<_>>(),
+            "messages": view
+                .messages
+                .iter()
+                .map(|m| {
+                    let mut j = serde_json::json!({"id": m.id, "body": m.body, "hlc": m.hlc});
+                    if let Some(to) = &m.to {
+                        j["to"] = Value::from(to.as_str());
+                    }
+                    if let Some(thread) = &m.thread {
+                        j["thread"] = Value::from(thread.as_str());
+                    }
+                    j
+                })
+                .collect::<Vec<_>>(),
             "removals": view.removals,
         })
     }
@@ -496,9 +542,9 @@ mod tests {
             .unwrap()
             .map(Result::unwrap)
             .collect();
-        let mut msgs = conn.prepare("select id, board_id, body, hlc, node_id from messages order by 1").unwrap();
+        let mut msgs = conn.prepare("select id, board_id, body, hlc, node_id, to_node, thread from messages order by 1").unwrap();
         let msgs: Vec<Vec<String>> = msgs
-            .query_map([], |r| Ok((0..5).map(|i| r.get::<_, String>(i).unwrap()).collect()))
+            .query_map([], |r| Ok((0..7).map(|i| r.get::<_, Option<String>>(i).unwrap().unwrap_or_default()).collect()))
             .unwrap()
             .map(Result::unwrap)
             .collect();
@@ -637,6 +683,9 @@ mod tests {
             ("board", OpIn { board_id: Some("b2".into()), ..good.clone() }),
             ("message field", OpIn { entity: "message".into(), field: "title".into(), ..good.clone() }),
             ("message body", OpIn { entity: "message".into(), field: "body".into(), value: Value::from(1), ..good.clone() }),
+            ("message object body", OpIn { entity: "message".into(), field: "body".into(), value: serde_json::json!({"body": 1}), ..good.clone() }),
+            ("message extra key", OpIn { entity: "message".into(), field: "body".into(), value: serde_json::json!({"body": "x", "html": "y"}), ..good.clone() }),
+            ("message empty to", OpIn { entity: "message".into(), field: "body".into(), value: serde_json::json!({"body": "x", "to": ""}), ..good.clone() }),
             ("removal value", OpIn { entity: "removal".into(), value: Value::from(-1), ..good.clone() }),
             ("removal float", OpIn { entity: "removal".into(), value: Value::from(1.5), ..good.clone() }),
             ("removal huge", OpIn { entity: "removal".into(), value: Value::from(MAX_COUNTER + 1), ..good.clone() }),

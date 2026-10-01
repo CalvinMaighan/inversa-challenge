@@ -14,12 +14,14 @@ import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { getGlobe } from "client/globe/api";
 import { colorOfNode, type MeState } from "client/state/me";
-import { NOTES, resetNoteDraft, setNotePicking, type NotesState } from "client/state/notes";
+import { NOTES, resetNoteDraft, setNotePicking, type NoteLive, type NotesState } from "client/state/notes";
+import { PEERS, type Peer } from "client/state/peers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import styled from "client/styled";
 
 import { createFieldNoteOps, deleteFieldNoteOp, editFieldNoteOp, isSpecies, MAX_NOTE_CHARS, validateNoteText, type FieldNote } from "../missions/board";
-import type { Team } from "../missions/team";
+import type { NoteEditor } from "../messages/live";
+import { callsignOf, type Team } from "../missions/team";
 import { Dot, IconButton, Mono, Pill, SectionTitle } from "../primitives";
 import { clearSelection } from "../selection";
 import { ago, SPECIES_NAMES } from "../tooltip/model";
@@ -153,6 +155,32 @@ const Actions = styled.div`
   padding: 0 8px 8px;
 `;
 
+/** A peer's unsaved edit, shown in place of the saved text while they type (PLAN.md C-A7). */
+const LiveText = styled.p`
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-style: italic;
+  color: var(--muted);
+`;
+
+const Caret = styled.span<{ $color: string }>`
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin: 0 1px;
+  vertical-align: text-bottom;
+  background: ${(p) => p.$color};
+  box-shadow: 0 0 4px ${(p) => p.$color};
+`;
+
+const Editing = styled.span<{ $color: string }>`
+  color: ${(p) => p.$color};
+  font: 600 11px var(--font-mono);
+`;
+
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -280,18 +308,39 @@ function Composer({ team, me }: { team: Team; me: MeState | undefined }) {
   );
 }
 
-function NoteItem({ team, note, mine, selected, now }: { team: Team; note: FieldNote; mine: boolean; selected: boolean; now: number }) {
+function NoteItem({ team, note, mine, selected, now, live, peers, me }: { team: Team; note: FieldNote; mine: boolean; selected: boolean; now: number; live: NoteLive | null; peers: readonly Peer[]; me: MeState | undefined }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(note.text);
   const [error, setError] = useState<string | null>(null);
   const color = colorOfNode(note.createdBy);
   const at = Date.parse(note.createdAt);
+  // The live stream of this edit: every keystroke goes to peers until Save or Cancel (`live.ts`).
+  const editor = useRef<NoteEditor | null>(null);
+  const composing = useRef(false);
+  const startEditing = () => {
+    setDraft(note.text);
+    editor.current?.done();
+    editor.current = team.live.note(note.id, note.text);
+    setEditing(true);
+  };
+  const stopEditing = () => {
+    editor.current?.done();
+    editor.current = null;
+    setEditing(false);
+  };
+  useEffect(() => () => editor.current?.done(), []);
+  // A peer's live edit replaces the saved text on screen; this node's own never shows (it is in the textarea).
+  const peerLive = live && live.from !== team.nodeId ? live : null;
+  // Once their text matches what is saved (they just saved, or have not typed yet) the saved text shows.
+  const liveText = peerLive && peerLive.text !== note.text ? peerLive : null;
+  const liveColor = peerLive ? colorOfNode(peerLive.from) : color;
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
     try {
+      editor.current?.update(draft, false);
       await team.edit([editFieldNoteOp(team.factory(), note.id, draft)]);
-      setEditing(false);
+      stopEditing();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -305,7 +354,7 @@ function NoteItem({ team, note, mine, selected, now }: { team: Team; note: Field
   };
 
   return (
-    <NoteRow $selected={selected} data-testid="note-row" data-note-id={note.id} data-author={note.createdBy}>
+    <NoteRow $selected={selected} data-testid="note-row" data-note-id={note.id} data-author={note.createdBy} data-live={peerLive ? "1" : "0"}>
       <NoteButton type="button" onClick={() => flyToNote(note)} aria-label={`Note by ${note.callsign || "unknown"}: fly to it`}>
         <Head>
           <Dot $tone="ok" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
@@ -319,18 +368,52 @@ function NoteItem({ team, note, mine, selected, now }: { team: Team; note: Field
               {speciesLabel(note.species)}
             </Pill>
           )}
+          {peerLive && (
+            <Editing $color={liveColor} data-testid="note-editing" aria-live="polite">
+              {callsignOf(peerLive.from, peers, me)} is editing…
+            </Editing>
+          )}
         </Head>
-        {!editing && <Text data-testid="note-body">{note.text}</Text>}
+        {!editing && !liveText && <Text data-testid="note-body">{note.text}</Text>}
+        {!editing && liveText && (
+          <LiveText data-testid="note-live" data-from={liveText.from}>
+            {liveText.text.slice(0, Math.min(liveText.caret, liveText.text.length))}
+            <Caret $color={liveColor} data-testid="note-caret" aria-hidden="true" />
+            {liveText.text.slice(Math.min(liveText.caret, liveText.text.length))}
+          </LiveText>
+        )}
       </NoteButton>
       {editing ? (
         <Section as="form" aria-label="Edit note" onSubmit={save} style={{ padding: "0 8px 8px" }}>
-          <TextArea value={draft} maxLength={MAX_NOTE_CHARS} aria-label="Edit note text" onChange={(e) => setDraft(e.target.value)} data-testid="note-edit-text" />
+          <TextArea
+            value={draft}
+            maxLength={MAX_NOTE_CHARS}
+            aria-label="Edit note text"
+            onChange={(e) => {
+              setDraft(e.target.value);
+              editor.current?.update(e.target.value, composing.current);
+            }}
+            onCompositionStart={() => {
+              composing.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              composing.current = false;
+              editor.current?.update(e.currentTarget.value, false);
+            }}
+            data-testid="note-edit-text"
+          />
           {error && <ErrorText role="alert">{error}</ErrorText>}
           <Row>
             <IconButton type="submit" $active disabled={!draft.trim()} data-testid="note-save">
               Save
             </IconButton>
-            <IconButton type="button" onClick={() => setEditing(false)}>
+            <IconButton
+              type="button"
+              onClick={() => {
+                editor.current?.update(note.text, false);
+                stopEditing();
+              }}
+            >
               Cancel
             </IconButton>
           </Row>
@@ -338,14 +421,7 @@ function NoteItem({ team, note, mine, selected, now }: { team: Team; note: Field
       ) : (
         mine && (
           <Actions>
-            <IconButton
-              type="button"
-              onClick={() => {
-                setDraft(note.text);
-                setEditing(true);
-              }}
-              data-testid="note-edit"
-            >
+            <IconButton type="button" onClick={startEditing} data-testid="note-edit">
               Edit
             </IconButton>
             <IconButton type="button" onClick={remove} aria-label="Delete note" data-testid="note-delete">
@@ -362,6 +438,8 @@ function NoteItem({ team, note, mine, selected, now }: { team: Team; note: Field
 export default function NotesPanel({ team, me, notes }: { team: Team; me: MeState | undefined; notes: readonly FieldNote[] }) {
   const now = useNow();
   const selected = useActiveState<SelectionState, string | null>(SELECTION, (s) => s.evidenceId)[0] ?? null;
+  const live = useActiveState<NotesState, NotesState["live"]>(NOTES, (s) => s.live)[0] ?? NOTES.defaults.live;
+  const peers = useActiveState<Peer[]>(PEERS)[0] ?? [];
   return (
     <>
       <Composer team={team} me={me} />
@@ -370,7 +448,7 @@ export default function NotesPanel({ team, me, notes }: { team: Team; me: MeStat
         {notes.length === 0 && <Hint data-testid="notes-empty">No notes yet. Tap “Pick on map”, click a spot and write what you saw.</Hint>}
         <List data-testid="note-list">
           {notes.map((n) => (
-            <NoteItem key={n.id} team={team} note={n} mine={canEditNote(n, team.nodeId)} selected={selected === noteEvidenceId(n.id)} now={now} />
+            <NoteItem key={n.id} team={team} note={n} mine={canEditNote(n, team.nodeId)} selected={selected === noteEvidenceId(n.id)} now={now} live={live[n.id] ?? null} peers={peers} me={me} />
           ))}
         </List>
       </Section>
