@@ -109,6 +109,24 @@ const agent = keySource
 console.log(`data: ${env.INVERSA_DATA_DIR} · agent: ${agent} · web: http://localhost:3050 · signal: http://127.0.0.1:8799`);
 if (generatedHookSecret) console.log(`ingest hook (dev only): POST http://127.0.0.1:4041/v1/<app>/ingest/hook/<source>, INGEST_HOOK_SECRET=${generatedHookSecret}`);
 start("api", "36", ["cargo", "run", "-q", "--release", "--manifest-path", "api/Cargo.toml"], root);
-start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
+// Web waits for the API: `cargo run` may compile for minutes, and a page already open in the browser would
+// hammer the /v1 proxy with ECONNREFUSED stack traces (and GraphQL 500s in the console) until the API listens.
+void (async () => {
+  const started = Date.now();
+  let announced = false;
+  while (!stopping) {
+    try {
+      if ((await fetch("http://127.0.0.1:4041/health")).ok) break;
+    } catch {
+      // Not listening yet.
+    }
+    if (!announced && Date.now() - started > 5_000) {
+      announced = true;
+      console.log("\x1b[36m[api]\x1b[0m building or starting; web starts when /health answers");
+    }
+    await Bun.sleep(500);
+  }
+  if (!stopping) start("web", "35", ["bun", "run", "dev"], `${root}apps/web`);
+})();
 // Same pinned wrangler as apps/signal-worker (package.json `dev`, scripts/e2e.ts); env dev allows origin localhost:3050.
-start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", "8799", "--ip", "127.0.0.1", "--env", "dev"], `${root}apps/signal-worker`, true);
+start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", "8799", "--ip", "127.0.0.1", "--env", "dev", "--log-level", "warn"], `${root}apps/signal-worker`, true);
