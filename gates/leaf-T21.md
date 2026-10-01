@@ -14,7 +14,7 @@ Scope: `apps/web/client/threads/rtc.worker.ts`, `apps/web/client/threads/rtc/**`
 - [x] G2: two browser contexts converge (each opens the Notes tab and unfolds Crew missions). A Playwright script prints `TEAM rtc_p50=<ms> ws_p50=<ms> converged=1`, with rtc_p50 < 150
   CHECK: cd apps/web && bun run e2e:team 2>&1 | grep TEAM
   EXPECT: /TEAM rtc_p50=([0-9]|[1-9][0-9]|1[0-4][0-9])(\.\d+)? ws_p50=[0-9.]+ converged=1/
-  EVIDENCE: TEAM rtc_p50=18 ws_p50=86 converged=1 (channel transferred to the rtc worker; 3 runs: 17/87, 18/88, 18/86)
+  EVIDENCE: TEAM rtc_p50=26 ws_p50=104 converged=1 (T43 re-run on the Notes tab with Crew missions unfolded; channel transferred to the rtc worker. Before T43: 18/86, 17/87, 18/88)
 
 - [x] G3: concurrent removal increments from both contexts sum correctly, and offline edits sync on reconnect (the same script prints `COUNTERS-OK OFFLINE-OK`)
   CHECK: cd apps/web && bun run e2e:team 2>&1 | grep -E "COUNTERS-OK OFFLINE-OK"

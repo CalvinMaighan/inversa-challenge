@@ -157,7 +157,10 @@ export const notes = {
   inputSchema: notesInput,
   async execute(input: z.infer<typeof notesInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
-    const to = input.to ? new Date(input.to) : new Date(ctx.now.getTime() + LIVE_EDGE_SLACK_MS);
+    const edge = ctx.now.getTime() + LIVE_EDGE_SLACK_MS;
+    const asked = input.to ? Date.parse(input.to) : edge;
+    // A `to` at or after the reference time means "now": the live edge, so the current quarter hour counts.
+    const to = new Date(asked >= ctx.now.getTime() - LIVE_EDGE_SLACK_MS ? Math.max(asked, edge) : asked);
     const hours = Math.min(input.hours ?? DEFAULT_HOURS, MAX_HOURS);
     const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
     if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");

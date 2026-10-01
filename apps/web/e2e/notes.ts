@@ -293,6 +293,8 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   await a.click(`${authorRow(noteA!.id)} [data-testid="note-delete"]`);
   await gone;
   await waitNotes(b, (n) => !n.some((x) => x.id === noteA!.id), "delete on B");
+  // The deleted note was selected on A (its card was open): deleting clears the selection and the drawer.
+  await a.waitForFunction(() => (window.__inversa!.state("SELECTION") as { evidenceId: string | null }).evidenceId === null, null, { timeout: 10_000 });
   await waitPins(b, 1, "B after delete");
   if ((await pickPin(b, { lon: noteA!.lon, lat: noteA!.lat })) !== null) fail("the deleted note still picks on B");
   log("delete seen on B: row and pin gone");

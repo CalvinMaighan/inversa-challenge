@@ -10,7 +10,6 @@ import { lookupGazetteer } from "@/server/agent/tools/gazetteer";
 import { viewOf } from "@/server/agent/tools/views";
 import type { TableView } from "@/shared/agent/results";
 import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
-import { viewOf } from "@/server/agent/tools/views";
 import { startStub } from "@/eval/stub-server";
 import type { AgentStreamEvent } from "@/shared/agent/events";
 
@@ -47,27 +46,32 @@ describe("capability tools", () => {
     const output = await run("notes", { bbox: homestead, hours: 24 });
     expect(env.stub.requests.map((request) => request.operationName)).toEqual(["AgentNotes"]);
     expect(env.stub.requests[0]!.variables).toEqual({ id: "everglades" });
-    // Two notes near Homestead inside 24 h; the Flamingo note is outside the box, the older one outside the window,
-    // and the mission note (missionId + body) is not a field note at all.
-    expect(output.count).toBe(2);
-    expect(output.evidence.map((row) => row.id)).toEqual(["note:0194a1b2-0001-7000-8000-000000000001", "note:0194a1b2-0002-7000-8000-000000000002"]);
+    // Three notes near Homestead inside 24 h, one of them written in the quarter hour after the reference time
+    // (the timeline cursor sits on a 15-minute step at the live edge); the Flamingo note is outside the box, the
+    // older one outside the window, and the mission note (missionId + body) is not a field note at all.
+    expect(output.count).toBe(3);
+    expect(output.evidence.map((row) => row.id)).toEqual(["note:0194a1b2-0005-7000-8000-000000000005", "note:0194a1b2-0001-7000-8000-000000000001", "note:0194a1b2-0002-7000-8000-000000000002"]);
     for (const row of output.evidence) expect(parseEvidenceId(row.id)?.kind).toBe("note");
     expect(output.feeds).toEqual([]);
     const rows = output.data.rows as { author: string; species: string | null; aboutSighting: string | null; text: string }[];
-    expect(rows[0]).toMatchObject({ author: "Ranger-A1B2", species: "tegu", aboutSighting: null });
-    expect(rows[1]).toMatchObject({ author: "Ranger-B2C3", species: "iguana", aboutSighting: "sighting:7" });
-    expect(output.data.onBoard).toBe(3);
+    expect(rows[0]).toMatchObject({ author: "Ranger-B2C3", species: "python", aboutSighting: null });
+    expect(rows[1]).toMatchObject({ author: "Ranger-A1B2", species: "tegu", aboutSighting: null });
+    expect(rows[2]).toMatchObject({ author: "Ranger-B2C3", species: "iguana", aboutSighting: "sighting:7" });
+    expect(output.data.onBoard).toBe(4);
+    // An explicit `to` at the reference time still means now; a historical `to` is taken as given.
+    expect((await run("notes", { bbox: homestead, hours: 24, to: NOW.toISOString() })).count).toBe(3);
+    expect((await run("notes", { bbox: homestead, hours: 24, to: "2026-01-15T02:00:00Z" })).count).toBe(2);
     const view = viewOf(output)!;
     expect(view.result?.view).toBe("table");
     expect(view.highlight).toEqual(output.evidence.map((row) => row.id));
     const table = view.result as unknown as { rows: { evidenceId: string; note: string; lat: number; lon: number }[] };
-    expect(table.rows[0]).toMatchObject({ evidenceId: "note:0194a1b2-0001-7000-8000-000000000001", lat: 25.4712, lon: -80.4651 });
-    expect(table.rows[0]!.note).toMatch(/^Two tegus/);
+    expect(table.rows[1]).toMatchObject({ evidenceId: "note:0194a1b2-0001-7000-8000-000000000001", lat: 25.4712, lon: -80.4651 });
+    expect(table.rows[1]!.note).toMatch(/^Two tegus/);
     expect(view.bbox!.west).toBeLessThan(-80.4651);
 
     // Species filter and a wider window reach the Flamingo note only through the region box.
     expect((await run("notes", { bbox: homestead, hours: 24, species: "iguana" })).count).toBe(1);
-    expect((await run("notes", { hours: 24 * 7 })).count).toBe(3);
+    expect((await run("notes", { hours: 24 * 7 })).count).toBe(4);
     await expect(run("notes", { from: "2026-01-16T00:00:00Z", to: "2026-01-15T00:00:00Z" })).rejects.toThrow(/empty/);
   });
 

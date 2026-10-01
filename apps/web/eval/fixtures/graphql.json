@@ -1,6 +1,7 @@
 {
   "now": "2026-01-15T03:00:00Z",
   "notes": [
+    { "id": "0194a1b2-0005-7000-8000-000000000005", "fields": { "text": "Fresh python track across the levee road, maybe 3 m long.", "lat": 25.4601, "lon": -80.4703, "species": "python", "createdBy": "b2c3d4e5f6a1-7000-8000-00000000b1b1", "callsign": "Ranger-B2C3", "createdAt": "2026-01-15T03:05:00Z" } },
     { "id": "0194a1b2-0001-7000-8000-000000000001", "fields": { "text": "Two tegus crossing the canal road by the pump station, both headed west into the brush.", "lat": 25.4712, "lon": -80.4651, "species": "tegu", "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0", "callsign": "Ranger-A1B2", "createdAt": "2026-01-15T01:20:00Z" } },
     { "id": "0194a1b2-0002-7000-8000-000000000002", "fields": { "text": "Iguana carcass on the levee after the cold night; no live ones seen.", "lat": 25.4553, "lon": -80.4902, "species": "iguana", "sightingId": "7", "createdBy": "b2c3d4e5f6a1-7000-8000-00000000b1b1", "callsign": "Ranger-B2C3", "createdAt": "2026-01-14T22:05:00Z" } },
     { "id": "0194a1b2-0003-7000-8000-000000000003", "fields": { "text": "Boat ramp at Flamingo closed for dredging until Friday.", "lat": 25.1417, "lon": -80.9237, "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0", "callsign": "Ranger-A1B2", "createdAt": "2026-01-12T15:00:00Z" } },

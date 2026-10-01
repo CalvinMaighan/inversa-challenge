@@ -21,6 +21,7 @@ import styled from "client/styled";
 import { createFieldNoteOps, deleteFieldNoteOp, editFieldNoteOp, isSpecies, MAX_NOTE_CHARS, validateNoteText, type FieldNote } from "../missions/board";
 import type { Team } from "../missions/team";
 import { Dot, IconButton, Mono, Pill, SectionTitle } from "../primitives";
+import { clearSelection } from "../selection";
 import { ago, SPECIES_NAMES } from "../tooltip/model";
 import { canEditNote, NOTE_RATE_LIMIT, noteEvidenceId, placeName, RateLimiter } from "./model";
 
@@ -299,6 +300,8 @@ function NoteItem({ team, note, mine, selected, now }: { team: Team; note: Field
   const remove = () => {
     if (!window.confirm("Delete this note for everyone?")) return;
     void team.edit([deleteFieldNoteOp(team.factory(), note.id)]);
+    // A deleted note has no pin to bracket and no card to show.
+    if (selected) clearSelection();
   };
 
   return (
