@@ -6,6 +6,7 @@
 //
 //   bun scripts/grade.ts                 full run, writes docs/grading/report.md
 //   bun scripts/grade.ts --fast          static and unit checks only (skips build, e2e, live)
+//   bun scripts/grade.ts --skip-live     everything except checks that call a live model (they stay PENDING, 0 points)
 //   bun scripts/grade.ts --only a,b      only these criteria
 //   bun scripts/grade.ts --app carp      only this app's checks (plus app-independent ones)
 //   bun scripts/grade.ts --timeout 600   default per-check timeout in seconds
@@ -388,6 +389,8 @@ export function loadRubric(file = path.join(REPO, "docs/grading/rubric.json")): 
 
 export type GradeOptions = {
   fast?: boolean;
+  /** Skip the checks that call a live model (kind "live"); they stay PENDING with 0 points, never pass. */
+  skipLive?: boolean;
   only?: string[];
   app?: AppId;
   timeout?: number;
@@ -455,9 +458,9 @@ export async function grade(r: Rubric, opts: GradeOptions = {}): Promise<GradeRe
         const miss = missingRequirement(k.requires, app, env);
         if (miss) {
           unit.reason = miss;
-        } else if (opts.fast && !FAST_KINDS.has(k.kind)) {
+        } else if ((opts.fast && !FAST_KINDS.has(k.kind)) || (opts.skipLive && k.kind === "live")) {
           unit.status = "SKIP";
-          unit.reason = `skipped by --fast (${k.kind})`;
+          unit.reason = opts.skipLive && !opts.fast ? `skipped by --skip-live (${k.kind})` : `skipped by --fast (${k.kind})`;
         } else {
           const cmd = expand(k.run, app);
           const runs = await runRepeated(cmd, k.timeout ?? opts.timeout ?? r.defaults?.timeout ?? 300, k.repeat ?? 1);
@@ -809,8 +812,9 @@ async function main(argv: string[]): Promise<number> {
   }
   const timeout = Number(argValue(argv, "--timeout")) || undefined;
   const fast = argv.includes("--fast");
+  const skipLive = argv.includes("--skip-live");
   const verbose = !argv.includes("--quiet");
-  const g = await grade(rubric, { fast, only, app, timeout, log: verbose ? (l) => console.log(l) : undefined });
+  const g = await grade(rubric, { fast, skipLive, only, app, timeout, log: verbose ? (l) => console.log(l) : undefined });
   for (const x of g.criteria) console.log(gradeLine(x));
   const counts = { PASS: 0, FAIL: 0, PENDING: 0 };
   for (const x of g.criteria) counts[x.status]++;
