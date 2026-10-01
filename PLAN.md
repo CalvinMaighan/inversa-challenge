@@ -348,3 +348,27 @@ Spec: `docs/LIONFISH_WATCH.md`. Brief: `docs/TASK_BRIEF.md`. Lionfish only, four
 
 - L1 merged 6/6 (driver re-ran gate-check). bz/co thin, NAS is global, CRW via ERDDAP. See docs/LIONFISH_WATCH.md.
 - T44 merged 12/12 (taxon cards, 7d window, categories popover, SVG icons). API 225, web 692, clippy clean.
+
+### Three-app contract (A0, driver, 2026-10-01)
+
+Facts behind it (from the touchpoint map): the Rust API is single-tenant (one `AppState` with `obs`/`team` DBs and a global `Hub`; bbox constants in `poll/bio.rs`, `poll/physical.rs`, `hotspot/mod.rs`, `frames.rs`, `push/goes_grid.rs`, `quality_phys.rs`; `hotspot::Species` has 4 fixed variants; `frames::SPECIES_COUNT=4`); the web has `SPECIES_IDS`/`REGION_BBOX` constants and the share link (`v=1`) has no app id; RTC room = board id; CRDT already has `Message` entity; RTC `PeerMessage` has only ops/cursor/hello.
+
+- **C-A1 tenancy:** one process, one `AppState` per app id held in `AppRegistry` (`api/src/app/`). Each app has its own data dir `<INVERSA_DATA_DIR>/<app>/{observations,team}.db`, its own `Hub`, scheduler, frames builder and feed-state publisher. No shared mutable state between apps. Ids: `carp`, `lionfish`, `python`. Default `carp`.
+- **C-A2 routes:** `/v1/{app}/graphql` (http+ws), `/v1/{app}/frames`, `/v1/{app}/ingest/hook/{source}`, `/v1/{app}/media/...`. `/health` is global and lists apps with per-app feed health. Unknown app: 404 JSON `{"error":"unknown_app","apps":[...]}`. Old unprefixed `/v1/...` routes are removed.
+- **C-A3 AppConfig:** JSON files `spec/apps/{carp,lionfish,python}.json` validated by `spec/apps/app-config.schema.json`. Rust (`serde`) and TS (`zod`) load the same files; a conformance test loads all three in both. Fields: `id`, `name`, `icon`, `tagline`, `question`, `kind` (`species` | `conditions`), `taxa[]` (name, iNat/GBIF/NAS keys, color, half-life days; species apps), `regions[]` (id, name, bbox W,S,E,N, cellDeg, camera; one for python/carp, four for lionfish), `locations[]` (id, name, lat, lon, usgs, nwps, nws; carp), `feeds[]` (source, mode `push`|`poll`, params), `score` (components, default weights), `windows` (default, options in hours), `layers[]`, `legend`, `copy`, `helperQuestions[]`, `agent` (persona, scope text, tool allowlist, refusal text), `eval` (golden set id).
+- **C-A4 runtime layout:** hotspot/frames/GOES grids are built from `regions[]` at runtime (no bbox consts). Species enum becomes `TaxonIdx(u8)` from config order. EVF2 header carries region count and per-region layout; `SPECIES_COUNT` becomes a header field. Carp (`kind=conditions`) has no hotspot grid; it uses readings, forecast snapshots and alerts queries.
+- **C-A5 web:** `apps/web/shared/apps/` exports `loadApps()`, `APP_IDS`, `AppConfig`; `client/state/app.ts` holds the active app (URL `?app=` wins, then localStorage `inversa.app`, then `carp`). Every GraphQL/frames/ws/agent request is prefixed with the app. Share link `v=2` adds `app`. Agent request body carries `app`; the server picks persona, tools allowlist, scope guard and view defaults from config. `SPECIES_IDS`, `REGION_BBOX`, `LAYER_IDS` constants are replaced by config lookups.
+- **C-A6 rooms:** board id and RTC room are `<app>:main`; the signal worker `requireId` charset must accept `:`.
+- **C-A7 realtime messaging (M1):** new `PeerMessage` variants over the RTC data channel:
+  - `{type:"dm.delta", thread, msgId, from, to, seq, at, del:{pos,len}, ins:string}` per keystroke batch (<= 1 per animation frame), ordered by `seq`, idempotent.
+  - `{type:"dm.commit", thread, msgId, from, to, text, hlc}` persists as CRDT `Message` with `to` and `thread` fields (new fields on the entity; vectors in `spec/crdt` updated in both runners).
+  - `{type:"dm.typing", thread, from, on}` presence.
+  - `{type:"note.delta", noteId, from, seq, del, ins}` live character stream of a note being edited; the final text is committed as the existing LWW op. Notes also show peer carets.
+- **C-A8 gates culture:** each leaf prints one machine-readable result line (named in its gates) from an e2e or test; gates grep it.
+
+### Wave plan (updated)
+
+Wave 0: C1 (carp proof, running), F1 (ingest modes), Q1 (questions), A0 (this contract). Wave 1: A1a (Rust tenancy), A1b (web seam + selector), M1 (messaging, independent of tenancy beyond C-A6/C-A7). Wave 2: L2–L7 lionfish, C2–C7 carp, P1 python, K1 cleanup. Wave 3: X1–X3 integration, G1 grading, H1 hardening, D1 docs, Z1.
+
+### Status log (pivot)
+
