@@ -12,9 +12,9 @@ import { get } from "@calvinjs/active-state";
 
 import type { AlertFacts, HoverFacts, HotspotFacts, NoteFacts, SightingFacts, StationFacts } from "client/globe/hover";
 import { speciesIndexOfTaxon } from "client/globe/species";
+import { activeApp } from "client/state/app";
 import { TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { QUALITY_CODES } from "shared/frames";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { feedLabel } from "../topbar/feed-chips";
 import { REGION_TIME_ZONE } from "../topbar/clock";
@@ -38,8 +38,10 @@ export const NETWORK_LABELS: Record<string, string> = {
   coops: "NOAA tide gauge",
 };
 
-/** Display names, indexed like SPECIES_IDS. */
-export const SPECIES_NAMES: readonly string[] = ["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish"];
+/** Display names of the active app's focus species, in config order. */
+export function speciesNames(): string[] {
+  return activeApp().taxa.map((t) => t.name);
+}
 /** Only while a taxon's name has not arrived from the API yet (T44: every taxon has a name once TAXA loads). */
 export const OTHER_SPECIES_NAME = "Introduced species";
 
@@ -78,7 +80,7 @@ export function ago(ms: number, atMs: number): string {
  */
 export function speciesName(taxon: number, commonName?: string | null, byId: Readonly<Record<string, TaxonInfo>> = get<TaxaState>(TAXA)?.byId ?? {}): string {
   const s = speciesIndexOfTaxon(taxon);
-  if (s >= 0) return SPECIES_NAMES[s]!;
+  if (s >= 0) return speciesNames()[s]!;
   const given = commonName?.trim();
   if (given) return taxonName({ commonName: given, scientificName: "" });
   const info = byId[String(taxon)];
@@ -119,7 +121,7 @@ function alert(f: AlertFacts): TooltipText {
 }
 
 function hotspot(f: HotspotFacts): TooltipText {
-  const name = SPECIES_NAMES[f.species] ?? SPECIES_IDS[f.species] ?? "Species";
+  const name = speciesNames()[f.species] ?? "Species";
   return { title: `${name} hotspot`, parts: [`score ${f.score.toFixed(2)}`, "heuristic"] };
 }
 

@@ -5,6 +5,9 @@
  * defaults to the production e2e build on e2e/stack.ts and takes this stack with E2E_TEAM_STACK=dev. Free ports
  * throughout, so a developer's own `bun run dev` (3050, 4041, 8799) keeps running, but `next dev` here still
  * needs apps/web's dev lock, which a running `bun run dev` holds.
+ *
+ * Apps (PLAN.md C-A2, C-A6): `page` opens the stack's app (`?app=`, python by default), `graphql` posts to that
+ * app's `/v1/<app>/graphql`, and its team board is `<app>:main` (`boardId`).
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
@@ -12,6 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Page } from "playwright";
+
+import { boardIdFor, type AppId } from "../shared/apps";
 
 export const APP_DIR = join(import.meta.dir, "..");
 export const REPO_DIR = join(APP_DIR, "../..");
@@ -104,7 +109,11 @@ export type DevStack = {
   signalUrl: string;
   apiPort: number;
   nextPort: number;
-  /** The ops page. */
+  /** The stack's app. */
+  app: AppId;
+  /** Its team board and RTC room, `<app>:main`. */
+  boardId: string;
+  /** The ops page, opened in the stack's app. */
   page: string;
   procs: Proc[];
   /** POST a GraphQL query to Axum. */
@@ -113,12 +122,12 @@ export type DevStack = {
 };
 
 /** Start all three; `stop` kills them and removes the scratch dir. Throws (after stopping) when a port is busy. */
-export async function startDevStack(name: string): Promise<DevStack> {
+export async function startDevStack(name: string, app: AppId = "python"): Promise<DevStack> {
   const log = (...args: unknown[]) => console.error(`[e2e:${name}]`, ...args);
   const signalPort = freePort();
   const nextPort = freePort(signalPort);
   const signalUrl = `http://127.0.0.1:${signalPort}`;
-  const page = `http://127.0.0.1:${nextPort}/`;
+  const page = `http://127.0.0.1:${nextPort}/?app=${app}`;
   for (const port of [signalPort, nextPort]) if (await portBusy(port)) fail(`port ${port} is already in use; stop that process first`);
   const scratch = mkdtempSync(join(tmpdir(), `${name}-e2e-`));
   const procs: Proc[] = [];
@@ -157,7 +166,8 @@ export async function startDevStack(name: string): Promise<DevStack> {
     }
     const next = start(scratch, "next", "bun", ["x", "next", "dev", "-p", String(nextPort), "-H", "127.0.0.1"], APP_DIR, {
       INVERSA_API_ORIGIN: `http://127.0.0.1:${apiPort}`,
-      NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${apiPort}/v1/graphql`,
+      // An origin: the gql worker adds `/v1/<app>/graphql` for the app it serves.
+      NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${apiPort}`,
       NEXT_PUBLIC_SIGNAL_URL: signalUrl,
       NEXT_TELEMETRY_DISABLED: "1",
       BROWSER: "none",
@@ -178,13 +188,15 @@ export async function startDevStack(name: string): Promise<DevStack> {
     );
     log(`signal ${signalUrl}, api :${apiPort}, next ${page}`);
     return {
+      app,
+      boardId: boardIdFor(app),
       signalUrl,
       apiPort,
       nextPort,
       page,
       procs,
       async graphql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-        const res = await fetch(`http://127.0.0.1:${apiPort}/v1/graphql`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query, variables }) });
+        const res = await fetch(`http://127.0.0.1:${apiPort}/v1/${app}/graphql`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query, variables }) });
         const json = (await res.json()) as { data?: T; errors?: unknown };
         if (!json.data) fail(`graphql: ${JSON.stringify(json.errors)}`);
         return json.data;

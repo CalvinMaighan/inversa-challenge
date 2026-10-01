@@ -4,8 +4,8 @@ import { isPersisted, isShared, registeredState } from "@calvinjs/active-state";
 import { STATE_KEY_IDS, STATE_KEY_INDEX, state } from "client/state";
 import { registeredStateKeys } from "@/eslint-plugins/inversa/state-key-registration.mjs";
 
-/** PRD §12 "Theme and state" plus active-theme's two keys. */
-const PLAN_KEYS = ["TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "TAXA", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
+/** PRD §12 "Theme and state" plus active-theme's two keys, and the active app (PLAN.md C-A5). */
+const PLAN_KEYS = ["APP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "TAXA", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
 
 describe("state catalog", () => {
@@ -41,6 +41,7 @@ describe("transport key index (PLAN.md C6)", () => {
       "AGENT_CARD",
       "AGENT_CHAT",
       "AGENT_HIGHLIGHT",
+      "APP",
       "FEEDS",
       "LAYERS",
       "ME",

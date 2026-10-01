@@ -1,9 +1,7 @@
 import { key } from "@calvinjs/active-state";
 
 import type { BBox } from "shared/agent/events";
-
-/** South Florida region (PLAN.md C15). */
-export const REGION_BBOX: Readonly<BBox> = Object.freeze({ west: -83.2, south: 24.3, east: -79.8, north: 27.5 });
+import { appBBox, DEFAULT_APP_ID, getApp, type AppConfig } from "shared/apps";
 
 export type ViewState = {
   /** Visible extent, kept in sync by the globe camera. */
@@ -35,15 +33,24 @@ export function altitudeToFit(bbox: BBox): number {
   return Math.round(((Math.max(width, height) / 2) / Math.tan(Math.PI / 6)) * 1.1);
 }
 
-const defaults: ViewState = {
-  bbox: { ...REGION_BBOX },
-  lat: (REGION_BBOX.south + REGION_BBOX.north) / 2,
-  lon: (REGION_BBOX.west + REGION_BBOX.east) / 2,
-  altitudeM: altitudeToFit(REGION_BBOX),
-  heading: 0,
-  pitch: -90,
-  place: null,
-  seq: 0,
-};
+/**
+ * The map preset of an app (C-A3): its whole extent (every region), looked at from the first region's camera
+ * when the config gives one, else from the extent's centre, high enough to fit it.
+ */
+export function viewFor(app: AppConfig, seq = 0): ViewState {
+  const bbox = appBBox(app);
+  const camera = app.regions.length === 1 ? app.regions[0]!.camera : undefined;
+  return {
+    bbox,
+    lat: camera?.lat ?? (bbox.south + bbox.north) / 2,
+    lon: camera?.lon ?? (bbox.west + bbox.east) / 2,
+    altitudeM: camera?.altitudeM ?? altitudeToFit(bbox),
+    heading: camera?.heading ?? 0,
+    pitch: camera?.pitch ?? -90,
+    place: null,
+    seq,
+  };
+}
 
-export const VIEW = key("VIEW", defaults);
+/** Server HTML and first paint use the default app; `AppBoot` moves to the resolved one after hydration. */
+export const VIEW = key("VIEW", viewFor(getApp(DEFAULT_APP_ID)));

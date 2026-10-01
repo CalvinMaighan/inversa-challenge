@@ -123,3 +123,9 @@ export const GOLDEN: Golden[] = [
     expect: { tools: ["geocode", "sightings"], phrases: [/conflict/i, /casual/i], minCitations: 2, cites: { sighting: 2 } },
   },
 ];
+
+/**
+ * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; the lionfish and
+ * carp sets come with those apps' leaves and start empty.
+ */
+export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: [] };

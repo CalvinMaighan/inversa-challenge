@@ -5,8 +5,8 @@ import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/mo
 import { isValidSessionId } from "@/server/agent/session";
 import { rateLimited } from "@/server/rate-limit";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
+import { APP_IDS, getApp, speciesIds } from "@/shared/apps";
 import { CATEGORY_IDS } from "@/shared/species-categories";
-import { SPECIES_IDS } from "@/shared/voice/ui-tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,23 +19,30 @@ const bbox = z
   .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })
   .refine((b) => b.west < b.east && b.south < b.north, "bbox needs west < east and south < north");
 
-const requestSchema: z.ZodType<AgentStreamRequest> = z.object({
-  sessionId: z.string().refine(isValidSessionId, "sessionId must be 1–128 of [A-Za-z0-9_-]"),
-  question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
-  view: z
-    .object({
-      bbox,
-      time: z.string().refine((value) => Number.isFinite(Date.parse(value)), "time must be ISO 8601"),
-      layers: z.array(z.string().max(64)).max(64),
-      species: z
-        .array(z.enum([...SPECIES_IDS, ...CATEGORY_IDS]))
-        .max(SPECIES_IDS.length + CATEGORY_IDS.length)
-        .optional(),
-      windowHours: z.number().int().min(1).max(24 * 31).optional(),
-      selection: z.string().max(256).nullable(),
-    })
-    .optional(),
-});
+const requestSchema: z.ZodType<AgentStreamRequest> = z
+  .object({
+    app: z.enum(APP_IDS),
+    // Room for the server's `<app>-` prefix within the session store's 128 characters.
+    sessionId: z.string().max(110).refine(isValidSessionId, "sessionId must be 1–110 of [A-Za-z0-9_-]"),
+    question: z.string().trim().min(1).max(MAX_QUESTION_CHARS),
+    view: z
+      .object({
+        bbox,
+        time: z.string().refine((value) => Number.isFinite(Date.parse(value)), "time must be ISO 8601"),
+        layers: z.array(z.string().max(64)).max(64),
+        species: z.array(z.string().max(64)).max(64).optional(),
+        windowHours: z.number().int().min(1).max(24 * 31).optional(),
+        selection: z.string().max(256).nullable(),
+      })
+      .optional(),
+  })
+  .superRefine((body, ctx) => {
+    // Species filter keys are the app's focus species and the categories; anything else is another app's.
+    const allowed = new Set<string>([...speciesIds(getApp(body.app)), ...CATEGORY_IDS]);
+    body.view?.species?.forEach((key, i) => {
+      if (!allowed.has(key)) ctx.addIssue({ code: "custom", path: ["view", "species", i], message: `not a species of app ${body.app}` });
+    });
+  });
 
 function jsonError(status: number, error: string, issues?: unknown): Response {
   return Response.json({ error, ...(issues ? { issues } : {}) }, { status });

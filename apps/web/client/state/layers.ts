@@ -1,55 +1,74 @@
 import { key, set } from "@calvinjs/active-state";
 
+import { DEFAULT_APP_ID, getApp, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
 import { SIGHTING_WINDOW_HOURS, SIGHTING_WINDOW_OPTIONS, type SightingWindowHours } from "shared/frames";
 import { CATEGORY_DEFAULT_ON, CATEGORY_IDS, type CategoryId } from "shared/species-categories";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
-export type LayerId = (typeof LAYER_IDS)[number];
-export type SpeciesId = (typeof SPECIES_IDS)[number];
+import { activeApp } from "./app";
+
+export type { LayerId };
+/** A focus species key of the active app (its config `taxa`, C-A3). */
+export type SpeciesId = string;
+/** A focus species key or a category key. */
+export type SpeciesFilterId = string;
+export { CATEGORY_IDS };
+export type { CategoryId };
 
 /**
- * Species filter keys (T44): the four focus species, then the categories every other sighting falls into
+ * Species filter keys (T44): the app's focus species, then the categories every other sighting falls into
  * (snakes, lizards, turtles, ..., plants, other). Animal categories start on; insects, spiders, plants and the
  * rest start off.
  */
-export const SPECIES_FILTER_IDS = [...SPECIES_IDS, ...CATEGORY_IDS] as const;
-export type SpeciesFilterId = (typeof SPECIES_FILTER_IDS)[number];
-export { CATEGORY_IDS };
-export type { CategoryId };
+export function speciesFilterIds(app: AppConfig = activeApp()): SpeciesFilterId[] {
+  return [...speciesIds(app), ...CATEGORY_IDS];
+}
 
 /** Filter key of one non-focus taxon (`taxa.id`): an override on top of its category. */
 export const taxonKey = (taxonId: number | string): `t${string}` => `t${taxonId}`;
 export const TAXON_KEY = /^t(\d+)$/;
 
+/**
+ * Species filter applied to sightings and hotspots. Focus and category keys read as their default when missing;
+ * a `t<taxon id>` key overrides its taxon's category either way (a species hidden on its own, or "only this one"
+ * with its category off). A layer id key holds a focus species id instead: it pins that layer to one species,
+ * whatever the booleans say (`client/globe/species.ts` `enabledSpecies`); the legend's hotspot pin writes it.
+ */
+export type SpeciesFilter = Record<string, boolean | string>;
+
 export type LayersState = {
-  /** Visibility per globe layer. */
+  /** Visibility per globe layer. A layer the app does not list stays off. */
   visible: Record<LayerId, boolean>;
-  /**
-   * Species filter applied to sightings and hotspots (the four focus species). Focus and category keys read as
-   * their default when missing; a `t<taxon id>` key overrides its taxon's category either way (a species hidden
-   * on its own, or "only this one" with its category off). A layer id key pins that layer to one focus species,
-   * whatever the booleans say (`client/globe/species.ts` `enabledSpecies`); the legend's hotspot pin writes it.
-   */
-  species: Record<SpeciesFilterId, boolean> & Partial<Record<LayerId, SpeciesId>> & Partial<Record<`t${string}`, boolean>>;
+  species: SpeciesFilter;
   /** The trailing sightings window the globe draws and the bar counts, hours (T44). */
   sightingHours: SightingWindowHours;
 };
 
 /**
- * Sightings first (T41): of the data layers only sightings start visible. Stations, alerts, hotspots and the
- * temperature rasters start hidden, a tap away under "More data (for experts)"; alerts the agent cites still
- * show as brackets. Missions and team cursors draw only what the team put there.
+ * Sightings first (T41): of the data layers only sightings start visible in a species app. Stations, alerts,
+ * hotspots and the temperature rasters start hidden, a tap away under "More data (for experts)"; alerts the
+ * agent cites still show as brackets. A conditions app (carp) is about gauges and alerts, so everything it lists
+ * starts on. Missions and team cursors draw only what the team put there.
  */
 // eslint-disable-next-line inversa/prefer-catalog-constants -- typed as LayerId, so tsc checks them against LAYER_IDS.
 const HIDDEN_BY_DEFAULT: ReadonlySet<LayerId> = new Set<LayerId>(["stations", "alerts", "hotspots", "lst", "sst"]);
 
-const defaults: LayersState = {
-  visible: Object.fromEntries(LAYER_IDS.map((id) => [id, !HIDDEN_BY_DEFAULT.has(id)])) as Record<LayerId, boolean>,
-  species: Object.fromEntries(SPECIES_FILTER_IDS.map((id) => [id, (CATEGORY_IDS as readonly string[]).includes(id) ? CATEGORY_DEFAULT_ON[id as CategoryId] : true])) as Record<SpeciesFilterId, boolean>,
-  sightingHours: SIGHTING_WINDOW_HOURS,
-};
+/** Default of one filter key: focus species on, categories per CATEGORY_DEFAULT_ON. */
+function keyDefault(id: string): boolean {
+  return (CATEGORY_IDS as readonly string[]).includes(id) ? CATEGORY_DEFAULT_ON[id as CategoryId] : true;
+}
 
-export const LAYERS = key("LAYERS", defaults);
+/** LAYERS for a freshly selected app: its layers, its species, its default window. */
+export function layersFor(app: AppConfig): LayersState {
+  const listed = new Set<LayerId>(app.layers);
+  const window = app.windows.default;
+  return {
+    visible: Object.fromEntries(LAYER_IDS.map((id) => [id, listed.has(id) && (app.kind === "conditions" || !HIDDEN_BY_DEFAULT.has(id))])) as Record<LayerId, boolean>,
+    species: Object.fromEntries(speciesFilterIds(app).map((id) => [id, keyDefault(id)])),
+    sightingHours: isWindowHours(window) ? window : SIGHTING_WINDOW_HOURS,
+  };
+}
+
+export const LAYERS = key("LAYERS", layersFor(getApp(DEFAULT_APP_ID)));
 
 export function setLayerVisible(layer: LayerId, visible: boolean): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => ({ ...prev, visible: { ...prev.visible, [layer]: visible } }));
@@ -70,10 +89,10 @@ export function setTaxonVisible(taxonId: number | string, visible: boolean | nul
 }
 
 /** Every focus and category key off, every taxon override dropped; layer pins kept. */
-function nothing(prev: LayersState["species"]): LayersState["species"] {
+function nothing(prev: SpeciesFilter): SpeciesFilter {
   const next = { ...prev };
-  for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k as `t${string}`];
-  for (const id of SPECIES_FILTER_IDS) next[id] = false;
+  for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k];
+  for (const id of speciesFilterIds()) next[id] = false;
   return next;
 }
 
@@ -95,16 +114,16 @@ export function showOnlyTaxon(taxonId: number | string): void {
 export function showAllSpecies(): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
     const next = { ...prev.species };
-    for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k as `t${string}`];
-    for (const id of SPECIES_IDS) next[id] = true;
+    for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k];
+    for (const id of speciesIds(activeApp())) next[id] = true;
     for (const id of CATEGORY_IDS) if (CATEGORY_DEFAULT_ON[id]) next[id] = true;
     return { ...prev, species: next };
   });
 }
 
-/** Filter keys shown, in SPECIES_FILTER_IDS order (a missing key reads as its default). */
-export function shownSpecies(filter: Readonly<Record<string, unknown>> | undefined): SpeciesFilterId[] {
-  return SPECIES_FILTER_IDS.filter((id) => (filter?.[id] ?? defaults.species[id]) !== false);
+/** Filter keys shown, in `speciesFilterIds()` order (a missing key reads as its default). */
+export function shownSpecies(filter: Readonly<Record<string, unknown>> | undefined, app: AppConfig = activeApp()): SpeciesFilterId[] {
+  return speciesFilterIds(app).filter((id) => (filter?.[id] ?? keyDefault(id)) !== false);
 }
 
 /** Taxon overrides in the filter: `[taxon id, shown]`. */
@@ -118,8 +137,8 @@ export function taxonOverrides(filter: Readonly<Record<string, unknown>> | undef
 }
 
 /** Whether the filter hides something that shows by default (the bar then offers "All"). */
-export function isSpeciesFiltered(filter: Readonly<Record<string, unknown>> | undefined): boolean {
-  if (SPECIES_IDS.some((id) => filter?.[id] === false)) return true;
+export function isSpeciesFiltered(filter: Readonly<Record<string, unknown>> | undefined, app: AppConfig = activeApp()): boolean {
+  if (speciesIds(app).some((id) => filter?.[id] === false)) return true;
   if (CATEGORY_IDS.some((id) => CATEGORY_DEFAULT_ON[id] && filter?.[id] === false)) return true;
   return taxonOverrides(filter).some(([, shown]) => !shown);
 }

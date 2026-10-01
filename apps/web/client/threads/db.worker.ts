@@ -18,6 +18,7 @@ import { DbEngine, type EngineGql } from "./db/engine";
 import { isToDb, type FromDb } from "./db/rpc";
 import { packTransfer, type SightingsPack } from "./db/sightings";
 import { Store, type SqlDb, type SqlValue } from "./db/store";
+import { appFromWorkerName, framesPath } from "./gql/client";
 import { GqlRpcClient } from "./gql/protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -25,15 +26,18 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 // Before the first await, so the host handshake is not missed.
 connectThread(scope, state);
 
-const FRAMES_URL = new URL("/v1/frames", scope.location.origin).href;
+/** This worker serves one app (C-A5): boot.ts names it `inversa-db:<app>`; its frames and SQLite file are that app's. */
+const APP = appFromWorkerName(scope.name);
+const FRAMES_URL = new URL(framesPath(APP), scope.location.origin).href;
 /**
  * The engine is served as static files (scripts/copy-sqlite-wasm.ts) and imported by URL: Turbopack cannot
  * bundle `@sqlite.org/sqlite-wasm` (its amalgam spawns a Worker from a dynamic URL). `import.meta.url` inside
  * the module then resolves `sqlite3.wasm` next to it.
  */
 const SQLITE_WASM_URL = new URL("/sqlite-wasm/index.mjs", scope.location.origin).href;
-const VFS_NAME = "inversa-db";
-const DB_FILE = "/inversa.sqlite3";
+/** One pool and file per app: the query cache and the CRDT board of one app never answer another's requests. */
+const VFS_NAME = `inversa-db-${APP}`;
+const DB_FILE = `/inversa-${APP}.sqlite3`;
 
 const post = (event: FromDb, transfer?: Transferable[]) => scope.postMessage(event, transfer ?? []);
 

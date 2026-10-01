@@ -3,6 +3,7 @@
 import { get, init, set, subscribe } from "@calvinjs/active-state";
 
 import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
+import { activeAppId } from "client/state/app";
 import type { VoiceState as VoiceKeyState } from "client/state/voice";
 import type { VoiceControlMessage } from "server/voice/view-state-control";
 import {
@@ -258,7 +259,8 @@ export async function startVoice(): Promise<void> {
       },
     });
     if (abort.signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const res = await fetch("/api/voice/session", {
+    // The session runs in the active app: its persona, its UI tools' layers and species (PLAN.md C-A5).
+    const res = await fetch(`/api/voice/session?app=${activeAppId()}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",

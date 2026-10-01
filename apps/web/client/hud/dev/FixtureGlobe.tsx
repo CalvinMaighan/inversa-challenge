@@ -8,7 +8,8 @@ import { isEnvValue } from "shared/frames";
 
 import { registerGlobe, type GlobeApi } from "client/globe/api";
 import { TIME, type TimeState } from "client/state/time";
-import { REGION_BBOX, VIEW, type ViewState } from "client/state/view";
+import { C4_BBOX } from "client/globe/geometry";
+import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
 import { frameIndexAt } from "client/threads/api";
 
@@ -33,7 +34,7 @@ const TINTS: [number, number, number][] = [
 
 /** Equirectangular fit of the region into the viewport, x scaled by cos(mid-latitude). */
 function fit(w: number, h: number) {
-  const b = REGION_BBOX;
+  const b = C4_BBOX;
   const k = Math.cos((((b.south + b.north) / 2) * Math.PI) / 180);
   const spanX = (b.east - b.west) * k;
   const spanY = b.north - b.south;
@@ -76,8 +77,8 @@ export default function FixtureGlobe({ grid }: { grid: FrameGrid }) {
     const baseImage = new ImageData(base.width, base.height);
     for (let r = 0; r < base.height; r++) {
       for (let c = 0; c < base.width; c++) {
-        const lon = REGION_BBOX.west + ((c + 0.5) / base.width) * (REGION_BBOX.east - REGION_BBOX.west);
-        const lat = REGION_BBOX.north - ((r + 0.5) / base.height) * (REGION_BBOX.north - REGION_BBOX.south);
+        const lon = C4_BBOX.west + ((c + 0.5) / base.width) * (C4_BBOX.east - C4_BBOX.west);
+        const lat = C4_BBOX.north - ((r + 0.5) / base.height) * (C4_BBOX.north - C4_BBOX.south);
         const [red, green, blue] = isLand(lon, lat) ? [29, 43, 34] : [15, 34, 48];
         const o = (r * base.width + c) * 4;
         baseImage.data.set([red, green, blue, 255], o);

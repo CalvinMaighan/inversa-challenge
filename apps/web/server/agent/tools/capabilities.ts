@@ -1,23 +1,24 @@
 /**
  * Agent capability tools. Each data tool makes exactly one POST to Axum
- * `/v1/graphql`: its query plus `feeds` in the same document, so every
+ * `/v1/<app>/graphql`: its query plus `feeds` in the same document, so every
  * result carries the C3 envelopes for the sources it depends on.
  * `geocode` uses the local gazetteer then Open-Meteo; `set_view` only emits.
+ * Which tools a turn gets, and which species and regions they accept, come from
+ * the app config (C-A3 `agent.tools`, `taxa`, `regions`).
  */
 
 import { z } from "zod";
 
-import { REGION_BBOX } from "@/server/agent/config";
-import { CapabilityRegistry, type CapabilityContext, type CapabilityOutput, type Evidence } from "@/server/agent/runtime/registry";
+import { CapabilityRegistry, type AnyCapability, type CapabilityContext, type CapabilityOutput, type Evidence } from "@/server/agent/runtime/registry";
 import {
   cellCenter,
   cellFor,
   evidence,
   hotspotKey,
   readingKey,
-  SPECIES_KEYS,
+  speciesKeys,
 } from "@/server/agent/tools/evidence";
-import { lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
+import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
 import {
@@ -44,6 +45,7 @@ import {
   type SightingRow,
 } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
+import { appBBox, clampToApp, type AppConfig } from "@/shared/apps";
 import { worstHealth, type FeedState } from "@/shared/feed-state";
 import { QUALITY_CODES } from "@/shared/frames";
 import { sightingPageUrl } from "@/shared/source-pages";
@@ -79,7 +81,14 @@ const timeSchema = z
   .refine((value) => value === "" || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
   .describe("ISO 8601 time, e.g. 2026-01-15T03:00:00Z");
 
-const speciesSchema = z.enum(SPECIES_KEYS).describe("python | tegu | iguana | lionfish");
+type SpeciesSchema = z.ZodType<string>;
+
+/** The app's focus species as an enum, so the model sees exactly the keys this app has. */
+function speciesSchemaFor(app: AppConfig): SpeciesSchema {
+  const keys = speciesKeys(app);
+  if (keys.length === 0) return z.never();
+  return z.enum(keys as [string, ...string[]]).describe(keys.join(" | "));
+}
 
 const QUALITY = QUALITY_CODES;
 
@@ -91,17 +100,11 @@ type Param = (typeof PARAMS)[number];
 
 // ---------------------------------------------------------------- helpers
 
-function resolveBbox(input: BBox | undefined, ctx: CapabilityContext): BBox {
-  const bbox = input ?? ctx.view?.bbox ?? REGION_BBOX;
-  const clamped = {
-    west: Math.max(bbox.west, REGION_BBOX.west),
-    south: Math.max(bbox.south, REGION_BBOX.south),
-    east: Math.min(bbox.east, REGION_BBOX.east),
-    north: Math.min(bbox.north, REGION_BBOX.north),
-  };
-  if (clamped.west >= clamped.east || clamped.south >= clamped.north) {
-    throw new Error("bbox is outside the operating region (South Florida, 24.3–27.5°N, 83.2–79.8°W)");
-  }
+/** The asked-for (or viewed) area cut to the app's extent; outside it the tool refuses with the app's refusal text (P4). */
+export function resolveBbox(input: BBox | undefined, ctx: Pick<CapabilityContext, "app" | "view">): BBox {
+  const bbox = input ?? ctx.view?.bbox ?? appBBox(ctx.app);
+  const clamped = clampToApp(ctx.app, bbox);
+  if (!clamped) throw new Error(`bbox is outside this app's regions (${ctx.app.regions.map((r) => r.name).join(", ")}). ${ctx.app.agent.refusal}`);
   return clamped;
 }
 
@@ -120,14 +123,15 @@ function resolveWindow(
 const inBox = (bbox: BBox, lat: number, lon: number) =>
   lat >= bbox.south && lat <= bbox.north && lon >= bbox.west && lon <= bbox.east;
 
-/** `bbox` grown by `deg` on every side, clamped to the operating region. */
-function padBbox(bbox: BBox, deg: number): BBox {
+/** `bbox` grown by `deg` on every side, clamped to the app's extent. */
+function padBbox(app: AppConfig, bbox: BBox, deg: number): BBox {
   const r = (v: number) => Math.round(v * 1e6) / 1e6;
+  const region = appBBox(app);
   return {
-    west: r(Math.max(REGION_BBOX.west, bbox.west - deg)),
-    south: r(Math.max(REGION_BBOX.south, bbox.south - deg)),
-    east: r(Math.min(REGION_BBOX.east, bbox.east + deg)),
-    north: r(Math.min(REGION_BBOX.north, bbox.north + deg)),
+    west: r(Math.max(region.west, bbox.west - deg)),
+    south: r(Math.max(region.south, bbox.south - deg)),
+    east: r(Math.min(region.east, bbox.east + deg)),
+    north: r(Math.min(region.north, bbox.north + deg)),
   };
 }
 
@@ -207,12 +211,13 @@ const lower = (value: string) => value.toLowerCase();
 const geocode = {
   name: "geocode",
   description:
-    "Resolve a South Florida place name (park units, sloughs, reefs, Keys towns, marinas) to a point, a bbox and its grid cell. Call before any area query.",
+    "Resolve a place name inside this app's regions (park units, reefs, towns, river gauges, marinas) to a point, a bbox and its grid cell. Call before any area query.",
   inputSchema: z.object({ place: z.string().min(2).max(120).describe("Place name, e.g. 'Flamingo' or 'Key Largo'") }),
   async execute(input: { place: string }, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const place = lookupGazetteer(input.place) ?? (await openMeteoGeocode(input.place, ctx.signal));
-    if (!place) throw new Error(`No place named "${input.place}" inside the operating region`);
-    return output({ ...place, cell: cellFor(place.lat, place.lon) }, [], [], 1);
+    const local = lookupGazetteer(input.place);
+    const place = (local && inRegion(ctx.app, local.lat, local.lon) ? local : null) ?? (await openMeteoGeocode(ctx.app, input.place, ctx.signal));
+    if (!place) throw new Error(`No place named "${input.place}" inside this app's regions. ${ctx.app.agent.refusal}`);
+    return output({ ...place, cell: cellFor(ctx.app, place.lat, place.lon) }, [], [], 1);
   },
 };
 
@@ -277,7 +282,7 @@ const sightings = {
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
-    const wanted = input.species ? await resolveSpecies(input.species, ctx.signal) : null;
+    const wanted = input.species ? await resolveSpecies(input.species, ctx) : null;
     if (wanted && wanted.taxonIds.length === 0) {
       const missing = wanted.unresolved.map((u) => (u.inat ? `${u.asked} (iNaturalist knows it as ${u.inat}, but no sighting of it is stored)` : `${u.asked} (no such species in the data or at iNaturalist)`));
       return output({ bbox, total: 0, distinctAnimals: 0, duplicates: 0, conflicts: 0, rows: [], unresolvedSpecies: missing, note: `No records: ${missing.join("; ")}. Say so plainly.` }, [], [], 0);
@@ -300,7 +305,7 @@ const sightings = {
         taxa: wanted?.taxonIds ?? null,
         quality: input.quality?.map((quality) => quality.toUpperCase()) ?? null,
       },
-      ctx.signal,
+      ctx,
     );
     const recent = data.sightings.filter((row) => Date.parse(row.observedAt) >= Date.parse(asked.from));
     const widened = (!explicit || endsNow) && recent.length === 0 && data.sightings.length > 0;
@@ -432,7 +437,7 @@ const speciesCounts = {
       "AgentSpeciesCounts",
       SPECIES_COUNTS_QUERY,
       { bbox, ...window, groups, top },
-      ctx.signal,
+      ctx,
     );
     const rows = data.speciesCounts.map(speciesCountRow);
     const evidenceRows = rows
@@ -542,12 +547,12 @@ const conditions = {
   async execute(input: z.infer<typeof conditionsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const area = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, 24);
-    const around = padBbox(area, NEARBY_DEG);
+    const around = padBbox(ctx.app, area, NEARBY_DEG);
     const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
       "AgentReadings",
       READINGS_QUERY,
       { bbox: around, ...window, params: input.params?.map((param) => param.toUpperCase()) ?? null },
-      ctx.signal,
+      ctx,
     );
     const inside = data.readings.filter((row) => inBox(area, row.station.lat, row.station.lon));
     const nearby = inside.length === 0 && data.readings.length > 0;
@@ -704,7 +709,7 @@ const alerts = {
       "AgentAlerts",
       ALERTS_QUERY,
       { bbox, at },
-      ctx.signal,
+      ctx,
     );
     const evidenceRows = data.alerts.map((row) => evidence("alert", row.id, `${row.event} (${row.severity})`));
     const feeds = feedsFor(data.feeds, [], ["nws", "nwws"]);
@@ -726,26 +731,27 @@ const HOTSPOTS_QUERY = `query AgentHotspots($species: ID!, $at: Time!, $bbox: BB
 
 type GqlHotspotGrid = { species: string; at: string; cells: { cell: string; lat: number; lon: number; score: number }[] };
 
-const hotspotsInput = z.object({
-  species: speciesSchema,
-  bbox: bboxSchema.optional(),
-  at: timeSchema.optional(),
-  top: z.number().int().min(1).max(50).optional().describe("How many cells (default 10)."),
-});
+const hotspotsInput = (species: SpeciesSchema) =>
+  z.object({
+    species,
+    bbox: bboxSchema.optional(),
+    at: timeSchema.optional(),
+    top: z.number().int().min(1).max(50).optional().describe("How many cells (default 10)."),
+  });
 
-const hotspots = {
+const hotspots = (species: SpeciesSchema) => ({
   name: LAYER.hotspots,
   description:
-    "Top-scoring 0.01° cells for a species at a time (explainable heuristic, not a prediction). Use explain_cell for why a cell scores.",
-  inputSchema: hotspotsInput,
-  async execute(input: z.infer<typeof hotspotsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+    "Top-scoring grid cells for a species at a time (explainable heuristic, not a prediction). Use explain_cell for why a cell scores.",
+  inputSchema: hotspotsInput(species),
+  async execute(input: z.infer<ReturnType<typeof hotspotsInput>>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const at = atTime(input.at, ctx);
     const data = await gqlWithFeeds<{ hotspots: GqlHotspotGrid; feeds: GqlFeedState[] }>(
       "AgentHotspots",
       HOTSPOTS_QUERY,
       { species: input.species, at, bbox, top: input.top ?? 10 },
-      ctx.signal,
+      ctx,
     );
     const grid = data.hotspots;
     const evidenceRows = grid.cells.map((cell) =>
@@ -760,7 +766,7 @@ const hotspots = {
     );
     return withView(out, cellsView(grid.species, grid.at, cells, bbox));
   },
-};
+});
 
 // ---------------------------------------------------------------- explain_cell
 
@@ -778,28 +784,29 @@ type GqlExplain = {
   terms: { name: string; value: number; rationale: string }[];
 };
 
-const explainInput = z
-  .object({
-    species: speciesSchema,
-    cell: z.string().regex(/^\d+:\d+$/).optional().describe("Cell id '<col>:<row>' from hotspots."),
-    lat: z.number().optional(),
-    lon: z.number().optional(),
-    at: timeSchema.optional(),
-  })
-  .refine((v) => v.cell !== undefined || (v.lat !== undefined && v.lon !== undefined), "give cell, or lat and lon");
+const explainInput = (species: SpeciesSchema) =>
+  z
+    .object({
+      species,
+      cell: z.string().regex(/^\d+:\d+$/).optional().describe("Cell id '<col>:<row>' from hotspots."),
+      lat: z.number().optional(),
+      lon: z.number().optional(),
+      at: timeSchema.optional(),
+    })
+    .refine((v) => v.cell !== undefined || (v.lat !== undefined && v.lon !== undefined), "give cell, or lat and lon");
 
-const explainCell = {
+const explainCell = (species: SpeciesSchema) => ({
   name: "explain_cell",
   description: "Term-by-term breakdown (density, activity, access, with rationale) of one cell's hotspot score.",
-  inputSchema: explainInput,
-  async execute(input: z.infer<typeof explainInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const cell = input.cell ?? cellFor(input.lat!, input.lon!);
+  inputSchema: explainInput(species),
+  async execute(input: z.infer<ReturnType<typeof explainInput>>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+    const cell = input.cell ?? cellFor(ctx.app, input.lat!, input.lon!);
     const at = atTime(input.at, ctx);
     const data = await gqlWithFeeds<{ explainCell: GqlExplain; feeds: GqlFeedState[] }>(
       "AgentExplainCell",
       EXPLAIN_QUERY,
       { cell, species: input.species, at },
-      ctx.signal,
+      ctx,
     );
     const explained = data.explainCell;
     const row = evidence(
@@ -807,7 +814,7 @@ const explainCell = {
       hotspotKey(explained.species, explained.cell, explained.at),
       `${explained.species} cell ${explained.cell} score ${explained.score.toFixed(2)}`,
     );
-    const center = cellCenter(explained.cell);
+    const center = cellCenter(ctx.app, explained.cell);
     const out = output(
       { ...explained, evidenceId: row.id, center, heuristic: true, note: HOTSPOT_NOTE },
       [row],
@@ -816,7 +823,7 @@ const explainCell = {
     );
     return withView(out, explainView(explained, row.id, center));
   },
-};
+});
 
 // ---------------------------------------------------------------- backtest
 
@@ -834,22 +841,23 @@ type GqlBacktest = {
   perDay: { day: string; sightings: number; hits: number }[];
 };
 
-const backtestInput = z.object({
-  species: speciesSchema,
-  days: z.number().int().min(1).max(30).optional().describe("Days to test (default 14)."),
-});
+const backtestInput = (species: SpeciesSchema) =>
+  z.object({
+    species,
+    days: z.number().int().min(1).max(30).optional().describe("Days to test (default 14)."),
+  });
 
-const backtest = {
+const backtest = (species: SpeciesSchema) => ({
   name: "backtest",
   description:
     "Measured hit rate of past hotspot scores: share of each day's sightings inside the top 10% of cells scored with earlier data, against the 10% baseline.",
-  inputSchema: backtestInput,
-  async execute(input: z.infer<typeof backtestInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+  inputSchema: backtestInput(species),
+  async execute(input: z.infer<ReturnType<typeof backtestInput>>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ backtest: GqlBacktest; feeds: GqlFeedState[] }>(
       "AgentBacktest",
       BACKTEST_QUERY,
       { species: input.species, days: input.days ?? 14 },
-      ctx.signal,
+      ctx,
     );
     const result = data.backtest;
     const scored = result.perDay.reduce((sum, day) => sum + day.sightings, 0);
@@ -873,7 +881,7 @@ const backtest = {
     );
     return withView(out, backtestView(result, row.id));
   },
-};
+});
 
 // ---------------------------------------------------------------- feed_state
 
@@ -884,7 +892,7 @@ const feedState = {
   description: "Freshness of every data feed (nominal, lagging, stale, down), with newest observation and last fetch times.",
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
-    const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx.signal);
+    const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
     const out = output({ asOf: ctx.now.toISOString() }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
@@ -909,18 +917,24 @@ const setView = {
   },
 };
 
-export function buildAgentRegistry(): CapabilityRegistry {
-  return new CapabilityRegistry()
-    .register(geocode)
-    .register(sightings)
-    .register(speciesCounts)
-    .register(conditions)
-    .register(alerts)
-    .register(hotspots)
-    .register(explainCell)
-    .register(backtest)
-    .register(feedState)
-    .register(notes)
-    .register(setView);
+/** Every tool an app may list in `agent.tools`. */
+function allCapabilities(app: AppConfig): AnyCapability[] {
+  const species = speciesSchemaFor(app);
+  return [geocode, sightings, speciesCounts, conditions, alerts, hotspots(species), explainCell(species), backtest(species), feedState, notes, setView];
+}
+
+export const CAPABILITY_NAMES: readonly string[] = allCapabilities({ taxa: [] } as unknown as AppConfig).map((cap) => cap.name);
+
+/**
+ * The tools of one app: its `agent.tools` allowlist, in registry order. A tool off the list is never
+ * registered, so the model cannot call it; a name on the list that no tool has is a config error.
+ */
+export function buildAgentRegistry(app: AppConfig): CapabilityRegistry {
+  const allowed = new Set(app.agent.tools);
+  const unknown = [...allowed].filter((name) => !CAPABILITY_NAMES.includes(name));
+  if (unknown.length) throw new Error(`app ${app.id}: agent.tools names unknown tools: ${unknown.join(", ")}`);
+  const registry = new CapabilityRegistry();
+  for (const cap of allCapabilities(app)) if (allowed.has(cap.name)) registry.register(cap);
+  return registry;
 }
 

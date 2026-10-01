@@ -42,7 +42,11 @@ const nextConfig: NextConfig = {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
   async rewrites() {
-    return [{ source: "/v1/:path*", destination: `${API_ORIGIN}/v1/:path*` }];
+    // `/health` lists the apps and their feed health (PLAN.md C-A2); the app selector's dots read it.
+    return [
+      { source: "/v1/:path*", destination: `${API_ORIGIN}/v1/:path*` },
+      { source: "/health", destination: `${API_ORIGIN}/health` },
+    ];
   },
 };
 

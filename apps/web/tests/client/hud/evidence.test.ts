@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { selectPython } from "@/tests/client/python-app";
 
 import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, qualityBadges, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
@@ -6,6 +7,8 @@ import { isDrawerOpen } from "client/hud/selection";
 import { parseEvidenceId } from "client/state/selection";
 import { decodeShareLink, encodeShareLink } from "client/hud/share-link";
 import type { AgentChatState } from "client/state/agent";
+
+selectPython();
 
 describe("evidence ids and links", () => {
   test("hotspot ids parse into species, 0.01° cell and frame time", () => {

@@ -1,8 +1,16 @@
 import type { AgentStreamEvent, AgentStreamRequest, BBox } from "shared/agent/events";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { getApp, speciesIds, type AppId } from "shared/apps";
+import { CATEGORY_DEFAULT_ON, CATEGORY_IDS } from "shared/species-categories";
 
-/** Species filter keys the HUD reports (client/state/layers SPECIES_FILTER_IDS). */
-const SPECIES_FILTER_KEYS: readonly string[] = [...SPECIES_IDS, "other"];
+/** Species filter keys the HUD reports for an app (client/state/layers `speciesFilterIds`). */
+function speciesFilterKeys(app: AppId): readonly string[] {
+  return [...speciesIds(getApp(app)), ...CATEGORY_IDS];
+}
+
+/** Keys shown when nothing is filtered: the focus species and the animal categories. */
+function shownByDefault(keys: readonly string[]): string[] {
+  return keys.filter((k) => !(CATEGORY_IDS as readonly string[]).includes(k) || CATEGORY_DEFAULT_ON[k as (typeof CATEGORY_IDS)[number]]);
+}
 
 /**
  * What `spawn_thinking` runs. The session depends on this interface only, so tests inject a fake;
@@ -11,6 +19,8 @@ const SPECIES_FILTER_KEYS: readonly string[] = [...SPECIES_IDS, "other"];
 
 export type AgentRunInput = {
   sessionId: string;
+  /** The voice session's app; the analyst answers within it. */
+  app: AppId;
   question: string;
   /** Latest HUD state the browser posted (`view_state` control), or null. */
   view: unknown;
@@ -43,18 +53,19 @@ function isBBox(value: unknown): value is BBox {
  * The HUD snapshot (`client/voice/hud-state.ts` HudState) reduced to the agent's view input.
  * Undefined when the browser has not posted one or it is malformed: the agent then uses no view.
  */
-export function agentViewFromHud(hud: unknown): AgentView | undefined {
+export function agentViewFromHud(hud: unknown, app: AppId): AgentView | undefined {
   if (!hud || typeof hud !== "object") return undefined;
   const { bbox, time, layers, species, selection } = hud as Record<string, unknown>;
   const at = typeof time === "string" ? time : (time as { at?: unknown } | null)?.at;
   if (!isBBox(bbox) || typeof at !== "string" || !Number.isFinite(Date.parse(at))) return undefined;
   // The species filter, like the typed chat sends it: only when it hides some species.
-  const shown = Array.isArray(species) ? SPECIES_FILTER_KEYS.filter((k) => species.includes(k)) : null;
+  const keys = speciesFilterKeys(app);
+  const shown = Array.isArray(species) ? keys.filter((k) => species.includes(k)) : null;
   return {
     bbox: { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north },
     time: at,
     layers: Array.isArray(layers) ? layers.filter((l): l is string => typeof l === "string") : [],
-    ...(shown && shown.length < SPECIES_FILTER_KEYS.length ? { species: shown } : {}),
+    ...(shown && shownByDefault(keys).some((k) => !shown.includes(k)) ? { species: shown } : {}),
     selection: typeof selection === "string" ? selection : null,
   };
 }
@@ -67,8 +78,9 @@ export const defaultAgentRunner: AgentRunner = {
     const result = await runTurn(
       {
         sessionId: `voice-${input.sessionId}`,
+        app: input.app,
         question: input.question,
-        view: agentViewFromHud(input.view),
+        view: agentViewFromHud(input.view, input.app),
         signal: input.signal,
       },
       (event: AgentStreamEvent) => onEvent(event),

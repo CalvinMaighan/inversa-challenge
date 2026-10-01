@@ -8,7 +8,7 @@ import { connectThread } from "@calvinjs/active-state/threads";
 
 import { state } from "client/state";
 
-import { GRAPHQL_HTTP_PATH, postGraphql, resolveWsUrl, SubscriptionClient } from "./gql/client";
+import { appFromWorkerName, graphqlPath, postGraphql, resolveWsUrl, SubscriptionClient } from "./gql/client";
 import { serveGqlRpc, type FromGql, type GqlHandlers } from "./gql/protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -16,11 +16,14 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 // Before the first await, so the host handshake is not missed.
 connectThread(scope, state);
 
-const HTTP_URL = new URL(GRAPHQL_HTTP_PATH, scope.location.origin).href;
+/** This worker serves one app (C-A5): boot.ts names it `inversa-gql:<app>`. */
+const APP = appFromWorkerName(scope.name);
+const HTTP_URL = new URL(graphqlPath(APP), scope.location.origin).href;
 const WS_URL = resolveWsUrl({
   explicit: process.env.NEXT_PUBLIC_INVERSA_WS_URL,
   dev: process.env.NODE_ENV !== "production",
   location: scope.location,
+  app: APP,
 });
 
 export const FRAMES_UPDATED_SUBSCRIPTION = "subscription { framesUpdated { from to } }";

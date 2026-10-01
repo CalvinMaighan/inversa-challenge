@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { PYTHON_BBOX, PYTHON_LAYERS, selectPython } from "@/tests/client/python-app";
 
 import { agentView, buildAgentRequest, validBBox } from "client/agent/chat/request";
-import { LAYERS } from "client/state/layers";
-import { REGION_BBOX } from "client/state/view";
+
+selectPython();
 
 const NOW = Date.parse("2026-09-30T12:00:00Z");
 
@@ -20,6 +21,7 @@ describe("agent request view", () => {
       NOW,
     );
     expect(request).toEqual({
+      app: "python",
       sessionId: "s1",
       question: "Where should python crews go tonight?",
       view: {
@@ -33,18 +35,18 @@ describe("agent request view", () => {
   });
 
   test("missing or unusable fields fall back to the region, the wall clock, the default window and nothing selected", () => {
-    expect(agentView({}, NOW)).toEqual({ bbox: { ...REGION_BBOX }, time: "2026-09-30T12:00:00.000Z", layers: [], windowHours: 168, selection: null });
+    expect(agentView({}, NOW)).toEqual({ bbox: PYTHON_BBOX, time: "2026-09-30T12:00:00.000Z", layers: [], windowHours: 168, selection: null });
     expect(agentView({ layers: { sightingHours: 48 } }, NOW).windowHours).toBe(48);
     expect(agentView({ layers: { sightingHours: 99 } }, NOW).windowHours).toBe(168);
     // Voice's TIME shape uses at: null for "live".
     expect(agentView({ time: { at: null }, view: { bbox: { west: -80, south: 25, east: -81, north: 26 } } }, NOW)).toMatchObject({
-      bbox: { ...REGION_BBOX },
+      bbox: PYTHON_BBOX,
       time: "2026-09-30T12:00:00.000Z",
     });
   });
 
   test("the species filter travels only when it hides an animal", () => {
-    const all = { ...LAYERS.defaults.species };
+    const all = { ...PYTHON_LAYERS.species };
     const animals = ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"];
     expect(agentView({ layers: { visible: { sightings: true }, species: all } }, NOW).species).toBeUndefined();
     // Switching plants on hides nothing: no filter travels.

@@ -7,12 +7,13 @@
  * Pure over the evidence record (C14 shapes from Axum) and the time cursor. Never shows raw coordinates or ids;
  * those stay under "Details for experts".
  */
+import { activeApp } from "client/state/app";
 import { categoryOfTaxon, isFocusTaxon, taxonName } from "client/state/taxa";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
-import { CATEGORY_NOUNS, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
+import { CATEGORY_NOUNS, type CategoryId } from "shared/species-categories";
 
-import { SPECIES_GUIDE } from "../help/content";
+import { speciesGuide } from "../help/content";
 import { feedLabel } from "../topbar/feed-chips";
 import { ago, formatReading, NETWORK_LABELS } from "../tooltip/model";
 
@@ -53,8 +54,9 @@ export function speciesCard(taxon: Record<string, unknown>): SpeciesCard {
   const sci = str(taxon.scientificName);
   const name = taxonName({ commonName: common ?? "", scientificName: sci ?? "" }, "Unnamed species");
   const focusIndex = isFocusTaxon(id) ? id - 1 : -1;
-  const guide = focusIndex >= 0 ? SPECIES_GUIDE[focusIndex] : undefined;
-  const category = focusIndex >= 0 ? FOCUS_CATEGORIES[focusIndex]! : categoryOfTaxon(taxon as Parameters<typeof categoryOfTaxon>[0]);
+  const app = activeApp();
+  const guide = focusIndex >= 0 ? speciesGuide(app)[focusIndex] : undefined;
+  const category = (focusIndex >= 0 ? app.taxa[focusIndex]!.category : undefined) ?? categoryOfTaxon(taxon as Parameters<typeof categoryOfTaxon>[0]);
   const summary = str(taxon.summary);
   const pageUrl = str(taxon.pageUrl);
   return {

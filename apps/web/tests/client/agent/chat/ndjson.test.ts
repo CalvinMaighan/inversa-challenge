@@ -13,7 +13,7 @@ function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
-const REQUEST: AgentStreamRequest = { sessionId: "s1", question: "q" };
+const REQUEST: AgentStreamRequest = { app: "python", sessionId: "s1", question: "q" };
 
 describe("NDJSON reader", () => {
   test("reassembles lines split across chunks and skips junk", async () => {

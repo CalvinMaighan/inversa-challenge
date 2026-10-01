@@ -5,14 +5,23 @@ import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState, type SpeciesId } from "client/state/layers";
 import { TAXA, type TaxaState } from "client/state/taxa";
+import { activeApp } from "client/state/app";
 import styled from "client/styled";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { legendTitle, taxonKey } from "shared/apps";
 
+import { useActiveApp } from "../appselect/use-active-app";
 import { Mono } from "../primitives";
-import { SPECIES_NAMES } from "../tooltip/model";
 import CategoryIcon from "../species/CategoryIcon";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
+
+/** The app's legend line (config `legend.title`). */
+const LegendTitle = styled.p`
+  margin: 0;
+  padding-bottom: var(--gap-xs);
+  color: var(--muted);
+  font: 500 12px / 1.4 var(--font-ui);
+`;
 
 const Row = styled.div`
   padding: var(--gap-s) 0;
@@ -217,9 +226,9 @@ function LegendRowView({ row }: { row: LegendRow }) {
             data-testid={`legend-pin-${row.layer}`}
           >
             <option value="">All shown species</option>
-            {SPECIES_IDS.map((id, i) => (
-              <option key={id} value={id}>
-                {SPECIES_NAMES[i]} only
+            {activeApp().taxa.map((taxon) => (
+              <option key={taxonKey(taxon)} value={taxonKey(taxon)}>
+                {taxon.name} only
               </option>
             ))}
           </select>
@@ -260,9 +269,12 @@ export default function LegendBody({ active }: { active: boolean }) {
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
   const stats = useGlobeStats(active);
   const taxa = useActiveState<TaxaState, TaxaState["byId"]>(TAXA, (t) => t.byId)[0] ?? TAXA.defaults.byId;
-  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, taxa), [layers, stats, taxa]);
+  const app = useActiveApp();
+  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, taxa, app), [app, layers, stats, taxa]);
+  const title = legendTitle(app);
   return (
-    <section aria-label="Layers and legend" data-testid="layers-legend">
+    <section aria-label="Layers and legend" data-testid="layers-legend" data-app={app.id}>
+      {title ? <LegendTitle data-testid="legend-title">{title}</LegendTitle> : null}
       {rows.map((row) => (
         <LegendRowView key={row.layer} row={row} />
       ))}

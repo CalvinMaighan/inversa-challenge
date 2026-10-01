@@ -4,8 +4,8 @@
  * Open-Meteo. Coordinates are WGS84; area bboxes are hand-drawn and generous.
  */
 
-import { REGION_BBOX } from "@/server/agent/config";
 import type { BBox } from "@/shared/agent/events";
+import { regionAt, type AppConfig } from "@/shared/apps";
 
 export type Place = {
   name: string;
@@ -114,25 +114,25 @@ export function lookupGazetteer(query: string): Place | null {
   return best ? toPlace(best.row) : null;
 }
 
-export function inRegion(lat: number, lon: number): boolean {
-  return lat >= REGION_BBOX.south && lat <= REGION_BBOX.north && lon >= REGION_BBOX.west && lon <= REGION_BBOX.east;
+/** Inside one of the app's regions. */
+export function inRegion(app: AppConfig, lat: number, lon: number): boolean {
+  return regionAt(app, lat, lon) !== null;
 }
 
 type OpenMeteoResult = { name: string; latitude: number; longitude: number; admin1?: string; feature_code?: string };
 
-/** Open-Meteo geocoding, restricted to the operating region. */
-export async function openMeteoGeocode(query: string, signal?: AbortSignal): Promise<Place | null> {
+/** Open-Meteo geocoding, restricted to the app's regions (lionfish spans four countries, so no country filter). */
+export async function openMeteoGeocode(app: AppConfig, query: string, signal?: AbortSignal): Promise<Place | null> {
   const url = new URL("https://geocoding-api.open-meteo.com/v1/search");
   url.searchParams.set("name", query);
-  url.searchParams.set("count", "10");
+  url.searchParams.set("count", "20");
   url.searchParams.set("language", "en");
   url.searchParams.set("format", "json");
-  url.searchParams.set("countryCode", "US");
   const timeout = AbortSignal.timeout(8_000);
   const response = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!response.ok) throw new Error(`Open-Meteo geocoding HTTP ${response.status}`);
   const body = (await response.json()) as { results?: OpenMeteoResult[] };
-  const hit = (body.results ?? []).find((row) => inRegion(row.latitude, row.longitude));
+  const hit = (body.results ?? []).find((row) => inRegion(app, row.latitude, row.longitude));
   if (!hit) return null;
   return {
     name: hit.admin1 ? `${hit.name}, ${hit.admin1}` : hit.name,

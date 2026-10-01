@@ -1,7 +1,8 @@
 import { key } from "@calvinjs/active-state";
 
-import { categoryFromAncestry, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { categoryFromAncestry, type CategoryId } from "shared/species-categories";
+
+import { activeApp } from "./app";
 
 /**
  * What the client knows about a taxon (T44): the GraphQL `Taxon`, keyed by `taxa.id` (the EVF2 record's
@@ -37,18 +38,18 @@ const defaults: TaxaState = { byId: {}, version: 0 };
 
 export const TAXA = key("TAXA", defaults);
 
-/** `taxa.id` 1-4 are the focus species, in SPECIES_IDS order (PLAN.md C4). */
+/** `taxa.id` 1..N are the active app's focus species, in config order (PLAN.md C-A4). */
 export function isFocusTaxon(taxonId: number): boolean {
-  return Number.isInteger(taxonId) && taxonId >= 1 && taxonId <= SPECIES_IDS.length;
+  return Number.isInteger(taxonId) && taxonId >= 1 && taxonId <= activeApp().taxa.length;
 }
 
 /**
- * The category of a taxon id: the focus four are known without the store; any other taxon reads the store, and
- * one not loaded yet is `null` (drawn with the generic icon until it arrives).
+ * The category of a taxon id: a focus species' comes from its config (`taxa[].category`, else the store); any
+ * other taxon reads the store, and one not loaded yet is `null` (drawn with the generic icon until it arrives).
  */
 export function taxonCategory(byId: Readonly<Record<string, TaxonInfo>>, taxonId: number): CategoryId | null {
-  if (isFocusTaxon(taxonId)) return FOCUS_CATEGORIES[taxonId - 1]!;
-  return byId[String(taxonId)]?.category ?? null;
+  const configured = isFocusTaxon(taxonId) ? activeApp().taxa[taxonId - 1]!.category : undefined;
+  return configured ?? byId[String(taxonId)]?.category ?? null;
 }
 
 /** The category of a raw taxon record (an evidence record's `taxon`, a GraphQL row). */

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { selectPython } from "@/tests/client/python-app";
 import { get, init, set } from "@calvinjs/active-state";
 
 import {
@@ -13,6 +14,8 @@ import { registerGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, TIME, state } from "client/state";
 import { timeWindow, type TimeState } from "client/state/time";
 import { altitudeToFit } from "client/state/view";
+
+selectPython();
 
 init(state);
 

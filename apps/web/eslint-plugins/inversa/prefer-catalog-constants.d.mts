@@ -1,7 +1,7 @@
 /** Types for `prefer-catalog-constants.mjs`. Keep in sync. */
 import type { Rule } from "eslint";
 
-export type VocabularyConstant = "SPECIES_IDS" | "LAYER_IDS" | "QUALITY_CODES";
+export type VocabularyConstant = "APP_IDS" | "LAYER_IDS" | "QUALITY_CODES";
 /** Mirrors the shared/ lists; a test keeps the two in step. */
 export declare const CATALOG_VOCABULARY: Record<VocabularyConstant, string[]>;
 export declare const CONSTANT_MODULE: Record<VocabularyConstant, string>;

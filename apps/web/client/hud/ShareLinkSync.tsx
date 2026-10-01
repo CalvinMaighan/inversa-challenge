@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { subscribe } from "@calvinjs/active-state";
 
+import { APP, activeAppId } from "client/state/app";
 import { LAYERS } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { TIME } from "client/state/time";
@@ -30,7 +31,9 @@ export default function ShareLinkSync() {
     const applyHash = (hash: string) => {
       lastHash = hash;
       const decoded = decodeShareLink(hash);
-      if (!hasShareFields(decoded)) return;
+      // The hash is a view within the active app (AppBoot already resolved it, `?app=` first); another app's
+      // layers and species mean nothing here.
+      if (!hasShareFields(decoded) || (decoded.app !== undefined && decoded.app !== activeAppId())) return;
       cancelFly();
       cancelFly = applyShareState(decoded);
     };
@@ -49,7 +52,7 @@ export default function ShareLinkSync() {
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(write, SHARE_WRITE_DEBOUNCE_MS);
     };
-    const offs = [VIEW, TIME, LAYERS, SELECTION].map((k) => subscribe(k, schedule));
+    const offs = [APP, VIEW, TIME, LAYERS, SELECTION].map((k) => subscribe(k, schedule));
     // replaceState never fires hashchange, so this only sees links pasted or edited by hand.
     const onHashChange = () => {
       const hash = currentHash();

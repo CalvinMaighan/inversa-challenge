@@ -47,7 +47,7 @@ export async function turn(
   const events: AgentStreamEvent[] = [];
   sessionSeq += 1;
   const result = await runTurn(
-    { sessionId: `test-${Date.now()}-${sessionSeq}`, question, now: NOW, cache: false, ...extra },
+    { app: "python", sessionId: `test-${Date.now()}-${sessionSeq}`, question, now: NOW, cache: false, ...extra },
     (event) => events.push(event),
   );
   return { events, result };

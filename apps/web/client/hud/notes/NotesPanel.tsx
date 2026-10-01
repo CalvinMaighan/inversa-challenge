@@ -10,7 +10,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { speciesIds } from "shared/apps";
 
 import { getGlobe } from "client/globe/api";
 import { colorOfNode, type MeState } from "client/state/me";
@@ -22,7 +23,7 @@ import { createFieldNoteOps, deleteFieldNoteOp, editFieldNoteOp, isSpecies, MAX_
 import type { Team } from "../missions/team";
 import { Dot, IconButton, Mono, Pill, SectionTitle } from "../primitives";
 import { clearSelection } from "../selection";
-import { ago, SPECIES_NAMES } from "../tooltip/model";
+import { ago, speciesNames } from "../tooltip/model";
 import { canEditNote, NOTE_RATE_LIMIT, noteEvidenceId, placeName, RateLimiter } from "./model";
 
 /** Camera height when a note is opened from the list: the spot and a few hundred metres around it. */
@@ -163,8 +164,8 @@ function useNow(): number {
 }
 
 function speciesLabel(id: string): string {
-  const i = (SPECIES_IDS as readonly string[]).indexOf(id);
-  return i >= 0 ? SPECIES_NAMES[i]! : id;
+  const i = speciesIds(activeApp()).indexOf(id);
+  return i >= 0 ? speciesNames()[i]! : id;
 }
 
 function flyToNote(note: Pick<FieldNote, "id" | "lon" | "lat">): void {
@@ -243,7 +244,7 @@ function Composer({ team, me }: { team: Team; me: MeState | undefined }) {
       <Row>
         <Select value={species} aria-label="Species" onChange={(e) => setSpecies(e.target.value)} data-testid="note-species">
           <option value="">Species (optional)</option>
-          {SPECIES_IDS.map((s) => (
+          {speciesIds(activeApp()).map((s) => (
             <option key={s} value={s}>
               {speciesLabel(s)}
             </option>

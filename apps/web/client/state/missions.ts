@@ -1,7 +1,12 @@
 import { key } from "@calvinjs/active-state";
 
-/** One shared board for the region; the rtc room and `board(id)` query use the same id. */
-export const DEFAULT_BOARD_ID = "everglades";
+import { boardIdFor, DEFAULT_APP_ID } from "shared/apps";
+
+/**
+ * One shared board per app (C-A6): `<app>:main`; the rtc room and `board(id)` query use the same id. This is the
+ * default app's; switching apps moves MISSIONS.boardId (`client/state/app-switch.ts`).
+ */
+export const DEFAULT_BOARD_ID = boardIdFor(DEFAULT_APP_ID);
 
 /**
  * Summary of the team board for the HUD. The board itself (missions, notes, messages, removals) lives in the

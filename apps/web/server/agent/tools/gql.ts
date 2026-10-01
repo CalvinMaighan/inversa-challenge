@@ -1,22 +1,32 @@
-/** GraphQL client for Axum `/v1/graphql` (PLAN.md C2). One POST per call. */
+/** GraphQL client for Axum `/v1/<app>/graphql` (PLAN.md C2, C-A2). One POST per call. */
 
 import { apiOrigin } from "@/server/agent/config";
+import type { AppConfig } from "@/shared/apps";
 import type { FeedHealth, FeedState } from "@/shared/feed-state";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
 export class GraphqlError extends Error {}
 
+/** Which app's API a call goes to, and the turn's abort signal. A `CapabilityContext` is one. */
+export type GqlScope = { app: Pick<AppConfig, "id">; signal?: AbortSignal };
+
+/** The app's GraphQL endpoint (C-A2). There is no unprefixed route. */
+export function graphqlUrl(app: Pick<AppConfig, "id">): string {
+  return `${apiOrigin()}/v1/${encodeURIComponent(app.id)}/graphql`;
+}
+
 export async function gql<T>(
   operationName: string,
   query: string,
   variables: Record<string, unknown>,
-  signal?: AbortSignal,
+  scope: GqlScope,
 ): Promise<T> {
+  const { signal } = scope;
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetch(`${apiOrigin()}/v1/graphql`, {
+    response = await fetch(graphqlUrl(scope.app), {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({ operationName, query, variables }),
@@ -66,15 +76,15 @@ export async function gqlWithFeeds<T>(
   operationName: string,
   query: string,
   variables: Record<string, unknown>,
-  signal?: AbortSignal,
+  scope: GqlScope,
 ): Promise<T> {
   const withRunIds = feedRunIds;
   try {
-    return await gql<T>(operationName, `${query}\n${feedFragment()}`, variables, signal);
+    return await gql<T>(operationName, `${query}\n${feedFragment()}`, variables, scope);
   } catch (error) {
     if (!withRunIds || !(error instanceof GraphqlError) || !error.message.includes("lastFetchRunId")) throw error;
     feedRunIds = false;
-    return gql<T>(operationName, `${query}\n${feedFragment()}`, variables, signal);
+    return gql<T>(operationName, `${query}\n${feedFragment()}`, variables, scope);
   }
 }
 
@@ -121,12 +131,7 @@ export function dataVersion(feeds: readonly FeedState[]): string | null {
   return best === null ? null : new Date(best).toISOString();
 }
 
-export async function fetchFeeds(signal?: AbortSignal): Promise<FeedState[]> {
-  const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>(
-    "AgentFeeds",
-    "query AgentFeeds { feeds { ...FeedFields } }",
-    {},
-    signal,
-  );
+export async function fetchFeeds(scope: GqlScope): Promise<FeedState[]> {
+  const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeeds", "query AgentFeeds { feeds { ...FeedFields } }", {}, scope);
   return data.feeds.map(toFeedState);
 }

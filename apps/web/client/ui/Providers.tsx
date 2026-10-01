@@ -6,6 +6,7 @@ import { ActiveState } from "@calvinjs/active-state/react";
 import { ActiveTheme } from "active-theme/state";
 
 import { DEBUG_HOOK, installDebugHook } from "client/debug";
+import AppBoot from "client/hud/appselect/AppBoot";
 import { state } from "client/state";
 import { ensureIdentity } from "client/state/me";
 import { STORAGE_PREFIX } from "client/themes/bootstrap";
@@ -52,6 +53,7 @@ export default function Providers({ children }: { children: ReactNode }) {
     <EmotionRegistry>
       <ThemeProvider theme={emotionTheme}>
         <ActiveState init={state} ssr storagePrefix={STORAGE_PREFIX} />
+        <AppBoot />
         <ThemeSync />
         <GlobalStyles />
         <Identity />

@@ -42,7 +42,7 @@ export type AlertFacts = {
 
 export type HotspotFacts = {
   kind: "hotspot";
-  /** Index into SPECIES_IDS. */
+  /** Index into the active app's focus species (config order). */
   species: number;
   /** Heuristic score, 0..1. */
   score: number;

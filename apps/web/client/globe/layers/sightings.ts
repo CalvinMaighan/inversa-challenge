@@ -20,7 +20,8 @@ import { sightingHoursOf } from "client/state/layers";
 import { taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import type { CategoryId } from "shared/species-categories";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
 import { sightingEvidenceId } from "../evidence";
@@ -109,7 +110,7 @@ export function visibleRecords(records: readonly TrailRecord[], filter: Readonly
  * hidden species still shows what turning it back on would draw.
  */
 export function sightingBreakdown(records: readonly Pick<SightingRecord, "taxon">[]): Record<string, number> {
-  const out: Record<string, number> = Object.fromEntries(SPECIES_IDS.map((_, i) => [String(i + 1), 0]));
+  const out: Record<string, number> = Object.fromEntries(activeApp().taxa.map((_, i) => [String(i + 1), 0]));
   for (const r of records) {
     const key = String(r.taxon);
     out[key] = (out[key] ?? 0) + 1;

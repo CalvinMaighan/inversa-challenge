@@ -1,16 +1,21 @@
 import { describe, expect, test } from "bun:test";
+import { set } from "@calvinjs/active-state";
+import { SPECIES_COLORS, selectPython } from "@/tests/client/python-app";
 
+import { APP } from "client/state/app";
 import { evidenceCell, hotspotEvidenceId, readingEvidenceId, sightingEvidenceId } from "client/globe/evidence";
 import { cellAt, gridBounds } from "client/globe/geometry";
 import { polygonsOf } from "client/globe/layers/geojson";
 import { alertBucket, alertQueryTime } from "client/globe/layers/alerts";
 import { bucketOfKey, createKeyedFetch, dataKey } from "client/globe/layers/keyed-fetch";
-import { categoryShown, colorOfTaxon, enabledSpecies, NEUTRAL_COLOR, recordShown, SPECIES_COLORS, speciesIndexOfTaxon, taxonShown } from "client/globe/species";
+import { categoryShown, colorOfTaxon, enabledSpecies, NEUTRAL_COLOR, recordShown, speciesIndexOfTaxon, taxonShown } from "client/globe/species";
 import type { TaxonInfo } from "client/state/taxa";
 import { CATEGORY_ANCESTORS, CATEGORY_COLORS } from "shared/species-categories";
 import { parseEvidenceId } from "client/state/selection";
 
 import { flush } from "./fakes";
+
+selectPython();
 
 describe("evidence ids (C14)", () => {
   test("formats match the agent's", () => {
@@ -100,10 +105,22 @@ describe("live keys (C18)", () => {
     let revision = 3;
     const ctx = { revision: () => revision };
     const key = dataKey(1_790_805_600_000, ctx);
-    expect(key).toBe("1790805600000|3");
+    expect(key).toBe("1790805600000|3|python");
     expect(bucketOfKey(key)).toBe(1_790_805_600_000);
     revision = 4;
     expect(dataKey(1_790_805_600_000, ctx)).not.toBe(key);
+  });
+
+  test("active app: right after an app switch the key changes, so the old app's rows are never served from the cache", () => {
+    const ctx = { revision: () => 3 };
+    const python = dataKey(1_790_805_600_000, ctx);
+    set(APP, { id: "carp" });
+    try {
+      expect(dataKey(1_790_805_600_000, ctx)).toBe("1790805600000|3|carp");
+      expect(dataKey(1_790_805_600_000, ctx)).not.toBe(python);
+    } finally {
+      selectPython();
+    }
   });
 
   test("alerts are asked for at the bucket start, or at now on the bucket holding now", () => {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { isAgentStreamEvent } from "shared/agent/events";
+import type { AppConfig } from "shared/apps";
 import {
   VOICE_INPUT_SAMPLE_RATE,
   VOICE_OUTPUT_SAMPLE_RATE,
@@ -31,8 +32,8 @@ import {
   RESULT_RESPONSE_INSTRUCTIONS,
   SPAWN_THINKING_TOOL,
   VIEW_SCREEN_TOOL,
-  VOICE_TOOLS,
   buildVoiceInstructions,
+  voiceToolsFor,
   formatProgressContext,
   formatResultContext,
   type ResultContextItem,
@@ -82,6 +83,8 @@ const INVALID_JSON = Symbol("invalid-json");
 
 export type VoiceSessionOptions = {
   ip: string;
+  /** The app the browser opened voice in: persona, scope, UI tool enums and the analyst's app (C-A5). */
+  app: AppConfig;
   target: RealtimeTarget;
   runner: AgentRunner;
   budget: VoiceBudget;
@@ -260,8 +263,8 @@ export class VoiceSession {
           conn.send({
             type: "session.update",
             session: {
-              instructions: buildVoiceInstructions(),
-              tools: VOICE_TOOLS,
+              instructions: buildVoiceInstructions(this.opts.app),
+              tools: voiceToolsFor(this.opts.app),
               voice: VOICE_REALTIME_VOICE,
               turn_detection: { type: "server_vad" },
               audio: {
@@ -654,7 +657,7 @@ export class VoiceSession {
 
   /** Validated UI commands go to the browser; invalid ones go back to the model only. */
   private runUiTool(name: string, args: unknown): ToolReceipt {
-    const result = validateUiToolCall(name, args);
+    const result = validateUiToolCall(name, args, this.opts.app);
     if (!result.ok) return { ok: false, error: result.error };
     this.emit({ type: "ui.command", name: result.command.name, args: result.command.args });
     return { ok: true };
@@ -703,7 +706,7 @@ export class VoiceSession {
     let run: Promise<{ content: string }>;
     try {
       run = this.opts.runner.run(
-        { sessionId: this.id, question: trimmed, view: this.viewState, signal: abort.signal },
+        { sessionId: this.id, app: this.opts.app.id, question: trimmed, view: this.viewState, signal: abort.signal },
         (event) => {
           if (tracked.status !== "running") return;
           // Every C7 agent event streams to the orb card; anything else the runner emits stays local.

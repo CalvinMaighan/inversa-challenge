@@ -10,12 +10,11 @@
  */
 import { allocFrameGrid, type FrameGrid } from "@calvinjs/active-state/threads";
 
-import { REGION_BBOX } from "client/state/view";
 import type { FrameMeta, FrameSightings } from "client/threads/api";
 import { ENV_MISSING, EVF_SPECIES, type SightingRecord } from "shared/frames";
 
 import { frameSightingsOf, gridFromEvf } from "./evf";
-import { C4_GEOMETRY } from "./geometry";
+import { C4_BBOX, C4_GEOMETRY } from "./geometry";
 
 export const DEV_SAMPLE_URL = "/dev/globe/sample-evf";
 
@@ -140,14 +139,14 @@ export function syntheticFrames({
   const land = new Uint8Array(ENV_COLS * ENV_ROWS);
   for (let r = 0; r < ENV_ROWS; r += 1) {
     for (let c = 0; c < ENV_COLS; c += 1) {
-      land[r * ENV_COLS + c] = onMainland(REGION_BBOX.west + (c + 0.5) * ENV_DEG, REGION_BBOX.south + (r + 0.5) * ENV_DEG) ? 1 : 0;
+      land[r * ENV_COLS + c] = onMainland(C4_BBOX.west + (c + 0.5) * ENV_DEG, C4_BBOX.south + (r + 0.5) * ENV_DEG) ? 1 : 0;
     }
   }
-  const spanLon = REGION_BBOX.east - REGION_BBOX.west;
-  const spanLat = REGION_BBOX.north - REGION_BBOX.south;
+  const spanLon = C4_BBOX.east - C4_BBOX.west;
+  const spanLat = C4_BBOX.north - C4_BBOX.south;
   const clouds = [0, 1, 2].map(() => ({
-    lon: REGION_BBOX.west + random() * spanLon,
-    lat: REGION_BBOX.south + random() * spanLat,
+    lon: C4_BBOX.west + random() * spanLon,
+    lat: C4_BBOX.south + random() * spanLat,
     dLon: 0.02 + random() * 0.03,
     dLat: -0.01 + random() * 0.02,
     radius: 0.25 + random() * 0.2,
@@ -169,14 +168,14 @@ export function syntheticFrames({
       for (const blob of BLOBS[s]!) {
         const amp = blob.peak * diurnal * cold;
         const reach = blob.sigma * 3;
-        const c0 = Math.max(0, Math.floor((blob.lon - reach - REGION_BBOX.west) / HS_DEG));
-        const c1 = Math.min(HS_COLS - 1, Math.ceil((blob.lon + reach - REGION_BBOX.west) / HS_DEG));
-        const r0 = Math.max(0, Math.floor((blob.lat - reach - REGION_BBOX.south) / HS_DEG));
-        const r1 = Math.min(HS_ROWS - 1, Math.ceil((blob.lat + reach - REGION_BBOX.south) / HS_DEG));
+        const c0 = Math.max(0, Math.floor((blob.lon - reach - C4_BBOX.west) / HS_DEG));
+        const c1 = Math.min(HS_COLS - 1, Math.ceil((blob.lon + reach - C4_BBOX.west) / HS_DEG));
+        const r0 = Math.max(0, Math.floor((blob.lat - reach - C4_BBOX.south) / HS_DEG));
+        const r1 = Math.min(HS_ROWS - 1, Math.ceil((blob.lat + reach - C4_BBOX.south) / HS_DEG));
         for (let r = r0; r <= r1; r += 1) {
-          const dLat = REGION_BBOX.south + (r + 0.5) * HS_DEG - blob.lat;
+          const dLat = C4_BBOX.south + (r + 0.5) * HS_DEG - blob.lat;
           for (let c = c0; c <= c1; c += 1) {
-            const dLon = REGION_BBOX.west + (c + 0.5) * HS_DEG - blob.lon;
+            const dLon = C4_BBOX.west + (c + 0.5) * HS_DEG - blob.lon;
             const v = Math.round(255 * amp * Math.exp(-(dLon * dLon + dLat * dLat) / (2 * blob.sigma * blob.sigma)));
             const i = r * HS_COLS + c;
             if (v > cells[i]!) cells[i] = Math.min(255, v);
@@ -188,13 +187,13 @@ export function syntheticFrames({
     const lst = grid.lst(f);
     const sst = grid.sst(f);
     for (let r = 0; r < ENV_ROWS; r += 1) {
-      const lat = REGION_BBOX.south + (r + 0.5) * ENV_DEG;
+      const lat = C4_BBOX.south + (r + 0.5) * ENV_DEG;
       for (let c = 0; c < ENV_COLS; c += 1) {
-        const lon = REGION_BBOX.west + (c + 0.5) * ENV_DEG;
+        const lon = C4_BBOX.west + (c + 0.5) * ENV_DEG;
         const i = r * ENV_COLS + c;
         const cloudy = clouds.some((k) => {
-          const dx = lon - wrap(k.lon + k.dLon * f, REGION_BBOX.west, spanLon);
-          const dy = lat - wrap(k.lat + k.dLat * f, REGION_BBOX.south, spanLat);
+          const dx = lon - wrap(k.lon + k.dLon * f, C4_BBOX.west, spanLon);
+          const dy = lat - wrap(k.lat + k.dLat * f, C4_BBOX.south, spanLat);
           return dx * dx + dy * dy < k.radius * k.radius;
         });
         const northFront = front * Math.min(1, Math.max(0, (lat - 24.3) / 1.6 + 0.3));

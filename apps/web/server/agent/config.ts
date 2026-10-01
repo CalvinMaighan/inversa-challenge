@@ -10,9 +10,3 @@ export function dataDir(): string {
   // Runtime-only path: keep Turbopack from tracing the whole project into the server bundle.
   return resolve(/*turbopackIgnore: true*/ process.cwd(), process.env.INVERSA_DATA_DIR?.trim() || "data");
 }
-
-/** PLAN.md C15 region bbox. Tool defaults and clamps use it. */
-export const REGION_BBOX = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 } as const;
-
-/** PLAN.md C14 grid: 0.01° cells anchored at the region's south-west corner. */
-export const CELL_DEG = 0.01;

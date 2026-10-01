@@ -31,7 +31,7 @@ describe("voice default agent runner (live)", () => {
     };
     const events: AgentRunEvent[] = [];
     const result = await defaultAgentRunner.run(
-      { sessionId: `live-voice-${Date.now()}`, question: "Any NWS alerts in effect for Florida Bay right now?", view: hud },
+      { sessionId: `live-voice-${Date.now()}`, app: "python", question: "Any NWS alerts in effect for Florida Bay right now?", view: hud },
       (event) => events.push(event),
     );
 

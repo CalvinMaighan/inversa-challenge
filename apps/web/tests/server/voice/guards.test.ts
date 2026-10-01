@@ -13,9 +13,12 @@ import {
   formatResultContext,
   RESULT_CONTEXT_MAX_CHARS,
   RESULT_TRUNCATION_NOTE,
-  UI_TOOLS,
+  uiToolsFor,
 } from "server/voice/voice-prompt";
+import { getApp } from "shared/apps";
 import { isVoiceControlRequest } from "shared/voice/protocol";
+
+const PYTHON = getApp("python");
 
 describe("protocol and control guards", () => {
   test("protocol control requests", () => {
@@ -54,32 +57,45 @@ describe("ui tool validation", () => {
   });
 
   test("fly_to resolves a place and fills coordinates", () => {
-    const result = validateUiToolCall("fly_to", { place: "Key Largo" });
+    const result = validateUiToolCall("fly_to", { place: "Key Largo" }, PYTHON);
     expect(result).toEqual({
       ok: true,
       command: { name: "fly_to", args: { place: "Key Largo", lat: 25.0865, lon: -80.4473, altitudeM: 15_000 } },
     });
-    expect(validateUiToolCall("fly_to", { lat: 25, lon: -81 })).toMatchObject({ ok: true });
-    expect(validateUiToolCall("fly_to", {})).toMatchObject({ ok: false });
-    expect(validateUiToolCall("fly_to", { place: "Atlantis" })).toMatchObject({ ok: false });
+    expect(validateUiToolCall("fly_to", { lat: 25, lon: -81 }, PYTHON)).toMatchObject({ ok: true });
+    expect(validateUiToolCall("fly_to", {}, PYTHON)).toMatchObject({ ok: false });
+    expect(validateUiToolCall("fly_to", { place: "Atlantis" }, PYTHON)).toMatchObject({ ok: false });
   });
 
   test("times must parse", () => {
-    expect(validateUiToolCall("set_time", { time: "now" })).toMatchObject({ ok: true });
-    expect(validateUiToolCall("set_time", { time: "2026-09-30T10:00:00Z" })).toMatchObject({ ok: true });
-    expect(validateUiToolCall("set_time", { time: "soonish" })).toMatchObject({ ok: false });
-    expect(validateUiToolCall("play_timeline", { from: "2026-09-02T00:00:00Z", to: "2026-09-01T00:00:00Z" })).toMatchObject({ ok: false });
-    expect(validateUiToolCall("play_timeline", {})).toEqual({
+    expect(validateUiToolCall("set_time", { time: "now" }, PYTHON)).toMatchObject({ ok: true });
+    expect(validateUiToolCall("set_time", { time: "2026-09-30T10:00:00Z" }, PYTHON)).toMatchObject({ ok: true });
+    expect(validateUiToolCall("set_time", { time: "soonish" }, PYTHON)).toMatchObject({ ok: false });
+    expect(validateUiToolCall("play_timeline", { from: "2026-09-02T00:00:00Z", to: "2026-09-01T00:00:00Z" }, PYTHON)).toMatchObject({ ok: false });
+    expect(validateUiToolCall("play_timeline", {}, PYTHON)).toEqual({
       ok: true,
       command: { name: "play_timeline", args: { speed: 8, playing: true } },
     });
   });
 
   test("tool schemas exported to Grok match the zod contract", () => {
+    const UI_TOOLS = uiToolsFor(PYTHON);
     const toggle = UI_TOOLS.find((t) => t.name === "toggle_layer")!;
     expect(toggle.parameters).toMatchObject({ type: "object", required: ["layer", "visible"] });
     const play = UI_TOOLS.find((t) => t.name === "play_timeline")!;
     expect((play.parameters as { required?: string[] }).required ?? []).not.toContain("speed");
+  });
+
+  test("voice tools per app: toggle_layer offers only the app's layers and species (C-A5)", () => {
+    const toggle = (id: "carp" | "lionfish" | "python") => uiToolsFor(getApp(id)).find((t) => t.name === "toggle_layer")!;
+    const props = (id: "carp" | "lionfish" | "python") => (toggle(id).parameters as { properties: Record<string, { enum?: string[] }> }).properties;
+    expect(props("carp").layer!.enum).toEqual(["stations", "alerts", "missions", "peers", "notes"]);
+    expect(props("carp").species?.enum).toBeUndefined();
+    expect(toggle("carp").description).not.toContain("python");
+    expect(props("lionfish").species!.enum).toEqual(["lionfish"]);
+    expect(props("python").species!.enum).toEqual(["python", "tegu", "iguana", "lionfish"]);
+    expect(validateUiToolCall("toggle_layer", { layer: "sightings", visible: true }, getApp("carp"))).toMatchObject({ ok: false });
+    expect(validateUiToolCall("toggle_layer", { layer: "sightings", visible: true, species: "lionfish" }, getApp("lionfish"))).toMatchObject({ ok: true });
   });
 });
 

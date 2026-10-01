@@ -34,6 +34,7 @@
     "e2e:speciescard": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/speciescard.ts",
     "e2e:quality": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/quality.ts",
     "e2e:perf": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/perf.ts",
+    "e2e:appselect": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/appselect.ts",
     "perf:poll": "bun e2e/perf-poll.ts"
   },
   "dependencies": {

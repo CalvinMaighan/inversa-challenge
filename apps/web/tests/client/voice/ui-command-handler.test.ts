@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { PYTHON_LAYERS, selectPython } from "@/tests/client/python-app";
 import { get, init, set } from "@calvinjs/active-state";
 
 import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
@@ -11,6 +12,8 @@ import { resolvePlace } from "client/voice/gazetteer";
 import { bboxAround, readHudState } from "client/voice/hud-state";
 import { applyUiCommand } from "client/voice/ui-command-handler";
 
+selectPython();
+
 init(state);
 
 const NOW = Date.parse("2026-09-30T20:40:00Z");
@@ -19,7 +22,7 @@ const WINDOW = timeWindow(NOW);
 beforeEach(() => {
   set(VIEW, VIEW.defaults);
   set(TIME, { ...TIME.defaults, ...WINDOW });
-  set(LAYERS, LAYERS.defaults);
+  set(LAYERS, PYTHON_LAYERS);
   set(SELECTION, SELECTION.defaults);
   set(VOICE, VOICE.defaults);
 });

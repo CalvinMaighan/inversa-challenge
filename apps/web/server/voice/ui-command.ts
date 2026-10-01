@@ -2,7 +2,8 @@ import { z } from "zod";
 
 import { parseEvidenceId } from "client/state/selection";
 import { resolvePlace } from "client/voice/gazetteer";
-import { parseUiCommand, uiToolSchemas, UI_TOOL_NAMES, type UiCommand, type UiToolName } from "shared/voice/ui-tools";
+import type { AppConfig } from "shared/apps";
+import { parseUiCommand, uiToolSchemasFor, UI_TOOL_NAMES, type UiCommand, type UiToolName } from "shared/voice/ui-tools";
 
 /**
  * Relay-side handling of the direct UI tools (PLAN.md C8). Schema validation is
@@ -20,15 +21,16 @@ function validTime(value: string): boolean {
   return value === "now" || Number.isFinite(Date.parse(value));
 }
 
-function schemaError(name: UiToolName, args: unknown): string {
-  const parsed = uiToolSchemas[name].safeParse(args);
+function schemaError(name: UiToolName, args: unknown, app: AppConfig): string {
+  const parsed = uiToolSchemasFor(app)[name].safeParse(args);
   return parsed.success ? "invalid arguments" : z.prettifyError(parsed.error).replace(/\s+/g, " ").trim();
 }
 
-export function validateUiToolCall(name: string, args: unknown): UiToolResult {
+/** Validated against `app`'s tools: a layer or species the app does not have is an error the model can correct. */
+export function validateUiToolCall(name: string, args: unknown, app: AppConfig): UiToolResult {
   if (!isUiToolName(name)) return { ok: false, error: `Unknown UI tool ${name}` };
-  const command = parseUiCommand(name, args);
-  if (!command) return { ok: false, error: `Invalid ${name} arguments: ${schemaError(name, args)}` };
+  const command = parseUiCommand(name, args, app);
+  if (!command) return { ok: false, error: `Invalid ${name} arguments: ${schemaError(name, args, app)}` };
 
   switch (command.name) {
     case "fly_to": {

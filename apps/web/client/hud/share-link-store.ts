@@ -1,13 +1,15 @@
 /**
- * Share link ↔ store. Reads the four keys a link carries (VIEW, TIME, LAYERS, SELECTION) into a `ShareState`,
- * and applies a decoded link back onto them, flying the globe to the restored camera once it is up.
+ * Share link ↔ store. Reads the app and the four keys a link carries (VIEW, TIME, LAYERS, SELECTION) into a
+ * `ShareState`, and applies a decoded link back onto them, flying the globe to the restored camera once it is up.
+ * The link's fields are the active app's: `ShareLinkSync` skips a link of another app (the URL's `?app=` wins).
  */
 import { get, set } from "@calvinjs/active-state";
 
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { onGlobeReady } from "client/globe/api";
-import { LAYERS, shownSpecies, sightingHoursOf, SPECIES_FILTER_IDS, taxonKey, taxonOverrides, TAXON_KEY, type LayersState } from "client/state/layers";
+import { activeApp, activeAppId } from "client/state/app";
+import { LAYERS, shownSpecies, sightingHoursOf, speciesFilterIds, taxonKey, taxonOverrides, TAXON_KEY, type LayersState } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { retime, TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
@@ -22,6 +24,7 @@ export function readShareState(): ShareState {
   const layers = get<LayersState>(LAYERS) ?? LAYERS.defaults;
   const selection = get<HudSelection>(SELECTION) ?? SELECTION.defaults;
   return {
+    app: activeAppId(),
     camera: { lat: view.lat, lon: view.lon, altitudeM: view.altitudeM, heading: view.heading, pitch: view.pitch },
     // Live links carry no time: opening one later lands on the live edge of that moment, not in replay.
     at: isLive(time, Date.now()) && !time.playing ? undefined : (time.at ?? time.to),
@@ -35,6 +38,7 @@ export function readShareState(): ShareState {
 
 /** Apply a decoded link. Returns an unsubscribe for the pending globe fly, a no-op once it has flown. */
 export function applyShareState(state: ShareState): () => void {
+  const app = activeApp();
   let cancelFly = () => {};
   if (state.camera) {
     const camera = state.camera;
@@ -54,13 +58,14 @@ export function applyShareState(state: ShareState): () => void {
     set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...retime(prev, atMs, Date.now()), playing: false }));
   }
   if (state.layers || state.species || state.taxa || state.hours) {
-    const visibleIds = state.layers ? new Set(state.layers) : null;
+    // Only layers the app has can be turned on, whatever the link says.
+    const visibleIds = state.layers ? new Set(state.layers.filter((id) => app.layers.includes(id))) : null;
     const speciesIds = state.species ? new Set(state.species) : null;
     set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
       // Layer pins travel along; a link's species list replaces the keys and the taxon overrides.
       const species: LayersState["species"] = { ...prev.species };
-      if (speciesIds || state.taxa) for (const k of Object.keys(species)) if (TAXON_KEY.test(k)) delete species[k as `t${string}`];
-      if (speciesIds) for (const id of SPECIES_FILTER_IDS) species[id] = speciesIds.has(id);
+      if (speciesIds || state.taxa) for (const k of Object.keys(species)) if (TAXON_KEY.test(k)) delete species[k];
+      if (speciesIds) for (const id of speciesFilterIds(app)) species[id] = speciesIds.has(id);
       for (const [id, shown] of state.taxa ?? []) species[taxonKey(id)] = shown;
       return {
         ...prev,

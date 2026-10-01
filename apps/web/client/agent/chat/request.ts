@@ -1,6 +1,7 @@
+import { activeApp } from "client/state/app";
 import { isSpeciesFiltered, shownSpecies, sightingHoursOf, type LayersState } from "client/state/layers";
-import { REGION_BBOX } from "client/state/view";
 import type { AgentStreamRequest, BBox } from "shared/agent/events";
+import { appBBox } from "shared/apps";
 
 /**
  * What the card sends with each question: the current view from VIEW, TIME, LAYERS (visible layers and the
@@ -30,7 +31,7 @@ export function agentView(snapshot: ViewSnapshot, nowMs: number): NonNullable<Ag
   const filter = snapshot.layers?.species;
   const species = shownSpecies(filter);
   return {
-    bbox: validBBox(bbox) ? { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north } : { ...REGION_BBOX },
+    bbox: validBBox(bbox) ? { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north } : appBBox(activeApp()),
     time: new Date(Number.isFinite(atMs) ? atMs : nowMs).toISOString(),
     layers: Object.entries(snapshot.layers?.visible ?? {})
       .filter(([, on]) => on === true)
@@ -41,6 +42,7 @@ export function agentView(snapshot: ViewSnapshot, nowMs: number): NonNullable<Ag
   };
 }
 
+/** The body of `POST /api/agent/stream`, in the active app (C-A5: the server picks persona, tools and scope from it). */
 export function buildAgentRequest(sessionId: string, question: string, snapshot: ViewSnapshot, nowMs: number): AgentStreamRequest {
-  return { sessionId, question: question.trim(), view: agentView(snapshot, nowMs) };
+  return { app: activeApp().id, sessionId, question: question.trim(), view: agentView(snapshot, nowMs) };
 }
