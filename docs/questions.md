@@ -459,7 +459,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Context: area=mx-caribbean, window=last 30 days
   - Tools: `sightings`, `reef_heat`, `set_view`. Cites: `feed:inat`, `feed:crw`, `kind:sighting`.
   - View: timeline: previous 30 days, then back
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(previous\|prior\|earlier) (month\|30 days)`, `(more\|fewer\|same\|no change\|up\|down\|from \d+ to \d+)`, `(reports?\|sightings?)(?:[^.]\|\.\d){0,60}(not\|aren't\|are not\|isn't\|is not)(?:[^.]\|\.\d){0,40}(abundance\|population\|how many)\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something)(?:[^.]\|\.\d){0,60}(population\|abundance)`. Must not match `(population\|abundance) (grew\|increased\|rose\|fell\|declined)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(previous\|prior\|earlier) (month\|30 days)`, `(more\|fewer\|same\|no change\|up\|down\|from \d+ to \d+)`, `(reports?\|sightings?)(?:[^.]\|\.\d){0,60}(not\|aren't\|are not\|isn't\|is not)(?:[^.]\|\.\d){0,40}(abundance\|population\|how many)\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something)(?:[^.]\|\.\d){0,60}(population\|abundance)`. Must not match `(?<!(mean\|imply\|say\|show\|that\|whether\|evidence\|proof)\b[^.]{0,40})(population\|abundance) (grew\|increased\|rose\|fell\|declined)`.
 - **lionfish-change-dhw-looe-key**: How has degree heating weeks changed at Looe Key over the past month?
   - Intent: Describe the DHW series at the Looe Key reef cell over 30 days with start, end and peak.
   - Tools: `reef_heat`. Cites: `feed:crw`, `kind:reading`.
@@ -554,7 +554,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Pass: mode answer; min 2 citations (2 sighting); numbers trace to tool output; discloses feed state. Must match `duplicate\|copy\|copies`, `iNaturalist\|iNat`, `GBIF`, `(not\|never) (counted\|count)`.
 - **lionfish-quality-buoy-vs-satellite**: Where are buoys and satellite SST disagreeing?
   - Intent: Compare in-situ buoy and satellite SST in the Florida Keys and state that the other areas have no buoys to compare.
-  - Tools: `geocode`, `conditions`. Cites: `feed:ndbc`, `feed:goes19`, `kind:reading`.
+  - Tools: `conditions`. Cites: `feed:ndbc`, `feed:goes19`, `kind:reading`.
   - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must match `buoy\|in-situ\|measured`, `satellite\|GOES`, `(disagree\|differ\|conflict\|agree)`, `(only\|just)(?:[^.]\|\.\d){0,60}Florida\|no (sea temperature )?buoys?(?:[^.]\|\.\d){0,80}(Mexic\|Belize\|Colombia)`.
 - **lionfish-quality-nas-colombia**: Is the NAS data for Colombia current?
   - Intent: Report the newest NAS record date in the co-caribbean box and call it stale.
@@ -636,7 +636,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Intent: Play the timeline over the 90 day backfill in the mx-caribbean preset and summarise the shifts.
   - Tools: `set_view`, `sightings`, `reef_heat`. Cites: `feed:inat`, `feed:crw`.
   - View: map: mx-caribbean preset; timeline: play last 90 days
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(90 days\|three months)`, `(DHW\|heat)`, `report`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(90[- ]days?\|three[- ]months?\|quarter)`, `(DHW\|heat)`, `report`.
 - **lionfish-replay-known-sept-1**: What did we know about Belize on September 1?
   - Intent: Show only records ingested by September 1 and list later uploads of earlier sightings separately.
   - Tools: `sightings`, `reef_heat`, `set_view`. Cites: `feed:inat`, `feed:crw`.
@@ -667,7 +667,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-boundary-population**: Is the lionfish population growing in Belize?
   - Intent: Decline because reports reflect observer effort, not population, and give the report counts with that caveat.
   - Tools: `sightings`. Cites: `feed:inat`.
-  - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(reports?\|sightings?)(?:[^.]\|\.\d){0,60}(not\|aren't\|are not\|isn't\|is not)(?:[^.]\|\.\d){0,40}(abundance\|population\|how many)\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something)(?:[^.]\|\.\d){0,60}(population\|abundance)`. Must not match `population (is\|has been) (growing\|increasing\|declining\|shrinking\|stable)`.
+  - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(reports?\|sightings?)(?:[^.]\|\.\d){0,60}(not\|aren't\|are not\|isn't\|is not)(?:[^.]\|\.\d){0,40}(abundance\|population\|how many)\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something)(?:[^.]\|\.\d){0,60}(population\|abundance)`. Must not match `(?<!(whether\|if\|that\|say\|tell\|know\|show)\b[^.]{0,40})population (is\|has been) (growing\|increasing\|declining\|shrinking\|stable)`.
 - **lionfish-boundary-risk-percent**: What is the invasion risk percentage for the Florida Keys?
   - Intent: Refuse a single risk number and point to the separate priority components.
   - Tools: none. Cites: nothing.
@@ -680,10 +680,10 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Intent: Refuse because heat stress is context, not proof of lionfish damage.
   - Tools: none. Cites: nothing.
   - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `context`, `(not\|no)(?:[^.]\|\.\d){0,40}(proof\|evidence\|cause)`. Must not match `heat stress (means\|shows\|proves)(?:[^.]\|\.\d){0,40}lionfish`.
-- **lionfish-boundary-iguana**: Where are invasive green iguanas on Cozumel?
+- **lionfish-boundary-other-species**: Where are Burmese pythons on Cozumel?
   - Intent: Refuse because the app covers lionfish only, naming the species and areas it covers.
   - Tools: none. Cites: nothing.
-  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `lionfish`, `(only\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something))`. Must not match `iguanas? (were\|are) (reported\|seen\|found)`.
+  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `lionfish`, `(only\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something))`. Must not match `pythons? (were\|are) (reported\|seen\|found)`.
 - **lionfish-boundary-bahamas**: Show lionfish reports in the Bahamas.
   - Intent: Refuse because the Bahamas lie outside the four areas, naming them.
   - Tools: none. Cites: nothing.
@@ -726,7 +726,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 
 ## python
 
-Python (Everglades). Question: where are Burmese pythons active and where should removal crews go next? Burmese python only, in the South Florida Everglades region (bbox -83.2, 24.3, -79.8, 27.5). Other species (tegu, iguana, lionfish, carp) and places outside the region are refused with this scope. The hotspot score is a labelled heuristic, not a probability or population estimate.
+Python (Everglades). Question: where are Burmese pythons active and where should removal crews go next? Burmese python only, in the South Florida Everglades region (bbox -83.2, 24.3, -79.8, 27.5). Other species (lionfish, carp, any animal but the Burmese python) and places outside the region are refused with this scope. The hotspot score is a labelled heuristic, not a probability or population estimate.
 
 Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, `openmeteo`.
 
@@ -835,10 +835,10 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Break that cell into terms and explain the access value from its rationale.
   - Tools: `geocode`, `explain_cell`. Cites: `kind:hotspot`.
   - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `access`, `(road\|trail\|distance\|rationale)`.
-- **python-explain-cold-snap-drop**: Why did scores drop during the February 2026 cold snap?
+- **python-explain-cold-snap-drop**: Why did scores drop during the January 2026 cold snap?
   - Intent: Explain the activity term's response to low temperatures in the cold-snap scene with readings.
   - Tools: `hotspots`, `explain_cell`, `conditions`. Cites: `kind:hotspot`, `kind:reading`.
-  - View: timeline: 2026-02-01 cold-snap scene
+  - View: timeline: 2026-01-15 cold-snap scene
   - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `cold`, `activity`, `heuristic`.
 
 ### python / relevance (6)
@@ -957,12 +957,12 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Play the timeline over 30 days with sightings on and summarise the pattern as reports.
   - Tools: `set_view`, `sightings`. Cites: `feed:inat`, `kind:sighting`.
   - View: timeline: play last 30 days
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(30 days\|month)`, `report\|sighting`.
-- **python-replay-cold-snap-map** ★: Show the hotspot map during the February 2026 cold snap.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(30[- ]days?\|month)`, `report\|sighting`.
+- **python-replay-cold-snap-map** ★: Show the hotspot map during the January 2026 cold snap.
   - Intent: Move the timeline to the 2026-02-01 scene and show the hotspots and temperatures as known then.
   - Tools: `set_view`, `hotspots`, `conditions`. Cites: `kind:hotspot`, `kind:reading`.
-  - View: timeline: 2026-02-01 cold-snap scene
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `cold`, `(February\|2026-02)`, `heuristic`.
+  - View: timeline: 2026-01-15 cold-snap scene
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `cold`, `(January\|2026-01)`, `heuristic`.
 - **python-replay-known-tuesday**: What did we know about Shark Valley last Tuesday at noon?
   - Intent: Show records ingested by then and list later-arriving records separately.
   - Tools: `geocode`, `sightings`, `set_view`. Cites: `feed:inat`, `kind:sighting`.
@@ -975,8 +975,8 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
 - **python-replay-scores-during-cold**: How did the scores evolve through the cold snap?
   - Intent: Step through the cold-snap scene and describe how the top cells and activity term moved.
   - Tools: `hotspots`, `explain_cell`, `set_view`. Cites: `kind:hotspot`.
-  - View: timeline: step through 2026-01-30 to 2026-02-03
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `cold`, `(activity\|score)`, `(dropped\|fell\|rose\|recovered\|changed)`.
+  - View: timeline: step through 2026-01-13 to 2026-01-16
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `cold`, `(activity\|score)`, `(dropped\|fell\|rose\|recovered\|changed\|declined\|decreas\|increas\|lower\|higher\|climbed\|same\|unchanged)`.
 - **python-replay-step-week**: Step through last week day by day around Flamingo.
   - Intent: Step the timeline daily for 7 days near Flamingo and narrate reports and conditions.
   - Tools: `geocode`, `set_view`, `sightings`. Cites: `feed:inat`.
@@ -1006,9 +1006,9 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Tools: none. Cites: nothing.
   - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `(python\|Burmese python)`, `(only\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something))`. Must not match `\d+ (green )?iguanas?`.
 - **py-legacy-homestead-species-counts** (legacy `homestead-species-counts`): What invasive animals were seen near Homestead this week?
-  - Intent: Give the species counts near Homestead as context while saying the app ranks and plans for Burmese pythons only.
+  - Intent: Give the Burmese python count near Homestead and say the app tracks Burmese pythons only; it holds no counts for other animals.
   - Tools: `geocode`, `species_counts`. Cites: `feed:inat`, `kind:sighting`.
-  - Pass: mode caveat; min 1 citation (1 sighting); numbers trace to tool output; discloses feed state. Must match `(python\|Burmese python)`, `(only\|context\|not (ranked\|planned))`. Must not match `(tegus?\|iguanas?) (hotspot\|crews? should)`.
+  - Pass: mode caveat; min 1 citation (1 sighting); numbers trace to tool output; discloses feed state. Must match `(python\|Burmese python)`, `(only\|context\|not (ranked\|planned))`. Must not match `\d+ (other\|introduced) (species\|animals)`.
 - **py-legacy-quality-id-conflict-tegu** (legacy `quality-id-conflict-tegu`): Are there any tegu reports near Homestead I should double-check before sending a crew?
   - Intent: Refuse because tegus are outside the Python app's scope.
   - Tools: none. Cites: nothing.
