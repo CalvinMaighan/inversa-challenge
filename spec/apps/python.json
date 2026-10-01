@@ -64,10 +64,18 @@
     { "id": "alerts", "label": "NWS alerts", "defaultOn": false },
     { "id": "missions", "label": "Team missions", "defaultOn": true },
     { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true }
+    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
+    { "id": "clouds", "label": "Clouds", "defaultOn": false, "description": "Cloud cover from the weather satellite." },
+    { "id": "lightning", "label": "Lightning", "defaultOn": false, "description": "Where lightning struck in the last 15 minutes." },
+    { "id": "cyclones", "label": "Hurricanes and tropical storms", "defaultOn": false, "description": "Active storms, their track and forecast cone." }
   ],
   "legend": {
     "sightings": "One dot per report; duplicates and ID conflicts are flagged, never hidden.",
+    "radar": "NOAA nowCOAST MRMS base reflectivity, about every 4 minutes, contiguous US only.",
+    "clouds": "NOAA nowCOAST GOES-19/18 longwave infrared, every 5 minutes.",
+    "lightning": "NOAA nowCOAST 15-minute lightning strike density, about 8 km cells.",
+    "cyclones": "NHC and CPHC advisories: positions, past track, forecast track and cone.",
     "hotspots": "Score per 0.02 degree cell; brighter is higher. A heuristic, not a probability.",
     "lst": "GOES-19 land surface temperature, hatched where cloud or bad quality.",
     "sst": "GOES-19 sea surface temperature; buoys may disagree.",

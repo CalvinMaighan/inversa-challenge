@@ -65,7 +65,8 @@ describe("ui command handler", () => {
 
   test("invalid args are rejected on the client too", () => {
     expect(applyUiCommand({ name: "fly_to", args: { lat: 200, lon: 0 } }, NOW)).toBe(false);
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "radar", visible: true } }, NOW)).toBe(false);
+    // `radar` became a real layer in GE5; `traffic` is one no app has.
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "traffic", visible: true } }, NOW)).toBe(false);
     expect(applyUiCommand({ name: "select", args: { evidenceId: "mission:12" } }, NOW)).toBe(false);
     expect(applyUiCommand({ name: "rm_rf", args: {} }, NOW)).toBe(false);
     expect(view()).toEqual(VIEW.defaults);

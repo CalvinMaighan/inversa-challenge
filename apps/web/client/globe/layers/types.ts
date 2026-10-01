@@ -21,7 +21,11 @@ export type GlobeViewer = {
       add<T>(primitive: T): T;
       remove(primitive: unknown): boolean;
     };
+    /** GE5 raster overlays are Cesium imagery layers; absent on the test fake, where those layers report an error. */
+    imageryLayers?: { add(layer: unknown, index?: number): void; remove(layer: unknown, destroy?: boolean): boolean };
   };
+  /** GE5: the credit line (`CesiumWidget.creditDisplay`); overlays register their attribution while on. */
+  creditDisplay?: { addStaticCredit(credit: unknown): void; removeStaticCredit(credit: unknown): void };
 };
 
 export type LayerStats = {
@@ -44,6 +48,8 @@ export type LayerStats = {
    * primitives) remain, which is none.
    */
   marker?: { kind: "billboard" | "point"; dots: number; images: number };
+  /** GE5 overlays: the instant the layer shows (snapped to its source's cadence) and whether it was clamped to an edge. */
+  overlay?: { shownMs: number; clamped: "latest" | "earliest" | null; opacity: number };
 };
 
 /** What layers read besides the frame grid. The globe wires it to active-state and the threads API. */

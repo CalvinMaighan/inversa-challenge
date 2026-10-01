@@ -7,6 +7,7 @@ import { HEAT_STOPS, TEMP_STOPS } from "client/globe/ramp";
 import { formatCount, GAP_SWATCHES, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
 import { statsSignature } from "client/hud/legend/useGlobeStats";
 import { type LayersState } from "client/state/layers";
+import { isOverlayId } from "shared/overlays";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 selectPython();
@@ -29,7 +30,8 @@ const layers = (over: Partial<LayersState> = {}): LayersState => ({ ...PYTHON_LA
 describe("legend", () => {
   test("one row per globe layer, none missing, none twice", () => {
     const rows = legendRows(layers(), null);
-    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].sort());
+    // The GE5 water and weather overlays have their own group (client/hud/legend/WaterWeather.tsx).
+    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].filter((id) => !isOverlayId(id)).sort());
   });
 
   test("sightings: one row for the app's species in the layer's own colour with the app icon and its live count", () => {

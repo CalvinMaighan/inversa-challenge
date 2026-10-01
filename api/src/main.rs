@@ -14,6 +14,7 @@ mod hotspot;
 mod ingest;
 mod media;
 mod model;
+mod overlay;
 mod realtime;
 mod review;
 mod source_pages;

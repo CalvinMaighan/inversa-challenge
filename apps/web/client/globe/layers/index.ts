@@ -3,6 +3,7 @@ import { createLstLayer, createSstLayer } from "./env-raster";
 import { createHotspotLayer } from "./hotspots";
 import { createMissionsLayer } from "./missions";
 import { createNotesLayer } from "./notes";
+import { createOverlayLayers } from "./overlays";
 import { createPeersLayer } from "./peers";
 import { createSightingsLayer } from "./sightings";
 import { createStationsLayer } from "./stations";
@@ -20,6 +21,8 @@ export function createLayers(ctx: LayerContext): GlobeLayer[] {
     createMissionsLayer(ctx),
     createNotesLayer(ctx),
     createPeersLayer(ctx),
+    // GE5 water and weather overlays: imagery layers (their own stack) and storm primitives on top.
+    ...createOverlayLayers(ctx),
   ];
 }
 

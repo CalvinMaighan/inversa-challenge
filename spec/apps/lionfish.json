@@ -89,10 +89,20 @@
     { "id": "stations", "label": "Buoys and tide stations (Florida)", "defaultOn": false },
     { "id": "missions", "label": "Team missions", "defaultOn": true },
     { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true }
+    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "sst-map", "label": "Sea surface temperature map", "defaultOn": false, "description": "How warm the sea was, satellite picture, one per day." },
+    { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
+    { "id": "clouds", "label": "Clouds", "defaultOn": false, "description": "Cloud cover from the weather satellite." },
+    { "id": "lightning", "label": "Lightning", "defaultOn": false, "description": "Where lightning struck in the last 15 minutes." },
+    { "id": "cyclones", "label": "Hurricanes and tropical storms", "defaultOn": false, "description": "Active storms, their track and forecast cone." }
   ],
   "legend": {
     "sightings": "One dot per report, by observed date. Submitted date can lag years.",
+    "sst-map": "NASA GIBS MUR sea surface temperature, daily; the newest picture is the day before.",
+    "radar": "NOAA nowCOAST MRMS base reflectivity, about every 4 minutes, contiguous US only.",
+    "clouds": "NOAA nowCOAST GOES-19/18 longwave infrared, every 5 minutes.",
+    "lightning": "NOAA nowCOAST 15-minute lightning strike density, about 8 km cells.",
+    "cyclones": "NHC and CPHC advisories: positions, past track, forecast track and cone.",
     "hotspots": "Priority components shown separately; weights are configurable and labelled.",
     "sst": "GOES-19 full-disk SST; satellite and buoy can disagree.",
     "heat": "Degree heating weeks (accumulated) and bleaching alert level (current) from NOAA Coral Reef Watch.",

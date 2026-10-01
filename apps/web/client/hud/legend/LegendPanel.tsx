@@ -12,6 +12,7 @@ import { Mono } from "../primitives";
 import AppIcon from "../appselect/AppIcon";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
+import WaterWeather from "./WaterWeather";
 
 /** The app's legend line (config `legend.title`). */
 const LegendTitle = styled.p`
@@ -238,6 +239,7 @@ export default function LegendBody({ active }: { active: boolean }) {
       {rows.map((row) => (
         <LegendRowView key={row.layer} row={row} />
       ))}
+      <WaterWeather app={app} active={active} />
       <GapsRow />
     </section>
   );

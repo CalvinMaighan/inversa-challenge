@@ -128,7 +128,8 @@ describe("voice relay against a mocked xAI socket", () => {
   test("rejects invalid ui tool", async () => {
     const { mock, events } = await startSession();
     modelCalls(mock, "resp_1", "call_bad_lat", "fly_to", { lat: 200, lon: -80 });
-    modelCalls(mock, "resp_2", "call_bad_layer", "toggle_layer", { layer: "radar", visible: true });
+    // `radar` became a real layer in GE5; `traffic` is one this app never had.
+    modelCalls(mock, "resp_2", "call_bad_layer", "toggle_layer", { layer: "traffic", visible: true });
     modelCalls(mock, "resp_3", "call_bad_place", "fly_to", { place: "Atlantis" });
     modelCalls(mock, "resp_4", "call_bad_time", "set_time", { time: "last tuesday" });
     modelCalls(mock, "resp_5", "call_bad_json", "select", "{not json");
