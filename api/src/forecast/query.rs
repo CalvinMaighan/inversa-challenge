@@ -64,12 +64,17 @@ fn with_points(conn: &Connection, mut s: Snapshot) -> rusqlite::Result<Snapshot>
     Ok(s)
 }
 
-/// The forecast known at `t`: greatest `issued_at <= t` among rows knowable at `t`, newest
+/// The NWS gridpoint weather run shares the store (`product = gridpoint`, no stage) but is not a
+/// river forecast: the as-of forecast, history, site status, the review engine and coverage skip
+/// it; [`weather_run`] reads it.
+const RIVER_ONLY: &str = "product != 'gridpoint'";
+
+/// The river forecast known at `t`: greatest `issued_at <= t` among rows knowable at `t`, newest
 /// revision of that issuance. None when nothing was known.
 pub fn asof(conn: &Connection, site: &str, t: i64) -> rusqlite::Result<Option<Snapshot>> {
     let sql = format!(
         "select {SNAPSHOT_COLUMNS} from forecast_snapshots
-         where site = ?1 and issued_at <= ?2 and {}
+         where site = ?1 and issued_at <= ?2 and {RIVER_ONLY} and {}
          order by issued_at desc, revision desc limit 1",
         knowable(2)
     );
@@ -78,12 +83,26 @@ pub fn asof(conn: &Connection, site: &str, t: i64) -> rusqlite::Result<Option<Sn
     snap.map(|s| with_points(conn, s)).transpose()
 }
 
-/// Issuances known at `t`, newest first, at most `limit`; one row per issuance (its newest
+/// The newest NWS gridpoint weather run known at `t` (`product = gridpoint`), without points:
+/// its `issued_at` is the office's `updateTime`, `ingested_at` our fetch. None when no run is
+/// stored for the site.
+pub fn weather_run(conn: &Connection, site: &str, t: i64) -> rusqlite::Result<Option<Snapshot>> {
+    let sql = format!(
+        "select {SNAPSHOT_COLUMNS} from forecast_snapshots
+         where site = ?1 and issued_at <= ?2 and product = 'gridpoint' and {}
+         order by issued_at desc, revision desc limit 1",
+        knowable(2)
+    );
+    let mut st = conn.prepare_cached(&sql)?;
+    st.query_row(params![site, t], snapshot_row).optional()
+}
+
+/// River issuances known at `t`, newest first, at most `limit`; one row per issuance (its newest
 /// knowable revision). Points included.
 pub fn history(conn: &Connection, site: &str, t: i64, limit: usize) -> rusqlite::Result<Vec<Snapshot>> {
     let sql = format!(
         "select {SNAPSHOT_COLUMNS} from forecast_snapshots s
-         where site = ?1 and issued_at <= ?2 and {}
+         where site = ?1 and issued_at <= ?2 and {RIVER_ONLY} and {}
            and revision = (select max(x.revision) from forecast_snapshots x
                            where x.site = s.site and x.product = s.product and x.issued_at = s.issued_at
                              and (x.source != 'nwps-live' or x.ingested_at <= ?2))
@@ -117,9 +136,11 @@ pub struct Coverage {
 
 pub fn coverage(conn: &Connection, site: &str) -> rusqlite::Result<Coverage> {
     conn.query_row(
-        "select min(case when source = 'nwps-live' then max(issued_at, ingested_at) else issued_at end),
-                min(case when source = 'nwps-live' then ingested_at end), count(*)
-         from forecast_snapshots where site = ?1",
+        &format!(
+            "select min(case when source = 'nwps-live' then max(issued_at, ingested_at) else issued_at end),
+                    min(case when source = 'nwps-live' then ingested_at end), count(*)
+             from forecast_snapshots where site = ?1 and {RIVER_ONLY}"
+        ),
         [site],
         |r| Ok(Coverage { replay_coverage_start: r.get(0)?, live_coverage_start: r.get(1)?, snapshots: r.get(2)? }),
     )

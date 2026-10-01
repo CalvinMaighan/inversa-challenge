@@ -399,7 +399,8 @@ describe("carp tool: weather, alerts, sources, evidence, board, view", () => {
     const out = await run("weather_forecast", { site: "Morgan City", periods: 4 });
     expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentWeatherForecast"]);
     const data = out.data as any;
-    expect(data).toMatchObject({ site: "MCGL1", office: "LCH", grid: "137,73", updateTime: "2026-09-30T14:20:50Z", fetchedAt: "2026-10-01T06:55:00Z" });
+    expect(data).toMatchObject({ site: "MCGL1", office: "LCH", officeName: "LCH (Lake Charles)", grid: "137,73", updateTime: "2026-09-30T12:46:24Z", fetchedAt: "2026-09-30T12:46:24Z" });
+    expect(data.updateTimeSource).toMatch(/own gridpoint run/);
     expect(data.periods).toHaveLength(4);
     // The period from 06:00 CDT on 1 Oct: 88 F, 5 mph, 84 % chance; QPF from the 6 h windows starting 07:00 and 13:00 CDT (0 + 6.604 mm).
     expect(data.periods[1]).toMatchObject({ start: "2026-10-01T11:00:00Z", temperatureF: 88, windMph: 5, windMs: 2.24, precipChancePct: 84, qpfMm: 6.6, qpfIn: 0.26, qpfWindows: 2 });
@@ -407,7 +408,7 @@ describe("carp tool: weather, alerts, sources, evidence, board, view", () => {
     expect(typeof data.periods[1].gustMph).toBe("number");
     expect(data.stored).toMatch(/precipChancePct .*a probability, not an amount/);
     expect(data.honesty).toMatch(/not a river stage or flood prediction/);
-    expect(data.cite).toBe("[e:forecast:nws:LCH/137x73:1790778050000]");
+    expect(data.cite).toBe("[e:forecast:nws:LCH/137x73:1790772384000]");
     const table = viewOf(out)!.more?.[0] as TableView;
     expect(table.columns.map((c) => c.key)).toEqual(["start", "temperatureF", "windMph", "precipChancePct", "qpfIn"]);
     // A period with no stored windows reports none, never 0.

@@ -35,6 +35,10 @@ export const forecastId = (lid: string, issuedAt: string | number) => `forecast:
 export const nwpsObservationId = (lid: string, observedAt: string) => `reading:${readingKey(lid, "stage_m", observedAt, "measured")}`;
 
 const provenance = (source: string) => (source.toUpperCase() === "IEM_ARCHIVE" ? "iem-archive" : source.toUpperCase() === "NWS_GRIDPOINT" ? "nws-gridpoint" : "nwps-live");
+/** River issuances only: the NWS gridpoint weather run shares the forecast store but carries no stage (client/carp/model.ts isRiverForecast). */
+const isRiverSnapshot = (s: { source: string }) => s.source.toUpperCase() !== "NWS_GRIDPOINT";
+/** NWS forecast offices by id, for the agent to name the office in words. */
+const NWS_OFFICES: Record<string, string> = { LCH: "Lake Charles", LIX: "New Orleans/Baton Rouge", SHV: "Shreveport", JAN: "Jackson", MFL: "Miami", KEY: "Key West", TBW: "Tampa Bay", MLB: "Melbourne", JAX: "Jacksonville", TAE: "Tallahassee" };
 const feedOf = (source: string) => (provenance(source) === "iem-archive" ? "iem" : provenance(source) === "nws-gridpoint" ? "nws-forecast" : "nwps");
 
 const sitesInput = z.array(z.string().min(2).max(80)).max(16).optional().describe("Sites by NWPS id (SMML1), town (Krotz Springs), name, or a preset ('Atchafalaya' = the basin's four). Omit for all eight.");
@@ -176,14 +180,16 @@ export const riverForecast = {
       const view = data[`f${i}`]!;
       const status = data[`t${i}`] as unknown as Pick<GqlSiteStatus, "thresholds" | "stageFt" | "category" | "observation"> | undefined;
       const th = thresholdsOf(status?.thresholds ?? null);
-      let current = view.snapshot;
-      let earlier = view.history.filter((s) => s.issuedAt !== current?.issuedAt);
+      // The NWS gridpoint weather run shares the store (no stage); the river issuances are the rest.
+      const riverHistory = view.history.filter(isRiverSnapshot);
+      let current = view.snapshot && isRiverSnapshot(view.snapshot) ? view.snapshot : (riverHistory[0] ?? null);
+      let earlier = riverHistory.filter((s) => s.issuedAt !== current?.issuedAt);
       if (issuedAtText) {
         const wanted = ms(issuedAtText);
-        const hit = view.history.find((s) => Math.abs(ms(s.issuedAt) - wanted) < 60_000);
+        const hit = riverHistory.find((s) => Math.abs(ms(s.issuedAt) - wanted) < 60_000);
         if (hit) {
           current = hit;
-          earlier = view.history.filter((s) => ms(s.issuedAt) < ms(hit.issuedAt));
+          earlier = riverHistory.filter((s) => ms(s.issuedAt) < ms(hit.issuedAt));
         }
       }
       const thresholds = th;
@@ -865,10 +871,12 @@ export const forecastVerify = {
       sites.map((s, i) => {
         const view = data[`f${i}`];
         if (!view) return [s.lid, null];
-        if (!issuedAtText) return [s.lid, view.snapshot?.issuedAt ?? null];
+        const river = view.history.filter(isRiverSnapshot);
+        const snapshot = view.snapshot && isRiverSnapshot(view.snapshot) ? view.snapshot : (river[0] ?? null);
+        if (!issuedAtText) return [s.lid, snapshot?.issuedAt ?? null];
         const wanted = ms(issuedAtText);
-        const exact = view.history.find((snap) => Math.abs(ms(snap.issuedAt) - wanted) <= 60_000);
-        const current = view.history.find((snap) => ms(snap.issuedAt) <= wanted) ?? view.snapshot;
+        const exact = river.find((snap) => Math.abs(ms(snap.issuedAt) - wanted) <= 60_000);
+        const current = river.find((snap) => ms(snap.issuedAt) <= wanted) ?? snapshot;
         return [s.lid, exact?.issuedAt ?? current?.issuedAt ?? null];
       }),
     );
@@ -940,11 +948,15 @@ export const forecastVerify = {
 
 // ---------------------------------------------------------------- weather_forecast
 
-const WEATHER_QUERY = `query AgentWeatherForecast($bbox: BBox!, $from: Time!, $to: Time!, $params: [Param!]) {
+// `runs` (a configured site only): the site's forecast history, where the gridpoint run carries the office's
+// own update time and our fetch time; a point (python) has no site, and the feed's newest run stands in.
+const WEATHER_QUERY = `query AgentWeatherForecast($bbox: BBox!, $from: Time!, $to: Time!, $params: [Param!], $site: ID!, $withSite: Boolean!) {
   readings(bbox: $bbox, from: $from, to: $to, params: $params) { station { id source name lat lon kind } param value flag observedAt origin }
+  runs: forecasts(site: $site, asOf: $to, history: 1) @include(if: $withSite) { weatherRun { site product issuedAt ingestedAt source } }
   feeds { ...FeedFields }
 }
 `;
+type GqlWeatherRuns = { weatherRun: { site: string; product: string; issuedAt: string; ingestedAt: string; source: string } | null } | null;
 
 const weatherInput = z
   .object({
@@ -1003,11 +1015,12 @@ export const weatherForecast = {
     // The point's own grid cell, else the nearest gridpoint within half a degree (a park has one grid per office).
     const bbox: BBox = { west: lon - 0.06, south: lat - 0.06, east: lon + 0.06, north: lat + 0.06 };
     const isGrid = (r: GqlReading) => r.origin.toLowerCase() === "modeled" && (r.station.kind.toLowerCase() === "grid" || r.station.source === "nws-forecast" || r.station.source === "nws");
-    let data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, from: iso(from), to: iso(to), params: WEATHER_PARAMS }, ctx);
+    const vars = { from: iso(from), to: iso(to), params: WEATHER_PARAMS, site: site?.lid ?? "", withSite: site !== null };
+    let data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[]; runs?: GqlWeatherRuns }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, ...vars }, ctx);
     let nearest: string | null = null;
     if (!data.readings.some(isGrid) && !site) {
       const wide: BBox = { west: lon - 0.5, south: lat - 0.5, east: lon + 0.5, north: lat + 0.5 };
-      const around = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox: wide, from: iso(from), to: iso(to), params: WEATHER_PARAMS }, ctx);
+      const around = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox: wide, ...vars }, ctx);
       const grids = around.readings.filter(isGrid);
       const best = grids.map((r) => r.station).sort((a, b) => Math.hypot(a.lat - lat, a.lon - lon) - Math.hypot(b.lat - lat, b.lon - lon))[0];
       if (best) {
@@ -1015,6 +1028,8 @@ export const weatherForecast = {
         data = { readings: grids.filter((r) => r.station.id === best.id), feeds: around.feeds };
       }
     }
+    // The site's own gridpoint run (its office's update time, our fetch time); else the feed's newest run.
+    const run = data.runs?.weatherRun ?? null;
     const modeled = data.readings.filter(isGrid);
     // Period rows are keyed by the 12 h period start (air, wind, PoP); QPF windows and gusts have their own times.
     const byTime = new Map<string, Partial<Record<string, number | null>>>();
@@ -1032,9 +1047,11 @@ export const weatherForecast = {
       byTime.set(r.observedAt, slot);
     }
     const feed = data.feeds.find((f) => f.source === "nws-forecast") ?? data.feeds.find((f) => f.source === "nws") ?? null;
-    const updateTime = feed?.newestObservedAt ?? feed?.lastFetchAt ?? null;
+    const updateTime = run?.issuedAt ?? feed?.newestObservedAt ?? feed?.lastFetchAt ?? null;
+    const fetchedAt = run?.ingestedAt ?? feed?.lastFetchAt ?? null;
     const gridStation = modeled[0]?.station ?? null;
     const office = site?.office ?? gridStation?.name.match(/\b([A-Z]{3})\b/)?.[1] ?? "NWS";
+    const officeName = NWS_OFFICES[office] ? `${office} (${NWS_OFFICES[office]})` : office;
     const grid = site?.grid ?? (gridStation ? gridStation.id : `${lat.toFixed(3)},${lon.toFixed(3)}`);
     // No comma in an id: the citation parser splits marker groups on commas.
     const fid = `nws:${office}/${grid.replace(",", "x")}:${updateTime ? ms(updateTime) : 0}`;
@@ -1065,7 +1082,7 @@ export const weatherForecast = {
         };
       });
     const anyPrecip = rows.some((r) => r.precipChancePct !== null || r.qpfMm !== null);
-    const evidenceRows: Evidence[] = rows.length ? [evidence("forecast", fid, `NWS gridpoint forecast ${office} ${grid} updated ${updateTime ?? "unknown"}`, feed?.source ?? "nws-forecast")] : [];
+    const evidenceRows: Evidence[] = rows.length ? [evidence("forecast", fid, `NWS gridpoint forecast ${officeName} ${grid} updated ${updateTime ?? "unknown"}`, feed?.source ?? "nws-forecast")] : [];
     const feeds = feedsFor(data.feeds, feed ? [feed.source] : [], ["nws"]);
     const seriesView: SeriesView = {
       view: "series",
@@ -1092,10 +1109,12 @@ export const weatherForecast = {
           name: site?.name ?? gridStation?.name ?? null,
           ...(nearest ? { nearest: `no gridpoint at the point itself; this is the nearest stored gridpoint, ${nearest}` } : {}),
           office,
+          officeName,
           grid,
           updateTime,
           updateLocal: updateTime ? localTime(ctx.app, updateTime) : null,
-          fetchedAt: feed?.lastFetchAt ?? null,
+          updateTimeSource: run ? "this site's own gridpoint run (the office's updateTime)" : "the feed's newest run across offices (no stored run for this site)",
+          fetchedAt,
           ageHours: updateTime ? hoursBetween(now, ms(updateTime)) : null,
           cite: rows.length ? `[e:forecast:${fid}]` : null,
           stored: anyPrecip

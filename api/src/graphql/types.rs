@@ -987,8 +987,11 @@ pub struct ForecastView {
     /// The forecast in force at `asOf`: greatest issuance at or before `asOf` that had been
     /// captured by then (live) or was public by then (archive). Null when none was known.
     pub snapshot: Option<ForecastSnapshot>,
-    /// Issuances known at `asOf`, newest first, at most `history`.
+    /// River issuances known at `asOf`, newest first, at most `history`.
     pub history: Vec<ForecastSnapshot>,
+    /// The newest NWS gridpoint weather run known at `asOf` (`product` gridpoint, no stage
+    /// points): `issuedAt` is the office's updateTime, `ingestedAt` our fetch. Null when none.
+    pub weather_run: Option<ForecastSnapshot>,
     /// The first `asOf` with a forecast: when the earliest stored snapshot became knowable
     /// (archive rows at issuance, live rows when captured).
     pub replay_coverage_start: Option<Time>,

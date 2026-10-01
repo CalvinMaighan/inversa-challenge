@@ -448,8 +448,10 @@ type ForecastView {
   asOf: Time!
   """The forecast in force at asOf: greatest issuance at or before asOf that was captured (live) or public (archive) by then."""
   snapshot: ForecastSnapshot
-  """Issuances known at asOf, newest first, at most `history`."""
+  """River issuances known at asOf, newest first, at most `history`."""
   history: [ForecastSnapshot!]!
+  """The newest NWS gridpoint weather run known at asOf (product gridpoint, no stage points): issuedAt is the office's updateTime, ingestedAt our fetch. Null when none."""
+  weatherRun: ForecastSnapshot
   """The first asOf with a forecast: when the earliest stored snapshot became knowable (archive rows at issuance, live rows when captured)."""
   replayCoverageStart: Time
   """First live capture by this process; before it every forecast is an archive copy."""
