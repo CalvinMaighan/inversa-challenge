@@ -28,6 +28,11 @@ Scope:
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: pending
 
+- [ ] G7: every external link in the app opens in a new tab: drawer, agent table rows, markdown links in agent answers, help sheet, feed popover and attribution. An e2e scans the live page DOM after an answer, the drawer, the help sheet and the popover are opened, and prints `EXTERNAL-LINKS total=<n> new_tab=<n> unsafe=0` (every `a[href^=http]` not on the app origin has `target=_blank` and `rel` containing noopener and noreferrer)
+  CHECK: cd apps/web && bun run e2e:links 2>&1 | grep EXTERNAL-LINKS
+  EXPECT: /EXTERNAL-LINKS total=([1-9]\d*) new_tab=\1 unsafe=0/
+  EVIDENCE: pending
+
 - [ ] G6: api suite, clippy, web typecheck and lint clean
   CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep -c "test result: ok" && cargo clippy --manifest-path api/Cargo.toml --all-targets -- -D warnings 2>&1 | tail -1 && bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: /Finished[\s\S]*CLEAN/
