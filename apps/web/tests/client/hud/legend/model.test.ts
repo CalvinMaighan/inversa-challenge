@@ -28,8 +28,9 @@ const layers = (over: Partial<LayersState> = {}): LayersState => ({ ...PYTHON_LA
 
 describe("legend", () => {
   test("one row per globe layer, none missing, none twice", () => {
+    // Python lists every layer but vessels (carp and lionfish only, GE4).
     const rows = legendRows(layers(), null);
-    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].sort());
+    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].filter((id) => id !== "vessels").sort());
   });
 
   test("sightings: one row for the app's species in the layer's own colour with the app icon and its live count", () => {

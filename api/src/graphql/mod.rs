@@ -13,6 +13,7 @@ mod query;
 mod resolver_tests;
 mod subscription;
 pub mod types;
+pub mod vessels;
 
 use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
 use async_graphql::{Context, Data, Schema};

@@ -16,6 +16,7 @@ export const PUBLISHERS: Readonly<Record<string, string>> = {
   "tidesandcurrents.noaa.gov": "NOAA Tides & Currents",
   "api.weather.gov": "NWS",
   "mesonet.agron.iastate.edu": "IEM VTEC browser",
+  "www.vesselfinder.com": "VesselFinder",
 };
 
 /** The publisher name of an https URL on an allowlisted host, or null (any other scheme, host, port or userinfo). */

@@ -27,7 +27,7 @@ export function boardIdFor(id: AppId): string {
  * Every globe layer the client can draw. An app's `layers[]` may also name layers the client does not draw yet
  * (lionfish `heat`, carp `locations`); those are listed in the config and skipped by the client.
  */
-export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"] as const;
+export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes", "vessels"] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
 export function isLayerId(value: unknown): value is LayerId {
@@ -53,6 +53,7 @@ export const FEED_SOURCES = {
   "nws-alerts": "poll",
   "nws-forecast": "poll",
   iem: "poll",
+  aisstream: "push",
 } as const;
 export type FeedSource = keyof typeof FEED_SOURCES;
 const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];

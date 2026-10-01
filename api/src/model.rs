@@ -277,4 +277,8 @@ pub enum Row {
     ForecastObservations(ForecastObservationsRow),
     Thresholds(ThresholdsRow),
     SiteAlerts(SiteAlertsRow),
+    /// An AIS position (`aisstream`, GE4); thinned to one per vessel per minute on write.
+    VesselPosition(crate::vessels::VesselPositionRow),
+    /// AIS static and voyage data (`aisstream`, GE4).
+    VesselStatic(crate::vessels::VesselStaticRow),
 }

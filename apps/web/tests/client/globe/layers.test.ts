@@ -36,10 +36,10 @@ describe("layer contract", () => {
   test("every LAYER_ID has exactly one layer, in draw order rasters → areas → points → people", () => {
     const layers = createLayers(fakeContext());
     expect(layers.map((l) => l.id).sort()).toEqual([...LAYER_IDS].sort());
-    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "sightings", "missions", "notes", "peers"]);
+    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "vessels", "sightings", "missions", "notes", "peers"]);
   });
 
-  test("init / enable / update / disable / stats / destroy on a fake viewer, for all nine layers", async () => {
+  test("init / enable / update / disable / stats / destroy on a fake viewer, for all ten layers", async () => {
     const ctx = fakeContext({ timeMs: T0 + 2 * STEP, meta: fakeMeta(T0, 3), sightings: () => [rec()] });
     const viewer = fakeViewer();
     const grid = smallGrid(3);

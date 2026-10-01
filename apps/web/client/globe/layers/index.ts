@@ -7,6 +7,7 @@ import { createPeersLayer } from "./peers";
 import { createSightingsLayer } from "./sightings";
 import { createStationsLayer } from "./stations";
 import type { GlobeLayer, LayerContext } from "./types";
+import { createVesselsLayer } from "./vessels";
 
 /** Every layer, bottom to top: rasters, then alert areas, then point features, then people. */
 export function createLayers(ctx: LayerContext): GlobeLayer[] {
@@ -16,6 +17,7 @@ export function createLayers(ctx: LayerContext): GlobeLayer[] {
     createHotspotLayer(ctx),
     createAlertsLayer(ctx),
     createStationsLayer(ctx),
+    createVesselsLayer(ctx),
     createSightingsLayer(ctx),
     createMissionsLayer(ctx),
     createNotesLayer(ctx),

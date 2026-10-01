@@ -68,7 +68,8 @@
     { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },
     { "source": "openmeteo-marine", "mode": "poll", "name": "Open-Meteo Marine", "homepage": "https://open-meteo.com/en/docs/marine-weather-api", "params": { "stepDeg": 0.5, "forecastHours": 72, "waveModel": "meteofrance_wave", "currentModel": "meteofrance_currents", "metaCheckMinutes": 15 } },
     { "source": "ndbc", "mode": "poll", "params": { "bulk": true, "note": "latest_obs.txt; only Florida has sea-temperature buoys inside the areas" } },
-    { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } }
+    { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } },
+    { "source": "aisstream", "mode": "push", "name": "AISStream.io vessel positions", "homepage": "https://aisstream.io", "params": {} }
   ],
   "score": {
     "label": "Survey priority (four components shown separately; rankScore is a weighted mean that only orders cells; no single risk percent)",
@@ -89,7 +90,8 @@
     { "id": "stations", "label": "Buoys and tide stations (Florida)", "defaultOn": false },
     { "id": "missions", "label": "Team missions", "defaultOn": true },
     { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true }
+    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "vessels", "label": "Ships (AIS)", "defaultOn": false, "description": "Ships broadcasting AIS, moving with the timeline. Vessel positions: AISStream.io." }
   ],
   "legend": {
     "sightings": "One dot per report, by observed date. Submitted date can lag years.",

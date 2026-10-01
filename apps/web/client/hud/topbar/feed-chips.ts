@@ -37,6 +37,7 @@ const LABELS: Record<string, string> = {
   openmeteo: "METEO",
   nas: "NAS",
   gbif: "GBIF",
+  aisstream: "AIS",
 };
 
 export function feedLabel(source: string): string {

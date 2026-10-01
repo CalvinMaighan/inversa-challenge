@@ -1,3 +1,5 @@
+pub mod ais;
+pub mod ais_watchdog;
 pub mod goes_grid;
 pub mod goes_sqs;
 pub mod hook;
@@ -19,6 +21,9 @@ pub fn all(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     if app.cfg.has_feed("nwws") {
         out.extend(nwws::sources(config));
     }
+    if app.cfg.has_feed(crate::vessels::SOURCE_ID) {
+        out.extend(ais::sources(config, app));
+    }
     out
 }
 
@@ -34,6 +39,11 @@ pub fn disabled(config: &Config, app: &Arc<App>) -> Vec<(SourceInfo, String)> {
     if app.cfg.has_feed("nwws") {
         if let Some(reason) = nwws::disabled_reason(config) {
             out.push((nwws::info(), reason));
+        }
+    }
+    if app.cfg.has_feed(crate::vessels::SOURCE_ID) {
+        if let Some(reason) = ais::disabled_reason(config) {
+            out.push((ais::info(), reason));
         }
     }
     out

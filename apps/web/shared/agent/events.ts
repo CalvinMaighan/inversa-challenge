@@ -50,8 +50,8 @@ export type LionfishViewState = { preset?: string; region?: string; area?: strin
  * `forecast:<lid>:<issued ms>` an NWPS/IEM forecast issuance; `source:<feed>` a feed's static facts;
  * `mission:<id>` and `message:<id>` the team board's records.
  */
-export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest" | "note" | "forecast" | "source" | "mission" | "message";
-export const EVIDENCE_KINDS: readonly EvidenceKind[] = ["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note", "forecast", "source", "mission", "message"];
+export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest" | "note" | "forecast" | "source" | "mission" | "message" | "vessel";
+export const EVIDENCE_KINDS: readonly EvidenceKind[] = ["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note", "forecast", "source", "mission", "message", "vessel"];
 
 export type AgentStreamRequest = {
   /** The app the question is asked in (C-A5): persona, tools, scope guard and API prefix. */

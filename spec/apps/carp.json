@@ -35,7 +35,8 @@
     { "source": "nws-alerts", "mode": "poll", "name": "NWS alerts API (Louisiana)", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": { "area": "LA", "offices": ["KLIX", "KSHV", "KLCH", "KJAN"], "senders": ["NWS New Orleans LA", "NWS Shreveport LA", "NWS Lake Charles LA", "NWS Jackson MS"], "sameCodes": [] } },
     { "source": "nws-forecast", "mode": "poll", "name": "NWS gridpoint forecast", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": {} },
     { "source": "iem", "mode": "poll", "name": "IEM HML river forecast archive (Iowa State)", "homepage": "https://mesonet.agron.iastate.edu/request/hml.php", "params": { "days": 30 } },
-    { "source": "nwws", "mode": "push", "params": { "offices": ["KLCH", "KLIX", "KSHV"] } }
+    { "source": "nwws", "mode": "push", "params": { "offices": ["KLCH", "KLIX", "KSHV"] } },
+    { "source": "aisstream", "mode": "push", "name": "AISStream.io vessel positions", "homepage": "https://aisstream.io", "params": {} }
   ],
   "score": {
     "label": "Needs review (reasons listed per location; not a risk score)",
@@ -53,7 +54,8 @@
     { "id": "stations", "label": "Gauge readings", "defaultOn": true },
     { "id": "missions", "label": "Team missions", "defaultOn": true },
     { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true }
+    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "vessels", "label": "Ships (AIS)", "defaultOn": false, "description": "Ships broadcasting AIS, moving with the timeline. Vessel positions: AISStream.io." }
   ],
   "legend": {
     "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP is reported as active in the Atchafalaya Basin (LDWF).",

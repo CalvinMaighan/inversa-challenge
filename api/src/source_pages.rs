@@ -41,6 +41,7 @@ pub const PUBLISHERS: &[(&str, &str)] = &[
     ("mesonet.agron.iastate.edu", "IEM VTEC browser"),
     ("pae-paha.pacioos.hawaii.edu", "NOAA Coral Reef Watch (PacIOOS ERDDAP)"),
     ("water.noaa.gov", "NOAA National Water Prediction Service"),
+    ("www.vesselfinder.com", "VesselFinder"),
 ];
 
 /// DOI CRW asks users to cite for the CoralTemp v3.1 5 km product suite (Skirving et al. 2020,
@@ -94,6 +95,8 @@ fn page_for(source: &str, ext_id: &str) -> Option<String> {
         "crw" => crw_page(ext_id)?,
         // NWPS lid (`BTRL1`), the station ext_id of the nwps, iem and nws-forecast sources.
         "nwps" | "iem" | "nws-forecast" => format!("https://water.noaa.gov/gauges/{}", alnum(ext_id)?.to_ascii_uppercase()),
+        // A vessel by MMSI (GE4); VesselFinder redirects an MMSI to the ship's page.
+        "aisstream" => crate::vessels::page_url(digits(ext_id)?.parse().ok().filter(|m| crate::vessels::valid_mmsi(*m))?),
         _ => return None,
     })
 }
@@ -379,6 +382,24 @@ pub fn source_facts(source: &str) -> Option<SourceFacts> {
             why_poll: None,
         },
         "goes19" | "goes19-sst" => GOES,
+        "aisstream" => SourceFacts {
+            publisher: "AISStream.io (terrestrial AIS receivers)",
+            api_url: "wss://stream.aisstream.io/v0/stream",
+            page_url: "https://aisstream.io/documentation",
+            licence: "Free (beta), no formal terms of service or SLA; AIS is a public radio broadcast. A key from aisstream.io is required and must stay server side.",
+            attribution: "Vessel positions: AISStream.io",
+            doi: None,
+            cadence: "Push: a websocket stream of every AIS message in the app's boxes; positions kept at most one per vessel per minute.",
+            expected_latency: "Seconds after a receiver hears the ship.",
+            rate_limit: "3 subscribed connections per account, 3 open per IP, one subscription update per second; slow consumers lose messages.",
+            coverage: "Ships with AIS transponders inside the app's region boxes, where a shore receiver hears them.",
+            limits: &[
+                "Only ships that broadcast AIS; small boats often do not.",
+                "Terrestrial receivers only: coverage thins offshore and away from ports.",
+                "Needs AISSTREAM_API_KEY; without it the feed shows as down with the reason, and stored history still replays.",
+            ],
+            why_poll: None,
+        },
         "nwws" => SourceFacts {
             publisher: "NOAA National Weather Service, NOAA Weather Wire Service (NWWS-OI)",
             api_url: "xmpp://nwws-oi.weather.gov (room nwws)",
@@ -608,6 +629,8 @@ mod tests {
             ("nws", cap),
             ("crw", looe_key),
             ("nwps", "SMML1".to_string()),
+            // The recorded real AIS frame (api/tests/fixtures/ais/position_report.json).
+            ("aisstream", "538006783".to_string()),
         ]
         .into_iter()
         .map(|(source, ext)| {
@@ -738,7 +761,7 @@ mod tests {
     #[test]
     fn source_page_url_hosts_allowlisted() {
         let links = fixture_links();
-        assert_eq!(links.len(), 11);
+        assert_eq!(links.len(), 12);
         let mut hosts = std::collections::BTreeSet::new();
         for (source, ext, url) in &links {
             assert!(url.starts_with("https://"), "{source} {ext}: {url}");
@@ -870,7 +893,7 @@ mod tests {
         let sources = body["data"]["sources"].as_array().unwrap_or_else(|| panic!("{body}"));
         let mut feeds: Vec<&str> = sources.iter().map(|s| s["feed"].as_str().unwrap()).collect();
         feeds.sort_unstable();
-        assert_eq!(feeds, ["crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
+        assert_eq!(feeds, ["aisstream", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
         assert_eq!(body["data"]["crw"], serde_json::json!({"feed": "crw", "mode": "WEBHOOK", "doi": CRW_DOI}));
         assert_eq!(body["data"]["none"], serde_json::Value::Null);
         let goes = sources.iter().find(|s| s["feed"] == "goes19-sst").unwrap();

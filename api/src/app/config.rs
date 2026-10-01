@@ -29,7 +29,7 @@ pub const DEFAULT_APP: &str = "carp";
 /// `openmeteo` and `goes19` (L4). The carp (conditions) sources are `usgs` (shared with python,
 /// OGC API), `nwps`, `nws-alerts` (the `nws` poller scoped to `area=LA` and matched to sites),
 /// `nws-forecast` (gridpoint) and `iem` (HML archive backfill) (C4).
-pub const SOURCES: [(&str, Mode); 17] = [
+pub const SOURCES: [(&str, Mode); 18] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
     ("gbif", Mode::Poll),
@@ -47,6 +47,8 @@ pub const SOURCES: [(&str, Mode); 17] = [
     ("nws-alerts", Mode::Poll),
     ("nws-forecast", Mode::Poll),
     ("iem", Mode::Poll),
+    // AISStream.io vessel positions over a websocket (GE4, `ingest::push::ais`).
+    ("aisstream", Mode::Push),
 ];
 
 /// Sources listed in `SOURCES` whose adapter does not exist yet (none since leaf C4; the

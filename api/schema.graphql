@@ -307,6 +307,25 @@ type Backtest {
   note: String
 }
 
+"""One AIS fix (GE4). sog in knots, cog and heading in degrees true; null when not available."""
+type VesselPoint {
+  at: Time!
+  lat: Float!
+  lon: Float!
+  sog: Float
+  cog: Float
+  heading: Float
+}
+
+"""A vessel and its fixes in the window, oldest first (GE4). Evidence id vessel:<mmsi>."""
+type VesselTrack {
+  mmsi: ID!
+  name: String
+  """cargo, tanker, passenger, fishing, tug, pleasure, highspeed, service, other or unknown"""
+  type: String!
+  points: [VesselPoint!]!
+}
+
 type EvidenceLink {
   id: ID!
   relation: String!
@@ -657,6 +676,8 @@ type ReviewHistory {
 
 type Query {
   feeds: [FeedState!]!
+  """AIS vessel tracks (GE4, carp and lionfish): vessels with a fix in bbox during from..to (at most 7 days), most recently seen first; types filters on VesselTrack.type; limit default 300, max 1000."""
+  vessels(bbox: BBox!, from: Time!, to: Time!, types: [String!], limit: Int): [VesselTrack!]!
   """Every feed of the app: licence, credit, cadence, latency, rate limit, why it is polled, last fetch and state."""
   sources: [SourceInfo!]!
   """One feed by source id; null for a feed the app does not run."""

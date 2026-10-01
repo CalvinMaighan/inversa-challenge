@@ -18,6 +18,7 @@ mod realtime;
 mod review;
 mod source_pages;
 mod state;
+mod vessels;
 
 use tokio::net::TcpListener;
 
