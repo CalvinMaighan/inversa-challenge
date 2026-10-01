@@ -1,41 +1,32 @@
 /**
- * Team realtime browser gates (gates/leaf-T21.md G2, G3) against the real stack:
+ * Team realtime browser gates (gates/leaf-T21.md G2, G3; docs/perf.md) on the shared real stack (e2e/stack.ts):
+ * Axum over a temp data dir with INVERSA_SOURCES=off, so `applyOps`, `opsSince` and the `ops` subscription are
+ * the production code; the production Next build; the signal Worker under `wrangler dev --local`; and the front
+ * proxy, all on free ports (a running `bun run dev` on 3050/4041/8799 is left alone).
  *
- *   - `wrangler dev --local` for the signal Worker on 8799 (its dev env allows origin 127.0.0.1:3050);
- *   - a real Axum (`cargo run --release`) on a free port with a temp INVERSA_DATA_DIR and INVERSA_SOURCES=off,
- *     so `applyOps`, `opsSince` and the `ops` subscription are the production code;
- *   - `next dev` on 3050 proxying /v1 to it.
+ *   bun run e2e:team             build, run, print the TEAM lines
+ *   E2E_SKIP_BUILD=1 …           reuse the last e2e build
  *
  * Two Playwright contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops
  * page. A edits through the panel, B is watched by a MutationObserver; both timestamps come from the same
- * machine clock. 20 chat lines over RTC, then 20 more with peer traffic blocked (`window.__team.blockRtc`)
- * so they ride applyOps → Axum → the WebSocket. Then concurrent removal logging from both contexts must sum,
- * and an edit made while B is offline must converge after it reconnects.
+ * machine clock. First, A's own chat log is watched: an optimistic local edit must be in the DOM before the
+ * next animation frame after the submit (PRD §13 "same frame"). Then 20 chat lines over RTC, then 20 more with
+ * peer traffic blocked (`window.__team.blockRtc`) so they ride applyOps → Axum → the WebSocket. Then concurrent
+ * removal logging from both contexts must sum, and an edit made while B is offline must converge after it
+ * reconnects.
  *
- * Prints `TEAM rtc_p50=<ms> ws_p50=<ms> converged=1` and `COUNTERS-OK OFFLINE-OK` on success.
+ * Prints `TEAM local_same_frame=<n>/<n> local_p50=<ms> rtc_p50=<ms> ws_p50=<ms> converged=1` and
+ * `COUNTERS-OK OFFLINE-OK` on success.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { chromium, type BrowserContext, type Page } from "playwright";
 
-const APP_DIR = join(import.meta.dir, "..");
-const REPO_DIR = join(APP_DIR, "../..");
-const SIGNAL_DIR = join(REPO_DIR, "apps/signal-worker");
-const WRANGLER = "wrangler@4.145.0";
-const SIGNAL_PORT = 8799;
-const NEXT_PORT = 3050;
-const SIGNAL_URL = `http://127.0.0.1:${SIGNAL_PORT}`;
-const PAGE = `http://127.0.0.1:${NEXT_PORT}/`;
+import { buildApi, buildWeb, startStack, type Stack } from "./stack";
+
 const EDITS = 20;
 const REMOVALS_EACH = 5;
-const READY_TIMEOUT_MS = 240_000;
 const RTC_TIMEOUT_MS = 90_000;
 const CONVERGE_TIMEOUT_MS = 60_000;
 
-const scratch = mkdtempSync(join(tmpdir(), "team-e2e-"));
 const log = (...args: unknown[]) => console.error("[e2e:team]", ...args);
 
 function fail(msg: string): never {
@@ -44,148 +35,13 @@ function fail(msg: string): never {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function freePort(): number {
-  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-  const port = probe.port!;
-  probe.stop(true);
-  return port;
-}
-
-async function portBusy(port: number): Promise<boolean> {
-  try {
-    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
-    return true;
-  } catch (err) {
-    return err instanceof Error && err.name === "TimeoutError";
-  }
-}
-
-// ---- processes --------------------------------------------------------------------------------------
-
-type Proc = { name: string; child: ChildProcess; logPath: string; stop(): Promise<void> };
-
-function start(name: string, cmd: string, args: string[], cwd: string, env: Record<string, string | undefined>): Proc {
-  const logPath = join(scratch, `${name}.log`);
-  const fd = openSync(logPath, "a");
-  const child = spawn(cmd, args, { cwd, detached: true, stdio: ["ignore", fd, fd], env: { ...process.env, ...env } });
-  let exited = false;
-  const exitedPromise = new Promise<void>((resolve) => child.once("exit", () => ((exited = true), resolve())));
-  return {
-    name,
-    child,
-    logPath,
-    async stop() {
-      if (exited || child.pid === undefined) return;
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {}
-      const killer = setTimeout(() => {
-        try {
-          process.kill(-child.pid!, "SIGKILL");
-        } catch {}
-      }, 5_000);
-      await exitedPromise;
-      clearTimeout(killer);
-    },
-  };
-}
-
-const tail = (p: Proc, n = 40) => {
-  try {
-    return readFileSync(p.logPath, "utf8").split("\n").slice(-n).join("\n");
-  } catch {
-    return "";
-  }
-};
-
-async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: number, dead?: () => boolean): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (dead?.()) fail(`${what}: process exited`);
-    if (await probe()) return;
-    await sleep(300);
-  }
-  fail(`${what}: not ready after ${timeoutMs / 1000}s`);
-}
-
-async function startSignal(): Promise<Proc> {
-  const p = start("signal", "bunx", [WRANGLER, "dev", "--local", "--env", "dev", "--port", String(SIGNAL_PORT), "--ip", "127.0.0.1", "--persist-to", join(scratch, "wrangler-state")], SIGNAL_DIR, {
-    WRANGLER_SEND_METRICS: "false",
-  });
-  await waitFor(
-    "wrangler dev",
-    async () => {
-      try {
-        const res = await fetch(`${SIGNAL_URL}/turn`, { headers: { Origin: `http://127.0.0.1:${NEXT_PORT}` }, signal: AbortSignal.timeout(1000) });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => p.child.exitCode !== null,
-  );
-  return p;
-}
-
-async function startApi(): Promise<{ proc: Proc; port: number }> {
-  const port = freePort();
-  const proc = start("api", "cargo", ["run", "-q", "--release", "--manifest-path", join(REPO_DIR, "api/Cargo.toml")], REPO_DIR, {
-    INVERSA_DATA_DIR: join(scratch, "data"),
-    INVERSA_SOURCES: "off",
-    INVERSA_BIND: `127.0.0.1:${port}`,
-    RUST_LOG: "info",
-  });
-  await waitFor(
-    "axum",
-    async () => {
-      try {
-        return (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => proc.child.exitCode !== null,
-  );
-  return { proc, port };
-}
-
-async function startNext(apiPort: number): Promise<Proc> {
-  // What `predev` does; then bind next to 127.0.0.1 itself, or Next 16 blocks its own dev chunks as cross-origin.
-  for (const script of ["cesium:copy", "sqlite:copy"]) {
-    const res = Bun.spawnSync(["bun", "run", script], { cwd: APP_DIR, stdout: "pipe", stderr: "pipe" });
-    if (res.exitCode !== 0) fail(`${script}: ${res.stderr.toString()}`);
-  }
-  const proc = start("next", "bun", ["x", "next", "dev", "-p", String(NEXT_PORT), "-H", "127.0.0.1"], APP_DIR, {
-    INVERSA_API_ORIGIN: `http://127.0.0.1:${apiPort}`,
-    NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${apiPort}/v1/graphql`,
-    NEXT_PUBLIC_SIGNAL_URL: SIGNAL_URL,
-    NEXT_TELEMETRY_DISABLED: "1",
-    BROWSER: "none",
-  });
-  await waitFor(
-    "next dev",
-    async () => {
-      try {
-        const res = await fetch(PAGE, { signal: AbortSignal.timeout(20_000) });
-        return res.ok && (await res.text()).includes("data-shell");
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => proc.child.exitCode !== null,
-  );
-  return proc;
-}
-
 // ---- page helpers -----------------------------------------------------------------------------------
 
 // `window.__team` is declared by client/hud/missions/team.ts (the same tsconfig program).
 declare global {
   interface Window {
     __t0?: number;
+    __local?: { at: number; inFrame: boolean } | null;
   }
 }
 
@@ -193,7 +49,7 @@ const pageErrors = new Map<string, string[]>();
 /** Pages whose browser refused to transfer the RTCDataChannel and relayed through main instead. */
 const relayed = new Set<string>();
 
-async function open(ctx: BrowserContext, name: string): Promise<Page> {
+async function open(ctx: BrowserContext, name: string, url: string): Promise<Page> {
   const page = await ctx.newPage();
   const errs: string[] = [];
   pageErrors.set(name, errs);
@@ -202,7 +58,7 @@ async function open(ctx: BrowserContext, name: string): Promise<Page> {
     if (m.type() === "error") errs.push(m.text());
     if (/relaying through main/.test(m.text())) relayed.add(name);
   });
-  await page.goto(PAGE, { waitUntil: "domcontentloaded" });
+  await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => Boolean(window.__team) && document.querySelector('[data-testid="team-panel"][data-ready="1"]') !== null, null, { timeout: 120_000 });
   return page;
 }
@@ -255,6 +111,47 @@ async function sayViaUi(page: Page, text: string): Promise<number> {
   return page.evaluate(() => window.__t0!);
 }
 
+/**
+ * Optimistic local edit: at submit (capture phase), arm a MutationObserver on the sender's own chat log and a
+ * `requestAnimationFrame` callback. rAF callbacks run before the frame is painted, so the edit is "same frame"
+ * when the line is already in the DOM by then. Returns the DOM latency (performance.now, ms) and that verdict.
+ */
+async function sayLocal(page: Page, text: string): Promise<{ ms: number; inFrame: boolean }> {
+  await page.evaluate((want) => {
+    window.__local = null;
+    const form = document.querySelector('[data-testid="chat-input"]')!.closest("form")!;
+    const log = document.querySelector('[data-testid="chat-log"]')!;
+    const has = () => (log.textContent ?? "").includes(want);
+    form.addEventListener(
+      "submit",
+      () => {
+        const t0 = performance.now();
+        let at: number | null = null;
+        const mo = new MutationObserver(() => {
+          if (at === null && has()) at = performance.now() - t0;
+        });
+        mo.observe(log, { subtree: true, childList: true, characterData: true });
+        requestAnimationFrame(() => {
+          const inFrame = has();
+          if (at === null && inFrame) at = performance.now() - t0;
+          const settle = () => {
+            if (at === null && !has()) return void setTimeout(settle, 1);
+            mo.disconnect();
+            window.__local = { at: at ?? performance.now() - t0, inFrame };
+          };
+          settle();
+        });
+      },
+      { capture: true, once: true },
+    );
+  }, text);
+  await page.fill('[data-testid="chat-input"]', text);
+  await page.press('[data-testid="chat-input"]', "Enter");
+  const r = await page.waitForFunction(() => window.__local ?? null, null, { timeout: 10_000 });
+  const v = (await r.jsonValue()) as { at: number; inFrame: boolean };
+  return { ms: v.at, inFrame: v.inFrame };
+}
+
 async function measure(a: Page, b: Page, tag: string): Promise<number[]> {
   const samples: number[] = [];
   for (let i = 0; i < EDITS; i++) {
@@ -270,6 +167,10 @@ async function measure(a: Page, b: Page, tag: string): Promise<number[]> {
 const p50 = (xs: number[]) => {
   const s = [...xs].sort((x, y) => x - y);
   return s[Math.floor(s.length / 2)]!;
+};
+const p95 = (xs: number[]) => {
+  const s = [...xs].sort((x, y) => x - y);
+  return s[Math.min(s.length - 1, Math.ceil(s.length * 0.95) - 1)]!;
 };
 
 async function board(page: Page) {
@@ -288,26 +189,23 @@ async function waitBoard(page: Page, pred: (b: Awaited<ReturnType<typeof board>>
   fail(`${what}: ${JSON.stringify(last).slice(0, 600)}`);
 }
 
-async function serverBoard(apiPort: number): Promise<{ missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> }> {
-  const res = await fetch(`http://127.0.0.1:${apiPort}/v1/graphql`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query: 'query { board(id: "everglades") { missions { id fields } messages { body } removals } }' }),
-  });
-  const json = (await res.json()) as { data?: { board: { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> } }; errors?: unknown };
-  if (!json.data) fail(`board query: ${JSON.stringify(json.errors)}`);
-  return json.data.board;
+type ServerBoard = { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> };
+
+async function serverBoard(stack: Stack): Promise<ServerBoard> {
+  const data = await stack.graphql<{ board: ServerBoard }>('query { board(id: "everglades") { missions { id fields } messages { body } removals } }');
+  return data.board;
 }
 
 // ---- scenario ---------------------------------------------------------------------------------------
 
-async function scenario(apiPort: number): Promise<string[]> {
+async function scenario(stack: Stack): Promise<string[]> {
+  const url = `${stack.origin}/`;
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     const ctxA = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const ctxB = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-    const a = await open(ctxA, "A");
-    const b = await open(ctxB, "B");
+    const a = await open(ctxA, "A", url);
+    const b = await open(ctxB, "B", url);
     const [idA, idB] = await Promise.all([nodeId(a), nodeId(b)]);
     if (!idA || !idB || idA === idB) fail(`identities: ${idA} ${idB}`);
     log(`A=${idA.slice(0, 8)} B=${idB.slice(0, 8)}; waiting for the data channel`);
@@ -328,16 +226,21 @@ async function scenario(apiPort: number): Promise<string[]> {
     await b.waitForSelector(`[data-mission-id="${missionId}"]`);
     log(`mission ${missionId.slice(0, 8)} on both`);
 
+    // Optimistic local edit: in A's own log before A's next frame.
+    const local: { ms: number; inFrame: boolean }[] = [];
+    for (let i = 0; i < EDITS; i++) local.push(await sayLocal(a, `local-${i}-${Math.random().toString(36).slice(2, 6)}`));
+    const localMs = local.map((x) => Number(x.ms.toFixed(1)));
+    const sameFrame = local.filter((x) => x.inFrame).length;
+    log(`local samples ms: ${localMs.join(" ")} same_frame=${sameFrame}/${EDITS}`);
+
     // Latency over RTC: A types in the chat, B's chat log changes.
     const rtc = await measure(a, b, "rtc");
-    const rtcP50 = p50(rtc);
-    log(`rtc samples ms: ${rtc.join(" ")} p50=${rtcP50}`);
+    log(`rtc samples ms: ${rtc.join(" ")} p50=${p50(rtc)} p95=${p95(rtc)}`);
 
     // Latency over the WebSocket: peer traffic blocked on both sides.
     await Promise.all([a, b].map((p) => p.evaluate(() => window.__team!.blockRtc(true))));
     const ws = await measure(a, b, "ws");
-    const wsP50 = p50(ws);
-    log(`ws samples ms: ${ws.join(" ")} p50=${wsP50}`);
+    log(`ws samples ms: ${ws.join(" ")} p50=${p50(ws)} p95=${p95(ws)}`);
 
     // Concurrent removals, still over the WebSocket: a grow-only counter per node must sum on both sides.
     for (const p of [a, b]) {
@@ -361,7 +264,7 @@ async function scenario(apiPort: number): Promise<string[]> {
       const overall = await p.textContent('[data-testid="totals-overall"]');
       if (overall !== String(expected)) fail(`${name} overall total ${overall}, expected ${expected}`);
     }
-    const server1 = await serverBoard(apiPort);
+    const server1 = await serverBoard(stack);
     if (server1.removals[missionId] !== expected) fail(`server removals ${JSON.stringify(server1.removals)}`);
     log(`counters: ${expected} on A, B and the server`);
 
@@ -379,7 +282,7 @@ async function scenario(apiPort: number): Promise<string[]> {
     const [fa, fb] = await Promise.all([board(a), board(b)]);
     const canon = (x: Awaited<ReturnType<typeof board>>) => JSON.stringify({ m: x.missions, r: x.removals, msgs: x.messages.map((y) => y.id).sort() });
     if (canon(fa) !== canon(fb)) fail(`boards differ after reconnect:\nA ${canon(fa)}\nB ${canon(fb)}`);
-    const server2 = await serverBoard(apiPort);
+    const server2 = await serverBoard(stack);
     if (server2.missions.find((x) => x.id === missionId)?.fields.status !== "in_progress") fail("server did not get B's offline status change");
     if (server2.messages.length !== fa.messages.length) fail(`server has ${server2.messages.length} messages, clients ${fa.messages.length}`);
     log("offline edit converged on A, B and the server");
@@ -387,37 +290,30 @@ async function scenario(apiPort: number): Promise<string[]> {
     const fatal = [...pageErrors.entries()].flatMap(([n, errs]) => errs.filter((e) => /\[rtc\]|\[team\]|\[missions\]|Uncaught/.test(e)).map((e) => `${n}: ${e}`));
     if (fatal.length) fail(`page errors:\n${fatal.join("\n")}`);
 
-    return [`TEAM rtc_p50=${rtcP50} ws_p50=${wsP50} converged=1`, "COUNTERS-OK OFFLINE-OK"];
+    return [
+      `TEAM local_same_frame=${sameFrame}/${EDITS} local_p50=${p50(localMs)} rtc_p50=${p50(rtc)} rtc_p95=${p95(rtc)} ws_p50=${p50(ws)} ws_p95=${p95(ws)} converged=1`,
+      "COUNTERS-OK OFFLINE-OK",
+    ];
   } finally {
     await browser.close();
   }
 }
 
 async function main(): Promise<number> {
-  for (const port of [SIGNAL_PORT, NEXT_PORT]) {
-    if (await portBusy(port)) {
-      console.log(`port ${port} is already in use; stop that process first`);
-      return 1;
-    }
-  }
-  const procs: Proc[] = [];
+  buildApi(log);
+  buildWeb(log);
+  const stack = await startStack({ name: "team" });
   try {
-    log("starting wrangler dev, axum and next dev");
-    const [signal, api] = await Promise.all([startSignal(), startApi()]);
-    procs.push(signal, api.proc);
-    procs.push(await startNext(api.port));
-    log(`signal ${SIGNAL_URL}, api :${api.port}, next ${PAGE}`);
-    const lines = await scenario(api.port);
+    const lines = await scenario(stack);
     for (const l of lines) console.log(l);
     return 0;
   } catch (err) {
-    for (const p of procs) console.log(`---- ${p.name} log ----\n${tail(p)}`);
+    console.log(stack.logs());
     for (const [name, errs] of pageErrors) if (errs.length) console.log(`---- page ${name} errors ----\n${errs.slice(-20).join("\n")}`);
     console.log(`TEAM-FAIL: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   } finally {
-    await Promise.all(procs.map((p) => p.stop()));
-    rmSync(scratch, { recursive: true, force: true });
+    await stack.stop();
   }
 }
 

@@ -5,7 +5,7 @@
  * Grids are row-major from the south-west corner (PLAN.md C4); canvases are row-major from the top, so every
  * painter flips rows to put north up.
  */
-import { ENV_MISSING } from "shared/frames";
+import { ENV_FLAGGED, ENV_MISSING, isEnvValue } from "shared/frames";
 
 /** A colour stop: position in [0, 1], then r, g, b in 0..255 and alpha in 0..1. */
 export type RampStop = readonly [t: number, r: number, g: number, b: number, a: number];
@@ -36,7 +36,7 @@ export const TEMP_STOPS: readonly RampStop[] = [
 export const LST_RANGE_C = { min: 0, max: 45 } as const;
 export const SST_RANGE_C = { min: 16, max: 33 } as const;
 
-/** Hatch drawn over cells that are missing in this frame but valid in others (cloud, bad DQF). */
+/** Hatch drawn over gaps: cells flagged in this frame (cloud, bad DQF), or missing now but valid in others. */
 export const HATCH_RGBA = [214, 219, 228, 96] as const;
 /** Hatch line spacing, output pixels. */
 export const HATCH_PERIOD = 6;
@@ -81,7 +81,7 @@ export function decodeHotspot(byte: number, hotspotScale: number): number {
 
 /** °C from an i16 centi-degree cell, or null when missing or flagged. */
 export function decodeEnvC(centi: number): number | null {
-  return centi === ENV_MISSING ? null : centi / 100;
+  return isEnvValue(centi) ? centi / 100 : null;
 }
 
 /** LUT index for a centi-degree value within a display range. */
@@ -128,8 +128,9 @@ export function paintHeat(
 }
 
 /**
- * Cells valid in at least one of `frames`. A cell never valid is outside the product's domain (land for SST,
- * open sea for LST) and stays clear; a cell valid elsewhere but missing now is a gap and gets hatched.
+ * Cells inside the product's domain in at least one of `frames`: valid, or flagged (a pixel that reported
+ * cloud or bad DQF). A cell with no reading anywhere is outside the domain (land for SST, open sea for LST)
+ * and stays clear; a cell in the domain but without a value now is a gap and gets hatched.
  */
 export function everValidMask(frames: Iterable<Int16Array>, cells: number): Uint8Array {
   const mask = new Uint8Array(cells);
@@ -171,8 +172,8 @@ export function paintEnv(
     for (let c = 0; c < cols; c += 1) {
       const idx = r * cols + c;
       const v = values[idx]!;
-      const missing = v === ENV_MISSING;
-      const gap = missing && (everValid === null || everValid[idx] === 1);
+      const missing = !isEnvValue(v);
+      const gap = v === ENV_FLAGGED || (missing && (everValid === null || everValid[idx] === 1));
       if (!missing) valid += 1;
       else if (gap) gaps += 1;
       const l = missing ? -1 : envIndex(v, range) * 4;

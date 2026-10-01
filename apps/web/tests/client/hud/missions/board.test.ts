@@ -14,6 +14,7 @@ import {
   MAX_TITLE_CHARS,
   memoryCounterStore,
   messageOp,
+  overlayOps,
   MISSION_WINDOW_MS,
   missionFieldsFromForm,
   readCounter,
@@ -171,5 +172,38 @@ describe("board model", () => {
     expect(model.totals).toEqual({ overall: 4, bySpecies: { python: 4, tegu: 0, iguana: 0, lionfish: 0 } });
     expect(model.messages.map((m) => m.body)).toEqual(["hi"]);
     expect(model.notes).toEqual([]);
+  });
+
+  test("overlayOps: pending local ops over the worker's view read the same as the worker's view after them", () => {
+    const f = factory();
+    const store = memoryCounterStore();
+    const keep = createMissionOps(f, missionFieldsFromForm(form({ title: "keep" }), "n"));
+    f.t += 10;
+    const gone = createMissionOps(f, missionFieldsFromForm(form({ title: "gone", cell: "3:3" }), "n"));
+    const base = [...keep.ops, ...gone.ops, messageOp(f, "first"), removalOp(f, keep.id, bumpCounter(store, "everglades", "node-a", keep.id))];
+    const committed = applyOps(createState("everglades"), base);
+    f.t += 10;
+    const fresh = createMissionOps(f, missionFieldsFromForm(form({ title: "fresh", cell: "9:9" }), "n"));
+    const pending = [
+      setStatusOp(f, keep.id, "in_progress"),
+      messageOp(f, "second"),
+      removalOp(f, keep.id, bumpCounter(store, "everglades", "node-a", keep.id)),
+      removalOp(f, keep.id, bumpCounter(store, "everglades", "node-a", keep.id)),
+      ...createNoteOps(f, keep.id, "a note"),
+      deleteMissionOp(f, gone.id),
+      ...fresh.ops,
+    ];
+    const optimistic = boardModel(overlayOps(viewBoard(committed), pending));
+    const truth = boardModel(viewBoard(applyOps(committed, pending)));
+    expect(optimistic).toEqual(truth);
+    expect(optimistic.missions.map((m) => [m.title, m.status])).toEqual([
+      ["fresh", "planned"],
+      ["keep", "in_progress"],
+    ]);
+    expect(optimistic.removals[keep.id]).toBe(3);
+    expect(optimistic.messages.map((m) => m.body)).toEqual(["first", "second"]);
+    // Nothing pending: the worker's view as it is.
+    const view = viewBoard(committed);
+    expect(overlayOps(view, [])).toBe(view);
   });
 });

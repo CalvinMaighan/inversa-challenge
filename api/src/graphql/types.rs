@@ -199,6 +199,9 @@ pub struct Sighting {
     pub photo_url: Option<String>,
     pub canonical_id: Option<ID>,
     pub conflict: bool,
+    /// When the record was first stored. `ingestedAt - observedAt` is its ingest lag; over 24 h
+    /// the record is late (frame flag 4).
+    pub ingested_at: Time,
 }
 
 #[derive(Debug, Clone, SimpleObject)]

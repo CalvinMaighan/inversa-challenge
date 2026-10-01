@@ -15,6 +15,7 @@ import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
 import { Dot, Icon, IconButton, Mono, MOBILE, Pill, Surface } from "../primitives";
+import { openEvidence } from "../selection";
 import { formatClocks, isLive } from "./clock";
 import { formatLatLon, unproject } from "./coords";
 import { feedChip, feedSummary } from "./feed-chips";
@@ -146,9 +147,22 @@ function FeedChips() {
     <Chips aria-label={`Feeds: ${summary.degraded} of ${list.length} not nominal`}>
       {list.map((feed) => {
         const chip = feedChip(feed);
+        // The chip opens the feed's latest fetch run in the drawer: state, note and error readable without a hover.
+        const run = feed.lastFetchRunId ? `fetch:${feed.lastFetchRunId}` : null;
+        const open = run ? () => openEvidence(run) : undefined;
         return (
           <li key={chip.source}>
-            <Pill $tone={chip.tone} title={chip.title} data-feed={chip.source} data-state={chip.state} tabIndex={0}>
+            <Pill
+              $tone={chip.tone}
+              title={chip.title}
+              data-feed={chip.source}
+              data-state={chip.state}
+              tabIndex={0}
+              role={run ? "button" : undefined}
+              style={run ? { cursor: "pointer" } : undefined}
+              onClick={open}
+              onKeyDown={open ? (e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), open()) : undefined}
+            >
               <Dot $tone={chip.tone} $pulse={chip.state === "down"} />
               {chip.label}
               <ChipIcon aria-label={chip.mode}>

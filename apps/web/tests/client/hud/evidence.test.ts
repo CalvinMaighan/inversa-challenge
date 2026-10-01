@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { formatLatLon, unproject } from "client/hud/topbar/coords";
-import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, recordRevisions } from "client/hud/drawer/evidence";
+import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, qualityBadges, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
 import { isDrawerOpen } from "client/hud/selection";
 import { parseEvidenceId } from "client/state/selection";
@@ -66,6 +66,20 @@ describe("evidence ids and links", () => {
     ]);
     expect(evidenceBadges({ links: [], record: { conflict: true } })).toEqual([{ group: "conflicts", count: 1 }]);
     expect(evidenceBadges({ links: [], record: {} })).toEqual([]);
+  });
+
+  test("quality badges: late sighting, flagged reading, failed fetch, degraded feed", () => {
+    const feed = (state: "nominal" | "stale") => ({ source: "ndbc", mode: "poll" as const, state, newestObservedAt: null, lastFetchAt: null, lastFetchRunId: "4", lagSeconds: 1, note: null });
+    const base = { record: {}, ingestLagSeconds: null, feed: null };
+    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 2 * 86_400 + 4 * 3600 })).toEqual([{ badge: "late", label: "LATE · ARRIVED 2d 4h AFTER" }]);
+    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 86_400 })).toEqual([]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "bad_dqf", value: null } })).toEqual([{ badge: "missing", label: "MISSING · BAD DQF" }]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "ok", value: 1 } })).toEqual([]);
+    expect(qualityBadges({ ...base, kind: "fetch", record: { status: "error" }, feed: feed("stale") })).toEqual([
+      { badge: "failed", label: "FETCH FAILED" },
+      { badge: "feed", label: "NDBC FEED STALE", state: "stale" },
+    ]);
+    expect(qualityBadges({ ...base, kind: "fetch", record: { status: "ok" }, feed: feed("nominal") })).toEqual([]);
   });
 
   test("bracket locations come from lat/lon, then station, then the alert area", () => {

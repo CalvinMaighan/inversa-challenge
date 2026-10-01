@@ -53,7 +53,7 @@ describe("C17 views per tool", () => {
     const { out, view } = await run("sightings", { bbox: HOMESTEAD, species: ["tegu"] });
     const table = view.result as TableView;
     expect(table.view).toBe("table");
-    expect(table.columns.map((c) => c.key)).toEqual(["time", "species", "quality", "source", "lat", "lon", "dup", "conflict"]);
+    expect(table.columns.map((c) => c.key)).toEqual(["time", "species", "quality", "source", "lat", "lon", "dup", "conflict", "late"]);
     expect(table.columns.find((c) => c.key === "time")?.kind).toBe("time");
     expect(table.rows.map((r) => r.evidenceId)).toEqual(["sighting:2001", "sighting:2002", "sighting:2003"]);
     expect(table.rows.find((r) => r.evidenceId === "sighting:2002")?.conflict).toBe("conflict");
@@ -67,6 +67,9 @@ describe("C17 views per tool", () => {
     const pythons = await run("sightings", { bbox: SHARK_VALLEY });
     const rows = (pythons.view.result as TableView).rows;
     expect(rows.find((r) => r.evidenceId === "sighting:1002")?.dup).toBe("sighting:1001");
+    // The NAS copy of 1003 reached the API 2.2 days after the animal was seen; the GBIF copy of 1001 within hours.
+    expect(rows.find((r) => r.evidenceId === "sighting:1004")?.late).toBe("2.2 days after");
+    expect(rows.find((r) => r.evidenceId === "sighting:1002")?.late).toBeNull();
     // Canonical records are bracketed before their duplicates.
     expect(pythons.view.highlight!.slice(0, 2)).toEqual(["sighting:1001", "sighting:1003"]);
   });

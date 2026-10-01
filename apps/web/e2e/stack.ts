@@ -46,6 +46,8 @@ export type Stack = {
   api: string;
   /** POST rows (model::Row serde form) through the signed hook; returns the parsed 202 body. */
   hook(rows: unknown[]): Promise<Record<string, unknown>>;
+  /** POST any body through the signed hook, whatever the answer (a body that does not normalize is a 422). */
+  hookRaw(body: string): Promise<{ status: number; text: string }>;
   /** POST a GraphQL query to Axum. */
   graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
   /** Tail of the Axum and Next logs, for failures. */
@@ -129,6 +131,8 @@ function startProxy(port: number, up: { api: string; next: string; signal: strin
   return Bun.serve<WsData>({
     port,
     hostname: "127.0.0.1",
+    // The agent stream can sit quiet longer than Bun's 10 s default while the model thinks (Caddy has no such cap).
+    idleTimeout: 255,
     async fetch(req, server) {
       const url = new URL(req.url);
       const toApi = url.pathname.startsWith("/v1/");
@@ -277,21 +281,24 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin });
     log(`axum ${api} (data ${dataDir}), next ${nextOrigin}, signal ${signalOrigin}, page origin ${origin}`);
 
+    const hookRaw = async (body: string) => {
+      const ts = Math.floor(Date.now() / 1000);
+      const signature = createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
+      const res = await fetch(`${api}/v1/ingest/hook/web`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-timestamp": String(ts), "x-signature": signature },
+        body,
+      });
+      return { status: res.status, text: await res.text() };
+    };
     return {
       origin,
       api,
       graphql,
+      hookRaw,
       async hook(rows) {
-        const body = JSON.stringify(rows);
-        const ts = Math.floor(Date.now() / 1000);
-        const signature = createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
-        const res = await fetch(`${api}/v1/ingest/hook/web`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-timestamp": String(ts), "x-signature": signature },
-          body,
-        });
-        const text = await res.text();
-        if (res.status !== 202) throw new Error(`hook answered ${res.status}: ${text}`);
+        const { status, text } = await hookRaw(JSON.stringify(rows));
+        if (status !== 202) throw new Error(`hook answered ${status}: ${text}`);
         return JSON.parse(text) as Record<string, unknown>;
       },
       logs: tail,

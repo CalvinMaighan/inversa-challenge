@@ -100,7 +100,8 @@ export const GOLDEN: Golden[] = [
     id: "quality-duplicates-shark-valley",
     question: "How many distinct pythons were reported around Shark Valley this week?",
     quality: true,
-    expect: { tools: ["geocode", "sightings"], phrases: [/duplicate/i, /\b(2|two) distinct/i], minCitations: 2, cites: { sighting: 2 } },
+    // Duplicate and late in one: the NAS copy of an iNaturalist python arrived 2.2 days after the sighting.
+    expect: { tools: ["geocode", "sightings"], phrases: [/duplicate/i, /\b(2|two) distinct/i, /\blate\b|arrived [^.]{0,40}\bafter\b/i], minCitations: 2, cites: { sighting: 2 } },
   },
   {
     id: "quality-missing-lst",

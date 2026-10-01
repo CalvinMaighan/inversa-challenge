@@ -89,6 +89,8 @@ export type SightingRow = {
   lon: number;
   duplicateOf: string | null;
   idConflict: boolean;
+  /** Ingest lag in words ("2.2 d") when the record arrived more than a day after it was observed, else null. */
+  late?: string | null;
 };
 
 export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: string): ToolViewData {
@@ -105,6 +107,7 @@ export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: s
       { key: "lon", label: "Lon", unit: "°", kind: "number" },
       { key: "dup", label: "Duplicate of", kind: "text" },
       { key: "conflict", label: "ID conflict", kind: "text" },
+      { key: "late", label: "Arrived late", kind: "text" },
     ],
     rows: shown.map((row) => ({
       evidenceId: row.evidenceId,
@@ -116,6 +119,7 @@ export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: s
       lon: row.lon,
       dup: row.duplicateOf,
       conflict: row.idConflict ? "conflict" : null,
+      late: row.late ? `${row.late} after` : null,
     })),
     ...(rows.length > shown.length ? { total: rows.length } : {}),
   };

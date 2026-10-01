@@ -139,14 +139,33 @@ function fetchEvidence(feed: GqlFeedState): Evidence | null {
   return evidence("fetch", feed.lastFetchRunId, `${feed.source} ${state.state} · last fetch ${feed.lastFetchAt ?? "never"}`);
 }
 
-/** The analyst reads this summary before any claim about freshness. */
-function feedSummary(feeds: FeedState[]) {
+/** Age in words for the model: "25 min", "8 h", "25 days". */
+export function ageWords(seconds: number): string {
+  if (seconds < 90 * 60) return `${Math.max(1, Math.round(seconds / 60))} min`;
+  if (seconds < 48 * 3600) return `${Math.round(seconds / 3600)} h`;
+  return `${Math.round(seconds / 86_400)} days`;
+}
+
+/**
+ * The analyst reads this summary before any claim about freshness. `mention` lists every feed that is not
+ * nominal, with the citation marker already written, so naming a degraded feed and citing it is one copy.
+ */
+export function feedSummary(feeds: FeedState[]) {
   const pick = (state: FeedState["state"]) => feeds.filter((feed) => feed.state === state).map((feed) => feed.source);
   return {
     worst: feeds.length > 0 ? worstHealth(feeds) : "unknown",
     lagging: pick("lagging"),
     stale: pick("stale"),
     down: pick("down"),
+    mention: feeds
+      .filter((feed) => feed.state !== "nominal")
+      .map((feed) => ({
+        source: feed.source,
+        state: feed.state,
+        newestObservation: feed.lagSeconds === null ? "none stored" : `${ageWords(feed.lagSeconds)} old`,
+        note: feed.note,
+        cite: feed.lastFetchRunId ? `[e:fetch:${feed.lastFetchRunId}]` : null,
+      })),
   };
 }
 
@@ -189,7 +208,7 @@ const geocode = {
 
 const SIGHTINGS_QUERY = `query AgentSightings($bbox: BBox!, $from: Time!, $to: Time!, $taxa: [ID!], $quality: [Quality!]) {
   sightings(bbox: $bbox, from: $from, to: $to, taxa: $taxa, quality: $quality) {
-    id source extId taxon { id scientificName commonName } lat lon accuracyM observedAt quality canonicalId conflict
+    id source extId taxon { id scientificName commonName } lat lon accuracyM observedAt quality canonicalId conflict ingestedAt
   }
   feeds { ...FeedFields }
 }
@@ -207,7 +226,21 @@ type GqlSighting = {
   quality: string;
   canonicalId: string | null;
   conflict: boolean;
+  /** Absent from APIs that predate it. */
+  ingestedAt?: string | null;
 };
+
+/** A record stored more than a day after it was observed is late (the API's frame flag 4, PRD §7). */
+const LATE_MS = 24 * HOUR_MS;
+
+/** How long after its observation a late record reached the API ("2.2 days"), or null when it is not late. */
+export function lateBy(row: Pick<GqlSighting, "observedAt" | "ingestedAt">): string | null {
+  if (!row.ingestedAt) return null;
+  const lag = Date.parse(row.ingestedAt) - Date.parse(row.observedAt);
+  if (!(lag > LATE_MS)) return null;
+  const days = lag / (24 * HOUR_MS);
+  return days < 10 ? `${days.toFixed(1)} days` : `${Math.round(days)} days`;
+}
 
 /** Research grade first, then curated records, then unconfirmed. */
 const QUALITY_RANK: Record<string, number> = { research: 0, curated: 1, needs_id: 2, casual: 3 };
@@ -282,6 +315,7 @@ const sightings = {
       lon: row.lon,
       duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
       idConflict: row.conflict,
+      late: lateBy(row),
     }));
     const species = input.species?.map((key) => speciesByKey(key).common.toLowerCase()).join(", ") ?? "invasive";
     const days = Math.max(1, Math.round((Date.parse(window.to) - Date.parse(window.from)) / (24 * HOUR_MS)));
@@ -304,6 +338,7 @@ const sightings = {
         distinctAnimals: rows.length - duplicates.length,
         duplicates: duplicates.length,
         conflicts: rows.filter((row) => row.conflict).length,
+        late: rows.filter((row) => lateBy(row) !== null).length,
         byQuality,
         bySpecies,
         truncated: rows.length > shown.length,
@@ -318,6 +353,7 @@ const sightings = {
           accuracyM: row.accuracyM,
           duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
           idConflict: row.conflict,
+          ...(lateBy(row) ? { arrivedLate: `${lateBy(row)} after it was observed` } : {}),
         })),
       },
       evidenceRows,

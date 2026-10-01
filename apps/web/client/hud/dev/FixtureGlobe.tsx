@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { get, set, subscribe } from "@calvinjs/active-state";
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 
-import { ENV_MISSING } from "shared/frames";
+import { isEnvValue } from "shared/frames";
 
 import { registerGlobe, type GlobeApi } from "client/globe/api";
 import { TIME, type TimeState } from "client/state/time";
@@ -145,7 +145,7 @@ export default function FixtureGlobe({ grid }: { grid: FrameGrid }) {
           for (let c = 0; c < envCols; c++) {
             const i = r * envCols + c;
             const o = (dst + c) * 4;
-            const missing = lst[i] === ENV_MISSING && sst[i] === ENV_MISSING;
+            const missing = !isEnvValue(lst[i]!) && !isEnvValue(sst[i]!);
             cp[o] = 200;
             cp[o + 1] = 205;
             cp[o + 2] = 210;

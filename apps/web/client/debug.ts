@@ -41,6 +41,8 @@ export type InversaDebug = {
   project(lon: number, lat: number): ScreenPoint | null;
   pick(x: number, y: number): string | null;
   globe(): ReturnType<GlobeHandle["diagnostics"]> | null;
+  /** Load milestones since navigation start. */
+  marks(): LoadMarks;
 };
 
 declare global {
@@ -51,9 +53,26 @@ declare global {
 
 let globeHandle: GlobeHandle | null = null;
 
+/** `performance.now()` of load milestones, for the cold-load measurement in docs/perf.md; null until reached. */
+export type LoadMarks = {
+  /** The hook installed: React has hydrated the shell (Providers' first effect). */
+  hydrated: number | null;
+  /** Cesium rendered its first frame. */
+  globeFirstFrame: number | null;
+};
+const loadMarks: LoadMarks = { hydrated: null, globeFirstFrame: null };
+
 /** GlobeView hands over its handle (null on unmount) so the hook can report layer stats. */
 export function setDebugGlobe(handle: GlobeHandle | null): void {
-  if (DEBUG_HOOK) globeHandle = handle;
+  if (!DEBUG_HOOK) return;
+  globeHandle = handle;
+  if (handle && loadMarks.globeFirstFrame === null) {
+    let off: (() => void) | null = null;
+    off = handle.api.onPostRender(() => {
+      loadMarks.globeFirstFrame ??= performance.now();
+      off?.();
+    });
+  }
 }
 
 function frameAt(atIso: string): number | null {
@@ -63,7 +82,10 @@ function frameAt(atIso: string): number | null {
 
 export function installDebugHook(): void {
   if (!DEBUG_HOOK || typeof window === "undefined" || window.__inversa) return;
+  // Reading only: nothing here may wire the threads (a dev page with fixture frames must keep them).
+  loadMarks.hydrated ??= performance.now();
   window.__inversa = {
+    marks: () => ({ ...loadMarks }),
     snapshot() {
       const grid = getFrameGrid();
       const sightings = getFrameSightings();

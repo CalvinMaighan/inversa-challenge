@@ -254,6 +254,12 @@ fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
     } else {
         (Health::Nominal, None)
     };
+    // A stale or lagging feed whose last fetch also failed says both: the age explains the state, the
+    // failure explains why it is not catching up.
+    let note = match (state, note, last_error) {
+        (Health::Stale | Health::Lagging, Some(n), Some(err)) => Some(format!("{n}; last fetch failed: {err}")),
+        (_, n, _) => n,
+    };
 
     FeedState {
         source: source.id,
@@ -414,6 +420,12 @@ mod tests {
         assert_eq!(s.state, Health::Stale, "{s:?}");
         assert_eq!(s.lag_seconds, Some(45 * 60));
         assert!(s.note.unwrap().contains("max latency is 30m"));
+
+        // The next fetch fails: still stale, and the note gives both reasons.
+        run(&db, "inat", NOW - MIN / 2, "error").await;
+        let s = only(&db).await;
+        assert_eq!(s.state, Health::Stale, "{s:?}");
+        assert_eq!(s.note.as_deref(), Some("newest observation is 45m old; max latency is 30m; last fetch failed: HTTP 503"));
     }
 
     #[tokio::test]

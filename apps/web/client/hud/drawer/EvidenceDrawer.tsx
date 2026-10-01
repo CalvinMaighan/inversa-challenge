@@ -10,7 +10,17 @@ import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
-import { evidenceBadges, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
+import {
+  evidenceBadges,
+  loadEvidence,
+  parseBacktestId,
+  parseHotspotId,
+  qualityBadges,
+  recordRevisions,
+  type BadgeGroup,
+  type Evidence,
+  type QualityBadge,
+} from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
 import { useLoad } from "./use-load";
@@ -99,6 +109,24 @@ const BADGE: Record<BadgeGroup, { label: (n: number) => string; tone: Tone }> = 
   revisions: { label: (n) => `${n} REVISION${n === 1 ? "" : "S"}`, tone: "warn" },
   conflicts: { label: (n) => `${n} CONFLICT${n === 1 ? "" : "S"}`, tone: "danger" },
 };
+
+const QUALITY_TONE: Record<QualityBadge["badge"], Tone> = { late: "warn", missing: "muted", failed: "danger", feed: "warn" };
+const FEED_TONE: Record<string, Tone> = { lagging: "warn", stale: "stale", down: "danger" };
+
+/** Late, missing, failed-fetch and degraded-feed badges, first thing under the id (PRD §7). */
+function QualityBadges({ evidence }: { evidence: Evidence }) {
+  const badges = qualityBadges(evidence);
+  if (badges.length === 0) return null;
+  return (
+    <Badges aria-label="Data quality" data-testid="hud-drawer-quality" style={{ marginTop: "var(--gap-s)", marginBottom: 0 }}>
+      {badges.map((b) => (
+        <Pill key={b.badge} $tone={b.state ? (FEED_TONE[b.state] ?? "warn") : QUALITY_TONE[b.badge]} data-quality={b.badge}>
+          {b.label}
+        </Pill>
+      ))}
+    </Badges>
+  );
+}
 
 const utc = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? `${new Date(iso).toISOString().slice(0, 19).replace("T", " ")}Z` : "—");
 
@@ -207,6 +235,12 @@ function Record({ evidence }: { evidence: Evidence }) {
               "—"
             )}
           </dd>
+          {evidence.feed?.note && (
+            <>
+              <dt>Feed note</dt>
+              <dd data-testid="hud-drawer-feed-note">{evidence.feed.note}</dd>
+            </>
+          )}
           {evidence.rawKey && (
             <>
               <dt>Raw key</dt>
@@ -281,6 +315,7 @@ export default function EvidenceDrawer() {
         <Mono style={{ fontSize: 12, overflowWrap: "anywhere" }} data-testid="hud-drawer-id">
           {id}
         </Mono>
+        {state.status === "ready" && <QualityBadges evidence={state.data} />}
       </Section>
       {hotspot && (
         <Section>

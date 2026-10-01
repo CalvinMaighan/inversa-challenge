@@ -9,7 +9,7 @@ import { parseEvidenceId } from "client/state/selection";
 import { REGION_BBOX } from "client/state/view";
 import { gqlRequest } from "client/threads/api";
 
-import { FEED_FIELDS, normalizeFeedState } from "../topbar/feed-chips";
+import { FEED_FIELDS, feedLabel, formatLag, normalizeFeedState } from "../topbar/feed-chips";
 
 export type EvidenceLink = { id: string; relation: string; source: string };
 
@@ -196,6 +196,28 @@ export function evidenceBadges(evidence: Pick<Evidence, "links" | "record">): { 
   };
   if (count.conflicts === 0 && evidence.record.conflict === true) count.conflicts = 1;
   return (Object.keys(count) as BadgeGroup[]).filter((g) => count[g] > 0).map((group) => ({ group, count: count[group] }));
+}
+
+/** A sighting stored more than a day after it was observed is late (the API's frame flag 4, `LATE_MS`). */
+export const LATE_SECONDS = 24 * 3600;
+
+export type QualityBadge = { badge: "late" | "missing" | "failed" | "feed"; label: string; state?: FeedState["state"] };
+
+/**
+ * The PRD §7 cases a record carries by itself, for the top of the drawer: a late sighting (with its ingest
+ * lag), a reading with no usable value (cloud, bad DQF, missing), a failed fetch run, and the record's feed
+ * when it is not nominal. Duplicates and conflicts come from the links (`evidenceBadges`).
+ */
+export function qualityBadges(evidence: Pick<Evidence, "kind" | "record" | "ingestLagSeconds" | "feed">): QualityBadge[] {
+  const out: QualityBadge[] = [];
+  const lag = evidence.ingestLagSeconds;
+  if (evidence.kind === "sighting" && lag !== null && lag > LATE_SECONDS) out.push({ badge: "late", label: `LATE · ARRIVED ${formatLag(lag)} AFTER` });
+  const flag = typeof evidence.record.flag === "string" ? evidence.record.flag.toLowerCase() : null;
+  if (evidence.kind === "reading" && flag && flag !== "ok") out.push({ badge: "missing", label: `MISSING · ${flag.replace(/_/g, " ").toUpperCase()}` });
+  if (evidence.kind === "fetch" && String(evidence.record.status ?? "").toLowerCase() === "error") out.push({ badge: "failed", label: "FETCH FAILED" });
+  const feed = evidence.feed;
+  if (feed && feed.state !== "nominal") out.push({ badge: "feed", label: `${feedLabel(feed.source)} FEED ${feed.state.toUpperCase()}`, state: feed.state });
+  return out;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
