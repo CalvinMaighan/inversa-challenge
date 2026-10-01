@@ -273,7 +273,8 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     expect(cells[0].components.completeness).toMatchObject({ weight: 0 });
     // The ranking carries no reasons (those come from explain_cell) and a summary line with the marker per cell.
     expect(cells[0].components.recentReports.rationale).toBeUndefined();
-    expect(String(cells[0].summary)).toMatch(/^Mexican Caribbean cell mx-caribbean:87:205: rankScore 0.81 \(a heuristic that only orders cells\); recent reports 1 \(ok, weight 1\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(String(cells[0].summary)).toMatch(/^Mexican Caribbean cell mx-caribbean:87:205 \(off Cozumel\): rankScore 0.81 \(a heuristic that only orders cells\); recent reports 1 \(ok, weight 1\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(cells[0].near).toBe("Cozumel");
     expect(String(out.data.say)).toMatch(/needs explain_cell/);
     expect(cells[0].heat).toMatchObject({ dhwCWeeks: 8.1, baa: 3, baaLabel: "Bleaching Alert Level 1", productDate: "2026-09-29", dataAge: "2 days old" });
     expect(cells[0].heat.cite.dhw).toMatch(/^\[e:reading:crw-mx-cozumel:dhw:\d+:satellite\]$/);
@@ -341,7 +342,7 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     // Placeholders beside an area (cell "0:0", lat 0, lon 0) still land on the area named.
     const filled = await run("explain_cell", { species: "lionfish", cell: "0:0", lat: 0, lon: 0, area: "Florida Keys" });
     expect(filled.data.cell).toBe("fl-keys:179:24");
-    expect(String(filled.data.summary)).toMatch(/^Florida Keys \/ South Florida cell fl-keys:179:24: rankScore 0.62/);
+    expect(String(filled.data.summary)).toMatch(/^Florida Keys \/ South Florida cell fl-keys:179:24 \(off Looe Key\): rankScore 0.62/);
     expect(String(belize.data.thinNote)).toMatch(/^Belize is a thin area: .*still shows heat stress \(DHW 5.28 °C-weeks, alert level 3, product day 2026-09-29\) and the history records from GBIF and NAS \[e:hotspot:lionfish:belize:72:82:\d+\]$/);
     // Nothing given: the top cell of the four areas, with the recipe, the summary line and the newest counted report's age.
     const top = await run("explain_cell", { species: "lionfish" });

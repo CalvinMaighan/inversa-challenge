@@ -376,7 +376,7 @@ export const teamBoard = {
         missionsTotal: missions.length,
         upcomingMissions: upcoming.length,
         messagesTotal: messages.length,
-        say: "Name every mission and message you mention with its line (marker included); a mission or message named without its marker is unsupported.",
+        say: "Say where these records come from: open with \"On the team board\" (the missions and messages people in this app wrote), then name every mission and message you mention with its line (marker included); a mission or message named without its marker is unsupported. When there are none in the window, say that the team board has no mission (or message) in it.",
         missions: missionRows.map((m) => ({ cite: `[e:mission:${m.id}]`, line: `${m.title}${m.place ? ` at ${m.place}` : m.site ? ` at ${m.site}` : ""}${m.start ? `, ${localTime(ctx.app, m.start)}` : ""}${m.assignees.length ? ` (${m.assignees.join(", ")})` : ""}${m.status ? `, ${m.status}` : ""} [e:mission:${m.id}]`, ...m, startLocal: m.start ? localTime(ctx.app, m.start) : null })),
         messages: messageRows.map((m) => ({ cite: `[e:message:${m.id}]`, line: `${m.from}${m.to ? ` to ${m.to}` : ""}${m.at ? `, ${localTime(ctx.app, m.at)}` : ""}: "${m.body.length > 120 ? `${m.body.slice(0, 120)}…` : m.body}" [e:message:${m.id}]`, ...m, atLocal: m.at ? localTime(ctx.app, m.at) : null, body: m.body.length > MODEL_TEXT_CHARS ? `${m.body.slice(0, MODEL_TEXT_CHARS)}…` : m.body })),
         evidence: evidenceRows,

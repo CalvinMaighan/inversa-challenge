@@ -159,6 +159,16 @@ export function inRegion(app: AppConfig, lat: number, lon: number): boolean {
   return regionAt(app, lat, lon) !== null;
 }
 
+/** The nearest reef, town or park name within `maxDeg` of a point (a cell gets a name people use), or null. */
+export function nearestPlace(lat: number, lon: number, maxDeg = 0.3): Place | null {
+  let best: { row: Row; d: number } | null = null;
+  for (const row of ROWS) {
+    const d = Math.hypot(row.lat - lat, (row.lon - lon) * Math.cos((lat * Math.PI) / 180));
+    if (d <= maxDeg && (!best || d < best.d)) best = { row, d };
+  }
+  return best ? toPlace(best.row) : null;
+}
+
 type OpenMeteoResult = { name: string; latitude: number; longitude: number; admin1?: string; feature_code?: string };
 
 /** Open-Meteo geocoding, restricted to the app's regions (lionfish spans four countries, so no country filter). */

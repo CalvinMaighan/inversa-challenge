@@ -15,7 +15,7 @@ import { z } from "zod";
 
 import type { CapabilityContext, CapabilityOutput, Evidence } from "@/server/agent/runtime/registry";
 import { evidence, hotspotKey, readingKey } from "@/server/agent/tools/evidence";
-import { inRegion, lookupGazetteer, type Place } from "@/server/agent/tools/gazetteer";
+import { inRegion, lookupGazetteer, nearestPlace, type Place } from "@/server/agent/tools/gazetteer";
 import { gqlWindowed, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { atTime, bboxSchema, feedsFor, given, givenTime, HOUR_MS, localTime, output, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { extentOf, MAX_HIGHLIGHT, withView, type ToolViewData } from "@/server/agent/tools/views";
@@ -683,11 +683,11 @@ function cellEvidence(app: AppConfig, species: string, at: string, cell: GqlCell
 const COMPONENT_WORDS: Record<(typeof COMPONENT_IDS)[number], string> = { recentReports: "recent reports", idQuality: "ID quality", heatStress: "heat stress", completeness: "completeness" };
 
 /** One sentence per cell, marker included, so naming a cell's rank is a copy: "Mexican Caribbean cell … rankScore 0.81 (heuristic) [e:hotspot:…]". */
-function cellSummary(areaName: string | null, cell: GqlCell, marker: string): string {
+function cellSummary(areaName: string | null, near: string | null, cell: GqlCell, marker: string): string {
   const c = cell.components;
   const parts = c ? COMPONENT_IDS.map((k) => `${COMPONENT_WORDS[k]} ${c[k].value ?? "unknown"} (${lower(c[k].state)}, weight ${c[k].weight})`).join(", ") : "components unknown";
   const rank = cell.rankScore === null ? "unranked (thin area: unknown is not zero)" : `rankScore ${cell.rankScore} (a heuristic that only orders cells)`;
-  return `${areaName ?? "unknown area"} cell ${cell.cell}: ${rank}; ${parts} ${marker}`;
+  return `${areaName ?? "unknown area"} cell ${cell.cell}${near ? ` (off ${near})` : ""}: ${rank}; ${parts} ${marker}`;
 }
 
 /**
@@ -699,11 +699,14 @@ function cellOut(app: AppConfig, species: string, at: string, cell: GqlCell, now
   const region = app.regions.find((r) => r.id === cell.regionId) ?? regionAt(app, cell.lat, cell.lon);
   const c = cell.components;
   const marker = `[e:${id}]`;
+  // The reef or town people call this cell by, so the answer can name the place the user named.
+  const near = nearestPlace(cell.lat, cell.lon)?.name ?? null;
   return {
     evidenceId: id,
     cite: marker,
-    summary: cellSummary(region?.name ?? null, cell, marker),
+    summary: cellSummary(region?.name ?? null, near, cell, marker),
     cell: cell.cell,
+    ...(near ? { near } : {}),
     area: region?.id ?? null,
     areaName: region?.name ?? null,
     lat: cell.lat,
