@@ -17,7 +17,20 @@
  *    first answer text (content_delta). p50 of each is printed.
  *
  * Lines: `PERF cold …` and `PERF agent …`.
+ *
+ * `--app <id>` (gates/leaf-AG1.md G6, rubric `query-speed`): the per-app agent pass only, with the answer cache
+ * cold then warm, on `next dev` over the fixture GraphQL stub (no Axum or production build): that app's golden
+ * questions through `POST /api/agent/stream`, first model output per question, then the first question again
+ * served from the answer cache. Line: `PERF app=<id> first_token_p50_ms=<n> n=<n> cached_query_ms=<n>`.
  */
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { GOLDEN_SETS } from "../eval/golden";
+import { fixtureNow, startStub } from "../eval/stub-server";
+import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
 import { chromium, type Browser } from "playwright";
 
 import type { AgentStreamEvent } from "../shared/agent/events";
@@ -87,15 +100,17 @@ async function coldLoad(stack: Stack, browser: Browser): Promise<Cold> {
 
 type AgentTiming = { status: number; firstModel: number; firstText: number | null; done: number; tools: number };
 
-async function ask(stack: Stack, question: string, i: number): Promise<AgentTiming> {
+async function ask(stack: Stack, question: string, i: number, app: AppId = "python"): Promise<AgentTiming> {
   const started = performance.now();
+  const view = app === "python" ? { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "notes"], selection: null } : { bbox: appBBox(getApp(app)), time: fixtureNow(app), layers: [], selection: null };
   const res = await fetch(`${stack.origin}/api/agent/stream`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      app,
       sessionId: `perf-${Date.now()}-${i}`,
       question,
-      view: { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "notes"], selection: null },
+      view,
     }),
   });
   if (!res.ok || !res.body) throw new Error(`agent stream answered ${res.status}: ${await res.text()}`);
@@ -129,7 +144,100 @@ async function ask(stack: Stack, question: string, i: number): Promise<AgentTimi
   return { status, firstModel, firstText, done: total, tools };
 }
 
+/** `--app <id>` or `--app=<id>`; absent means the full stack pass. */
+function appArg(argv: readonly string[]): AppId | null {
+  const eq = argv.find((a) => a.startsWith("--app="))?.slice("--app=".length);
+  const at = argv.indexOf("--app");
+  const raw = eq ?? (at >= 0 ? argv[at + 1] : undefined);
+  if (raw === undefined) return null;
+  if (!isAppId(raw)) throw new Error(`unknown app ${raw}`);
+  return raw;
+}
+
+/** Files `next dev` writes into the app dir; restored so a run leaves the tree as it found it. */
+const DEV_SIDE_EFFECTS = ["next-env.d.ts", "AGENTS.md", "CLAUDE.md"].map((name) => join(import.meta.dir, "..", name));
+
+/** First-token timing of one app's questions on `next dev` over the fixture stub, cache cold, then one cache hit. */
+async function appPass(app: AppId): Promise<void> {
+  if (!process.env.OPENROUTER_API_KEY?.trim()) throw new Error("OPENROUTER_API_KEY not set: run through doppler inversa/dev");
+  const web = join(import.meta.dir, "..");
+  const saved = new Map(DEV_SIDE_EFFECTS.map((file) => [file, existsSync(file) ? readFileSync(file) : null]));
+  const stub = startStub();
+  const dataDir = mkdtempSync(join(tmpdir(), "inversa-perf-"));
+  const port = Number(process.env.PERF_PORT ?? 3000 + Math.floor(Math.random() * 2000));
+  const origin = `http://127.0.0.1:${port}`;
+  const next = spawn(join(web, "node_modules/.bin/next"), ["dev", "-p", String(port), "-H", "127.0.0.1"], {
+    cwd: web,
+    detached: true,
+    env: { ...process.env, INVERSA_API_ORIGIN: stub.origin, INVERSA_DATA_DIR: dataDir, NEXT_TELEMETRY_DISABLED: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let output = "";
+  next.stdout?.on("data", (chunk) => (output += String(chunk)));
+  next.stderr?.on("data", (chunk) => (output += String(chunk)));
+  const config = getApp(app);
+  const now = fixtureNow(app);
+  const view = { bbox: appBBox(config), time: now, layers: [], selection: null };
+  const post = (question: string, sessionId: string) =>
+    fetch(`${origin}/api/agent/stream`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ app, sessionId, question, view }) });
+  const stack = { origin } as Stack;
+  try {
+    const deadline = Date.now() + 120_000;
+    for (;;) {
+      if (next.exitCode !== null) throw new Error(`next dev exited (${next.exitCode}):\n${output.slice(-2000)}`);
+      try {
+        const res = await fetch(`${origin}/api/agent/stream`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+        if (res.status === 400) break;
+      } catch {
+        // Not up yet.
+      }
+      if (Date.now() > deadline) throw new Error(`next dev did not answer in 120 s:\n${output.slice(-2000)}`);
+      await Bun.sleep(500);
+    }
+    // Warm the route (next dev compiles it on first use) and the harness boot with a turn the scope guard answers.
+    await (await post(app === "python" ? "Where are common carp in Louisiana?" : "Where are Burmese pythons active in the Everglades?", `perf-warm-${Date.now()}`)).text();
+    const golden = GOLDEN_SETS[config.eval.goldenSet] ?? [];
+    const wanted = Number(process.env.PERF_QUESTIONS ?? 5);
+    const questions = (golden.length ? golden.filter((g) => g.mode !== "refuse").map((g) => g.question) : AGENT_QUESTIONS).filter((q, i, all) => all.indexOf(q) === i).slice(0, wanted);
+    if (questions.length < 5) throw new Error(`need at least 5 questions, have ${questions.length}`);
+    const timings: AgentTiming[] = [];
+    for (const [i, q] of questions.entries()) {
+      const t = await ask(stack, q, i, app);
+      timings.push(t);
+      log(`agent ${i + 1} "${q}": status=${ms(t.status)} first_model=${ms(t.firstModel)} first_text=${t.firstText === null ? "-" : ms(t.firstText)} done=${ms(t.done)} tools=${t.tools}`);
+    }
+    // The same question again, from a new session: the answer cache serves it without the model.
+    const started = performance.now();
+    const repeat = await post(questions[0]!, `perf-cache-${Date.now()}`);
+    const text = await repeat.text();
+    const cachedMs = performance.now() - started;
+    const hit = text.includes('"answer cache hit"');
+    log(`cache repeat: ${ms(cachedMs)} ms hit=${hit}`);
+    if (!hit) throw new Error("the repeated question was not served from the answer cache");
+    console.log(`PERF app=${app} first_token_p50_ms=${ms(median(timings.map((t) => t.firstModel)))} n=${timings.length} cached_query_ms=${ms(cachedMs)} status_p50_ms=${ms(median(timings.map((t) => t.status)))} done_p50_ms=${ms(median(timings.map((t) => t.done)))}`);
+  } finally {
+    if (next.pid) {
+      try {
+        process.kill(-next.pid, "SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
+    stub.stop();
+    rmSync(dataDir, { recursive: true, force: true });
+    for (const [file, content] of saved) {
+      if (content === null) rmSync(file, { force: true });
+      else writeFileSync(file, content);
+    }
+  }
+}
+
 async function main() {
+  const app = appArg(process.argv.slice(2));
+  if (app) {
+    await appPass(app);
+    return;
+  }
   buildApi(log);
   buildWeb(log);
   // Only the Next server gets the model key, through Doppler; Axum and this script never see a secret.

@@ -7,6 +7,7 @@
  */
 
 import fixture from "./fixtures/graphql.json";
+import { CARP_FIXTURE_NOW, carpResolvers, REVIEW_OPERATIONS } from "./stub-carp";
 
 import { APP_IDS, isAppId, type AppId } from "@/shared/apps";
 
@@ -17,6 +18,11 @@ export type StubRequest = { app: AppId; path: string; operationName: string; var
 const GRAPHQL_PATH = /^\/v1\/([^/]+)\/graphql$/;
 
 export const FIXTURE_NOW = fixture.now;
+
+/** The fixture's reference time per app: carp has its own recorded week (`fixtures/carp.json`). */
+export function fixtureNow(app: AppId): string {
+  return app === "carp" ? CARP_FIXTURE_NOW : FIXTURE_NOW;
+}
 
 const inBox = (b: BBox, lat: number, lon: number) => lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east;
 const overlaps = (a: BBox, b: BBox) => a.west <= b.east && b.west <= a.east && a.south <= b.north && b.south <= a.north;
@@ -148,10 +154,13 @@ export type Stub = { origin: string; requests: StubRequest[]; stop(): void };
 
 /**
  * Port 0 picks a free port. `legacyFeeds` mimics an API from before
- * `FeedState.lastFetchRunId`: selecting the field is a GraphQL error.
+ * `FeedState.lastFetchRunId`: selecting the field is a GraphQL error. `reviewFields` serves C5's
+ * `reviewBoard`/`siteReview`/`reviewHistory` for carp; without it those operations fail like an API that
+ * predates C5, so the carp tools take their `siteStatusAt` fallback.
  */
-export function startStub(port = 0, options: { legacyFeeds?: boolean } = {}): Stub {
+export function startStub(port = 0, options: { legacyFeeds?: boolean; reviewFields?: boolean } = {}): Stub {
   const requests: StubRequest[] = [];
+  const carp = carpResolvers({ reviewFields: options.reviewFields });
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port,
@@ -167,7 +176,10 @@ export function startStub(port = 0, options: { legacyFeeds?: boolean } = {}): St
       if (options.legacyFeeds && body.query?.includes("lastFetchRunId")) {
         return Response.json({ data: null, errors: [{ message: 'Unknown field "lastFetchRunId" on type "FeedState".' }] });
       }
-      const resolve = RESOLVERS[operationName];
+      const resolve = app === "carp" ? carp[operationName] : RESOLVERS[operationName];
+      if (!resolve && app === "carp" && REVIEW_OPERATIONS.has(operationName)) {
+        return Response.json({ data: null, errors: [{ message: `Unknown field "${operationName.slice("Agent".length).replace(/^./, (c) => c.toLowerCase())}" on type "Query".` }] });
+      }
       if (!resolve) return Response.json({ data: null, errors: [{ message: `unknown operation ${operationName}` }] });
       try {
         const data = resolve(variables);

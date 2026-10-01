@@ -11,6 +11,7 @@ import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from 
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
 import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
+import { scopeGuard } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
@@ -124,6 +125,15 @@ async function runTurnUnguarded(
     );
   }
   if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
+
+  // P4: another app's species is refused from the config, without a model call.
+  const refusal = scopeGuard(app, question);
+  if (refusal) {
+    onEvent({ type: "status", state: "generating" });
+    onEvent({ type: "content_delta", text: refusal });
+    appendSessionTurn(sessionId, question, refusal);
+    return finish({ content: refusal, citations: [], toolCalls: [], usage: empty, model: "scope-guard", cached: false });
+  }
 
   const history = sessionHistory(sessionId);
 

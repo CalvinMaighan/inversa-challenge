@@ -65,20 +65,40 @@ const fail = (where: string, msg: string) => errors.push(`ERR ${where}: ${msg}`)
 
 // ------------------------------------------------------------- registry
 
-/** Tool names registered by `buildAgentRegistry`, resolved from source. */
+/**
+ * Tool names `buildAgentRegistry` can register, resolved from source: the identifiers in `allCapabilities`'s
+ * list (per-app allowlists pick from it), with `...carpTools` and `...commonTools` expanded from their modules.
+ */
 function registryTools(): string[] {
   const dir = join(ROOT, "apps/web/server/agent/tools");
-  const files = ["capabilities.ts", "notes.ts", "species.ts", "views.ts", "evidence.ts", "gazetteer.ts", "gql.ts"].map((f) =>
+  const files = ["capabilities.ts", "carp.ts", "common.ts", "notes.ts", "species.ts", "views.ts", "evidence.ts", "gazetteer.ts", "gql.ts"].map((f) =>
     readFileSync(join(dir, f), "utf8"),
   );
-  const layerIds = [...readFileSync(join(ROOT, "apps/web/shared/voice/ui-tools.ts"), "utf8").matchAll(/LAYER_IDS = \[([^\]]*)\]/g)]
+  const layerIds = [...readFileSync(join(ROOT, "apps/web/shared/apps/schema.ts"), "utf8").matchAll(/LAYER_IDS = \[([^\]]*)\]/g)]
     .flatMap((m) => [...m[1]!.matchAll(/"([^"]+)"/g)].map((s) => s[1]!));
-  const body = files[0]!.match(/function buildAgentRegistry\(\)[^{]*\{([\s\S]*?)\n\}/)?.[1] ?? "";
-  const idents = [...body.matchAll(/\.register\((\w+)\)/g)].map((m) => m[1]!);
-  if (!idents.length) fail("registry", "no .register(...) calls found in buildAgentRegistry");
+  const body = files[0]!.match(/function allCapabilities\([^)]*\)[^{]*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  // Every array literal in the function (the per-kind lists and the returned list), spreads expanded from the
+  // exported arrays of the other modules; local list names and the `species` schema argument are not tools.
+  const lists = [...body.matchAll(/\[([^\]]*)\]/g)].map((m) => m[1]!);
+  const local = new Set([...body.matchAll(/const (\w+) =/g)].map((m) => m[1]!));
+  const idents = [
+    ...new Set(
+      lists.flatMap((list) =>
+        [...list.matchAll(/(\.\.\.)?(\w+)(?:\([^)]*\))?/g)]
+          .map((m) => [m[1] === "...", m[2]!] as const)
+          .filter(([, name]) => name !== "species" && !local.has(name))
+          .flatMap(([spread, name]) => {
+            if (!spread) return [name];
+            const arr = files.map((src) => src.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`))?.[1]).find(Boolean) ?? "";
+            return [...arr.matchAll(/\w+/g)].map((m) => m[0]);
+          }),
+      ),
+    ),
+  ];
+  if (!idents.length) fail("registry", "no tools found in allCapabilities");
   return idents.map((ident) => {
     for (const src of files) {
-      const m = src.match(new RegExp(`const ${ident} = \\{\\s*name: ([^,\\n]+),`));
+      const m = src.match(new RegExp(`const ${ident} = (?:\\([^)]*\\) => )?\\(?\\{\\s*name: ([^,\\n]+),`));
       if (!m) continue;
       const expr = m[1]!.trim();
       const lit = expr.match(/^"([^"]+)"$/);
@@ -128,7 +148,7 @@ function validate(file: AppFile, app: AppId, registry: string[], ids: Set<string
   for (const tool of file.newTools ?? []) {
     const where = `${app}/newTools/${tool.name}`;
     for (const key of ["name", "purpose", "input", "output", "evidence"] as const) if (!isStr(tool[key])) fail(where, `${key} missing`);
-    if (registry.includes(tool.name)) fail(where, "already exists in the registry");
+    // A newTool that the registry now has is an implemented spec; the spec stays as its contract.
     const spec = JSON.stringify(tool);
     const prior = toolSpecs.get(tool.name);
     if (prior && prior !== spec) fail(where, "differs from the same tool's spec in another app file");

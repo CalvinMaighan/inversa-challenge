@@ -3,88 +3,92 @@
  * OpenRouter) with its tools answering from the fixture GraphQL stub.
  *
  *   bun run eval              (wraps `doppler run --project inversa --config dev`, which supplies OPENROUTER_API_KEY)
- *   bun run eval -- --app=lionfish   (or EVAL_APP=lionfish): that app's persona, tools and golden set; default python
+ *   bun run eval -- --app=carp   (or --app carp, or EVAL_APP=carp): that app's persona, tools and golden set; default python
  *
- * Checks per question: the expected tools ran, every citation (events and
- * final text) names evidence a tool returned in that turn, enough citations,
- * required phrases, the C7 stream shape. Last two lines:
- * `EVAL quality passed q/5` and `EVAL passed P/T`.
+ * Checks per question (eval/check.ts): the expected tools ran, every citation (events and final text) names
+ * evidence a tool returned in that turn, enough citations by count, kind and feed, required and forbidden
+ * phrases, every number in the answer traces to a tool output, feed state is disclosed, the C7 stream shape,
+ * and the C17 views. Lines the grader parses (docs/grading/rubric.md):
+ *   EVAL app=<id> model=<id> questions=<N>
+ *   EVAL category <c> passed P/T      (one per category, when the set has categories)
+ *   EVAL ungrounded=<n> checked=<n>
+ *   EVAL passed P/T
+ * Exit 0 only when every question passed and ungrounded=0.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { GOLDEN_SETS, type Golden } from "./golden";
-import { FIXTURE_NOW, startStub } from "./stub-server";
+import { checkQuestion, type ToolCapture } from "./check";
+import { CATEGORIES, GOLDEN_SETS, type Golden } from "./golden";
+import { fixtureNow, startStub } from "./stub-server";
 import { checkViews } from "./views";
 
 import { resetHarness } from "@/server/agent/cordis/boot";
-import { citedIds } from "@/server/agent/cordis/citations";
 import { runTurn, type RunTurnResult } from "@/server/agent/run-turn";
 import { AGENT_MODEL_ID, MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
-import type { Evidence } from "@/server/agent/runtime/registry";
-import { isAgentStreamEvent, type AgentStreamEvent } from "@/shared/agent/events";
+import type { CapabilityContext, CapabilityRegistry } from "@/server/agent/runtime/registry";
+import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
+import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
 import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppId } from "@/shared/apps";
 
 /** OpenRouter list price for GPT-6 Luna, USD per million tokens. */
 const PRICE_IN = 0.1;
 const PRICE_OUT = 0.5;
 /** Questions in flight at once. */
-const CONCURRENCY = 3;
+const CONCURRENCY = Number(process.env.EVAL_CONCURRENCY ?? 4);
 
-function check(golden: Golden, events: AgentStreamEvent[]): { reasons: string[]; tools: string[]; cited: string[] } {
-  const reasons: string[] = [];
-  if (!events.every(isAgentStreamEvent)) reasons.push("stream has an event outside the C7 union");
-  const done = events.filter((event) => event.type === "done");
-  if (done.length !== 1 || events.at(-1)?.type !== "done") reasons.push("stream must end with exactly one done event");
-  for (const event of events) if (event.type === "error") reasons.push(`error event: ${event.message}`);
+type Outcome = { golden: Golden; events: AgentStreamEvent[]; result: RunTurnResult; captures: ToolCapture[]; ms: number };
 
-  const tools = events.flatMap((event) => (event.type === "tool_start" ? [event.capabilityName] : []));
-  for (const tool of golden.expect.tools) if (!tools.includes(tool)) reasons.push(`tool not called: ${tool}`);
-
-  const returned = new Set(
-    events.flatMap((event) =>
-      event.type === "tool_end" && event.ok ? ((event.data as { evidence?: Evidence[] } | undefined)?.evidence ?? []).map((row) => row.id) : [],
-    ),
-  );
-  for (const event of events) {
-    if (event.type === "citation" && !returned.has(event.id)) reasons.push(`citation event for unreturned id ${event.id}`);
-  }
-  const content = done[0]?.type === "done" ? done[0].content : "";
-  const cited = [...new Set(citedIds(content))];
-  for (const id of cited) if (!returned.has(id)) reasons.push(`final text cites unreturned id ${id}`);
-  if (cited.length < golden.expect.minCitations) {
-    reasons.push(`${cited.length} citations, need ${golden.expect.minCitations}`);
-  }
-  for (const [kind, need] of Object.entries(golden.expect.cites ?? {})) {
-    const got = cited.filter((id) => id.startsWith(`${kind}:`)).length;
-    if (got < need) reasons.push(`${got} ${kind} citations, need ${need}`);
-  }
-  for (const phrase of golden.expect.phrases) if (!phrase.test(content)) reasons.push(`missing phrase ${phrase}`);
-  if (golden.expect.view && !events.some((event) => event.type === "view")) reasons.push("no view event");
-  return { reasons, tools, cited };
-}
-
-type Outcome = { golden: Golden; events: AgentStreamEvent[]; result: RunTurnResult; ms: number };
-
-/** `--app=<id>` beats `EVAL_APP`; python (the only app with a golden set so far) by default. */
-function evalApp(argv: readonly string[], env: Record<string, string | undefined>): AppId {
-  const raw = argv.find((a) => a.startsWith("--app="))?.slice("--app=".length) ?? env.EVAL_APP ?? "python";
+/** `--app=<id>` or `--app <id>` beats `EVAL_APP`; python by default. */
+export function evalApp(argv: readonly string[], env: Record<string, string | undefined>): AppId {
+  const eq = argv.find((a) => a.startsWith("--app="))?.slice("--app=".length);
+  const at = argv.indexOf("--app");
+  const raw = eq ?? (at >= 0 ? argv[at + 1] : undefined) ?? env.EVAL_APP ?? "python";
   if (!isAppId(raw)) throw new Error(`unknown app "${raw}" (apps: ${APP_IDS.join(", ")})`);
   return raw;
+}
+
+/** A registry whose successful outputs are captured (model-facing JSON and feeds) for the numbers trace. */
+function capturing(registry: CapabilityRegistry, into: ToolCapture[]): CapabilityRegistry {
+  const execute = registry.execute.bind(registry);
+  registry.execute = async (name: string, rawInput: unknown, ctx: CapabilityContext) => {
+    const result = await execute(name, rawInput, ctx);
+    if (result.ok) into.push({ name, text: JSON.stringify(result.output.data), feeds: result.output.feeds });
+    return result;
+  };
+  return registry;
+}
+
+/** The question's `context` as view state: the selected site, a knowledge time, a replay flag. */
+function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
+  const context = golden.context ?? {};
+  const asOf = context.asOf ? Date.parse(context.asOf) : NaN;
+  return {
+    ...base,
+    ...(context.selectedSite ? { site: context.selectedSite } : {}),
+    ...(Number.isFinite(asOf) ? { asOf, replay: true, time: new Date(asOf).toISOString() } : {}),
+    ...(context.replay === "true" ? { replay: true } : {}),
+  };
 }
 
 async function main(): Promise<number> {
   const app = getApp(evalApp(process.argv.slice(2), process.env));
   const golden = GOLDEN_SETS[app.eval.goldenSet] ?? [];
-  // EVAL_ONLY=id,id runs a subset while iterating; the gate runs all of them.
+  // EVAL_ONLY=id,id runs a subset while iterating; EVAL_CATEGORY=c one category; the gate runs all of them.
   const only = process.env.EVAL_ONLY?.split(",").map((id) => id.trim()).filter(Boolean);
-  const questions = only?.length ? golden.filter((g) => only.includes(g.id)) : [...golden];
+  const category = process.env.EVAL_CATEGORY?.trim();
+  const questions = golden.filter((g) => (!only?.length || only.includes(g.id)) && (!category || g.category === category));
   const total = questions.length;
-  const qualityTotal = questions.filter((golden) => golden.quality).length;
+  const categories = [...new Set(questions.map((g) => g.category).filter((c): c is string => !!c))].sort((a, b) => CATEGORIES.indexOf(a as (typeof CATEGORIES)[number]) - CATEGORIES.indexOf(b as (typeof CATEGORIES)[number]));
+  const qualityTotal = questions.filter((g) => g.quality).length;
+  const fixture = fixtureNow(app.id);
+  console.log(`EVAL app=${app.id} set=${app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${fixture}`);
   if (!openRouterApiKey()) {
     console.log(`EVAL ${MISSING_KEY_MESSAGE} (run it through \`bun run eval\`, which wraps doppler)`);
+    for (const c of categories) console.log(`EVAL category ${c} passed 0/${questions.filter((g) => g.category === c).length}`);
+    console.log("EVAL ungrounded=0 checked=0");
     console.log(`EVAL quality passed 0/${qualityTotal}`);
     console.log(`EVAL passed 0/${total}`);
     return 1;
@@ -94,22 +98,24 @@ async function main(): Promise<number> {
   const dataDir = mkdtempSync(join(tmpdir(), "inversa-eval-"));
   process.env.INVERSA_API_ORIGIN = stub.origin;
   process.env.INVERSA_DATA_DIR = dataDir;
-  const now = new Date(FIXTURE_NOW);
-  const view = { bbox: appBBox(app), time: FIXTURE_NOW, layers: appLayerIds(app).filter((l) => l === "sightings" || l === "hotspots"), selection: null };
+  const now = new Date(fixture);
+  const layers = appLayerIds(app).filter((l) => l === "sightings" || l === "hotspots" || l === "stations" || l === "alerts");
+  const baseView = { bbox: appBBox(app), time: fixture, layers, selection: null };
 
-  console.log(`EVAL app=${app.id} set=${app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${FIXTURE_NOW}`);
   const outcomes: Outcome[] = [];
+  const startedAll = Date.now();
   try {
     const queue = [...questions];
     const worker = async () => {
-      for (let golden = queue.shift(); golden; golden = queue.shift()) {
+      for (let g = queue.shift(); g; g = queue.shift()) {
         const events: AgentStreamEvent[] = [];
+        const captures: ToolCapture[] = [];
         const started = Date.now();
         const result = await runTurn(
-          { app: app.id, sessionId: `eval-${golden.id}-${started}`, question: golden.question, view, now, cache: false },
+          { app: app.id, sessionId: `eval-${g.id}-${started}`, question: g.question, view: viewFor(baseView, g), now, cache: false, registry: capturing(buildAgentRegistry(app), captures) },
           (event) => events.push(event),
         );
-        outcomes.push({ golden, events, result, ms: Date.now() - started });
+        outcomes.push({ golden: g, events, result, captures, ms: Date.now() - started });
       }
     };
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
@@ -125,21 +131,31 @@ async function main(): Promise<number> {
   let tokensOut = 0;
   let viewsValid = 0;
   let viewsTotal = 0;
-  for (const golden of questions) {
-    const outcome = outcomes.find((row) => row.golden === golden)!;
-    const { reasons, tools, cited } = check(golden, outcome.events);
-    // C17: every successful data tool call carries a ToolResultData with a view for the card.
+  let ungrounded = 0;
+  let checked = 0;
+  const byCategory = new Map<string, { passed: number; total: number }>();
+  for (const g of questions) {
+    const outcome = outcomes.find((row) => row.golden === g)!;
+    const { reasons, tools, cited, trace } = checkQuestion(g, outcome.events, outcome.captures);
     const views = checkViews(outcome.events);
     viewsValid += views.valid;
     viewsTotal += views.total;
     reasons.push(...views.reasons);
+    ungrounded += trace.ungrounded.length;
+    checked += trace.checked;
     const ok = reasons.length === 0;
     if (ok) passed += 1;
-    if (ok && golden.quality) qualityPassed += 1;
+    if (ok && g.quality) qualityPassed += 1;
+    if (g.category) {
+      const row = byCategory.get(g.category) ?? { passed: 0, total: 0 };
+      row.total += 1;
+      if (ok) row.passed += 1;
+      byCategory.set(g.category, row);
+    }
     tokensIn += outcome.result.usage.promptTokens + outcome.result.usage.cacheRead;
     tokensOut += outcome.result.usage.completionTokens;
-    const tag = golden.quality ? " [quality]" : "";
-    console.log(`${ok ? "PASS" : "FAIL"} ${golden.id}${tag} tools=${tools.join(",") || "-"} citations=${cited.length} ${outcome.ms}ms`);
+    const tag = g.quality ? " [quality]" : "";
+    console.log(`${ok ? "PASS" : "FAIL"} ${g.id}${tag} tools=${tools.join(",") || "-"} citations=${cited.length} numbers=${trace.checked} ${outcome.ms}ms`);
     for (const reason of reasons) console.log(`     - ${reason}`);
     if (process.env.EVAL_VERBOSE) {
       for (const event of outcome.events) {
@@ -158,11 +174,16 @@ async function main(): Promise<number> {
   }
   // Cache reads are billed below list price, so this is an upper bound.
   const cost = (tokensIn * PRICE_IN + tokensOut * PRICE_OUT) / 1_000_000;
-  console.log(`EVAL tokens in=${tokensIn} out=${tokensOut} cost<=$${cost.toFixed(4)}`);
+  console.log(`EVAL tokens in=${tokensIn} out=${tokensOut} cost<=$${cost.toFixed(4)} wall=${Math.round((Date.now() - startedAll) / 1000)}s finished=${new Date().toISOString()}`);
   console.log(`EVAL views valid ${viewsValid}/${viewsTotal}`);
+  for (const c of categories) {
+    const row = byCategory.get(c) ?? { passed: 0, total: 0 };
+    console.log(`EVAL category ${c} passed ${row.passed}/${row.total}`);
+  }
+  console.log(`EVAL ungrounded=${ungrounded} checked=${checked}`);
   console.log(`EVAL quality passed ${qualityPassed}/${qualityTotal}`);
   console.log(`EVAL passed ${passed}/${total}`);
-  return passed === total ? 0 : 1;
+  return passed === total && ungrounded === 0 ? 0 : 1;
 }
 
 process.exit(await main());

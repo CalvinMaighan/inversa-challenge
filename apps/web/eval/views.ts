@@ -8,7 +8,24 @@ import type { AgentStreamEvent } from "@/shared/agent/events";
 import { isToolResultData } from "@/shared/agent/results";
 
 /** Tools that return data and so owe the UI a panel. geocode and set_view do not. */
-export const DATA_TOOLS: ReadonlySet<string> = new Set(["sightings", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state"]);
+export const DATA_TOOLS: ReadonlySet<string> = new Set([
+  "sightings",
+  "conditions",
+  "alerts",
+  "hotspots",
+  "explain_cell",
+  "backtest",
+  "feed_state",
+  "site_status",
+  "river_readings",
+  "river_forecast",
+  "forecast_verify",
+  "review_history",
+  "weather_forecast",
+  "source_info",
+  "team_board",
+  "notes",
+]);
 
 const isView = (value: unknown) => isToolResultData({ result: value }) && value !== undefined;
 

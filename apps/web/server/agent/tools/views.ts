@@ -162,6 +162,11 @@ export const PARAM_UNITS: Record<string, string> = {
   wave_m: "m",
   wind_ms: "m/s",
   fire_frp: "MW",
+  stage_ft: "ft",
+  discharge_cfs: "cfs",
+  flow_kcfs: "kcfs",
+  air_f: "°F",
+  wind_mph: "mph",
 };
 
 export const PARAM_TITLES: Record<string, string> = {
@@ -174,6 +179,11 @@ export const PARAM_TITLES: Record<string, string> = {
   wave_m: "Wave height",
   wind_ms: "Wind speed",
   fire_frp: "Fire radiative power",
+  stage_ft: "River stage",
+  discharge_cfs: "Discharge (USGS)",
+  flow_kcfs: "Flow (NWPS)",
+  air_f: "Air temperature",
+  wind_mph: "Wind speed",
 };
 
 const ORIGIN_ORDER: Record<string, number> = { measured: 0, satellite: 1, modeled: 2 };

@@ -2,12 +2,14 @@
  * T14/T40 e2e: the chat column against the real agent (GPT-6 Luna on OpenRouter).
  *
  *   bun run e2e:agent      (wraps `doppler run --project inversa --config dev`, which supplies OPENROUTER_API_KEY)
+ *   bun run e2e:agent -- --app carp   the carp question, tools and citations, plus the as-of/replay view check
  *
  * Starts the eval's fixture GraphQL stub and `next dev` pointed at it, then in Chromium: the chat column is
  * visible at load (full height, left), ask, see the tool rows, click a citation and check SELECTION (evidence id
  * + drawerOpen), switch to Missions and back without losing the thread. Then at 375 px the column is a bottom
  * sheet; it opens to full height inside the viewport for G3 (docs/evidence/t14-card-375.png). Last line: FLOW-OK.
  * The answer's wording is the model's; the checks are on tools, citations and UI state, not on text.
+ * Last lines: `AGENT app=<id> flow=ok tools=<n> citation=ok[ view=ok]` (the grader's line) and FLOW-OK.
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -18,13 +20,33 @@ import { dirname, join, resolve } from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
-import { FIXTURE_NOW, startStub } from "../eval/stub-server";
+import { fixtureNow, startStub } from "../eval/stub-server";
+import type { AgentStreamEvent } from "../shared/agent/events";
+import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
 
 const WEB = resolve(import.meta.dir, "..");
-const SCREENSHOT = resolve(WEB, "../../docs/evidence/t14-card-375.png");
-const QUESTION = "Show me recent tegu sightings around Homestead.";
-/** Tools any correct answer to QUESTION needs (eval/golden.ts "tegu-sightings-homestead"); set_view is checked by the fly count. */
-const EXPECTED_TOOLS = ["geocode", "sightings"];
+/** `--app <id>` or `--app=<id>`; python by default (the T14 flow). */
+function appArg(argv: readonly string[]): AppId {
+  const eq = argv.find((a) => a.startsWith("--app="))?.slice("--app=".length);
+  const at = argv.indexOf("--app");
+  const raw = eq ?? (at >= 0 ? argv[at + 1] : undefined) ?? "python";
+  if (!isAppId(raw)) throw new Error(`unknown app ${raw}`);
+  return raw;
+}
+const APP = appArg(process.argv.slice(2));
+const FIXTURE_NOW = fixtureNow(APP);
+const SCREENSHOT = resolve(WEB, `../../docs/evidence/${APP === "python" ? "t14-card-375" : `agent-${APP}-375`}.png`);
+/** Per app: the question, the tools any correct answer needs (set_view is checked by the fly count), and the citation kinds a chip may carry. */
+const FLOWS: Record<AppId, { question: string; tools: string[]; citationKinds: string[] }> = {
+  python: { question: "Show me recent tegu sightings around Homestead.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },
+  carp: { question: "Which locations need operational review today?", tools: ["site_status"], citationKinds: ["forecast", "reading", "alert", "fetch"] },
+  lionfish: { question: "Which data feeds are stale or down right now?", tools: ["feed_state"], citationKinds: ["fetch"] },
+};
+const QUESTION = FLOWS[APP].question;
+const EXPECTED_TOOLS = FLOWS[APP].tools;
+const CITATION_KINDS = FLOWS[APP].citationKinds;
+/** The carp replay question (G7): the view event must carry a knowledge time and the replay flag. */
+const REPLAY_QUESTION = "Show me what we knew yesterday afternoon.";
 const BOOT_TIMEOUT_MS = 120_000;
 const STEP_TIMEOUT_MS = 90_000;
 
@@ -79,6 +101,9 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+/** Tool rows and citation chips of the flow, for the AGENT line. */
+const found = { tools: 0, citation: false, view: false };
+
 async function flow(origin: string, browser: Browser): Promise<void> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: "no-preference" });
   const page = await context.newPage();
@@ -86,11 +111,12 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  await page.goto(`${origin}/dev/agent?at=${encodeURIComponent(FIXTURE_NOW)}`, { waitUntil: "networkidle" });
+  await page.goto(`${origin}/dev/agent?app=${APP}&at=${encodeURIComponent(FIXTURE_NOW)}`, { waitUntil: "networkidle" });
   const column = page.locator("[data-chat-column]");
   await column.waitFor();
   // Hydrated once the dev probe reflects the ?at window.
-  await page.waitForFunction(() => document.querySelector("[data-dev-probe]")?.getAttribute("data-time-at")?.startsWith("2026-01-15"));
+  const day = FIXTURE_NOW.slice(0, 10);
+  await page.waitForFunction((d) => document.querySelector("[data-dev-probe]")?.getAttribute("data-time-at")?.startsWith(d), day);
 
   // 1. The chat column is visible at load: left edge, full height, about 420 px, with the mic in the composer.
   const box = await column.boundingBox();
@@ -114,6 +140,7 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   await toggle.click();
   const rows = await answer.locator("[data-tool-row]").evaluateAll((els) => els.map((el) => el.getAttribute("data-tool-row")));
   for (const tool of EXPECTED_TOOLS) assert(rows.includes(tool), `no ${tool} tool row (rows: ${rows.join(", ")})`);
+  found.tools = rows.length;
   log(`tool rows: ${rows.join(", ")} (${workedFor})`);
 
   // The view event flew the globe and moved the timeline.
@@ -122,8 +149,9 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   // 4. Citations: inline chips for verified ids only.
   const chips = answer.locator(".agent-cite");
   const chipIds = await chips.evaluateAll((els) => els.map((el) => el.getAttribute("data-evidence-id")));
-  assert(chipIds.length >= 2, `expected at least 2 citation chips, got ${chipIds.length}`);
-  assert(chipIds.some((id) => id?.startsWith("sighting:")), `no sighting citation among chips: ${chipIds.join(", ")}`);
+  assert(chipIds.length >= 1, `expected at least 1 citation chip, got ${chipIds.length}`);
+  assert(chipIds.some((id) => CITATION_KINDS.some((kind) => id?.startsWith(`${kind}:`))), `no ${CITATION_KINDS.join("/")} citation among chips: ${chipIds.join(", ")}`);
+  found.citation = true;
   log(`citation chips: ${chipIds.join(", ")}`);
   const bodyText = (await answer.textContent()) ?? "";
   assert(!bodyText.includes("[e:"), "raw [e:…] marker leaked into the answer text");
@@ -170,6 +198,34 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   await context.close();
 }
 
+/**
+ * G7 (carp): "show me what we knew yesterday afternoon" drives the map and timeline: the stream carries a `view`
+ * event with a knowledge time (`asOf`) in the fixture's past and the replay flag, from set_view.
+ */
+async function replayView(origin: string): Promise<void> {
+  const app = getApp(APP);
+  const res = await fetch(`${origin}/api/agent/stream`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ app: APP, sessionId: `e2e-replay-${Date.now()}`, question: REPLAY_QUESTION, view: { bbox: appBBox(app), time: FIXTURE_NOW, layers: [], selection: null } }),
+  });
+  assert(res.ok, `agent stream answered ${res.status}`);
+  const events = (await res.text())
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as AgentStreamEvent);
+  const views = events.filter((e): e is Extract<AgentStreamEvent, { type: "view" }> => e.type === "view");
+  const now = Date.parse(FIXTURE_NOW);
+  const replay = views.find((v) => typeof v.asOf === "number" && v.asOf < now && v.asOf > now - 3 * 24 * 3_600_000 && v.replay === true);
+  assert(replay, `no replay view event with a knowledge time in the last 3 days (views: ${JSON.stringify(views)})`);
+  const tools = events.filter((e) => e.type === "tool_start").map((e) => (e as { capabilityName: string }).capabilityName);
+  assert(tools.includes("set_view"), `set_view not called (tools: ${tools.join(", ")})`);
+  const done = events.at(-1);
+  assert(done?.type === "done" && done.content.length > 0, "no answer");
+  found.view = true;
+  log(`replay view: asOf=${new Date(replay.asOf!).toISOString()} replay=${replay.replay} site=${replay.site ?? "-"} tools=${tools.join(",")}`);
+}
+
 async function main(): Promise<void> {
   assert(process.env.OPENROUTER_API_KEY?.trim(), "OPENROUTER_API_KEY not set: run `bun run e2e:agent`, which wraps doppler inversa/dev");
   const saved = new Map(DEV_SIDE_EFFECTS.map((file) => [file, existsSync(file) ? readFileSync(file) : null]));
@@ -189,9 +245,10 @@ async function main(): Promise<void> {
   let browser: Browser | null = null;
   try {
     await waitForHttp(`${origin}/dev/agent`, next, () => output);
-    log(`next dev on ${origin}, stub ${stub.origin}, agent openai/gpt-6-luna on OpenRouter`);
+    log(`next dev on ${origin}, stub ${stub.origin}, app ${APP}, agent openai/gpt-6-luna on OpenRouter`);
     browser = await launch();
     await flow(origin, browser);
+    if (APP === "carp") await replayView(origin);
   } finally {
     await browser?.close().catch(() => undefined);
     if (next.pid) {
@@ -208,6 +265,7 @@ async function main(): Promise<void> {
       else writeFileSync(file, content);
     }
   }
+  console.log(`AGENT app=${APP} flow=ok tools=${found.tools} citation=${found.citation ? "ok" : "missing"}${APP === "carp" ? ` view=${found.view ? "ok" : "missing"}` : ""}`);
   console.log("FLOW-OK");
 }
 

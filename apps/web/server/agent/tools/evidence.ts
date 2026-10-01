@@ -1,6 +1,7 @@
 /** Evidence ids (PLAN.md C14), grid cells and species keys shared by the tools. Regions and species come from the app config (C-A3). */
 
 import type { CitableKind, Evidence } from "@/server/agent/runtime/registry";
+import { EVIDENCE_KINDS } from "@/shared/agent/events";
 import { cellAt, cellCentre, primaryRegion, taxonKey, type AppConfig } from "@/shared/apps";
 
 export type SpeciesKey = string;
@@ -16,7 +17,7 @@ export function speciesKeys(app: AppConfig): SpeciesKey[] {
   return app.taxa.map(taxonKey);
 }
 
-const EVIDENCE_KINDS = new Set<CitableKind>(["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note"]);
+const KINDS = new Set<CitableKind>(EVIDENCE_KINDS);
 
 /** `<kind>:<key>` with a known kind and a non-empty key. */
 export function parseEvidenceId(id: string): { kind: CitableKind; key: string } | null {
@@ -24,11 +25,11 @@ export function parseEvidenceId(id: string): { kind: CitableKind; key: string } 
   if (colon <= 0) return null;
   const kind = id.slice(0, colon) as CitableKind;
   const key = id.slice(colon + 1);
-  return EVIDENCE_KINDS.has(kind) && key.length > 0 ? { kind, key } : null;
+  return KINDS.has(kind) && key.length > 0 ? { kind, key } : null;
 }
 
-export function evidence(kind: CitableKind, key: string, label: string): Evidence {
-  return { id: `${kind}:${key}`, kind, label };
+export function evidence(kind: CitableKind, key: string, label: string, feed?: string): Evidence {
+  return feed ? { id: `${kind}:${key}`, kind, label, feed } : { id: `${kind}:${key}`, kind, label };
 }
 
 export function readingKey(stationId: string, param: string, observedAt: string, origin: string): string {
