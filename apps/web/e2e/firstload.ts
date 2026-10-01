@@ -6,6 +6,9 @@
  *   bun run e2e:firstload --before   only measure and save docs/evidence/simplify-before.png (run on a build of
  *                                    the code before T41)
  *   E2E_SKIP_BUILD=1 …               reuse the last e2e build
+ *   bun run e2e:firstload --app <id> --evidence-shots
+ *                                    also save the rubric's per-app shots: docs/evidence/<id>-desktop.png (the load
+ *                                    view at 1440×900) and docs/evidence/mobile/<id>-375.png (a fresh 375×812 load)
  *
  * 1. Clutter at load: interactive controls and elements with their own visible text, in the globe pane and on
  *    the whole page (text drawn on canvases is not counted). `SIMPLIFY pane_controls=… page_labels=…`.
@@ -54,6 +57,7 @@ const SPECIES_APP = CONFIG.kind === "species";
 const SURVEY_APP = isSurveyApp(CONFIG);
 const REPORTS = '[data-kind="report"]:not([data-copy])';
 const REGION = appBBox(CONFIG);
+const EVIDENCE_SHOTS = process.argv.includes("--evidence-shots");
 const shotName = (name: string) => (APP === "python" ? name : name.replace(/\.png$/, `-${APP}.png`));
 /** The app's default sightings window (`windows.defaultHours`: 7 days for python, 30 for lionfish). */
 const WINDOW_HOURS = CONFIG.windows.defaultHours;
@@ -193,6 +197,10 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   const loadShot = shotName(before ? "simplify-before.png" : "simplify-after.png");
   await page.screenshot({ path: path.join(SHOT_DIR, loadShot) });
   log(`screenshot ${loadShot}`);
+  if (EVIDENCE_SHOTS) {
+    await page.screenshot({ path: path.join(SHOT_DIR, `${APP}-desktop.png`) });
+    log(`screenshot ${APP}-desktop.png`);
+  }
   if (before) {
     await context.close();
     return lines;
@@ -265,6 +273,19 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   return lines;
 }
 
+/** The rubric's phone shot: a fresh load at 375×812, the chat sheet collapsed to its composer. */
+async function mobileShot(browser: Browser, stack: Stack): Promise<void> {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await context.clock.install({ time: new Date(CLOCK) });
+  const page = await context.newPage();
+  await ready(page, stack.origin);
+  const dir = path.join(SHOT_DIR, "mobile");
+  mkdirSync(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, `${APP}-375.png`) });
+  log(`screenshot mobile/${APP}-375.png`);
+  await context.close();
+}
+
 async function main() {
   const before = process.argv.includes("--before");
   buildApi(log);
@@ -274,6 +295,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     for (const line of await firstLoad(browser, stack, before)) console.log(line);
+    if (EVIDENCE_SHOTS && !before) await mobileShot(browser, stack);
   } catch (err) {
     log(`failed: ${err instanceof Error ? err.message : String(err)}`);
     log(stack.logs());

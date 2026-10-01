@@ -4,6 +4,8 @@ Inversa take-home. Status: v3, 2026-09-30. It supersedes v2: the backend moves t
 
 Research and decisions: [research.md](research.md).
 
+**Status at D1 (2026-10-01).** This PRD now specifies the python app, Everglades Ops, one of three apps on one engine; the carp and lionfish apps are specified in [APPS.md](APPS.md) and [LIONFISH_WATCH.md](LIONFISH_WATCH.md), and the system-level picture is in the [README](../README.md). Superseded below: the agent model is `openai/gpt-6-luna` on OpenRouter through cordis, not DeepSeek (§10); every API route carries the app (`/v1/{app}/graphql`, `/v1/{app}/frames`), not `/v1/graphql` (§9); each app has its own `observations.db` and `team.db` under `<data dir>/<app>/` (§7). Design alternatives and scaling are maintained in [design-alternatives.md](design-alternatives.md) and [scaling.md](scaling.md); §17 is kept as written.
+
 - **Deploy target:** https://inversa.calvinmaighan.dev
 - **Deadline:** 72 h. Sized as about 2 weeks (10 working days) for one senior developer; agent tooling (Claude, Cursor) runs the work in parallel.
 
@@ -28,7 +30,7 @@ Scope since K1 (R14): this PRD is the python app, Everglades Ops, one of three a
 
 Why this question, for Inversa:
 
-- **It is their work.** Inversa runs FWC's python contractor program (PATRIC) in the Everglades: 235 removals in July 2024, 748 in July 2025. It also runs lionfish programs in Florida and the Caribbean.
+- **It is their work.** FWC "partnered with Miami-based company Inversa" to triple python removals in two years; 1,022 pythons were removed in May to July 2025 against 343 in the same months of 2024, and 748 in July 2025 alone ([FWC release, 2025-10-21](https://myfwc.com/news/all-news/gov-python-removal-1025/), read 2026-10-01). That Inversa administers PATRIC is unverified. Inversa also runs lionfish programs in Mexico, Colombia, Belize and Florida ([case page](https://inversa.com/case/lionfish-management-program), read 2026-10-01).
 - **It mirrors their product.** Origin is an AI command center built around the loop *hotspot → mission → mission in progress → ROI*.
 - **It needs several feeds.**
   - Sightings say where pythons were.

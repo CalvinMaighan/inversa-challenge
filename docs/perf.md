@@ -2,6 +2,18 @@
 
 Every PRD §13 target measured on the real stack, with how it was measured, on the T27/T28 tree merged with main (T38, T40–T43); the poll run predates the merge, which touched no Rust. Machine: Apple Silicon Mac, headless Chromium (Playwright's `chromium-headless-shell`) with SwiftShader software WebGL, so every number that includes a globe frame is a software-rendering number; a laptop GPU renders the same frames faster. The stack is `apps/web/e2e/stack.ts`: Axum (release) over a temp data dir filled by `backfill --fixtures`, the production Next build (`next start`), the signal Worker under `wrangler dev --local`, and a Caddy-like front proxy, all on free ports.
 
+## First agent token per app, re-measured for D1 (2026-10-01)
+
+`doppler run --project inversa --config dev -- bun run --cwd apps/web e2e:perf --app <id>`: five of the app's golden questions to the live model on `next dev` over the fixture stub, then the first question again to hit the answer cache.
+
+```
+PERF app=carp first_token_p50_ms=1123 n=5 cached_query_ms=6 status_p50_ms=16 done_p50_ms=7263
+PERF app=lionfish first_token_p50_ms=1272 n=5 cached_query_ms=12 status_p50_ms=17 done_p50_ms=9639
+PERF app=lionfish first_token_p50_ms=1343 n=5 cached_query_ms=12 status_p50_ms=18 done_p50_ms=9712
+```
+
+Python exited 1 in both runs before printing its line: "the repeated question was not served from the answer cache". Its per-question first model output was 1633, 1563, 1828, 1566, 1203 ms (p50 1566) and 2485, 1452, 4125, 1584, 1240 ms (p50 1584). Against the rubric's 1,200 ms bar: carp passes, lionfish and python do not; all three are under the PRD's 2 s. The python cache miss is open.
+
 ## Three apps on the production build (H1, 2026-10-01)
 
 Re-measured for `gates/leaf-H1.md` G6 on the three-app tree (`pivot/three-apps` at `a884526` plus H1), same machine and harness as below: the production Next build (`next build`, standalone, e2e hook on so the page reports its marks), the release Axum over each app's fixtures, SwiftShader WebGL. Every globe number is a software-rendering number.

@@ -1,4 +1,6 @@
-# Lionfish Watch: pivot spec (draft, 2026-10-01)
+# Lionfish Watch: pivot spec (2026-10-01)
+
+Kept as the lionfish app's spec. Status at D1 (2026-10-01): built and gated (`gates/leaf-L1.md`, `leaf-L3.md`, `leaf-L4.md`, `leaf-L5.md`, `leaf-UL.md`, `leaf-AG2.md`). Two things differ from the text below: the benchmark bar is not met three runs in a row (blind runs 59, 62, 58 of 65; `docs/grading/agent-lionfish-analysis.md`), and GOES-19 SST push waits on an AWS queue. Inversa's lionfish program in Mexico, Colombia, Belize and Florida: [inversa.com/case/lionfish-management-program](https://inversa.com/case/lionfish-management-program), read 2026-10-01.
 
 Supersedes the "Florida only, four species" scope in `docs/PRD.md` and `docs/research.md` decision 1. Evaluate against `docs/TASK_BRIEF.md`. Origin of the idea: ChatGPT suggestion, adapted to keep our stack.
 

@@ -7,7 +7,7 @@ Date: 2026-09-30. Sources are listed at the end. Raw scrapes are in `.firecrawl/
 - **Business:** invasive species management. The company describes itself as "the largest diversified invasive species management company in the United States" (Florida Python Challenge sponsor page). It was founded in 2020 and is based in Miami.
 - **Model:** it removes invasive animals and turns the biomass into revenue (Inversa Leathers: python, lionfish and other invasive leathers, and "Silverfin", its invasive carp material). The economics pay for the removal.
 - **Programs:**
-  - **Burmese python, Florida Everglades.** Inversa administers FWC's PATRIC contractor program. Removals went from 235 in July 2024 to 748 in July 2025, backed by $2M in state funding (FWC release, 2025-10-21).
+  - **Burmese python, Florida Everglades.** Inversa administers FWC's PATRIC contractor program. Removals went from 235 in July 2024 to 748 in July 2025, backed by $2M in state funding (FWC release, 2025-10-21). *Corrected 2026-10-01, see §9: the release says FWC "partnered with" Inversa and gives 1,022 removals in May to July 2025 against 343 in the same months of 2024, 748 in July 2025; "administers" and "235 in July 2024" are unverified.*
   - **Lionfish, Caribbean.** Mexico (Banco Chinchorro MPA), Belize, Colombia and Florida, with NOAA, ORRAA and Conservation International. Results: 40k+ fish removed, $2.1M deployed, 267 fishers employed.
   - **Invasive carp, Mississippi.** A Mississippi fisheries manager is quoted on the lionfish case page.
 - **Origin, their product:** "environmental intelligence for invasive species management", described as an AI command center. Features named on the site:
@@ -186,3 +186,16 @@ The brief doesn't prescribe push or poll ingest. What exists for this domain:
 - [Google Map Tiles API usage and billing](https://developers.google.com/maps/documentation/tile/usage-and-billing)
 - [NOAA GOES on AWS open data registry](https://registry.opendata.aws/noaa-goes/)
 - [NWWS-OI request](https://www.weather.gov/nwws/nwws_oi_request)
+
+## 9. Decisions and corrections after the pivot (2026-10-01, leaf D1)
+
+History above is kept as written; this section records what changed.
+
+1. **Three apps on one engine.** The single South Florida question became three apps chosen by an app selector: carp (Louisiana river conditions, default), Lionfish Watch (four Caribbean areas) and Everglades Ops (Burmese python only). Options B and C in §4 became apps of their own; option D stayed dropped. Specs: `docs/APPS.md`, `docs/LIONFISH_WATCH.md`.
+2. **Carp is conditions only.** Carp barely appear in iNaturalist (§4 C's risk held), so the carp app answers about the river at candidate locations and refuses abundance, catch, access and safety. L'CARP facts verified with URLs in `docs/evidence/carp-data-proof.md` G6.
+3. **Lionfish keeps all four areas**, labelling Belize and Colombia as thin rather than adding feeds to rescue them (`docs/evidence/data-proof.md`).
+4. **Only three species exist** (K1, R14): tegu, iguana, the background of all introduced species, FIRMS, aisstream and Firecrawl monitors are removed, not hidden.
+5. **Ingest is push-first in the Rust scheduler**, not Cloudflare Cron Workers (§5): the free plan's 5 cron triggers and 10 ms CPU do not fit GOES decode or long-lived SQS and XMPP connections. Every poll is justified in `docs/ingest-modes.md`.
+6. **The agent runs GPT-6 Luna on OpenRouter**, not DeepSeek on Fireworks (§8): the deployed harness is cordis with `openai/gpt-6-luna`, and there is no mock model.
+7. **COEP is `require-corp`, not `credentialless`** (§3): Safari has no `credentialless`; third-party media goes through `/v1/{app}/media`.
+8. **Corrections to §1**, checked against [the FWC release of 2025-10-21](https://myfwc.com/news/all-news/gov-python-removal-1025/) on 2026-10-01: FWC "partnered with Miami-based company Inversa" to triple python removals in two years; 1,022 pythons were removed in May to July 2025 against 343 in the same period of 2024, and 748 in July 2025 alone. That Inversa *administers* PATRIC, and "235 in July 2024", are not in the release and are unverified (the News From The States article answered 403). The lionfish program locations (Mexico, Colombia, Belize, Florida) and partners (NOAA, ORRAA, Conservation International) were re-read on [the case page](https://inversa.com/case/lionfish-management-program) the same day.

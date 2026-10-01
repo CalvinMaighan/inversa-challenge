@@ -1,18 +1,20 @@
-# Three apps, one engine (draft, 2026-10-01)
+# Three apps, one engine (spec, 2026-10-01; status updated for D1)
+
+Status at D1 (2026-10-01): all three apps are built on the shared engine and pass their app-specific gates (carp: `gates/leaf-C3.md`, `leaf-C4.md`, `leaf-C5.md`, `leaf-UC.md`, `leaf-AG1.md`; lionfish: `gates/leaf-L3.md`, `leaf-L4.md`, `leaf-L5.md`, `leaf-UL.md`, `leaf-AG2.md`; python: the T-series gates and `gates/leaf-K1.md`). Open items per app are the PARTIAL and ABANDON rows of `docs/brief-compliance.md`. The sections below are the original spec, kept as written, with later results appended.
 
 One codebase, one UI shell, one species/program config unit per app (contract P1 in `PLAN.md`), chosen at runtime by the app selector below. Each app is vertically integrated: its own question, feeds, score, agent persona, helper questions, eval set and copy. Evaluate every app against `docs/TASK_BRIEF.md`.
 
 | App | Role | Question | Status |
 |---|---|---|---|
-| **Carp** (Louisiana) | Main app, the default selection | How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? | Spec below, not started |
-| **Lionfish Watch** | Second app | Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions? | `docs/LIONFISH_WATCH.md`; L1 data proof running |
-| **Python** (Everglades) | Third app | Where are Burmese pythons active and where should removal crews go next? | Existing build (T1–T44) becomes this config |
+| **Carp** (Louisiana) | Main app, the default selection | How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? | Built (C1 to C5, UC, AG1) |
+| **Lionfish Watch** | Second app | Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions? | Built (`docs/LIONFISH_WATCH.md`; L1 to L5, UL, AG2) |
+| **Python** (Everglades) | Third app | Where are Burmese pythons active and where should removal crews go next? | Built (T1 to T44, then this config; K1 narrowed it to the Burmese python) |
 
-Build order: finish L1 and the lionfish pivot, extract the app config seam (L2) so python keeps working, then carp.
+Build order as planned: finish L1 and the lionfish pivot, extract the app config seam so python keeps working, then carp. Done in that order.
 
 ## Carp app: Louisiana Field Conditions Explorer (working name)
 
-Source: ChatGPT research, 2026-10-01. **Unverified by us.** Before it goes in any doc, confirm: L'CARP launch (May 2026), the April 2026 wildlife commission agenda item, and Origin's Detect, Deploy, Deliver wording. Inversa's internal roadmap is unknown.
+Source: ChatGPT research, 2026-10-01, unverified when this spec was written. Since verified by C1 with URLs (read 2026-10-01): L'CARP launched in May 2026 and is run by Inversa ([LDWF program page](https://www.wlf.louisiana.gov/page/louisiana-carp-removal-program)); the April 2026 commission agenda has an Inversa presentation as item 10 ([LDWF notice](https://www.wlf.louisiana.gov/news/louisiana-wildlife-and-fisheries-commission-to-meet-thursday-april-9-at-1000-am)); Origin's page shows Detect, Deploy, Deliver ([inversa.com/origin](https://inversa.com/origin)). Details and quotes: `docs/evidence/carp-data-proof.md` G6. Inversa's internal roadmap is unknown (unverified).
 
 User: an operations manager planning fieldwork. Locations: a handful of river sites in Louisiana, labelled "demonstration locations" until Inversa supplies real operating areas.
 

@@ -1,5 +1,32 @@
 # Overnight brief: three apps on one engine (carp, lionfish, python)
 
+## Status (D1, 2026-10-01)
+
+The checkboxes in §5 are left as first written. Where each task stands, from the gate files and the `PLAN.md` status log:
+
+| Task | Status | Where |
+|---|---|---|
+| A0 contracts | done | `PLAN.md` "Three-app contract" |
+| L1, C1 data proofs | done | `gates/leaf-L1.md`, `gates/leaf-C1.md` |
+| A1 app seam, A2 selector | done, as A1a (Rust) and A1b (web and selector) | `gates/leaf-A1a.md`, `gates/leaf-A1b.md` |
+| L2 lionfish config | done inside A1 and L4 (no separate gate) | `spec/apps/lionfish.json` |
+| L3, L4, L5 | done | `gates/leaf-L3.md`, `gates/leaf-L4.md`, `gates/leaf-L5.md` |
+| L6 lionfish UI | done as UL | `gates/leaf-UL.md` |
+| L7 lionfish agent and benchmark | built; benchmark bar not met three runs in a row | `gates/leaf-AG2.md` |
+| C2 carp config | done inside C4 and UC (no separate gate) | `spec/apps/carp.json` |
+| C3, C4, C5 | done | `gates/leaf-C3.md`, `gates/leaf-C4.md`, `gates/leaf-C5.md` |
+| C6 carp UI | done as UC | `gates/leaf-UC.md` |
+| C7 carp agent and benchmark | built (AG1, AGB); benchmark bar met in 1 of 3 final runs | `gates/leaf-AG1.md`, `gates/leaf-AGB.md` |
+| P1 python as config | done inside A1 and K1 (no separate gate) | `gates/leaf-K1.md` |
+| E1 evidence kinds, hook and nudges | done | `gates/leaf-E1.md` |
+| F1, Q1, M1, K1, G1, H1 | done | their `gates/leaf-*.md` |
+| J1 judge and pooled eval | in progress | `gates/leaf-J1.md` |
+| X1 integration, X2 perf and a11y per app | not run as separate leaves; partly covered by K1 G7 (every e2e per app) and H1 G6 (perf per app) | |
+| X3 deploy readiness | superseded by H1 | `gates/leaf-H1.md` |
+| D1 docs re-audit | this leaf | `gates/leaf-D1.md` |
+| Z1 final integration | open | |
+| Deploy and push | not done; needs the user | `docs/HUMAN_STEPS.md` |
+
 ## 0. Execution instruction
 
 - **Target workspace:** `/Users/calvin/Documents/inversa-challenge` (branch `main`, remote `github.com/CalvinMaighan/inversa-challenge`, private).
