@@ -77,22 +77,20 @@ function registryTools(): string[] {
   const layerIds = [...readFileSync(join(ROOT, "apps/web/shared/apps/schema.ts"), "utf8").matchAll(/LAYER_IDS = \[([^\]]*)\]/g)]
     .flatMap((m) => [...m[1]!.matchAll(/"([^"]+)"/g)].map((s) => s[1]!));
   const body = files[0]!.match(/function allCapabilities\([^)]*\)[^{]*\{([\s\S]*?)\n\}/)?.[1] ?? "";
-  // Every array literal in the function (the per-kind lists and the returned list), spreads expanded from the
-  // exported arrays of the other modules; local list names and the `species` schema argument are not tools.
-  const lists = [...body.matchAll(/\[([^\]]*)\]/g)].map((m) => m[1]!);
-  const local = new Set([...body.matchAll(/const (\w+) =/g)].map((m) => m[1]!));
+  // Every identifier in the function that names a tool definition (`const x = { name: … }`, or a factory
+  // `const x = (species) => ({ name: … })`) or an exported tool array (`export const carpTools = [ … ]`), which is
+  // expanded; conditionals, locals and the `species` schema argument are skipped because they resolve to neither.
+  const isTool = (name: string) => files.some((src) => new RegExp(`const ${name} = (?:\\([^)]*\\) => )?\\(?\\{\\s*name: `).test(src));
+  const arrayOf = (name: string) => files.map((src) => src.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`))?.[1]).find(Boolean);
   const idents = [
     ...new Set(
-      lists.flatMap((list) =>
-        [...list.matchAll(/(\.\.\.)?(\w+)(?:\([^)]*\))?/g)]
-          .map((m) => [m[1] === "...", m[2]!] as const)
-          .filter(([, name]) => name !== "species" && !local.has(name))
-          .flatMap(([spread, name]) => {
-            if (!spread) return [name];
-            const arr = files.map((src) => src.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`))?.[1]).find(Boolean) ?? "";
-            return [...arr.matchAll(/\w+/g)].map((m) => m[0]);
-          }),
-      ),
+      [...body.matchAll(/\b([A-Za-z_]\w*)\b/g)]
+        .map((m) => m[1]!)
+        .flatMap((name) => {
+          const arr = arrayOf(name);
+          if (arr !== undefined) return [...arr.matchAll(/\w+/g)].map((m) => m[0]);
+          return isTool(name) ? [name] : [];
+        }),
     ),
   ];
   if (!idents.length) fail("registry", "no tools found in allCapabilities");

@@ -4,7 +4,7 @@
  * phrases the answer must contain, and how many verified citations it needs.
  */
 
-import carpQuestions from "app-configs/questions/carp.json";
+import { supportedQuestions, type QuestionFile } from "@/shared/apps/questions";
 
 export type Golden = {
   id: string;
@@ -139,20 +139,7 @@ export const GOLDEN: Golden[] = [
   },
 ];
 
-/** The question files' shape (`spec/apps/questions/<app>.json`, validated by `scripts/check-questions.ts`). */
-export type QuestionFile = {
-  app: string;
-  questions: {
-    id: string;
-    category: string;
-    question: string;
-    expectedTools: string[];
-    mustCite: string[];
-    view?: { map?: string; timeline?: string };
-    context?: Record<string, string>;
-    pass: { mode: "answer" | "caveat" | "refuse"; phrases: string[]; forbid: string[]; groundedNumbers: boolean; feedState: boolean; minCitations: number; cites?: Record<string, number> };
-  }[];
-};
+export type { QuestionFile };
 
 /** A question file as goldens: `pass` regexes compiled case-insensitively, `view` meaning a view event is required. */
 export function goldenFromFile(file: QuestionFile): Golden[] {
@@ -181,7 +168,7 @@ export function goldenFromFile(file: QuestionFile): Golden[] {
  * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; carp's is the
  * question file (the source of truth for ids, categories, tools and pass criteria); lionfish's comes with its leaf.
  */
-export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: goldenFromFile(carpQuestions as QuestionFile) };
+export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = { python: GOLDEN, lionfish: [], carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }) };
 
 /** The ten question categories, in the order the eval prints them. */
 export const CATEGORIES = ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"] as const;

@@ -1,5 +1,6 @@
 import type { AgentView } from "@/server/agent/runtime/registry";
 import { appTimeZone, LAYER_IDS, type AppConfig } from "@/shared/apps";
+import { matchSupportedQuestion, questionLine, supportedQuestions } from "@/shared/apps/questions";
 import { SIGHTING_WINDOW_HOURS } from "@/shared/frames";
 
 /** Tools named after the layer they fill. */
@@ -78,14 +79,16 @@ function conditionsSections(app: AppConfig): string {
     "- Other carp: the data holds river conditions, not fish sightings. 'Where are (common) carp', 'does rising water make carp move', 'do carp gather when…': refuse without calling any tool, with the refusal plus this sentence: 'It cannot say where carp are or what moves them: the feeds hold no carp sightings or locations, only river and weather conditions at the eight demonstration locations.'",
     "",
     "## Units, sources, times",
-    "- Stage in feet (ft, two decimals as given). USGS stage is stored in metres and converted; USGS and NWPS gauges can sit on different datums (Krotz Springs KRZL1: USGS reads about 2.45 ft lower), so never compare a USGS stage with a flood threshold and never subtract one gauge from the other across datums; say which gauge a number comes from. When the two stages differ, say that the flood categories and their thresholds (action stage and above) are defined on the NWPS datum, so only the NWPS stage is compared with them.",
+    "- Stage in feet (ft, two decimals as given). USGS stage is stored in metres and converted; USGS and NWPS gauges can sit on different datums (Krotz Springs KRZL1: USGS reads about 2.45 ft lower), so never compare a USGS stage with a flood threshold and never subtract one gauge from the other across datums; say which gauge a number comes from. When the two stages differ, say that the flood categories and their thresholds (action stage and above) are defined on the NWPS datum, so only the NWPS stage is compared with them; describe the offset as 'the USGS datum sits about 2.45 ft lower' (the words 'below', 'above' or 'under' next to 'USGS' read as a threshold comparison, so avoid them), and keep that sentence apart from the one about flood categories.",
     "- Flow: USGS discharge in cfs, NWPS flow in kcfs (1 kcfs = 1000 cfs). Label every flow number with its source and unit; where the two disagree (Monroe MLUL1, 5 to 7 times) report both, cited, and never average or blend them. Where a gauge reports no discharge, say it is not measured there; never fill it from the other source without saying so.",
     "- Flood categories (action, minor, moderate, major) are NWPS thresholds in NWPS feet, 'at or above'; the category comes from the tool, never from your own comparison. Write 'action stage', 'minor flood stage' with a space, never 'action-stage'. Low water is the NWPS low-water threshold, an operations signal, not a flood category. When a site's siteNote explains its behaviour (Morgan City is tidal, so its 4 ft action stage is reached often), say so.",
     "- Four times, kept apart and named: observed (when the gauge measured), issued (when the RFC published the forecast), valid (when a forecast point applies), ingested/fetched (when we received it). Every forecast you mention says when it was issued (use issuedLocal) and whether it is an nwps-live snapshot or an iem-archive copy. Every observation says how old it is.",
     `- Times: tool times are UTC (Z); write them in ${appTimeZone(app)} exactly as the tools' *Local fields give them: \"2026-09-30 10:32 CDT\" (date, 24-hour clock, zone right after), never \"10:32 a.m.\" or \"October 6\". Keep UTC only when quoting an issuance id. 'Today', 'tomorrow', 'yesterday afternoon', 'Friday' are ${appTimeZone(app)} days relative to the reference time; name the weekday and date you took them to mean. Never call a forecast 'today's' unless it was issued today local time.`,
     "- Spans and ages: write '24 hours', '3 days', '7 days', 'last week' (plain words, no hyphens like '24-hour'); an age is always '<n> hours old' ('40.1 hours old', never '40.1 hours before'); a change is 'rose 0.49 ft in 24 hours' or 'fell 0.2 ft over 3 days'. Licence words as the tool writes them: 'public domain' (two words).",
     "- Status words: a site 'needs review' (exactly those words: 'Morgan City needs review because …', 'no other site needs review'), is 'OK' or 'cannot be assessed'; copy each site's summary sentence from site_status. For a history, 'started needing review at <local time> because …' and 'stopped needing review at …'.",
-    "- A feed whose note starts 'disabled:' is 'switched off by configuration', never 'down', 'missing' or 'broken'; an empty alerts result means 'no active NWS alerts', not a feed problem.",
+    "- A feed whose note starts 'disabled:' is 'switched off by configuration'. Never write that a feed or the data 'is down', 'is missing' or 'is broken', not even to deny it ('not because the feed is down' is also wrong): say what the feed did ('the last check found no active NWS alerts'). An empty alerts result means 'no active NWS alerts', not a feed problem.",
+    "- Forecast wording: every forecast you mention carries the word 'issued' with its time ('issued 2026-09-30 10:32 CDT'); 'issuance' alone is not enough. A revision is 'higher' or 'lower' than the previous issuance (or 'unchanged'), with the delta the tool gives. A verification quotes at least one paired point per site as 'forecast X ft vs observed Y ft at <time>' with the observed reading's marker.",
+    "- The IEM archive exists for replay: say 'replay' when you explain it (it lets the timeline replay what was known on a past day, before our own snapshots began).",
     "- Freshness: say how old the newest observation and the forecast issuance are (hours old or 'as of <time>') whenever you report a value; a forecast over 36 h old is stale, an observation over 6 h old is stale, and a feed whose state is not nominal is named with its state and cite marker. Every answer, even one about sources or definitions, ends with one freshness line: copy the tool's inputsLine or freshnessLine (markers included) when it has one, else 'as of <local time>' with the feeds' states.",
     "- Numbers: use only values the tools give (latest, change24h, netChangeInWindow, mean24h, ageHours, peak, errorFt). Never compute a new number yourself (no ratios, differences, averages or ages in minutes); describe a comparison in words ('several times higher', 'about an hour old') or quote both values.",
     "- Tool arguments: leave an optional argument out when you do not need it; never fill it with a placeholder like '.', '.*', ' ' or 'null'. Site names are the configured locations only.",
@@ -107,7 +110,7 @@ function conditionsSections(app: AppConfig): string {
         ]
       : []),
     ...(tools.has("river_readings") ? ["- Stage, discharge, rises, falls, 24 h change, past week, tidal means, 'how much water': river_readings (hours: 24 for a day, 72 for three days, 168 for a week). Cite the latest reading and the window-start or 24 h reading you subtract; name the source and unit of each; use mean24h at tidal Morgan City and say it is tidal. For a datum or flow disagreement question also call evidence on the two readings to show where each number comes from."] : []),
-    ...(tools.has("river_forecast") ? ["- Forecasts, flood categories, horizons, revisions ('changed from yesterday': previous: 1), 'forecast to rise', 'Friday's stage', thresholds: river_forecast. Say issued time and provenance for each issuance, cite each one, give the peak and its category against the thresholds; a valid time beyond the horizon is 'beyond the forecast horizon', never a guess.", "- Planning a day or a site visit ('compare X and Y for tomorrow morning', 'best days this week', 'is it safe / should we go', 'focus tomorrow'): river_forecast for the sites, weather_forecast for each site, and alerts for each site, in that order, then answer per site with the forecast stage at the hour, the weather, and whether an alert is in effect (cite the alerts check marker when none is); end with the boundary: conditions only, not a safety or access judgement."] : []),
+    ...(tools.has("river_forecast") ? ["- Forecasts, flood categories, horizons, revisions ('changed from yesterday': previous: 1), 'forecast to rise', 'Friday's stage', thresholds: river_forecast. Say issued time and provenance for each issuance, cite each one, give the peak and its category against the thresholds; a valid time beyond the horizon is 'beyond the forecast horizon', never a guess.", "- Planning a day or a site visit ('compare X and Y for tomorrow morning', 'best days this week', 'is it safe / should we go', 'focus tomorrow'): river_forecast for the sites, weather_forecast for each site, and alerts for each site, in that order, then answer per site with the forecast stage at the hour, the weather, and whether an alert is in effect (cite the alerts check marker when none is); end with the sentence 'This is conditions only: it cannot judge safety or access.'"] : []),
     ...(tools.has("forecast_verify") ? ["- 'How did the forecast compare with what happened': forecast_verify (daysAgo). 'N days ago, did the forecast already show X reaching action stage': two calls, river_forecast with asOf = N days ago (what was known then) AND forecast_verify with daysAgo = N (how it played out); cite the issuance and at least one observed reading; report error as forecast minus observed in ft."] : []),
     ...(tools.has("review_history") ? ["- 'Why did this location start needing review', 'when was X flagged': review_history for the selected or named site, then evidence on the record that caused the flip. Give the time it flipped (local, with date), the rule, the value against the threshold, and cite the evidence."] : []),
     ...(tools.has("weather_forecast") ? ["- Weather, wind, rain, 'tonight', 'next three days': weather_forecast for each site asked (the Atchafalaya means its four sites). Give temperature in °F and wind in mph with the period, say when the office updated it and when we fetched it, and cite the forecast:nws id. The adapter stores temperature and wind only: for rain say that precipitation is not ingested here and point to the NWS page, never guess a chance of rain. 'When was the NWS forecast last updated': weather_forecast for the site, then source_info with feed nws-forecast (two calls), and name the office."] : []),
@@ -119,6 +122,7 @@ function conditionsSections(app: AppConfig): string {
       : []),
     ...(tools.has("team_board") ? ["- Missions and messages: team_board (leave `about` out for the whole board; give it only for one named site). Cite every mission and message you mention with its mission:/message: marker, including when you say which flagged sites have none. Combine with site_status or river_forecast when the question joins the team's plans to conditions ('flagged sites with no mission', 'forecasts at tomorrow's mission sites').", "- Field notes: notes with site for one place, or no arguments for every note; hours: 24 for today. A note that says something about the river ('ramp under water') is compared with river_readings for that site: quote the note (cite it), give the gauge reading (cite it), and say the gauge cannot confirm what the note describes."] : []),
     `- Map: set_view with preset ${presets} or site, and asOf for a past moment; call it once when the answer is about a place, the whole set, or a replay.`,
+    "- First, in the same reply as your first tool call, write one short line saying what you are checking (for example 'Checking the NWPS forecasts and the gauges for the Atchafalaya sites.') and then call the tools; a refusal needs no such line. The person sees that line at once while the tools run.",
     "- Lead with the operational answer (which sites, what changed, what was known), then the numbers with their sources and cite markers, then freshness and the boundary in one short sentence.",
   ];
   return lines.join("\n");
@@ -163,7 +167,27 @@ export function agentSystemPrompt(app: AppConfig): string {
     `- ${app.agent.scope}`,
     `- Questions about anything outside this scope (another species, area, location or topic) get this refusal, in your own words but naming what this app covers: "${app.agent.refusal}" Do not call tools for them.`,
   ].join("\n");
-  return [head, SHARED_RULES, speciesSections(app), conditionsSections(app), workingMethod(app)].filter(Boolean).join("\n\n");
+  return [head, SHARED_RULES, speciesSections(app), conditionsSections(app), workingMethod(app), supportedQuestionsSection(app)].filter(Boolean).join("\n\n");
+}
+
+/**
+ * The app's documented questions (spec/apps/questions, the set the UI offers and the benchmark runs) are not
+ * listed here: the whole list would add thousands of tokens to every call. The system prompt only says that a
+ * matching line may arrive with the turn's context (`questionHint`), which keeps the static prompt small and
+ * the first token fast.
+ */
+function supportedQuestionsSection(app: AppConfig): string {
+  if (supportedQuestions(app.id).length === 0) return "";
+  return [
+    "## Supported questions",
+    "This app documents a set of supported questions. When the turn's context carries a 'Supported question' line, the user's question matches it: call exactly the tools it lists, in that order, use the wording it gives (those words, in that spelling), and cite the kinds and feeds it names. Everything else in these rules still applies.",
+  ].join("\n");
+}
+
+/** The context line for the supported question the user's question matches, if any. */
+export function questionHint(app: AppConfig, question: string): string | null {
+  const match = matchSupportedQuestion(app.id, question);
+  return match ? `Supported question (match ${match.score.toFixed(2)}): ${questionLine(match.question)}` : null;
 }
 
 export function viewContext(view: AgentView | undefined, now: Date, app: AppConfig): string {

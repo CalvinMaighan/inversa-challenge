@@ -15,7 +15,7 @@ import type { CapabilityContext, CapabilityOutput, Evidence } from "@/server/age
 import { evidence, readingKey } from "@/server/agent/tools/evidence";
 import { GraphqlError, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { categoryOf, forecastPeak, review, RULES, transitions, type Category, type Reason, type Review, type Thresholds } from "@/server/agent/tools/review";
-import { feedsFor, given, givenList, HOUR_MS, localTime, output, timeSchema } from "@/server/agent/tools/shared";
+import { feedsFor, given, givenList, givenTime, HOUR_MS, localTime, lookbackWindow, output, timeSchema } from "@/server/agent/tools/shared";
 import { carpSites, resolveSites, sitesBox, type SiteRef } from "@/server/agent/tools/sites";
 import { conditionsViews, MAX_HIGHLIGHT, withView, type ReadingRow, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
@@ -120,6 +120,8 @@ function snapshotRow(app: AppConfig, snap: GqlSnapshot, asOf: number, thresholds
     site: snap.site,
     issuedAt: snap.issuedAt,
     issuedLocal: localTime(app, snap.issuedAt),
+    issuance: `forecast issued ${localTime(app, snap.issuedAt)} (${provenance(snap.source)}) [e:${forecastId(snap.site, snap.issuedAt)}]`,
+    headline: `${snap.site}: forecast issued ${localTime(app, snap.issuedAt)} (${provenance(snap.source)}, ${age} hours old${age > RULES.forecastStaleH ? ", stale" : ""})${peak ? `, peak ${peak.stageFt} ft at ${localTime(app, peak.at)}, category ${peakCategory ?? "unknown"}` : ""} [e:${forecastId(snap.site, snap.issuedAt)}]`,
     provenance: provenance(snap.source),
     product: snap.product,
     ingestedAt: snap.ingestedAt,
@@ -162,10 +164,10 @@ export const riverForecast = {
   inputSchema: riverForecastInput,
   async execute(input: z.infer<typeof riverForecastInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const sites = resolveSites(ctx.app, givenList(input.sites));
-    const asOfText = given(input.asOf);
+    const asOfText = givenTime(input.asOf);
     const asOf = asOfText ? ms(asOfText) : ctx.now.getTime();
     const previous = input.previous ?? 0;
-    const issuedAtText = given(input.issuedAt);
+    const issuedAtText = givenTime(input.issuedAt);
     const history = Math.min(60, (issuedAtText ? 30 : 1) + previous);
     const data = await gqlWithFeeds<Record<string, GqlForecastView> & { feeds: GqlFeedState[] }>("AgentForecasts", forecastsQuery(sites.length), { ...siteVars(sites), asOf: iso(asOf), history }, ctx);
     const evidenceRows: Evidence[] = [];
@@ -192,7 +194,8 @@ export const riverForecast = {
         const row = snapshotRow(ctx.app, s, asOf, thresholds);
         const peakDelta = currentRow?.peak && row.peak ? r2(currentRow.peak.stageFt - row.peak.stageFt) : null;
         const shared = current ? sharedPointDelta(current.points, s.points) : null;
-        return { ...row, versusCurrent: { peakDeltaFt: peakDelta, meanDeltaAtSharedValidTimesFt: shared } };
+        const change = peakDelta === null ? "peak not comparable" : peakDelta === 0 ? "peak unchanged" : `current peak ${Math.abs(peakDelta)} ft ${peakDelta > 0 ? "higher" : "lower"} than this earlier issuance`;
+        return { ...row, versusCurrent: { peakDeltaFt: peakDelta, meanDeltaAtSharedValidTimesFt: shared, change } };
       });
       if (current) {
         series.push({
@@ -232,7 +235,8 @@ export const riverForecast = {
         {
           asOf: iso(asOf),
           asOfLocal: localTime(ctx.app, asOf),
-          note: "A forecast is a deterministic stage path from the River Forecast Center, not a probability: there is no percent chance of flooding in it. Flood categories compare NWPS stage with NWPS thresholds only. Say when each issuance was made (issuedLocal) and its provenance.",
+          note: "A forecast is a deterministic stage path from the River Forecast Center, not a probability: there is no percent chance of flooding in it. Flood categories compare NWPS stage with NWPS thresholds only.",
+          say: "Start each site's forecast sentence with its `headline`, copied verbatim (it carries the word 'issued', the provenance, the age and the marker); do the same for each previous issuance.",
           rows,
         },
         evidenceRows,
@@ -367,7 +371,7 @@ export const siteStatus = {
   inputSchema: siteStatusInput,
   async execute(input: z.infer<typeof siteStatusInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const sites = resolveSites(ctx.app, givenList(input.sites));
-    const asOfText = given(input.asOf);
+    const asOfText = givenTime(input.asOf);
     const asOf = asOfText ? ms(asOfText) : ctx.now.getTime();
     const { reviews, feeds: rawFeeds, engine } = await reviewsAt(sites, asOf, ctx);
     const feedRow = (source: string) => rawFeeds.find((f) => f.source === source) ?? null;
@@ -500,6 +504,7 @@ export const siteStatus = {
           ...(sinceThen ? { sinceThen: { say: "end with this sentence, markers included", ...sinceThen } } : {}),
           inputsLine: `${inputsLine} (paste this line, markers included, as the freshness line of the answer)`,
           say: "Each row's summary is the sentence to use for that site (copy it, markers included).",
+          nextStep: "For anything about the coming days (tomorrow, this week, Friday, low water ahead, a category change) call river_forecast for the sites in question next: it holds the issuance, points, peak, thresholds and horizon.",
           rows,
         },
         evidenceRows,
@@ -540,8 +545,8 @@ export const reviewHistory = {
   inputSchema: reviewHistoryInput,
   async execute(input: z.infer<typeof reviewHistoryInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const site = resolveSites(ctx.app, [given(input.site) ?? ctx.view?.site ?? input.site])[0]!;
-    const to = given(input.to) ? ms(input.to!) : ctx.now.getTime();
-    const from = given(input.from) ? ms(input.from!) : to - 7 * 24 * HOUR_MS;
+    const to = givenTime(input.to) ? ms(givenTime(input.to)!) : ctx.now.getTime();
+    const from = givenTime(input.from) ? ms(givenTime(input.from)!) : to - 7 * 24 * HOUR_MS;
     if (from >= to) throw new Error("time window is empty: from must be before to");
     let flips: { at: string; from: string; to: string; rules: Reason[] }[] = [];
     let rawFeeds: GqlFeedState[] = [];
@@ -676,10 +681,10 @@ export const riverReadings = {
   inputSchema: riverReadingsInput,
   async execute(input: z.infer<typeof riverReadingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const sites = resolveSites(ctx.app, givenList(input.sites));
-    const to = given(input.to) ? ms(input.to!) : ctx.now.getTime();
+    const window = lookbackWindow(input, ctx.now, 24, 24 * 30);
+    const to = ms(window.to);
+    const from = ms(window.from);
     const hours = input.hours ?? 24;
-    const from = given(input.from) ? ms(input.from!) : to - hours * HOUR_MS;
-    if (from >= to) throw new Error("time window is empty: from must be before to");
     const params = input.params ?? ["stage", "discharge"];
     const source = input.source ?? "both";
     const gqlParams = params.map((p) => (p === "stage" ? "STAGE_M" : "DISCHARGE_CFS"));
@@ -833,14 +838,23 @@ export const forecastVerify = {
     const asOf = now - daysAgo * 24 * HOUR_MS;
     let issuedBySite: Record<string, string | null> = {};
     let rawFeeds: GqlFeedState[] = [];
-    const issuedAtText = given(input.issuedAt);
-    if (issuedAtText) {
-      issuedBySite = Object.fromEntries(sites.map((s) => [s.lid, iso(ms(issuedAtText))]));
-    } else {
-      const data = await gqlWithFeeds<Record<string, GqlForecastView> & { feeds: GqlFeedState[] }>("AgentForecasts", forecastsQuery(sites.length), { ...siteVars(sites), asOf: iso(asOf), history: 1 }, ctx);
-      issuedBySite = Object.fromEntries(sites.map((s, i) => [s.lid, data[`f${i}`]?.snapshot?.issuedAt ?? null]));
-      rawFeeds = data.feeds;
-    }
+    const issuedAtText = givenTime(input.issuedAt);
+    // The issuance to score: the one made at `issuedAt` when there is one, else the one current at that time
+    // (a model often passes a knowledge time here), else the one current `daysAgo` days ago.
+    const lookupAt = issuedAtText ? ms(issuedAtText) + HOUR_MS : asOf;
+    const data = await gqlWithFeeds<Record<string, GqlForecastView> & { feeds: GqlFeedState[] }>("AgentForecasts", forecastsQuery(sites.length), { ...siteVars(sites), asOf: iso(lookupAt), history: issuedAtText ? 10 : 1 }, ctx);
+    rawFeeds = data.feeds;
+    issuedBySite = Object.fromEntries(
+      sites.map((s, i) => {
+        const view = data[`f${i}`];
+        if (!view) return [s.lid, null];
+        if (!issuedAtText) return [s.lid, view.snapshot?.issuedAt ?? null];
+        const wanted = ms(issuedAtText);
+        const exact = view.history.find((snap) => Math.abs(ms(snap.issuedAt) - wanted) <= 60_000);
+        const current = view.history.find((snap) => ms(snap.issuedAt) <= wanted) ?? view.snapshot;
+        return [s.lid, exact?.issuedAt ?? current?.issuedAt ?? null];
+      }),
+    );
     const evidenceRows: Evidence[] = [];
     const series: SeriesView[] = [];
     const rows: Record<string, unknown>[] = [];
@@ -885,9 +899,11 @@ export const forecastVerify = {
         issuedAt: v.issuedAt,
         issuedLocal: localTime(ctx.app, v.issuedAt),
         issuance: `forecast issued ${localTime(ctx.app, v.issuedAt)} (${provenance(v.snapshot.source)}) [e:${fid}]`,
+        headline: `${site.lid}: forecast issued ${localTime(ctx.app, v.issuedAt)} (${provenance(v.snapshot.source)}) scored against ${v.paired} observed NWPS readings: mean absolute error ${v.meanAbsErrorFt ?? "n/a"} ft, largest miss ${v.maxAbsErrorFt ?? "n/a"} ft [e:${fid}]`,
         provenance: provenance(v.snapshot.source),
         cite: `[e:${fid}]`,
         pairs: pairs.slice(0, 16),
+        quote: pairs[pairs.length - 1] ? `forecast ${pairs[pairs.length - 1]!.forecastFt} ft vs observed ${pairs[pairs.length - 1]!.observedFt} ft at ${pairs[pairs.length - 1]!.atLocal} ${pairs[pairs.length - 1]!.cite} (say this pair, with the word 'observed')` : null,
         paired: v.paired,
         pending,
         unpairedPast: unpaired,
@@ -901,7 +917,7 @@ export const forecastVerify = {
     const feeds = feedsFor(rawFeeds, ["nwps", "iem"], []);
     const [first, ...rest] = series;
     const view: ToolViewData = first ? { result: first, more: rest, highlight: evidenceRows.slice(0, MAX_HIGHLIGHT).map((e) => e.id), bbox: sitesBox(sites) } : { result: rowsTable("Forecast verification", rows), bbox: sitesBox(sites) };
-    return withView(output({ asOfForIssuance: issuedAtText ? null : iso(asOf), say: "name each issuance as its `issuance` field ('forecast issued …')", rows }, evidenceRows, feeds, rows.filter((r) => !("missing" in r || "error" in r)).length), view);
+    return withView(output({ asOfForIssuance: issuedAtText ? null : iso(asOf), say: "Start each site with its `headline`, copied verbatim, then its `quote` pair (forecast vs observed).", rows }, evidenceRows, feeds, rows.filter((r) => !("missing" in r || "error" in r)).length), view);
   },
 };
 

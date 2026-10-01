@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
 import { evidence, speciesKeys } from "@/server/agent/tools/evidence";
 import { gql } from "@/server/agent/tools/gql";
-import { given } from "@/server/agent/tools/shared";
+import { given, givenTime } from "@/server/agent/tools/shared";
 import { resolveSites, sitesBox, type SiteRef } from "@/server/agent/tools/sites";
 import { extentOf, MAX_HIGHLIGHT, MAX_VIEW_ROWS, withView, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
@@ -173,12 +173,18 @@ export const notes = {
     const species = ctx.app.taxa.length > 0 ? given(input.species) : undefined;
     const bbox = sites.length > 0 ? sitesBox(sites, 0.1) : resolveBbox(input.bbox, ctx);
     const edge = ctx.now.getTime() + LIVE_EDGE_SLACK_MS;
-    const asked = input.to ? Date.parse(input.to) : edge;
+    const toText = givenTime(input.to);
+    const asked = toText ? Date.parse(toText) : edge;
     // A `to` at or after the reference time means "now": the live edge, so the current quarter hour counts.
     const to = new Date(asked >= ctx.now.getTime() - LIVE_EDGE_SLACK_MS ? Math.max(asked, edge) : asked);
     const hours = Math.min(input.hours ?? DEFAULT_HOURS, MAX_HOURS);
-    const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
-    if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
+    const fromText = givenTime(input.from);
+    let from = fromText ? new Date(fromText) : new Date(to.getTime() - hours * HOUR_MS);
+    // A `from` at or after `to` (the same instant sent twice) means the lookback, not an empty window.
+    if (from.getTime() >= to.getTime()) {
+      if (fromText && toText && Date.parse(fromText) > Date.parse(toText)) throw new Error("time window is empty: from must be before to");
+      from = new Date(to.getTime() - hours * HOUR_MS);
+    }
     const window = { from: from.toISOString(), to: to.toISOString() };
     const data = await gql<{ board: { notes: GqlNote[] } }>("AgentNotes", NOTES_QUERY, { id: boardIdFor(ctx.app.id) }, ctx);
     const keys = speciesKeys(ctx.app);

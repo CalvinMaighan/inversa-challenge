@@ -18,6 +18,10 @@ export type SourceFacts = {
   limits: string[];
   /** What the feed tells us, in operational terms. */
   tells: string;
+  /** How to name the feed in an answer. */
+  sayAs?: string;
+  /** Feeds that belong in the same answer (an archive and the live source it copies). */
+  related?: string[];
 };
 
 export const SOURCE_FACTS: Record<string, SourceFacts> = {
@@ -58,6 +62,8 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
       "a forecast is a deterministic stage path, not a probability; the feed gives no chance of flooding",
     ],
     tells: "the official river forecast and its flood category per site, and whether the gauge agrees with it; it does not say anything about carp, catch, access or safety",
+    sayAs: "NOAA's National Water Prediction Service (NWPS)",
+    related: ["iem"],
   },
   "nws-alerts": {
     feed: "nws-alerts",
@@ -109,7 +115,9 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
       "a third-party copy: when IEM and our own NWPS snapshot both hold an issuance, the snapshot is the record and IEM the backup",
       "archive rows are known from their issuance time, so a replay shows them as the RFC published them, not as we captured them",
     ],
-    tells: "what the river forecast said on a past day, so a replay or a forecast-versus-actual check can go back before our own snapshots",
+    tells: "what the river forecast said on a past day: it lets the timeline replay what was known then, and a forecast-versus-actual check go back before our own snapshots began",
+    sayAs: "Iowa State University's Iowa Environmental Mesonet (IEM) archive",
+    related: ["nwps"],
   },
   nwws: {
     feed: "nwws",

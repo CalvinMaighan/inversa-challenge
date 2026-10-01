@@ -23,7 +23,7 @@ import { commonTools } from "@/server/agent/tools/common";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
-import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, HOUR_MS, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
+import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
 import { localTime } from "@/server/agent/tools/shared";
 import {
@@ -94,11 +94,8 @@ function resolveWindow(
   ctx: CapabilityContext,
   defaultHours: number,
 ): { from: string; to: string } {
-  const to = input.to ? new Date(input.to) : ctx.now;
-  const hours = Math.min(input.hours ?? defaultHours, MAX_LOOKBACK_HOURS);
-  const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
-  if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
-  return { from: from.toISOString(), to: to.toISOString() };
+  const window = lookbackWindow(input, ctx.now, defaultHours, MAX_LOOKBACK_HOURS);
+  return { from: window.from, to: window.to };
 }
 
 const inBox = (bbox: BBox, lat: number, lon: number) =>
@@ -837,15 +834,16 @@ const setView = {
   async execute(input: z.infer<typeof setViewInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const presetName = given(input.preset);
     const preset = presetName ? (ctx.app.cameraPresets ?? []).find((p) => [p.id, p.name].map((s) => s.toLowerCase()).some((s) => s.includes(presetName.toLowerCase()) || presetName.toLowerCase().includes(p.id))) : undefined;
-    if (presetName && !preset) throw new Error(`no camera preset "${presetName}" (presets: ${(ctx.app.cameraPresets ?? []).map((p) => p.id).join(", ") || "none"})`);
     const siteName = given(input.site);
+    // An unknown preset next to a site ("preset: Simmesport, site: SMML1") is a site name: the site wins.
+    if (presetName && !preset && !siteName) throw new Error(`no camera preset "${presetName}" (presets: ${(ctx.app.cameraPresets ?? []).map((p) => p.id).join(", ") || "none"})`);
     // A site that is also the preset's name ("Atchafalaya") means the preset.
     const site = siteName && !(preset && preset.name.toLowerCase().includes(siteName.toLowerCase())) ? findSite(ctx.app, siteName) : null;
     if (siteName && !site && !preset) throw new Error(`"${siteName}" is not a configured location. ${ctx.app.agent.refusal}`);
     const bbox = resolveBbox(site ? siteBox(site) : preset ? presetBox(preset) : input.bbox, ctx);
-    const asOfText = given(input.asOf);
+    const asOfText = givenTime(input.asOf);
     const asOf = asOfText ? Date.parse(asOfText) : undefined;
-    const time = asOf !== undefined ? new Date(asOf).toISOString() : atTime(given(input.time), ctx);
+    const time = asOf !== undefined ? new Date(asOf).toISOString() : atTime(input.time, ctx);
     const replay = input.replay ?? asOf !== undefined;
     ctx.emit({
       type: "view",

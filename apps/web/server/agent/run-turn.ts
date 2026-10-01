@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { createUserMessage, type LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 
 import { recordTokens, tokenBudget } from "@/server/agent/budget";
@@ -9,7 +9,7 @@ import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
 import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
-import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
+import { agentSystemPrompt, questionHint, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
 import { scopeGuard } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
@@ -174,8 +174,9 @@ async function runTurnUnguarded(
   const registry = params.registry ?? buildAgentRegistry(app);
   const root = await bootHarness();
   const entry = harnessModel(root);
-  const endpoint = resolveAgentEndpoint(entry.model);
-  const context = viewContext(params.view, now, app);
+  const endpoint = resolveAgentEndpoint(entry.model, app.id);
+  const hint = questionHint(app, question);
+  const context = hint ? `${viewContext(params.view, now, app)}\n${hint}` : viewContext(params.view, now, app);
   const prior = transcript(history);
   emit({
     type: "context",
@@ -194,9 +195,10 @@ async function runTurnUnguarded(
   const deadline = AbortSignal.timeout(limits.maxRuntimeMs);
   const turnSignal = params.signal ? AbortSignal.any([params.signal, deadline]) : deadline;
 
-  // Reasoning effort is the adapter's per-model default (resolveModel).
+  // Reasoning effort follows the app's endpoint (resolveAgentEndpoint); the adapter reads it from the request.
   const ledger = new EvidenceLedger();
-  const agentOptions = { provider: entry.provider, model: endpoint.model, maxTokens: endpoint.maxTokens };
+  // The effort id is the adapter's own vocabulary (`openRouterEffort`), spelled the same as dsh-llm's branded id.
+  const agentOptions = { provider: entry.provider, model: endpoint.model, maxTokens: endpoint.maxTokens, reasoningEffort: endpoint.reasoningEffort as LlmCallConfig["reasoningEffort"] };
   let handle: Awaited<ReturnType<typeof root.agents.create>>;
   try {
     handle = await root.agents.create({

@@ -46,7 +46,10 @@ describe("eval trace", () => {
   test("eval trace: numbers in the answer are read without ids, dates, times and years", () => {
     const text = "At 2026-10-01T06:00:00Z (01:00 CDT, 1:00 am) KRZL1 read 1.65 ft (USGS 07381500), 15.5 h old; in 2026 the 3rd check at 10:32 found 8,110 cfs.";
     expect(extractNumbers(text).map((n) => n.raw)).toEqual(["1.65", "15.5", "8,110"]);
-    expect(extractNumbers("8.11 kcfs = 8110 cfs")[1]).toEqual({ value: 8110, decimals: 0, raw: "8110" });
+    // A whole number's trailing zeros are a rounding: 8110 matches 8105..8115, "21,200" matches 21187.
+    expect(extractNumbers("8.11 kcfs = 8110 cfs")[1]).toEqual({ value: 8110, decimals: -1, raw: "8110" });
+    expect(numbersTrace("about 21,200 cfs", [JSON.stringify({ mean24h: 21187 })]).ungrounded).toEqual([]);
+    expect(numbersTrace("about 21,300 cfs", [JSON.stringify({ mean24h: 21187 })]).ungrounded.map((n) => n.raw)).toEqual(["21,300"]);
   });
 
   test("eval trace: an invented number is rejected; a unit-converted one is accepted", () => {

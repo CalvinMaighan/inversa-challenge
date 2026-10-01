@@ -33,8 +33,11 @@ export const sourceInfo = {
   async execute(input: z.infer<typeof sourceInfoInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const configured = ctx.app.feeds.map((f) => f.source);
     const asked = given(input.feed)?.toLowerCase();
-    const wanted = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
-    if (asked && wanted.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
+    const direct = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
+    if (asked && direct.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
+    // An archive and the live source it copies belong in one answer: asking for one brings the other.
+    const known = new Set<string>(configured);
+    const wanted = !asked ? [...configured] : [...new Set(direct.flatMap((s) => [s, ...(SOURCE_FACTS[s]?.related ?? []).filter((r) => known.has(r))]))];
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeeds", "query AgentFeeds { feeds { ...FeedFields } }", {}, ctx);
     const feeds = feedsFor(data.feeds, wanted, []);
     const rows = wanted.map((source) => {
@@ -44,6 +47,8 @@ export const sourceInfo = {
       return {
         feed: source,
         cite: `[e:source:${source}]`,
+        sayAs: facts?.sayAs ?? config.name ?? source,
+        headline: `${facts?.sayAs ?? config.name ?? source} (publisher: ${facts?.publisher ?? "unknown"}; licence: ${facts?.licence ?? "not recorded"}; rate limit: ${facts?.rateLimit ?? "not published"}) [e:source:${source}]`,
         name: config.name ?? facts?.publisher ?? source,
         mode: config.mode,
         publisher: facts?.publisher ?? "unknown",
@@ -57,7 +62,17 @@ export const sourceInfo = {
         coverage: facts?.coverage ?? "not recorded",
         limits: facts?.limits ?? [],
         tells: facts?.tells ?? "",
-        health: state ? { state: state.state.toLowerCase(), newestObservedAt: state.newestObservedAt, lastFetchAt: state.lastFetchAt, note: state.note } : null,
+        health: state
+          ? {
+              state: state.state.toLowerCase(),
+              newestObservedAt: state.newestObservedAt,
+              newestAge: state.newestObservedAt ? `${Math.round(((ctx.now.getTime() - Date.parse(state.newestObservedAt)) / HOUR_MS) * 10) / 10} hours old` : null,
+              lastFetchAt: state.lastFetchAt,
+              lastFetchLocal: state.lastFetchAt ? localTime(ctx.app, state.lastFetchAt) : null,
+              lastFetchAge: state.lastFetchAt ? `${Math.round(((ctx.now.getTime() - Date.parse(state.lastFetchAt)) / HOUR_MS) * 10) / 10} hours old` : null,
+              note: state.note,
+            }
+          : null,
       };
     });
     const evidenceRows: Evidence[] = rows.map((row) => evidence("source", row.feed, `${row.feed} · ${row.publisher}`, row.feed));
@@ -84,7 +99,7 @@ export const sourceInfo = {
         {
           app: ctx.app.id,
           boundary,
-          note: "Facts are static (adapter documentation); health is the feed's current state. Cite each feed you describe with its cite marker, quote licence and rateLimit as written, and end with the freshnessLine.",
+          note: "Facts are static (adapter documentation); health is the feed's current state. Introduce each feed with its `headline`, copied verbatim (it names the publisher, licence and rate limit as written, with the marker); a related feed is included because the answer needs both; end with the freshnessLine.",
           freshnessLine,
           rows,
         },
@@ -138,6 +153,11 @@ export const evidenceTool = {
     const feeds = feedsFor(data.feeds, feedSource ? [feedSource] : [], []);
     const rawText = row.raw === null || row.raw === undefined ? null : JSON.stringify(row.raw);
     const evidenceRows: Evidence[] = [evidence(parsed.kind, parsed.key, `${row.kind} ${row.id}`, feedSource ?? undefined)];
+    // Ages at the reference time, so the answer need not compute them.
+    const record = (typeof row.record === "object" && row.record !== null ? row.record : {}) as Record<string, unknown>;
+    const stamp = (key: string) => (typeof record[key] === "string" && Number.isFinite(Date.parse(record[key] as string)) ? Date.parse(record[key] as string) : null);
+    const ageOf = (ms: number | null) => (ms === null ? null : `${Math.round(((ctx.now.getTime() - ms) / HOUR_MS) * 10) / 10} hours old`);
+    const ages = { issued: ageOf(stamp("issuedAt")), observed: ageOf(stamp("observedAt")), fetched: ageOf(row.fetchedAt && Number.isFinite(Date.parse(row.fetchedAt)) ? Date.parse(row.fetchedAt) : null) };
     return output(
       {
         id: row.id,
@@ -148,6 +168,9 @@ export const evidenceTool = {
         sourcePageUrl: row.sourcePageUrl,
         fetchedAt: row.fetchedAt,
         fetchedLocal: row.fetchedAt ? localTime(ctx.app, row.fetchedAt) : null,
+        issuedLocal: stamp("issuedAt") ? localTime(ctx.app, stamp("issuedAt")!) : null,
+        observedLocal: stamp("observedAt") ? localTime(ctx.app, stamp("observedAt")!) : null,
+        agesAtReference: ages,
         ingestLagSeconds: row.ingestLagSeconds,
         feed: feedSource,
         links: row.links,

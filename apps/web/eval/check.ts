@@ -40,7 +40,9 @@ export function extractNumbers(text: string): { value: number; decimals: number;
     const value = Number(raw.replace(/,/g, ""));
     if (!Number.isFinite(value)) continue;
     const dot = raw.indexOf(".");
-    out.push({ value, decimals: dot === -1 ? 0 : raw.length - dot - 1, raw });
+    // Trailing zeros of a whole number are a rounding ("21,200" for 21187), so they count as negative decimals.
+    const zeros = dot === -1 ? (/0+$/.exec(raw.replace(/,/g, ""))?.[0].length ?? 0) : 0;
+    out.push({ value, decimals: dot === -1 ? (Math.abs(value) >= 1000 ? -Math.min(zeros, 2) : 0) : raw.length - dot - 1, raw });
   }
   return out;
 }

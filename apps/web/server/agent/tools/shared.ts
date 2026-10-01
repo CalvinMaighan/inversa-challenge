@@ -17,9 +17,15 @@ export const HOUR_MS = 3_600_000;
  */
 export function given(value: string | undefined | null): string | undefined {
   if (value === undefined || value === null) return undefined;
-  const s = value.trim();
-  if (!s || /^[.*_\-?]+$/.test(s) || /^\.?(invalid|null|none|n\/a|undefined|any|all|default|\*)$/i.test(s)) return undefined;
+  const s = value.trim().replace(/^[*\s]+|[*\s]+$/g, "");
+  if (!s || /^[.*_\-?\d]{0,3}$/.test(s) || /^\.?(invalid|null|none|n\/a|undefined|any|all|default|not set|unset|unknown|tbd|placeholder|omit|skip|x\??)$/i.test(s)) return undefined;
   return s;
+}
+
+/** A time argument the model gave, or undefined for a placeholder or an unparsable value. */
+export function givenTime(value: string | undefined | null): string | undefined {
+  const s = given(value);
+  return s !== undefined && Number.isFinite(Date.parse(s)) ? s : undefined;
 }
 
 /** A list argument with the placeholders dropped; undefined when nothing is left. */
@@ -40,8 +46,8 @@ export const bboxSchema = z
 
 export const timeSchema = z
   .string()
-  // Models often send "" for an optional time they mean to leave out; treat it as not given.
-  .refine((value) => value === "" || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
+  // Models often send "" or a placeholder for an optional time they mean to leave out; those read as not given.
+  .refine((value) => given(value) === undefined || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
   .describe("ISO 8601 time, e.g. 2026-01-15T03:00:00Z");
 
 /** The asked-for (or viewed) area cut to the app's extent; outside it the tool refuses with the app's refusal text (P4). */
@@ -65,7 +71,28 @@ export function padBbox(app: AppConfig, bbox: BBox, deg: number): BBox {
 }
 
 export function atTime(input: string | undefined, ctx: CapabilityContext): string {
-  return (input ? new Date(input) : ctx.now).toISOString();
+  const at = givenTime(input);
+  return (at ? new Date(at) : ctx.now).toISOString();
+}
+
+/**
+ * A lookback window from `from`/`to`/`hours`: placeholders read as not given; a `from` equal to `to` (a model
+ * sending the same instant twice) or at or after the reference time falls back to the lookback so the call
+ * still answers; an explicit `from` after an explicit `to` is an error.
+ */
+export function lookbackWindow(input: { from?: string; to?: string; hours?: number }, now: Date, defaultHours: number, maxHours: number): { from: string; to: string; fromIgnored: boolean } {
+  const toText = givenTime(input.to);
+  const to = toText ? new Date(toText) : now;
+  const hours = Math.min(input.hours ?? defaultHours, maxHours);
+  const fromText = givenTime(input.from);
+  let from = fromText ? new Date(fromText) : new Date(to.getTime() - hours * HOUR_MS);
+  let fromIgnored = false;
+  if (from.getTime() >= to.getTime()) {
+    if (fromText && toText && from.getTime() > to.getTime()) throw new Error("time window is empty: from must be before to");
+    from = new Date(to.getTime() - hours * HOUR_MS);
+    fromIgnored = true;
+  }
+  return { from: from.toISOString(), to: to.toISOString(), fromIgnored };
 }
 
 /** Feeds this result depends on: the sources seen in rows, else the tool's defaults. */
