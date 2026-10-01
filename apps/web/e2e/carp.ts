@@ -366,7 +366,9 @@ async function main(): Promise<void> {
     const staleRows = await stalePage.page.$$eval("[data-carp-row]", (els) => els.map((el) => ({ status: el.getAttribute("data-status"), rules: [...el.querySelectorAll("li[data-rule]")].map((li) => li.getAttribute("data-rule")), text: (el as HTMLElement).innerText })));
     const staleRings = await stalePage.page.$$eval("[data-carp-site]", (els) => els.map((el) => el.getAttribute("data-freshness")));
     const staleMissing = await stalePage.page.locator('[data-testid="carp-missing"]').innerText();
-    const stale = check(staleRows.every((r) => r.rules.includes("stale_observation") && /stale after 6 h/.test(r.text)) && staleRings.every((f) => f === "stale") && /stale after 6 h/.test(staleMissing), `stale ${JSON.stringify(staleRows.map((r) => r.rules))} rings=${staleRings}`);
+    // The sentence is C5's ("observations older than 6 h are stale") or, without C5, the browser's ("stale after 6 h").
+    const saysStale = /stale after 6 h|older than 6 h are stale/;
+    const stale = check(staleRows.every((r) => r.rules.includes("stale_observation") && saysStale.test(r.text)) && staleRings.every((f) => f === "stale") && saysStale.test(staleMissing), `stale ${JSON.stringify(staleRows.map((r) => r.rules))} rings=${staleRings}`);
     const cannot = staleRows.filter((r) => r.status === "cannot_assess");
     const cannotAssess = check(cannot.length >= 1 && cannot.every((r) => /Cannot assess/i.test(r.text) && r.rules.length > 0), `cannot_assess ${cannot.length}`);
     await stalePage.context.close();

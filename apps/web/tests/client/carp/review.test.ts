@@ -5,7 +5,7 @@ import { state } from "client/state";
 import { APP } from "client/state/app";
 
 import { briefing, conflictText, flowAvailability } from "client/carp/briefing";
-import { fromC5, deriveReview, historyFromC5, reviewAt, sortBoard, type ReviewInput } from "client/carp/review";
+import { fromC5, deriveReview, historyFromC5, reviewAt, sortBoard, withThresholdsLater, type ReviewInput } from "client/carp/review";
 import { isUnknownField, loadC5Board, loadC5History, resetC5Probe } from "client/carp/data";
 import { usgsSeries } from "client/carp/model";
 import { GqlError } from "client/threads/api";
@@ -131,20 +131,25 @@ describe("C5 adapter", () => {
   test("status mapping against API rows: CANNOT_ASSESS is cannot_assess with its gaps, never review; REVIEW keeps its fired rules", () => {
     const blind = fromC5(cannotAssess("SMML1"), NOW, "FRESH")!;
     expect(blind).toMatchObject({ site: "SMML1", status: "cannot_assess", origin: "c5", freshness: "MISSING" });
+    // C5's rules 5 and 6 are named per input, as the board rows and the briefing key them.
     expect(blind.reasons.map((r) => [r.rule, r.kind])).toEqual([
-      ["missing_input", "gap"],
-      ["missing_input", "gap"],
+      ["missing_observation", "gap"],
+      ["missing_forecast", "gap"],
     ]);
     expect(blind.reasons[0]!.text).toBe("No NWPS stage observation known for this site at this time.");
+    const noThresholds = fromC5(apiRow("BXAL1", "CANNOT_ASSESS", [{ rule: "missing_input", valueText: "thresholds", explanation: "No NWPS flood thresholds known for this site at this time." }]), NOW, "FRESH")!;
+    expect(noThresholds.reasons[0]).toMatchObject({ rule: "no_thresholds", kind: "gap" });
+    expect(withThresholdsLater(noThresholds, false).reasons[0]!.text).toBe("No NWPS flood thresholds known for this site at this time.");
+    expect(withThresholdsLater(noThresholds, true).reasons[0]).toMatchObject({ value: "stored_later", text: expect.stringMatching(/first stored after this time/) });
     const fired = fromC5(apiRow("MCGL1", "REVIEW", [{ rule: "forecast_category", value: 4, threshold: 4, unit: "ft", issuedAt: "2026-09-30T15:32:00Z", explanation: "Forecast peak reaches action stage." }, { rule: "stale_input", valueText: "observation", explanation: "Newest NWPS observation is 7.0 h old; observations older than 6 h are stale and dropped from review scoring." }], { observationFreshness: "STALE" }), NOW, "FRESH")!;
     expect(fired).toMatchObject({ status: "review", freshness: "STALE" });
     expect(fired.reasons.map((r) => [r.rule, r.kind])).toEqual([
       ["forecast_category", "review"],
-      ["stale_input", "gap"],
+      ["stale_observation", "gap"],
     ]);
     expect(fromC5(apiRow("BTRL1", "OK", [], { observationFreshness: "AGING" }), NOW, "FRESH")).toMatchObject({ status: "ok", reasons: [], freshness: "AGING" });
     // A row without the freshness field reads it from the gaps.
-    expect(fromC5({ site: "KRZL1", status: "CANNOT_ASSESS", reasons: [{ rule: "stale_input", explanation: "Newest NWPS observation is stale." }] }, NOW, "FRESH")!.freshness).toBe("STALE");
+    expect(fromC5({ site: "KRZL1", status: "CANNOT_ASSESS", reasons: [{ rule: "stale_input", valueText: "observation", explanation: "Newest NWPS observation is stale." }] }, NOW, "FRESH")!.freshness).toBe("STALE");
   });
 
   test("reviewBoard answers an object with `sites`: every row maps, so markers never fall back to a derivation that says review", async () => {
@@ -178,7 +183,7 @@ describe("C5 adapter", () => {
     expect(reviewAt(h, t0)).toMatchObject({ status: "cannot_assess", freshness: "MISSING", asOfMs: t0 });
     expect(reviewAt(h, t0 + 9 * H)).toMatchObject({ status: "cannot_assess" });
     expect(reviewAt(h, t0 + 10 * H)).toMatchObject({ status: "ok", reasons: [], freshness: "FRESH" });
-    expect(reviewAt(h, t0 + 31 * H)).toMatchObject({ status: "review", reasons: [{ rule: "stage_rise", kind: "review", text: "Stage rose 1.30 ft in 24 h." }] });
+    expect(reviewAt(h, t0 + 31 * H)).toMatchObject({ status: "review", reasons: [{ rule: "stage_change", kind: "review", text: "Stage rose 1.30 ft in 24 h." }] });
     expect(reviewAt(h, NOW + 1)).toBeNull();
 
     // The loader asks for a few sites per document and keys the histories by site.

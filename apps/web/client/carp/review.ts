@@ -210,6 +210,17 @@ const val = (v: unknown) => (typeof v === "number" || typeof v === "string" ? v 
 const FRESHNESS = new Set<Freshness>(["FRESH", "AGING", "STALE", "MISSING"]);
 /** C5's rules 5 and 6 (`stale_input`, `missing_input`) name an input that could not be used; the others put a site in review. */
 const GAP_RULES = new Set(["stale_input", "missing_input"]);
+/** C5's rule ids in this module's per-input vocabulary (the ids the board rows, the briefing and the e2e checks key on). */
+const RULE_IDS: Record<string, string> = { stage_rise: "stage_change", active_alert: "nws_alerts", rapid_change_forecast: "forecast_drift" };
+const INPUT_IDS: Record<string, Record<string, string>> = {
+  stale_input: { observation: "stale_observation", forecast: "stale_forecast" },
+  missing_input: { observation: "missing_observation", forecast: "missing_forecast", thresholds: "no_thresholds", baseline: "missing_baseline" },
+};
+
+/** A C5 rule id (with the input it names, `valueText`) as this module names it: rules 5 and 6 per input. */
+export function clientRuleId(rule: string, input: string | null): string {
+  return INPUT_IDS[rule]?.[input ?? ""] ?? RULE_IDS[rule] ?? rule;
+}
 
 /** C5's `ReviewReason` rows (fired reasons: `explanation` is the sentence) in this module's shape. */
 function reasonsFromC5(list: unknown, status: string): ReviewReason[] {
@@ -219,7 +230,8 @@ function reasonsFromC5(list: unknown, status: string): ReviewReason[] {
     .flatMap((x) => {
       const text = str(x.explanation) ?? str(x.text);
       if (!text) return [];
-      const rule = str(x.rule) ?? "rule";
+      const c5Rule = str(x.rule) ?? "rule";
+      const rule = clientRuleId(c5Rule, str(x.valueText));
       const fired = typeof x.outcome !== "string" || x.outcome.toUpperCase() === "FIRED";
       return [
         {
@@ -231,7 +243,7 @@ function reasonsFromC5(list: unknown, status: string): ReviewReason[] {
           issuedAt: str(x.issuedAt),
           link: str(x.link),
           text,
-          kind: GAP_RULES.has(rule) ? ("gap" as const) : fired && status === "review" ? ("review" as const) : ("info" as const),
+          kind: GAP_RULES.has(c5Rule) ? ("gap" as const) : fired && status === "review" ? ("review" as const) : ("info" as const),
         },
       ];
     });
@@ -240,10 +252,19 @@ function reasonsFromC5(list: unknown, status: string): ReviewReason[] {
 /** The freshness of a review's observation input from its reasons: rule 6 on the observation = missing, rule 5 = stale. */
 function freshnessFromReasons(reasons: readonly ReviewReason[], fallback: Freshness): Freshness {
   for (const r of reasons) {
-    if (r.rule === "missing_input" && /observation/i.test(r.text)) return "MISSING";
-    if (r.rule === "stale_input" && /observation/i.test(r.text)) return "STALE";
+    if (r.rule === "missing_observation") return "MISSING";
+    if (r.rule === "stale_observation") return "STALE";
   }
   return fallback;
+}
+
+/**
+ * A past review whose thresholds were missing then but are held now: the row says they were stored after that
+ * time (what C5's sentence cannot know; the board holds today's thresholds).
+ */
+export function withThresholdsLater(review: SiteReview, later: boolean): SiteReview {
+  if (!later || !review.reasons.some((r) => r.rule === "no_thresholds")) return review;
+  return { ...review, reasons: review.reasons.map((r) => (r.rule === "no_thresholds" ? { ...r, value: "stored_later", text: noThresholdsText(true) } : r)) };
 }
 
 /**

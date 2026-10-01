@@ -7,8 +7,8 @@ import { CARP, type CarpState } from "client/state/carp";
 import type { AppConfig } from "shared/apps";
 
 import { boardInputs, loadBoard, loadC5Board, loadC5History, loadSiteHistory, loadSiteReadings, loadSiteStatusAt, loadVerifyMany, type BoardData, type SiteAt, type SiteHistory, type SiteStatusAt } from "./data";
-import { forecastAsOf, HOUR, isRiverForecast, type Site, type VerifyPoint } from "./model";
-import { deriveReview, reviewAt, type ReviewHistory, type SiteReview } from "./review";
+import { forecastAsOf, HOUR, isRiverForecast, thresholdList, type Site, type VerifyPoint } from "./model";
+import { deriveReview, reviewAt, withThresholdsLater, type ReviewHistory, type SiteReview } from "./review";
 
 /** The carp view state (site, asOf, replay). */
 export function useCarp(): CarpState {
@@ -112,7 +112,11 @@ export function useBoard(app: AppConfig, sites: readonly Site[], asOfMs: number 
   if (isLive) return { asOfMs: live?.nowMs ?? null, data: live?.data ?? null, reviews: live?.reviews ?? {}, loading: live === null, error };
   if (covered && history) {
     const reviews: Record<string, SiteReview> = {};
-    for (const site of sites) reviews[site.lid] = reviewAt(history.byLid[site.lid]!, asOfMs)!;
+    for (const site of sites) {
+      // Thresholds the API first stored after the as-of time: held now (the live board), missing then.
+      const heldNow = thresholdList(live?.data?.sites[site.lid]?.status?.thresholds).length > 0;
+      reviews[site.lid] = withThresholdsLater(reviewAt(history.byLid[site.lid]!, asOfMs)!, heldNow);
+    }
     return { asOfMs, data: live?.data ?? null, reviews, loading: false, error };
   }
   const ready = derived && derived.asOfMs === asOfMs;
