@@ -1,5 +1,7 @@
 # Gates: T44 every species is a first-class sighting (fable)
 
+> Superseded by leaf K1 (gates/leaf-K1.md G3, 2026-10-01): every app tracks only its own species, so T44's machinery is removed: taxon-info enrichment (`taxon_info.rs`, `/media/taxon`), the top-introduced-animals bar, the category popover and icons, the 2/7/30-day window selector. `e2e:speciescard` and `e2e/species-count.ts` are deleted; the `SPECIESCARD`, `SPECIESBAR` and `ICONS` checks below are history and no longer run. The single-species chip is checked by `e2e:species` (`SPECIES off=0 on=<m> counts=ok drawer=1`).
+
 Scope:
 - Grey "other" dots become real species. Every sighting shows its common and scientific name, photo, and a short plain "About this species" (native range, why it's a problem) from iNaturalist taxa data, fetched server-side and cached.
 - The species bar becomes the top introduced animals in the current window (by count), with Inversa's focus species pinned. Plants and insects sit behind their own chips, off by default.

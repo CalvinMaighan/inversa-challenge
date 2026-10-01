@@ -1,5 +1,7 @@
 # Gates: T41 dramatic simplification, sightings first (opus)
 
+> Superseded in part by leaf K1 (gates/leaf-K1.md G3, 2026-10-01): the python app tracks the Burmese python only, so the multi-species bar, the iguana chip and the Other chip are gone. `e2e:species` was rewritten to the single python chip and now prints `SPECIES off=0 on=<m> counts=ok drawer=1`; G3's CHECK and EXPECT below (`iguana_only=`) are history and no longer run.
+
 Scope:
 - The top bar becomes the title, a LIVE/REPLAY badge, and one status icon button whose popover holds feed health, theme, focus mode and help. (Sharpened at user review, below: no title or badge either; two icon buttons, About and Theme; LIVE/REPLAY is the timeline's Live button.)
 - Default layers are sightings and alerts only. Stations, hotspots and LST/SST are off by default, but stay one tap away in Layers. (Sharpened at user review, below: alerts are off too and show only when the agent cites them; Layers lives in About under "More data (for experts)".)
