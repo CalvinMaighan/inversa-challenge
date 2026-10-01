@@ -107,7 +107,7 @@ export function normalizeFeedState(raw: unknown): FeedState | null {
   if (typeof r.source !== "string" || !r.source) return null;
   const mode = String(r.mode ?? "").toLowerCase();
   const state = String(r.state ?? "").toLowerCase() as FeedHealth;
-  if ((mode !== "push" && mode !== "poll") || !HEALTH.has(state)) return null;
+  if ((mode !== "push" && mode !== "webhook" && mode !== "poll") || !HEALTH.has(state)) return null;
   const str = (v: unknown) => (typeof v === "string" ? v : null);
   return {
     source: r.source,

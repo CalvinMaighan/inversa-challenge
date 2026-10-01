@@ -12,6 +12,7 @@ export const PUBLISHERS: Readonly<Record<string, string>> = {
   "waterdata.usgs.gov": "USGS Water Data",
   "www.ndbc.noaa.gov": "NOAA NDBC",
   "pae-paha.pacioos.hawaii.edu": "NOAA Coral Reef Watch (PacIOOS ERDDAP)",
+  "water.noaa.gov": "NOAA National Water Prediction Service",
   "tidesandcurrents.noaa.gov": "NOAA Tides & Currents",
   "api.weather.gov": "NWS",
   "mesonet.agron.iastate.edu": "IEM VTEC browser",

@@ -40,6 +40,7 @@ pub const PUBLISHERS: &[(&str, &str)] = &[
     ("api.weather.gov", "NWS"),
     ("mesonet.agron.iastate.edu", "IEM VTEC browser"),
     ("pae-paha.pacioos.hawaii.edu", "NOAA Coral Reef Watch (PacIOOS ERDDAP)"),
+    ("water.noaa.gov", "NOAA National Water Prediction Service"),
 ];
 
 /// DOI CRW asks users to cite for the CoralTemp v3.1 5 km product suite (Skirving et al. 2020,
@@ -620,6 +621,7 @@ mod tests {
             ("nws", vtec),
             ("nws", cap),
             ("crw", looe_key),
+            ("nwps", "SMML1".to_string()),
         ]
         .into_iter()
         .map(|(source, ext)| {
@@ -751,7 +753,7 @@ mod tests {
     #[test]
     fn source_page_url_hosts_allowlisted() {
         let links = fixture_links();
-        assert_eq!(links.len(), 10);
+        assert_eq!(links.len(), 11);
         let mut hosts = std::collections::BTreeSet::new();
         for (source, ext, url) in &links {
             assert!(url.starts_with("https://"), "{source} {ext}: {url}");

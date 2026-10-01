@@ -1666,9 +1666,7 @@ mod tests {
         assert!(ev.raw.as_ref().is_some_and(|raw| raw.get("forecast").is_some()), "the stageflow body");
         assert!(ev.links.iter().any(|l| l.relation == "fetch"), "{:?}", ev.links);
         assert_eq!(ev.feed.as_ref().map(|f| f.source.as_str()), Some("nwps"));
-        // ponytail: water.noaa.gov is not on the PUBLISHERS allowlist (mirrored by the web app), so
-        // no gauge page link leaves `source_page_url` yet; add it on both sides to link NWPS pages.
-        assert_eq!(ev.source_page_url, None);
+        assert_eq!(ev.source_page_url.as_deref(), Some("https://water.noaa.gov/gauges/SMML1"));
         // Lower-case lids resolve too.
         resolves(&state, &format!("forecast:smml1:{issued}")).await;
         // The IEM archive issuance: provenance and its neighbours.

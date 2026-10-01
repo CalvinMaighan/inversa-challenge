@@ -4,7 +4,7 @@ export type FeedHealth = "nominal" | "lagging" | "stale" | "down";
 
 export type FeedState = {
   source: string;
-  mode: "push" | "poll";
+  mode: "push" | "webhook" | "poll";
   state: FeedHealth;
   newestObservedAt: string | null;
   lastFetchAt: string | null;
