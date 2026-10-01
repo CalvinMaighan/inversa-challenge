@@ -261,7 +261,7 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 
 - UI default is "sightings first":
   - Sightings and alerts are on by default. Stations, hotspots and LST/SST are off by default but stay one tap away in Layers.
-  - A species filter bar on the globe toggles python/tegu/iguana/lionfish/other with counts.
+  - Species bar (T44): the four focus species pinned, then the top introduced animals in the window, then an Other chip that opens a categories popover (snakes, lizards, turtles, crocodilians, frogs, birds, mammals, fish, snails, insects, spiders, plants, other; categories from iNat ancestry). Every marker is a category SVG icon in its label colour. The window is 2/7/30 days, default 7.
   - The top bar collapses to the title, the LIVE/REPLAY badge, and one status icon button whose popover holds feeds, theme, focus and help.
 
 ## Tree
@@ -318,3 +318,33 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T27/T28 (branch): leaf-T27 3/3, leaf-T28 2/2; the voice and GOES-push rows of docs/perf.md are ABANDON (H6, H4). `e2e_quality_cases` seeds the 5 cases through fixtures, the signed hook and the real NDBC poller against a dead upstream. Live eval 5/5 quality and 15/15 four runs in a row (`feedSummary.mention` with cite markers; late records named). UI: `ENV_FLAGGED` frame sentinel (flagged pixels hatched, never filled from a neighbour), drawer quality badges and feed note, chips open their last fetch run; `bun run e2e:quality` writes 11 shots to docs/evidence/quality/. Perf: scrub 7.7 ms, cached 0.3 ms, first token p50 1.0 s, local edit 0.6 ms (same frame 20/20, `overlayOps`), RTC 12 ms, WS 82 ms, poll 8/8 (first retry within 2 min), idle 0, cold first globe frame 1.7 s (Cesium `preloadModule`). `e2e:team` runs on the shared stack. CONTRACT-REQUEST: C2 `Sighting.ingestedAt: Time!`; C4 `ENV_FLAGGED = -32767`. Web 590 tests, api 207.
 - T27/T28 merged with main (T38, T40–T43); both contract requests accepted. Quality flags in plain words under T41's evidence summary (technical badges under "Details for experts"); About popover feed rows open their last fetch run; `overlayOps` covers field notes (write after delete stays deleted) and feeds NOTES pins; `e2e:team` on the shared stack, `E2E_TEAM_STACK=dev` for dev-stack.ts. Prompt: the 48 h globe window only for questions about what the globe shows (it had narrowed "tegu reports near Homestead"); sightings results list `lateRecords`. Merged tree: leaf-T27 3/3, leaf-T28 2/2, live eval 5/5 + 15/15 four in a row, QUALITY 5 cases, FIRSTLOAD/CHROME/ATTRIBUTION, SPECIES, EXTERNAL-LINKS 30/30, LAYOUT, AXE 0/0 + KEYBOARD-OK, NOTES, TEAM (both stacks), SCRUB 9.05 ms, IDLE 0, DBWORKER 0.2 ms, first token p50 1.1 s. Web 678 tests, api 219, clippy clean.
 - T27/T28 merged (quality 5 cases, eval 15/15 x4, perf table). Web 678, API 219.
+
+## Pivot: Lionfish Watch (2026-10-01)
+
+Spec: `docs/LIONFISH_WATCH.md`. Brief: `docs/TASK_BRIEF.md`. Lionfish only, four areas (Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean). Species is a config unit so a python dashboard can reuse the UI later. Gates files: `gates/leaf-L*.md`. Existing T1–T44 gates describing python/Everglades behaviour are superseded where a pivot leaf says so.
+
+### Pivot contract
+
+- **P1 species config:** one `SpeciesConfig` (id, taxa, areas, feeds, score components and weights, rules, agent persona, helper questions, eval set, copy) selected by `INVERSA_SPECIES` (default `lionfish`). No lionfish literal outside config.
+- **P2 areas:** four named bboxes from L1's `docs/evidence/data-proof.md`; ids `fl-keys`, `mx-caribbean`, `belize`, `co-caribbean`.
+- **P3 honesty:** score shows components separately (recent reports, ID quality, heat stress, completeness); no single risk percent; sightings are not abundance; heat stress is context.
+- **P4 scope guard:** data, tools and agent answers outside the four areas or the enabled species are refused with the area names.
+
+### Leaves
+
+| Leaf | Owns | Depends |
+|---|---|---|
+| L1 data proof | `scripts/probe-lionfish.ts`, `docs/evidence/data-proof.md` | none |
+| L2 species config + area scope | `api/src/model.rs`, `api/src/config*`, `apps/web/shared/**` config | L1 |
+| L3 NOAA CRW adapter | `api/src/ingest/poll/crw.rs`, `api/fixtures/crw/**` | L1 |
+| L4 marine + buoys + backfill (4 areas) | `openmeteo.rs`, `ndbc.rs`, `inat.rs`, `gbif.rs`, `nas.rs`, `api/src/backfill.rs` | L1, L2 |
+| L5 priority score | `api/src/hotspot/**` | L2, L3 |
+| L6 UI: branding, presets, evidence card | `apps/web/client/**` | L2, L5 |
+| L7 agent + benchmark | `apps/web/server/agent/**`, `apps/web/eval/**` | L2–L5 |
+| L8 docs | `docs/**`, `README.md` | all |
+| L9 integration, redeploy, verify | all | all |
+
+### Status log
+
+- L1 merged 6/6 (driver re-ran gate-check). bz/co thin, NAS is global, CRW via ERDDAP. See docs/LIONFISH_WATCH.md.
+- T44 merged 12/12 (taxon cards, 7d window, categories popover, SVG icons). API 225, web 692, clippy clean.
