@@ -6,6 +6,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "created before the final tuning runs: paraphrases of documented questions (paraphraseOf) and new questions across the ten categories; not edited after seeing results."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "ph-replay-month: the span phrase took only \"30 days\" or \"month\"; \"30-day\" names the same span, so the pattern now takes that spelling too (1 pattern; the same spelling fix the main set got)."
     }
   ],
   "questions": [
@@ -736,7 +741,7 @@
         "feedState": true,
         "minCitations": 1,
         "phrases": [
-          "(30 days|month)",
+          "(30[- ]days?|month)",
           "report|sighting"
         ]
       },

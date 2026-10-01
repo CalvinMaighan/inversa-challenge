@@ -370,7 +370,10 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     const ids = (known.data.rows as any[]).map((r) => r.evidenceId);
     expect(ids).toContain("sighting:9001");
     expect(ids).not.toContain("sighting:9003");
-    expect(String(known.data.knownAtNote)).toMatch(/later arrivals are left out/);
+    expect(String(known.data.knownAtNote)).toMatch(/later arrivals are listed under sinceThen/);
+    // The GBIF copy reached the feed on 2026-09-10: it is what arrived after the knowledge time.
+    expect((known.data.sinceThen as { arrivedAfter: number; rows: { evidenceId: string }[] }).arrivedAfter).toBe(1);
+    expect((known.data.sinceThen as { rows: { evidenceId: string }[] }).rows.map((r) => r.evidenceId)).toEqual(["sighting:9003"]);
   });
 
   test("lionfish tool: conditions compares buoys with GOES-19 SST in Florida and says no buoy exists in the other areas, with feed-tagged reading evidence", async () => {

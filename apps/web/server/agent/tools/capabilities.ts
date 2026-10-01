@@ -302,7 +302,21 @@ const sightings = {
         window,
         windowWords: endsNow ? `last ${days} days` : `${window.from.slice(0, 10)} to ${window.to.slice(0, 10)}`,
         dateField: bySubmitted ? "submitted (the window counts by the date each record reached the feed; observed dates can be much older)" : "observed (the window counts by the date the animal was seen; submittedAt says when the record reached the feed)",
-        ...(knownAt ? { knownAt, knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are left out` } : {}),
+        ...(knownAt
+          ? {
+              knownAt,
+              knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are listed under sinceThen`,
+              // What arrived after the knowledge time, so the "Since then" sentence needs no second call.
+              sinceThen: (() => {
+                const later = data.sightings.filter((row) => row.ingestedAt && Date.parse(row.ingestedAt) > Date.parse(knownAt) && Date.parse(row.observedAt) >= Date.parse(asked.from) - widenHours * HOUR_MS);
+                return {
+                  arrivedAfter: later.length,
+                  note: later.length ? `Since then ${later.length} more report${later.length === 1 ? "" : "s"} arrived: say "Since then" and cite them.` : "Since then no further report has arrived: say so.",
+                  rows: later.slice(0, 10).map((row) => ({ evidenceId: `sighting:${row.id}`, cite: `[e:sighting:${row.id}]`, source: row.source, observedAt: row.observedAt, submittedAt: row.ingestedAt, quality: lower(row.quality) })),
+                };
+              })(),
+            }
+          : {}),
         ...(ctx.app.copy.sightingsNote ? { sightingsNote: ctx.app.copy.sightingsNote } : {}),
         ...(widened
           ? {
@@ -615,14 +629,16 @@ const conditions = {
     const fallback = [...new Set((input.params ?? PARAMS).flatMap((param) => PARAM_SOURCES[param]))];
     // A multi-area app says where in-situ stations exist at all, so a satellite value cannot be checked elsewhere.
     const measuredIn = new Set(readings.filter((row) => lower(row.origin) === "measured").map((row) => regionAt(ctx.app, row.station.lat, row.station.lon)?.id));
-    const withMeasured = ctx.app.regions.filter((r) => measuredIn.has(r.id)).map((r) => r.name);
-    const withoutMeasured = ctx.app.regions.filter((r) => !measuredIn.has(r.id)).map((r) => r.name);
+    // Only the areas this call looked at: a Belize-only call says nothing about Florida's buoys.
+    const looked = ctx.app.regions.filter((r) => r.bbox.west < around.east && around.west < r.bbox.east && r.bbox.south < around.north && around.south < r.bbox.north);
+    const withMeasured = looked.filter((r) => measuredIn.has(r.id)).map((r) => r.name);
+    const withoutMeasured = looked.filter((r) => !measuredIn.has(r.id)).map((r) => r.name);
     const coverage =
       ctx.app.regions.length > 1
         ? {
             withMeasuredStations: withMeasured,
             withoutMeasuredStations: withoutMeasured,
-            note: `Measured (in-situ) buoys or tide stations exist only in: ${withMeasured.join(", ") || "none of the areas"}. No buoys in: ${withoutMeasured.join(", ") || "none"}, so satellite values stand alone there and cannot be checked against a measurement. Say this in those words.`,
+            note: `${withMeasured.length ? `Measured (in-situ) buoys or tide stations exist only in: ${withMeasured.join(", ")}. ` : ""}${withoutMeasured.length ? `No sea-temperature buoys in ${withoutMeasured.join(", ")}, so satellite values stand alone there and cannot be checked against a measurement. ` : ""}Say this in those words.`,
           }
         : null;
     const feeds = feedsFor(data.feeds, seenSources, fallback);

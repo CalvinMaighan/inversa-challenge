@@ -182,6 +182,8 @@ export const evidenceTool = {
         issuedLocal: stamp("issuedAt") ? localTime(ctx.app, stamp("issuedAt")!) : null,
         observedLocal: stamp("observedAt") ? localTime(ctx.app, stamp("observedAt")!) : null,
         agesAtReference: ages,
+        // The dates in words, so an answer about a record says observed, submitted and fetched with their times.
+        datesLine: [stamp("observedAt") ? `observed ${localTime(ctx.app, stamp("observedAt")!)}` : null, stamp("ingestedAt") ? `submitted (stored) ${localTime(ctx.app, stamp("ingestedAt")!)}` : null, stamp("issuedAt") ? `issued ${localTime(ctx.app, stamp("issuedAt")!)}` : null, row.fetchedAt && Number.isFinite(Date.parse(row.fetchedAt)) ? `fetched ${localTime(ctx.app, row.fetchedAt)}` : null].filter(Boolean).join("; "),
         ingestLagSeconds: row.ingestLagSeconds,
         feed: feedSource,
         links: row.links,
