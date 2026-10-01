@@ -110,7 +110,7 @@ Hover a sighting to see the species first, then how sure the ID is, for example 
 
 | Where | Control | What it does |
 |---|---|---|
-| Map | Species chips | Top left: Python, Tegu, Iguana and Lionfish pinned first (dimmed at 0), then the six animals seen most in the window, each with its colour and count, then Plants and Insects & others, off until switched on. Hover a chip for a one-line description. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. The globe, the legend, the timeline line and the agent's view all follow it. |
+| Map | Species chips | Top left: Python, Tegu, Iguana and Lionfish pinned first (dimmed at 0), then the six animals seen most in the window (three on a phone), each with its colour and count, then Plants and Insects & others, off until switched on. Hover a chip for a one-line description. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. The globe, the legend, the timeline line and the agent's view all follow it. |
 | Map | Sightings window | Next to the chips: last 2, 7 or 30 days (7 days to start). The agent's view follows it. |
 | Map | Sighting dots | One per animal reported in the window, in its species' colour, brightest when newest. Hover for the species and the ID's grade; click to open the record. |
 | Map | Evidence card | A plain summary (what, where, when, how sure), the species' Latin name and a line about it, the photo, the species' iNaturalist page and the publisher link, with the raw record under Details for experts. |

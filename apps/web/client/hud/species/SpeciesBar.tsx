@@ -34,8 +34,9 @@ export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, NEUTRA
 const [SIGHTINGS] = LAYER_IDS;
 /** A touch held this long shows only that species. */
 const LONG_PRESS_MS = 500;
-/** Non-focus animal chips in the bar: the most-seen taxa of the window. */
+/** Non-focus animal chips in the bar: the most-seen taxa of the window. A phone shows the first MOBILE_ANIMAL_CHIPS of them. */
 export const TOP_ANIMAL_CHIPS = 6;
+export const MOBILE_ANIMAL_CHIPS = 3;
 
 const Bar = styled(Surface)`
   display: flex;
@@ -56,6 +57,13 @@ const Bar = styled(Surface)`
 const Slot = styled.span`
   position: relative;
   display: inline-flex;
+
+  /* A phone keeps the bar to two rows: the focus four, the top three other animals and the groups. */
+  ${MOBILE} {
+    &[data-extra] {
+      display: none;
+    }
+  }
 
   /* The plain one-line description: on hover, keyboard focus and a held touch. */
   [role="tooltip"] {
@@ -194,6 +202,8 @@ export type ChipModel = {
   color: string;
   on: boolean;
   count: number | null;
+  /** Rank among the non-focus animal chips (0 = most seen); absent on focus and group chips. */
+  rank?: number;
 };
 
 /** First sentence of a taxon summary, for the chip's one-line description. */
@@ -227,10 +237,11 @@ export function speciesChips(filter: LayersState["species"], taxa: Readonly<Reco
     if (group === "animals" && n > 0) animals.push({ id, n, info });
   }
   animals.sort((a, b) => b.n - a.n || a.id - b.id);
-  for (const { id, n, info } of animals.slice(0, TOP_ANIMAL_CHIPS)) {
+  for (const [rank, { id, n, info }] of animals.slice(0, TOP_ANIMAL_CHIPS).entries()) {
     const name = taxonName(info, `Species ${id}`);
     chips.push({
       key: `t${id}`,
+      rank,
       target: { kind: "taxon", id },
       name,
       full: name,
@@ -278,7 +289,7 @@ function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
   };
   const seen = `${formatCount(chip.count)} seen in the last ${windowLabel(hours)}.`;
   return (
-    <Slot data-pressing={pressing ? "" : undefined}>
+    <Slot data-pressing={pressing ? "" : undefined} data-extra={chip.rank !== undefined && chip.rank >= MOBILE_ANIMAL_CHIPS ? "" : undefined}>
       <Chip
         type="button"
         $color={chip.color}

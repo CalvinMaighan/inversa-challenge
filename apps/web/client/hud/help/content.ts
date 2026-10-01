@@ -30,7 +30,7 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "species",
     group: "Map",
     control: "Species chips",
-    what: `Top left. Python, tegu, iguana and lionfish first, then the animals seen most in the window, each with its colour and count; Plants and Insects & others are off until you switch them on. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back.`,
+    what: `Top left. Python, tegu, iguana and lionfish first, then the six animals seen most in the window (three on a phone), each with its colour and count; Plants and Insects & others are off until you switch them on. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back.`,
   },
   {
     id: "window",

@@ -88,7 +88,8 @@ describe("taxa store (T44)", () => {
     expect(chips.map((c) => c.key)).toEqual(["python", "tegu", "iguana", "lionfish", "t10", "t11", "t14", "t15", "t16", "t17", "plants", "others"]);
     expect(TOP_ANIMAL_CHIPS).toBe(6);
     expect(chips.slice(0, 4).map((c) => c.count)).toEqual([0, 0, 5, 0]);
-    expect(chips[4]).toMatchObject({ name: "Brown anole", line: "The brown anole is a lizard.", color: colorOfTaxon(10), on: true, count: 40, target: { kind: "taxon", id: 10 } });
+    expect(chips[4]).toMatchObject({ name: "Brown anole", line: "The brown anole is a lizard.", color: colorOfTaxon(10), on: true, count: 40, target: { kind: "taxon", id: 10 }, rank: 0 });
+    expect(chips.map((c) => c.rank)).toEqual([undefined, undefined, undefined, undefined, 0, 1, 2, 3, 4, 5, undefined, undefined]);
     expect(chips[5]!.line).toBe("Genus species11, an introduced species");
     // Group chips: totals over every taxon of the group (not only the chips), neutral while off. 20 is unknown: an animal.
     expect(chips.find((c) => c.key === "plants")).toMatchObject({ name: "Plants", count: 300, on: false, color: NEUTRAL_COLOR });
