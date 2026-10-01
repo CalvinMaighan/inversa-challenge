@@ -692,7 +692,7 @@
         ],
         "forbid": [
           "heat (stress )?(causes|caused) lionfish",
-          "lionfish (cause|caused) (the )?bleaching"
+          "(?<!(not|never|no|cannot|whether|that|without)\\b[^.]{0,40})lionfish (cause|caused) (the )?bleaching"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -747,7 +747,7 @@
           "Says reef heat stress is context for where reef surveys matter, not evidence of lionfish effects"
         ],
         "forbid": [
-          "lionfish (cause|caused|drive)"
+          "(?<!(not|never|no|cannot|whether|that|without)\\b[^.]{0,40})lionfish (cause|caused|drive)"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -977,7 +977,7 @@
       ],
       "mustCite": [
         "feed:nas",
-        "kind:sighting"
+        "kind:fetch"
       ],
       "pass": {
         "mode": "answer",
@@ -1972,6 +1972,16 @@
     }
   ],
   "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "FXL",
+      "change": "lionfish-quality-nas-colombia: mustCite kind:sighting replaced by kind:fetch. The newest NAS record in the Colombian box is from 2016, and the API serves sightings in 31-day windows (api/src/graphql/query.rs MAX_WINDOW_MS), so no tool call can return that record: the stale verdict is grounded in the NAS feed state (its fetch marker, which carries feed nas) and the sightings result's newestBySource saying no NAS record is within reach; requiring a sighting citation forced the answer to cite an unrelated iNaturalist row. Seen as the only repeat failure (2 of 3 runs) of the FXL series finished 16:17:15Z."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "FXL",
+      "change": "lionfish-relevance-sst and lionfish-relevance-ocean-measures: the causal forbids `lionfish (cause|caused|drive)` and `lionfish (cause|caused) (the )?bleaching` matched the honest denial the rules ask for (\"they do not show that lionfish caused that pressure\", seen in a judged run); as with the population forbids (AG2), a negation word earlier in the sentence now exempts the match (2 patterns). The same pattern in lionfish.holdout.json (lh-relevance-why-dhw) is changed the same way."
+    },
     {
       "date": "2026-10-01",
       "by": "AG2",

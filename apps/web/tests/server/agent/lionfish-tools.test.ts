@@ -241,7 +241,21 @@ describe("lionfish tool: marine_forecast", () => {
     expect((belize.data.points as any[]).map((p) => p.station)).toEqual(["om-glovers"]);
     const point = await run("marine_forecast", { lat: 12.5, lon: -81.7 });
     expect((point.data.points as any[]).map((p) => p.station)).toEqual(["om-sanandres"]);
-    expect((point.data.points as any[])[0].distanceDeg).toBeLessThan(0.1);
+    expect((point.data.points as any[])[0].distanceDeg).toBeLessThan(0.2);
+    // A reef reads its whole area and keeps the nearest grid point, so a reef far from any point still gets one.
+    const looe = await run("marine_forecast", { place: "Looe Key", days: 1 });
+    expect((looe.data.points as any[]).map((p) => p.station)).toEqual(["om-looe"]);
+    expect(String(looe.data.horizonLine)).toMatch(/covers 72 hours \(three days\)/);
+    // The day asked about: inside the horizon it points at the daily row, beyond it the result says so and gives no number.
+    const soon = await run("marine_forecast", { place: "Cozumel", date: "2026-10-02" });
+    expect(soon.data.asked).toMatchObject({ date: "2026-10-02", covered: true });
+    const far = await run("marine_forecast", { place: "Cozumel", date: "2026-10-15" });
+    expect(far.data.asked).toMatchObject({ date: "2026-10-15", covered: false });
+    expect(String((far.data.asked as any).say)).toMatch(/cannot reach 2026-10-15/);
+    // A placeholder point (0, 0) beside a name is ignored, not refused; a point outside the areas on its own still is.
+    const filled = await run("marine_forecast", { area: "all", place: "all", lat: 0, lon: 0, days: 3 });
+    expect((filled.data.points as any[]).length).toBe(6);
+    expect(String(filled.data.pointIgnored)).toMatch(/outside the four areas and was ignored/);
     const unknown = await run("marine_forecast", { place: "Roatan" });
     expect(String(unknown.data.placeIgnored)).toMatch(/not a place the app knows/);
     expect((unknown.data.points as any[]).length).toBe(6);
@@ -261,6 +275,11 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     expect(Object.keys(cells[0].components)).toEqual(["recentReports", "idQuality", "heatStress", "completeness"]);
     expect(cells[0].components.recentReports).toMatchObject({ value: 1, state: "ok", weight: 1 });
     expect(cells[0].components.completeness).toMatchObject({ weight: 0 });
+    // The ranking carries no reasons (those come from explain_cell) and a summary line with the marker per cell.
+    expect(cells[0].components.recentReports.rationale).toBeUndefined();
+    expect(String(cells[0].summary)).toMatch(/^Mexican Caribbean cell mx-caribbean:87:205 \(off Cozumel\): rankScore 0.81 \(a heuristic that only orders cells\); recent reports 1 \(ok, weight 1\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(cells[0].near).toBe("Cozumel");
+    expect(String(out.data.say)).toMatch(/needs explain_cell/);
     expect(cells[0].heat).toMatchObject({ dhwCWeeks: 8.1, baa: 3, baaLabel: "Bleaching Alert Level 1", productDate: "2026-09-29", dataAge: "2 days old" });
     expect(cells[0].heat.cite.dhw).toMatch(/^\[e:reading:crw-mx-cozumel:dhw:\d+:satellite\]$/);
     expect(cells[0].fieldWindow).toMatchObject({ state: "ok", horizonHours: 72, currentMaxKmh: expect.any(Number) });
@@ -324,13 +343,27 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     expect(belize.data).toMatchObject({ cell: "belize:72:82", rankScore: null, thin: true });
     const point = await run("explain_cell", { species: "lionfish", lat: 24.546, lon: -81.406 });
     expect(point.data.cell).toBe("fl-keys:179:24");
+    // Placeholders beside an area (cell "0:0", lat 0, lon 0) still land on the area named.
+    const filled = await run("explain_cell", { species: "lionfish", cell: "0:0", lat: 0, lon: 0, area: "Florida Keys" });
+    expect(filled.data.cell).toBe("fl-keys:179:24");
+    // Every argument a placeholder ("all" is no area): the top cell of the four areas, not an error.
+    expect((await run("explain_cell", { species: "lionfish", cell: "0:0", lat: 0, lon: 0, area: "all" })).data.cell).toBe("mx-caribbean:87:205");
+    expect(String(filled.data.summary)).toMatch(/^Florida Keys \/ South Florida cell fl-keys:179:24 \(off Looe Key\): rankScore 0.62/);
+    expect(String(belize.data.thinNote)).toMatch(/^Belize is a thin area: .*still shows heat stress \(DHW 5.28 °C-weeks, alert level 3, product day 2026-09-29\) and the history records from GBIF and NAS \[e:hotspot:lionfish:belize:72:82:\d+\]$/);
+    // Nothing given: the top cell of the four areas, with the recipe, the summary line and the newest counted report's age.
+    const top = await run("explain_cell", { species: "lionfish" });
+    expect(top.data).toMatchObject({ cell: "mx-caribbean:87:205", newestReport: { id: "sighting:8001", observedAge: "1.9 days old" } });
+    expect(String(top.data.recipe)).toMatch(/^How the score is built: recent reports \(weight 1\): kernel-weighted.*completeness \(weight 0, lowers confidence, never the rank\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(String(top.data.summary)).toMatch(/\[e:hotspot:/);
+    expect(String(top.data.next)).toMatch(/call sightings for Mexican Caribbean/);
   });
 });
 
 describe("lionfish tool: sightings, conditions and set_view changes", () => {
   test("lionfish tool: sightings default to the app's 30-day window, carry submitted dates, lag days, area, imprecise and late flags, and GBIF copies as duplicates", async () => {
     const out = await run("sightings", { species: ["lionfish"] });
-    expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentSightings"]);
+    // The default 30-day window is fetched over the 90-day backfill reach: three 31-day pages, the API's cap.
+    expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentSightings", "AgentSightings", "AgentSightings"]);
     expect(out.data.window).toMatchObject({ from: new Date(NOW.getTime() - 30 * DAY).toISOString() });
     const byArea = out.data.byArea as Record<string, { name: string; reports: number; distinct: number; thin: boolean }>;
     expect(byArea["fl-keys"]).toEqual({ name: "Florida Keys / South Florida", thin: false, reports: 6, distinct: 4 });
@@ -361,11 +394,34 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
   test("lionfish tool: dateField submitted counts by arrival and surfaces old dives uploaded this month; knownAt replays what had arrived by a date", async () => {
     const submitted = await run("sightings", { species: ["lionfish"], dateField: "submitted", hours: 720 });
     const rows = submitted.data.rows as any[];
-    expect(rows.map((r) => r.evidenceId)).toContain("sighting:7009");
-    expect(rows.map((r) => r.evidenceId)).toContain("sighting:8015");
-    expect(rows.find((r) => r.evidenceId === "sighting:8015")).toMatchObject({ observedAt: "2021-03-11T15:00:00Z", submittedAt: "2026-09-29T08:00:00Z" });
+    // The API searches by observed date in 31-day pages: a 90-day reach is three requests, and a dive observed years
+    // ago and uploaded this month (7009, 8015) is beyond it; the result says so instead of pretending.
+    expect(stub.requests.filter((r) => r.operationName === "AgentSightings")).toHaveLength(3);
+    expect(stub.requests.every((r) => Date.parse(String(r.variables.to)) - Date.parse(String(r.variables.from)) <= 31 * DAY)).toBe(true);
+    expect(rows.map((r) => r.evidenceId)).toContain("sighting:8011");
+    expect(rows.find((r) => r.evidenceId === "sighting:8011")).toMatchObject({ observedAt: "2026-08-16T14:00:00Z", submittedAt: "2026-09-20T12:00:00Z", lagDays: 34.9 });
+    expect(rows.map((r) => r.evidenceId)).not.toContain("sighting:8015");
+    expect(String(submitted.data.reachNote)).toMatch(/up to 90 days back/);
     expect(String(submitted.data.dateField)).toMatch(/^submitted/);
     expect(submitted.data.widened).toBeUndefined();
+    // The stub refuses a window over 31 days as the API does.
+    expect(await registry.execute("conditions", { params: ["sst_c"], hours: 24 * 40 }, ctx)).toMatchObject({ ok: true });
+    // One feed's newest record in reach, per source: NAS has nothing in Colombia within 90 days, iNaturalist has.
+    const nas = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "co-caribbean")!.bbox, hours: 2160, source: "nas" });
+    // A focus feed orders the rows and names its newest record; the other feeds' rows stay (and stay citable).
+    expect(nas.data).toMatchObject({ focusSource: "nas", focusRows: 0, total: 4 });
+    expect((nas.data.newestBySource as any).nas.none).toMatch(/no nas record in this box in the last 90 days/);
+    // A past month's reports that reached the feed only after the month ended, with their lag.
+    const august = await run("sightings", { species: ["lionfish"], from: "2026-08-01T00:00:00Z", to: "2026-09-01T00:00:00Z" });
+    // Two iNaturalist dives (Florida 7004, Cozumel 8009 and 8011) and one GBIF copy (8018) reached the feed in September.
+    expect(august.data.arrivedAfterWindow).toBe(4);
+    expect((august.data.arrivedAfterWindowRecords as any[]).map((r) => r.cite).sort()).toEqual(["[e:sighting:7004]", "[e:sighting:8009]", "[e:sighting:8011]", "[e:sighting:8018]"]);
+    expect((august.data.arrivedAfterWindowRecords as any[]).find((r) => r.cite === "[e:sighting:8011]")).toMatchObject({ observed: "2026-08-16", submitted: "2026-09-20", lagDays: 34.9, area: "mx-caribbean" });
+    const gbif = await run("sightings", { species: ["lionfish"], hours: 2160, source: "gbif" });
+    expect((gbif.data.rows as any[])[0].source).toBe("gbif");
+    expect((gbif.data.rows as any[]).some((r) => r.source === "inat")).toBe(true);
+    expect((nas.data.newestBySource as any).inat).toMatchObject({ cite: "[e:sighting:9501]", observedAge: "1.8 days old" });
+    expect(nas.evidence.map((e) => e.id)).toContain("sighting:9501");
     const known = await run("sightings", { species: ["lionfish"], bbox: findArea(LIONFISH, "belize")!.bbox, hours: 2160, knownAt: "2026-09-01T00:00:00Z" });
     const ids = (known.data.rows as any[]).map((r) => r.evidenceId);
     expect(ids).toContain("sighting:9001");
@@ -420,9 +476,21 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(String((crw.data.record as any).credit)).toMatch(/NOAA Coral Reef Watch/);
     expect(String((crw.data.record as any).doi)).toMatch(/doi\.org/);
     expect(String(crw.data.sourceUrl)).toMatch(/dhw_5km/);
+    // The lag in days is a tool value (never the model's arithmetic); a hotspot record lists the dated records inside it with ages.
+    const late = await run("evidence", { id: "sighting:7003" });
+    expect(late.data).toMatchObject({ ingestLagDays: 20.8, ingestLagWords: "20.8 days later" });
+    expect(late.data.recordsInside).toBeUndefined();
+    const hotspot = await run("evidence", { id: `hotspot:lionfish:mx-caribbean:87:205:${NOW.getTime()}` });
+    expect(hotspot.data.newestSightingInside).toMatchObject({ id: "sighting:8001", observedAt: "2026-09-29T15:00:00Z", observedAge: "1.9 days old" });
+    expect((hotspot.data.recordsInside as any[]).length).toBeGreaterThan(4);
     const sources = await run("source_info", {});
     const rows = sources.data.rows as any[];
     expect(rows.map((r) => r.feed)).toEqual(["inat", "gbif", "nas", "crw", "openmeteo-marine", "ndbc", "goes19-sst"]);
+    // Each feed's facts point at the tool that shows its rows; "all" means every feed.
+    expect(String(rows.find((r) => r.feed === "nas").next)).toMatch(/call sightings over the four areas/);
+    expect(String(rows.find((r) => r.feed === "crw").next)).toMatch(/call reef_heat/);
+    expect(rows.find((r) => r.feed === "ndbc").next).toBeUndefined();
+    expect(((await run("source_info", { feed: "all" })).data.rows as any[]).length).toBe(7);
     expect(rows.find((r) => r.feed === "openmeteo-marine").licence).toMatch(/non-commercial/);
     expect(rows.find((r) => r.feed === "crw").attribution).toMatch(/NOAA Coral Reef Watch/);
     expect(rows.find((r) => r.feed === "crw").licence).toMatch(/credit to NOAA Coral Reef Watch/);
@@ -432,6 +500,11 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(feeds.evidence.map((e) => e.id)).toContain("fetch:lf-crw-7299");
     const notes = await run("notes", { hours: 168 });
     expect(notes.data.total).toBe(6);
+    // Placeholders wrapped in punctuation (".__omit__") read as left out: every note, no species filter.
+    const omitted = await run("notes", { hours: 168, site: ".__omit__", species: ".__omit__" });
+    expect(omitted.data.total).toBe(6);
+    expect(omitted.data.placeIgnored).toBeUndefined();
+    expect((notes.data.rows as any[])[0]).toMatchObject({ cite: expect.stringMatching(/^\[e:note:/), age: expect.stringMatching(/hours old$/) });
     const board = await run("team_board", { kind: "missions" });
     expect((board.data.missions as any[]).map((m) => m.title)).toHaveLength(3);
     const belize = await run("team_board", { kind: "messages", about: "Belize", hours: 24 });

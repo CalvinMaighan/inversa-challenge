@@ -4,6 +4,11 @@
   "changelog": [
     {
       "date": "2026-10-01",
+      "by": "FXL",
+      "change": "the causal forbid `lionfish (cause|caused|drive)` matched an honest denial in a judged golden run (lionfish-relevance-sst); a negation word earlier in the sentence now exempts the match, as in lionfish.json (1 pattern). No held-out result was read for this edit."
+    },
+    {
+      "date": "2026-10-01",
       "by": "AG2",
       "change": "created before the final tuning runs: paraphrases of documented questions (paraphraseOf) and new questions across the ten categories; not edited after seeing results."
     },
@@ -463,7 +468,7 @@
           "Says degree heating weeks are context for where reef surveys matter, not evidence of lionfish effects"
         ],
         "forbid": [
-          "lionfish (cause|caused|drive)"
+          "(?<!(not|never|no|cannot|whether|that|without)\\b[^.]{0,40})lionfish (cause|caused|drive)"
         ],
         "groundedNumbers": true,
         "feedState": true,

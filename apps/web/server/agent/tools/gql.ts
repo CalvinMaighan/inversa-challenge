@@ -93,6 +93,37 @@ export function resetFeedFieldProbe(): void {
   feedRunIds = true;
 }
 
+/** The API's longest `from`..`to` window for `sightings` and `readings` (api/src/graphql/query.rs `MAX_WINDOW_MS`). */
+export const MAX_API_WINDOW_MS = 31 * 24 * 3_600_000;
+
+/**
+ * A windowed query (`from`, `to` in `variables`) that may span more than the API's 31-day cap: fetched as
+ * consecutive pages of at most 31 days, newest first, with the row lists under `key` concatenated and the
+ * feeds taken from the first page. One POST when the window fits.
+ */
+export async function gqlWindowed<T extends Record<string, unknown> & { feeds: GqlFeedState[] }, K extends keyof T>(
+  operationName: string,
+  query: string,
+  variables: Record<string, unknown> & { from: string; to: string },
+  key: K,
+  scope: GqlScope,
+): Promise<T> {
+  const from = Date.parse(variables.from);
+  const to = Date.parse(variables.to);
+  if (!(to - from > MAX_API_WINDOW_MS)) return gqlWithFeeds<T>(operationName, query, variables, scope);
+  const pages: { from: string; to: string }[] = [];
+  for (let end = to; end > from; end -= MAX_API_WINDOW_MS) pages.push({ from: new Date(Math.max(from, end - MAX_API_WINDOW_MS)).toISOString(), to: new Date(end).toISOString() });
+  const results = await Promise.all(pages.map((page) => gqlWithFeeds<T>(operationName, query, { ...variables, ...page }, scope)));
+  const rows = results.flatMap((r) => (Array.isArray(r[key]) ? (r[key] as unknown[]) : []));
+  // A row on a page boundary (observed exactly at a page's `to`) appears on both pages: keep it once.
+  const seen = new Set<string>();
+  const unique = rows.filter((row) => {
+    const id = JSON.stringify(row);
+    return !seen.has(id) && seen.add(id);
+  });
+  return { ...results[0]!, [key]: unique } as T;
+}
+
 export type GqlFeedState = {
   source: string;
   mode: string;

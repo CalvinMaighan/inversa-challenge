@@ -14,6 +14,14 @@ type Vars = Record<string, unknown>;
 export const LIONFISH_FIXTURE_NOW: string = fixture.now;
 
 const DAY = 86_400_000;
+/** The API refuses a `sightings` or `readings` window over 31 days (api/src/graphql/query.rs `check_window`); so does the stub. */
+const MAX_WINDOW_MS = 31 * DAY;
+function checkWindow(v: Vars): void {
+  const from = Date.parse(String(v.from));
+  const to = Date.parse(String(v.to));
+  if (from > to) throw new Error("`from` must not be after `to`");
+  if (to - from > MAX_WINDOW_MS) throw new Error(`window of ${((to - from) / DAY).toFixed(1)} days exceeds the 31-day cap`);
+}
 const inBox = (b: BBox, lat: number, lon: number) => lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east;
 const inWindow = (at: string, from: unknown, to: unknown) => {
   const t = Date.parse(at);
@@ -32,6 +40,7 @@ function feeds() {
 }
 
 function sightings(v: Vars) {
+  checkWindow(v);
   const bbox = v.bbox as BBox;
   const taxa = list(v.taxa);
   const quality = list(v.quality);
@@ -62,6 +71,7 @@ function speciesCounts(v: Vars) {
 }
 
 function readings(v: Vars) {
+  checkWindow(v);
   const bbox = v.bbox as BBox;
   const params = list(v.params);
   return fixture.readings
@@ -112,7 +122,8 @@ function explainCell(v: Vars) {
   if (!found) throw new Error(`no priority score for lionfish in cell ${String(v.cell)} at ${String(v.at)}`);
   const weights = (v.weights ?? null) as Vars | null;
   const cell = reweighted(found as unknown as Cell, weights);
-  return { ...found, ...cell, at: String(v.at), terms: [], basis: typeof v.basis === "string" ? v.basis : found.basis };
+  // The API's explainCell carries the species it explains; the hotspot evidence id is built from it.
+  return { ...found, ...cell, species: "lionfish", at: String(v.at), terms: [], basis: typeof v.basis === "string" ? v.basis : found.basis };
 }
 
 function board(v: Vars) {
