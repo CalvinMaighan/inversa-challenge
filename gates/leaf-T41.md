@@ -40,3 +40,23 @@ Scope:
 
 - [ ] G7: before/after screenshots at 1440x900 (`docs/evidence/simplify-before.png`, `simplify-after.png`), plus the popover open and the species bar filtering iguana; looked at, with the noise reduction described (manual)
   EVIDENCE: pending
+
+## Added at user review (novice audience, sightings + notes only)
+
+- [ ] G8: at first load (live, no question asked), the only point markers on the globe are species sightings (and user notes once T43 lands). Station squares drawn = 0, alert outlines drawn = 0, and the hotspot haze is off. e2e prints `FIRSTLOAD sightings>0 stations=0 alerts=0 hotspots=0`
+  CHECK: cd apps/web && bun run e2e:firstload 2>&1 | grep FIRSTLOAD
+  EXPECT: /FIRSTLOAD sightings>0 stations=0 alerts=0 hotspots=0/
+  EVIDENCE: pending
+
+- [ ] G9: the globe pane has no always-visible top bar text. The app status, about and data-sources panel and the theme picker each sit behind an icon button with a popover (two icon buttons; Escape returns focus). Same e2e prints `CHROME icons=2 visible_text_labels=0`
+  CHECK: cd apps/web && bun run e2e:firstload 2>&1 | grep CHROME
+  EXPECT: /CHROME icons=2 visible_text_labels=0/
+  EVIDENCE: pending
+
+- [ ] G10: the evidence card leads with a plain-language summary (what, where in place words, when in relative time, how sure, photo when present) and the publisher link. Raw record and payload JSON sit behind a collapsed "Details for experts" disclosure (web test named "plain evidence summary")
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "plain evidence summary" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G11: a first-visit welcome explains the app in plain words in two sentences or fewer, shows the species chips with one-line plain descriptions, and offers example questions; it is dismissible and remembered. Live agent answers use plain language for non-experts and keep citations (live eval still passes the leaf-T39 threshold) (manual: screenshot `docs/evidence/simplify-welcome.png` plus the eval line)
+  EVIDENCE: pending
