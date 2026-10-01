@@ -8,6 +8,7 @@
 
 import fixture from "./fixtures/graphql.json";
 import { CARP_FIXTURE_NOW, carpResolvers, REVIEW_OPERATIONS } from "./stub-carp";
+import { LIONFISH_FIXTURE_NOW, lionfishResolvers, lionfishSelection } from "./stub-lionfish";
 
 import { APP_IDS, isAppId, type AppId } from "@/shared/apps";
 
@@ -19,9 +20,26 @@ const GRAPHQL_PATH = /^\/v1\/([^/]+)\/graphql$/;
 
 export const FIXTURE_NOW = fixture.now;
 
-/** The fixture's reference time per app: carp has its own recorded week (`fixtures/carp.json`). */
+/** The fixture's reference time per app: carp has its own recorded week (`fixtures/carp.json`), lionfish its own (`fixtures/lionfish.json`). */
 export function fixtureNow(app: AppId): string {
-  return app === "carp" ? CARP_FIXTURE_NOW : FIXTURE_NOW;
+  return app === "carp" ? CARP_FIXTURE_NOW : app === "lionfish" ? LIONFISH_FIXTURE_NOW : FIXTURE_NOW;
+}
+
+/**
+ * The fixture evidence id a question's `selectedEvidence` context describes ("a python sighting", "an LST reading"),
+ * or the text itself when it already is an id. Null when nothing in the fixture matches.
+ */
+export function fixtureSelection(app: AppId, text: string): string | null {
+  if (/^[a-z]+:.+/.test(text)) return text;
+  if (app === "lionfish") return lionfishSelection(text);
+  if (app === "python") {
+    if (/lst|land surface|reading/i.test(text)) {
+      const lst = fixture.readings.filter((r) => r.station === "22" && r.param === "LST_C" && r.value !== null).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
+      return lst ? `reading:22:lst_c:${Date.parse(lst.observedAt)}:satellite` : null;
+    }
+    if (/sighting|report/i.test(text)) return "sighting:1001";
+  }
+  return null;
 }
 
 const inBox = (b: BBox, lat: number, lon: number) => lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east;
@@ -148,7 +166,53 @@ const RESOLVERS: Record<string, (v: Vars) => Record<string, unknown>> = {
   AgentBacktest: (v) => ({ backtest: backtest(v), feeds: feeds() }),
   // The team board (T43): `board(id)` has no filters; the notes tool filters by bbox and time itself.
   AgentNotes: (v) => ({ board: { id: String(v.id), notes: fixture.notes } }),
+  AgentTeamBoard: (v) => ({ board: { id: String(v.id), lastSeq: 0, missions: fixture.board.missions, messages: fixture.board.messages, notes: fixture.notes, removals: {} } }),
+  // The gridpoint forecast is stored as modeled readings at an NWS grid station (what the C4 adapter does).
+  AgentWeatherForecast: (v) => ({ readings: readings(v), feeds: feeds() }),
+  AgentEvidence: (v) => ({ evidence: pythonEvidence(v), feeds: feeds() }),
 };
+
+/** `evidence(id)` over the python fixture: sightings, readings, fetch runs, hotspot cells, notes, missions and messages. */
+function pythonEvidence(v: Vars) {
+  const id = String(v.id);
+  const [kind, ...rest] = id.split(":");
+  const key = rest.join(":");
+  const feedOf = (source: string) => fixture.feeds.find((f) => f.source === source) ?? null;
+  const base = { id, kind, raw: null as unknown, rawKey: null as string | null, sourceUrl: null as string | null, sourcePageUrl: null as string | null, fetchedAt: null as string | null, ingestLagSeconds: null as number | null, feed: null as unknown, links: [] as { id: string; relation: string; source: string }[] };
+  if (kind === "sighting") {
+    const s = fixture.sightings.find((x) => x.id === key);
+    if (!s) throw new Error(`no evidence ${id}`);
+    const taxon = fixture.taxa[s.taxon as keyof typeof fixture.taxa];
+    const page = s.source === "inat" ? `https://www.inaturalist.org/observations/${s.extId}` : s.source === "gbif" ? `https://www.gbif.org/occurrence/${s.extId}` : `https://nas.er.usgs.gov/queries/SpecimenViewer.aspx?SpecimenID=${s.extId}`;
+    const api = s.source === "inat" ? `https://api.inaturalist.org/v1/observations/${s.extId}` : s.source === "gbif" ? `https://api.gbif.org/v1/occurrence/${s.extId}` : "https://nas.er.usgs.gov/api/v2/occurrence/search?state=FL";
+    return { ...base, record: { ...s, taxon: taxon.commonName, submittedAt: s.ingestedAt, licence: s.source === "inat" ? "CC BY-NC (observer's choice)" : s.source === "gbif" ? "CC BY 4.0 (dataset)" : "public domain" }, raw: s, sourceUrl: api, sourcePageUrl: page, fetchedAt: s.ingestedAt, ingestLagSeconds: Math.round((Date.parse(s.ingestedAt) - Date.parse(s.observedAt)) / 1000), feed: feedOf(s.source), links: s.canonicalId ? [{ id: `sighting:${s.canonicalId}`, relation: "duplicateOf", source: "inat" }] : [] };
+  }
+  if (kind === "reading") {
+    const [station, param, at, origin] = key.split(":");
+    const r = fixture.readings.find((x) => x.station === station && x.param.toLowerCase() === param && Date.parse(x.observedAt) === Number(at) && x.origin.toLowerCase() === origin);
+    const st = fixture.stations[station as keyof typeof fixture.stations];
+    if (!r || !st) throw new Error(`no evidence ${id}`);
+    const goes = st.source === "goes19";
+    const feed = feedOf(st.source);
+    const fetchedAt = feed?.lastFetchAt ?? null;
+    const record = { station: st.id, stationName: st.name, source: st.source, param: r.param, value: r.value, unit: r.param.endsWith("_C") ? "°C" : r.param === "STAGE_M" ? "m" : r.param === "WAVE_M" ? "m" : r.param === "WIND_MS" ? "m/s" : "", flag: r.flag, origin: r.origin, observedAt: r.observedAt, ...(goes ? { product: "GOES-19 ABI L2 LST/SST (full disk, hourly scan)", scanAt: r.observedAt, dqf: r.flag === "OK" ? "good" : r.flag.toLowerCase() } : {}) };
+    return { ...base, record, raw: r, sourceUrl: goes ? "s3://noaa-goes19/ABI-L2-LSTC" : st.source === "ndbc" ? `https://www.ndbc.noaa.gov/data/realtime2/${st.name.split(" ")[0]}.txt` : st.source === "usgs" ? "https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items" : "https://api.weather.gov", sourcePageUrl: goes ? "https://registry.opendata.aws/noaa-goes/" : st.source === "ndbc" ? "https://www.ndbc.noaa.gov/" : st.source === "usgs" ? "https://waterdata.usgs.gov/" : "https://www.weather.gov/", fetchedAt, ingestLagSeconds: fetchedAt ? Math.max(0, Math.round((Date.parse(fetchedAt) - Date.parse(r.observedAt)) / 1000)) : null, feed, links: [{ id: `source:${st.source}`, relation: "feed", source: st.source }] };
+  }
+  if (kind === "fetch") {
+    const f = fixture.feeds.find((x) => x.lastFetchRunId === key);
+    if (!f) throw new Error(`no evidence ${id}`);
+    return { ...base, record: f, raw: f, fetchedAt: f.lastFetchAt, feed: f };
+  }
+  if (kind === "hotspot") {
+    const [sp, cell] = key.split(":");
+    const found = fixture.explain[`${sp}|${cell}` as keyof typeof fixture.explain];
+    if (!found) throw new Error(`no evidence ${id}`);
+    return { ...base, record: found };
+  }
+  const row = kind === "note" ? fixture.notes.find((n) => n.id === key) : kind === "mission" ? fixture.board.missions.find((m) => m.id === key) : kind === "message" ? fixture.board.messages.find((m) => m.id === key) : null;
+  if (!row) throw new Error(`no evidence ${id}`);
+  return { ...base, record: row, raw: row };
+}
 
 export type Stub = { origin: string; requests: StubRequest[]; stop(): void };
 
@@ -176,7 +240,7 @@ export function startStub(port = 0, options: { legacyFeeds?: boolean; reviewFiel
       if (options.legacyFeeds && body.query?.includes("lastFetchRunId")) {
         return Response.json({ data: null, errors: [{ message: 'Unknown field "lastFetchRunId" on type "FeedState".' }] });
       }
-      const resolve = app === "carp" ? carp[operationName] : RESOLVERS[operationName];
+      const resolve = app === "carp" ? carp[operationName] : app === "lionfish" ? lionfishResolvers[operationName] : RESOLVERS[operationName];
       if (!resolve && app === "carp" && REVIEW_OPERATIONS.has(operationName)) {
         return Response.json({ data: null, errors: [{ message: `Unknown field "${operationName.slice("Agent".length).replace(/^./, (c) => c.toLowerCase())}" on type "Query".` }] });
       }

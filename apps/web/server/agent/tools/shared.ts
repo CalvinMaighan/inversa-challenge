@@ -148,6 +148,11 @@ export function feedSummary(feeds: FeedState[]) {
         note: feed.note,
         cite: feed.lastFetchRunId ? `[e:fetch:${feed.lastFetchRunId}]` : null,
       })),
+    // One ready sentence per degraded feed, to paste into the answer's freshness line.
+    line: feeds
+      .filter((feed) => feed.state !== "nominal" && !isDisabled(feed))
+      .map((feed) => `${feed.source} is ${feed.state}${feed.lagSeconds === null ? "" : ` (newest ${ageWords(feed.lagSeconds)} old)`}${feed.lastFetchRunId ? ` [e:fetch:${feed.lastFetchRunId}]` : ""}`)
+      .join("; "),
   };
 }
 
@@ -160,7 +165,8 @@ export function output(
   const feeds = rawFeeds.map(toFeedState);
   const fetches = rawFeeds.map(fetchEvidence);
   const allEvidence = [...evidenceRows, ...fetches.filter((row): row is Evidence => row !== null)];
-  const modelFeeds = feeds.map((feed, index) => ({ ...feed, state: modelState(feed), evidenceId: fetches[index]?.id ?? null }));
+  // Ages in words, so the model copies "28 h old" instead of converting seconds into hours and minutes.
+  const modelFeeds = feeds.map((feed, index) => ({ ...feed, state: modelState(feed), newestAge: feed.lagSeconds === null ? null : `${ageWords(feed.lagSeconds)} old`, evidenceId: fetches[index]?.id ?? null }));
   return {
     // Data-quality first, bulky rows last: if a long result is ever pruned head/tail, the caveats survive.
     data: { feedSummary: feedSummary(feeds), feeds: modelFeeds, ...data, evidence: allEvidence },

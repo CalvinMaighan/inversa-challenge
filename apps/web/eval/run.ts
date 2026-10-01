@@ -25,8 +25,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { BARS, barsMet, checkQuestion, pct } from "./check";
-import { CATEGORIES, GOLDEN_SETS, type Golden } from "./golden";
-import { fixtureNow, startStub } from "./stub-server";
+import { CATEGORIES, GOLDEN_SETS, holdoutSet, type Golden } from "./golden";
+import { fixtureNow, fixtureSelection, startStub } from "./stub-server";
 import { checkViews } from "./views";
 
 import { capturing, type ToolCapture } from "@/server/agent/answer-check";
@@ -35,7 +35,7 @@ import { runTurn, type RunTurnResult } from "@/server/agent/run-turn";
 import { AGENT_MODEL_ID, MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
-import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppId } from "@/shared/apps";
+import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppConfig, type AppId } from "@/shared/apps";
 
 /** OpenRouter list price for GPT-6 Luna, USD per million tokens. */
 const PRICE_IN = 0.1;
@@ -54,13 +54,23 @@ export function evalApp(argv: readonly string[], env: Record<string, string | un
   return raw;
 }
 
-/** The question's `context` as view state: the selected site, a knowledge time, a replay flag. */
-function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
+/**
+ * The question's `context` as view state: the selected site, a knowledge time, a replay flag (carp); a selected
+ * area, the globe's window and a selected evidence record (lionfish, python; the record is looked up in the fixture).
+ */
+function viewFor(app: AppConfig, base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
   const context = golden.context ?? {};
   const asOf = context.asOf ? Date.parse(context.asOf) : NaN;
+  const areaId = context.selectedArea ?? context.area;
+  const area = areaId ? app.regions.find((r) => r.id === areaId) : undefined;
+  const windowHours = context.window ? (/90/.test(context.window) ? 2160 : /30/.test(context.window) ? 720 : /7|week/.test(context.window) ? 168 : undefined) : undefined;
+  const selection = context.selectedEvidence ? fixtureSelection(app.id, context.selectedEvidence) : null;
   return {
     ...base,
     ...(context.selectedSite ? { site: context.selectedSite } : {}),
+    ...(area ? { bbox: area.bbox, region: area.id, area: area.id, preset: area.id } : {}),
+    ...(windowHours ? { windowHours } : {}),
+    ...(selection ? { selection } : {}),
     ...(Number.isFinite(asOf) ? { asOf, replay: true, time: new Date(asOf).toISOString() } : {}),
     ...(context.replay === "true" ? { replay: true } : {}),
   };
@@ -68,8 +78,10 @@ function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden):
 
 async function main(): Promise<number> {
   const app = getApp(evalApp(process.argv.slice(2), process.env));
-  const set = process.argv.includes("--holdout") ? `${app.eval.goldenSet}-holdout` : app.eval.goldenSet;
-  const golden = GOLDEN_SETS[set] ?? [];
+  // `--holdout` runs the held-out set (paraphrases and new questions the prompts never saw) instead of the main set.
+  const holdout = process.argv.includes("--holdout");
+  const set = holdout ? `${app.id}.holdout` : app.eval.goldenSet;
+  const golden = holdout ? holdoutSet(app.id) : (GOLDEN_SETS[app.eval.goldenSet] ?? []);
   // EVAL_ONLY=id,id runs a subset while iterating; EVAL_CATEGORY=c one category; the gate runs all of them.
   const only = process.env.EVAL_ONLY?.split(",").map((id) => id.trim()).filter(Boolean);
   const category = process.env.EVAL_CATEGORY?.trim();
@@ -99,7 +111,7 @@ async function main(): Promise<number> {
   process.env.INVERSA_DATA_DIR = dataDir;
   const now = new Date(fixture);
   const layers = appLayerIds(app).filter((l) => l === "sightings" || l === "hotspots" || l === "stations" || l === "alerts");
-  const baseView = { bbox: appBBox(app), time: fixture, layers, selection: null };
+  const baseView = { bbox: appBBox(app), time: fixture, layers, selection: null, ...(app.windows ? { windowHours: app.windows.defaultHours } : {}) };
 
   const outcomes: Outcome[] = [];
   const startedAll = Date.now();
@@ -111,7 +123,7 @@ async function main(): Promise<number> {
         const captures: ToolCapture[] = [];
         const started = Date.now();
         const result = await runTurn(
-          { app: app.id, sessionId: `eval-${g.id}-${started}`, question: g.question, view: viewFor(baseView, g), now, cache: false, registry: capturing(buildAgentRegistry(app), captures) },
+          { app: app.id, sessionId: `eval-${g.id}-${started}`, question: g.question, view: viewFor(app, baseView, g), now, cache: false, registry: capturing(buildAgentRegistry(app), captures) },
           (event) => events.push(event),
         );
         outcomes.push({ golden: g, events, result, captures, ms: Date.now() - started });

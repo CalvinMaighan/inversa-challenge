@@ -131,8 +131,9 @@ describe("agent carp", () => {
     expect(pattern.test("How much water is the Atchafalaya carrying at Simmesport?")).toBe(false);
     expect(scopeGuard(CARP, "Where are Burmese pythons active in the Everglades?")).toContain(CARP.agent.refusal);
     expect(scopeGuard(CARP, "What is the river stage at Krotz Springs right now?")).toBeNull();
-    // Python's own species pass its guard; carp (no taxa) is not a foreign species anywhere.
-    expect(scopeGuard(getApp("python"), "Show me recent tegu sightings around Homestead.")).toBeNull();
+    // Python answers for Burmese python only (AG2): its context taxa are refused by name; carp (no taxa) is not a foreign species anywhere.
+    expect(scopeGuard(getApp("python"), "Show me recent tegu sightings around Homestead.")).toContain(getApp("python").agent.refusal);
+    expect(scopeGuard(getApp("python"), "Show python sightings in the Everglades from the last 7 days.")).toBeNull();
     expect(scopeGuard(getApp("lionfish"), "How many iguanas were reported around Marathon?")).toContain(getApp("lionfish").agent.refusal);
 
     process.env.OPENROUTER_API_KEY = "test-key-never-used";

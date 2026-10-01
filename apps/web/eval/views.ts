@@ -25,6 +25,8 @@ export const DATA_TOOLS: ReadonlySet<string> = new Set([
   "source_info",
   "team_board",
   "notes",
+  "reef_heat",
+  "marine_forecast",
 ]);
 
 const isView = (value: unknown) => isToolResultData({ result: value }) && value !== undefined;

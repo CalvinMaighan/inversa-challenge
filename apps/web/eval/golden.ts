@@ -4,7 +4,8 @@
  * phrases the answer must contain, and how many verified citations it needs.
  */
 
-import carpHoldout from "app-configs/questions/carp.holdout.json";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { supportedQuestions, type QuestionFile } from "@/shared/apps/questions";
 
@@ -167,16 +168,26 @@ export function goldenFromFile(file: QuestionFile): Golden[] {
 }
 
 /**
- * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3). The questions above are python's; carp's is the
- * question file (the source of truth for ids, categories, tools and pass criteria); lionfish's comes with its leaf.
- * `<set>-holdout` is the held-out file (paraphrases and new questions the prompts never saw; `--holdout`).
+ * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3): each app's question file (the source of truth for
+ * ids, categories, tools and pass criteria). The hand-written `GOLDEN` above is python's legacy set, kept so the
+ * question checker can verify every legacy case was mapped (`py-legacy-<id>`).
  */
 export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = {
-  python: GOLDEN,
-  lionfish: [],
+  python: goldenFromFile({ app: "python", questions: supportedQuestions("python") }),
+  lionfish: goldenFromFile({ app: "lionfish", questions: supportedQuestions("lionfish") }),
   carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }),
-  "carp-holdout": goldenFromFile(carpHoldout as QuestionFile),
 };
+
+/**
+ * An app's held-out set (`spec/apps/questions/<app>.holdout.json`): paraphrases and new questions the prompts never
+ * saw, in the question-file schema plus a `changelog`. Read at run time, never bundled, so it stays out of every
+ * prompt and tool description.
+ */
+export function holdoutSet(app: string): Golden[] {
+  const path = resolve(import.meta.dir, `../../../spec/apps/questions/${app}.holdout.json`);
+  if (!existsSync(path)) return [];
+  return goldenFromFile(JSON.parse(readFileSync(path, "utf8")) as QuestionFile);
+}
 
 /** The ten question categories, in the order the eval prints them. */
 export const CATEGORIES = ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"] as const;

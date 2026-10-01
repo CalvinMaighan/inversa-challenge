@@ -38,10 +38,13 @@ const FIXTURE_NOW = fixtureNow(APP);
 const SCREENSHOT = resolve(WEB, `../../docs/evidence/${APP === "python" ? "t14-card-375" : `agent-${APP}-375`}.png`);
 /** Per app: the question, the tools any correct answer needs (set_view is checked by the fly count), and the citation kinds a chip may carry. */
 const FLOWS: Record<AppId, { question: string; tools: string[]; citationKinds: string[] }> = {
-  python: { question: "Show me recent tegu sightings around Homestead.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },
+  // Python answers for Burmese python only (AG2): a tegu question is refused by the scope guard, so the flow asks about pythons.
+  python: { question: "Show me recent python sightings around Shark Valley.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },
   carp: { question: "Which locations need operational review today?", tools: ["site_status"], citationKinds: ["forecast", "reading", "alert", "fetch"] },
-  lionfish: { question: "Which data feeds are stale or down right now?", tools: ["feed_state"], citationKinds: ["fetch"] },
+  lionfish: { question: "Show lionfish reports in the Mexican Caribbean from the last 30 days.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },
 };
+/** The lionfish view question (AG2 G7): the view event must frame an area, switch a layer on and carry a knowledge time. */
+const LIONFISH_VIEW_QUESTION = "Show me Belize with the reef heat stress layer on, as it was on September 1.";
 const QUESTION = FLOWS[APP].question;
 const EXPECTED_TOOLS = FLOWS[APP].tools;
 const CITATION_KINDS = FLOWS[APP].citationKinds;
@@ -226,6 +229,35 @@ async function replayView(origin: string): Promise<void> {
   log(`replay view: asOf=${new Date(replay.asOf!).toISOString()} replay=${replay.replay} site=${replay.site ?? "-"} tools=${tools.join(",")}`);
 }
 
+/**
+ * G7 (lionfish): "show me Belize with the heat layer as of September 1" drives the map: the stream carries a `view`
+ * event with the area preset, the heat layer and a knowledge time, from the component set_view (shared/agent/events.ts
+ * LionfishViewState: preset, region, area, layers, basis, asOf, replay).
+ */
+async function lionfishView(origin: string): Promise<void> {
+  const app = getApp(APP);
+  const res = await fetch(`${origin}/api/agent/stream`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ app: APP, sessionId: `e2e-lionfish-view-${Date.now()}`, question: LIONFISH_VIEW_QUESTION, view: { bbox: appBBox(app), time: FIXTURE_NOW, layers: [], selection: null } }),
+  });
+  assert(res.ok, `agent stream answered ${res.status}`);
+  const events = (await res.text())
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as AgentStreamEvent);
+  const views = events.filter((e): e is Extract<AgentStreamEvent, { type: "view" }> => e.type === "view");
+  const now = Date.parse(FIXTURE_NOW);
+  const framed = views.find((v) => (v.preset === "belize" || v.region === "belize") && Array.isArray(v.layers) && v.layers.includes("heat") && typeof v.asOf === "number" && v.asOf < now);
+  assert(framed, `no view event framing belize with the heat layer and a knowledge time (views: ${JSON.stringify(views)})`);
+  const tools = events.filter((e) => e.type === "tool_start").map((e) => (e as { capabilityName: string }).capabilityName);
+  assert(tools.includes("set_view"), `set_view not called (tools: ${tools.join(", ")})`);
+  const done = events.at(-1);
+  assert(done?.type === "done" && done.content.length > 0, "no answer");
+  found.view = true;
+  log(`lionfish view: preset=${framed.preset} region=${framed.region} layers=${framed.layers?.join(",")} asOf=${new Date(framed.asOf!).toISOString()} replay=${framed.replay} tools=${tools.join(",")}`);
+}
+
 async function main(): Promise<void> {
   assert(process.env.OPENROUTER_API_KEY?.trim(), "OPENROUTER_API_KEY not set: run `bun run e2e:agent`, which wraps doppler inversa/dev");
   const saved = new Map(DEV_SIDE_EFFECTS.map((file) => [file, existsSync(file) ? readFileSync(file) : null]));
@@ -249,6 +281,7 @@ async function main(): Promise<void> {
     browser = await launch();
     await flow(origin, browser);
     if (APP === "carp") await replayView(origin);
+    if (APP === "lionfish") await lionfishView(origin);
   } finally {
     await browser?.close().catch(() => undefined);
     if (next.pid) {
@@ -265,7 +298,7 @@ async function main(): Promise<void> {
       else writeFileSync(file, content);
     }
   }
-  console.log(`AGENT app=${APP} flow=ok tools=${found.tools} citation=${found.citation ? "ok" : "missing"}${APP === "carp" ? ` view=${found.view ? "ok" : "missing"}` : ""}`);
+  console.log(`AGENT app=${APP} flow=ok tools=${found.tools} citation=${found.citation ? "ok" : "missing"}${APP === "carp" || APP === "lionfish" ? ` view=${found.view ? "ok" : "missing"}` : ""}`);
   console.log("FLOW-OK");
 }
 

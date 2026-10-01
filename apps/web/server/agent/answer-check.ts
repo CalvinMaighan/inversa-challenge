@@ -43,7 +43,8 @@ const NOT_A_VALUE = [
   /\b\d{1,2}\s?(?:am|pm)\b/gi,
   /\b[A-Z]{4}\d\b/g,
   /\b\d{8}\b/g,
-  /\b(?:19|20)\d{2}\b/g,
+  // Years, but not the integer part of a decimal ("2027.7 days") or a comma-grouped number.
+  /(?<![\d.,])\b(?:19|20)\d{2}\b(?![.,]\d)/g,
   /\b\d{1,2}(?:st|nd|rd|th)\b/gi,
   // Run and record ids such as "c-usgs-4412", "NWS-LIX-FA-W-0091" (a value like "USGS 1.43 kcfs" is kept).
   /\b[a-z]*-?(?:usgs|nws|nwps|nwsa|nwsf|iem|web)-[a-z-]*\d+\b/gi,
@@ -53,7 +54,8 @@ const NUMBER = /-?\d[\d,]*(?:\.\d+)?/g;
 
 /** Numbers in free text, after stripping ids, dates and times. Each with its decimal places. */
 export function extractNumbers(text: string): { value: number; decimals: number; raw: string }[] {
-  let clean = text;
+  // A typographic minus (U+2212) is a minus.
+  let clean = text.replace(/−/g, "-");
   for (const re of NOT_A_VALUE) clean = clean.replace(re, " ");
   const out: { value: number; decimals: number; raw: string }[] = [];
   for (const m of clean.matchAll(NUMBER)) {
