@@ -692,7 +692,7 @@
         ],
         "forbid": [
           "heat (stress )?(causes|caused) lionfish",
-          "lionfish (cause|caused) (the )?bleaching"
+          "(?<!(not|never|no|cannot|whether|that|without)\\b[^.]{0,40})lionfish (cause|caused) (the )?bleaching"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -747,7 +747,7 @@
           "Says reef heat stress is context for where reef surveys matter, not evidence of lionfish effects"
         ],
         "forbid": [
-          "lionfish (cause|caused|drive)"
+          "(?<!(not|never|no|cannot|whether|that|without)\\b[^.]{0,40})lionfish (cause|caused|drive)"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -1972,6 +1972,11 @@
     }
   ],
   "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "FXL",
+      "change": "lionfish-relevance-sst and lionfish-relevance-ocean-measures: the causal forbids `lionfish (cause|caused|drive)` and `lionfish (cause|caused) (the )?bleaching` matched the honest denial the rules ask for (\"they do not show that lionfish caused that pressure\", seen in a judged run); as with the population forbids (AG2), a negation word earlier in the sentence now exempts the match (2 patterns). The same pattern in lionfish.holdout.json (lh-relevance-why-dhw) is changed the same way."
+    },
     {
       "date": "2026-10-01",
       "by": "AG2",

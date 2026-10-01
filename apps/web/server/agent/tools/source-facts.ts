@@ -156,7 +156,7 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
     licence: "U.S. Government work, public domain",
     attribution: "U.S. Geological Survey Nonindigenous Aquatic Species Database",
     cadence: "polled hourly",
-    latency: "curated records appear days to weeks after the observation (late records)",
+    latency: "curated records lag the observation by weeks to months (late records; outside Florida by months to years)",
     rateLimit: "not published",
     coverage: "verified nonindigenous species occurrences; not US-only (Mexico, Belize and Colombia records exist), but outside Florida the newest records lag months to years (Colombia's newest lionfish record is from 2016)",
     limits: ["late by design: curated weeks to months after the observation", "many records duplicate iNaturalist reports", "stale outside Florida"],
