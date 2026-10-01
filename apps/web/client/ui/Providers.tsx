@@ -12,6 +12,7 @@ import { STORAGE_PREFIX } from "client/themes/bootstrap";
 import EmotionRegistry from "client/themes/EmotionRegistry";
 import GlobalStyles from "client/themes/GlobalStyles";
 import { emotionTheme, theme } from "client/themes/theme";
+import { guardExternalLinks } from "shared/links";
 
 const noSubscribe = () => () => {};
 
@@ -36,6 +37,15 @@ function Identity() {
   return null;
 }
 
+/**
+ * Every external link opens in a new tab. Our own anchors already carry target/rel (`client/external-link.tsx`,
+ * the markdown writer); this catches DOM other code writes, such as Cesium's credits and attribution lightbox.
+ */
+function ExternalLinks() {
+  useEffect(() => guardExternalLinks(document.body), []);
+  return null;
+}
+
 /** Store, theme and styles for the whole app. No React context besides Emotion's. */
 export default function Providers({ children }: { children: ReactNode }) {
   return (
@@ -45,6 +55,7 @@ export default function Providers({ children }: { children: ReactNode }) {
         <ThemeSync />
         <GlobalStyles />
         <Identity />
+        <ExternalLinks />
         {children}
       </ThemeProvider>
     </EmotionRegistry>

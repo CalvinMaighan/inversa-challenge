@@ -35,6 +35,7 @@ import {
 import type { BBox } from "@/shared/agent/events";
 import { worstHealth, type FeedState } from "@/shared/feed-state";
 import { QUALITY_CODES } from "@/shared/frames";
+import { sightingPageUrl } from "@/shared/source-pages";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
 const HOUR_MS = 3_600_000;
@@ -282,6 +283,7 @@ const sightings = {
       lon: row.lon,
       duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
       idConflict: row.conflict,
+      sourcePageUrl: sightingPageUrl(row.source, row.extId),
     }));
     const species = input.species?.map((key) => speciesByKey(key).common.toLowerCase()).join(", ") ?? "invasive";
     const days = Math.max(1, Math.round((Date.parse(window.to) - Date.parse(window.from)) / (24 * HOUR_MS)));

@@ -33,6 +33,7 @@ use serde_json::{json, Value};
 
 use crate::graphql::types::{Evidence, EvidenceLink, FeedState};
 use crate::hotspot::{self, Grid, Species};
+use crate::source_pages::source_page_url;
 use crate::state::AppState;
 
 /// Longest text payload returned inline.
@@ -143,6 +144,8 @@ struct Found {
     /// Observation to ingestion, ms.
     ingest_lag_ms: Option<i64>,
     links: Vec<EvidenceLink>,
+    /// Publisher web page (`source_pages`), for rows a publisher has a page for.
+    page_url: Option<String>,
 }
 
 pub async fn evidence(state: &AppState, id: &str) -> Res<Evidence> {
@@ -162,7 +165,7 @@ pub async fn evidence(state: &AppState, id: &str) -> Res<Evidence> {
 }
 
 async fn assemble(state: &AppState, id: &str, kind: &str, found: Found) -> Res<Evidence> {
-    let Found { record, source, raw, ingest_lag_ms, links } = found;
+    let Found { record, source, raw, ingest_lag_ms, links, page_url } = found;
     let feed = match &source {
         Some(source) => crate::feed_state::compute(&state.obs, chrono::Utc::now().timestamp_millis())
             .await?
@@ -182,6 +185,7 @@ async fn assemble(state: &AppState, id: &str, kind: &str, found: Found) -> Res<E
         raw: raw_payload,
         raw_key: raw.as_ref().map(|r| r.key.clone()),
         source_url: raw.as_ref().map(|r| r.source_url.clone()),
+        source_page_url: page_url,
         fetched_at: raw.as_ref().map(|r| crate::graphql::types::Time(r.fetched_at)),
         ingest_lag_seconds: ingest_lag_ms.map(|ms| ms.max(0) / 1000),
         feed,
@@ -352,6 +356,7 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
             }
             links.extend(fetch_link(c, &source, raw_id)?);
             Ok(Some(Found {
+                page_url: record["extId"].as_str().and_then(|ext| source_page_url(&source, ext)),
                 record,
                 raw: raw_ref(c, raw_id)?,
                 source: Some(source),
@@ -528,6 +533,7 @@ async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
             Ok(Some(Found {
                 record,
                 ingest_lag_ms: raw.as_ref().map(|r| r.fetched_at - at),
+                page_url: source_page_url(&source, &ext_id),
                 raw,
                 source: Some(source),
                 links,
@@ -580,6 +586,7 @@ async fn alert(state: &AppState, id: &str, key: &str) -> Res<Found> {
             Ok(Some(Found {
                 record,
                 ingest_lag_ms: raw.as_ref().zip(onset).map(|(r, onset)| r.fetched_at - onset),
+                page_url: source_page_url(&source, &ext_id),
                 raw,
                 source: Some(source),
                 links,
@@ -641,6 +648,7 @@ async fn fetch(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 source: Some(source),
                 ingest_lag_ms: Some(received_at - fetched_at),
                 links,
+                page_url: None,
             }))
         })
         .await?;
@@ -670,7 +678,7 @@ async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
         "score": ex.score,
         "terms": ex.terms.iter().map(|t| json!({"name": t.name, "value": t.value, "rationale": t.rationale})).collect::<Vec<_>>(),
     });
-    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new() })
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None })
 }
 
 async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
@@ -686,7 +694,7 @@ async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
         "baseline": b.baseline,
         "perDay": b.per_day.iter().map(|d| json!({"day": iso(d.day), "sightings": d.sightings, "hits": d.hits})).collect::<Vec<_>>(),
     });
-    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new() })
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None })
 }
 
 #[cfg(test)]
@@ -813,6 +821,82 @@ mod tests {
         assert!(rels.contains(&(format!("sighting:{tegu}"), "duplicates")), "{rels:?}");
         assert!(rels.contains(&(format!("sighting:{tegu}"), "conflict")), "{rels:?}");
         assert!(!rels.contains(&(format!("sighting:{gbif}"), "conflict")), "{rels:?}");
+    }
+
+    #[tokio::test]
+    async fn evidence_source_page_url_per_kind() {
+        let state = test_state();
+        seed_sources(&state.obs).await;
+        let page = |ev: &Evidence| ev.source_page_url.clone();
+        state
+            .obs
+            .write(|tx| {
+                tx.execute(
+                    "insert into sources (id, name, homepage, mode, cadence_s, max_latency_s)
+                     values ('openmeteo', 'openmeteo', 'https://open-meteo.com', 'poll', 3600, 7200)",
+                    [],
+                )
+            })
+            .await
+            .unwrap();
+
+        let (raw, run) = archive_raw(&state, "inat", "raw/inat/2026/09/30/p.json.gz", b"{}", OBSERVED).await;
+        let inat = insert_sighting(&state, "inat", "335508189", 4, Some(raw), None).await;
+        let gbif = insert_sighting(&state, "gbif", "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656", 4, None, Some(inat)).await;
+        let nas = insert_sighting(&state, "nas", "1936189", 1, None, None).await;
+        let ev = evidence(&state, &format!("sighting:{inat}")).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://www.inaturalist.org/observations/335508189"));
+        // The API URL stays in sourceUrl.
+        assert_eq!(ev.source_url.as_deref(), Some("https://api.example.test/inat"));
+        let ev = evidence(&state, &format!("sighting:{gbif}")).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://www.gbif.org/occurrence/6130701656"));
+        let ev = evidence(&state, &format!("sighting:{nas}")).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://nas.er.usgs.gov/queries/SpecimenViewer.aspx?SpecimenID=1936189"));
+
+        let t = OBSERVED;
+        let buoy = insert_station(&state.obs, "ndbc", "KYWF1", 24.55, -81.81, "buoy").await;
+        let gage = insert_station(&state.obs, "usgs", "02290930:31179", 25.25, -80.80, "gage").await;
+        let grid = insert_station(&state.obs, "openmeteo", "24.925,-80.575", 24.925, -80.575, "grid").await;
+        let cell = insert_station(&state.obs, "goes19", "g5:77", 25.0, -80.6, "goes_cell").await;
+        insert_readings(&state.obs, vec![(buoy, "air_c", Some(27.0), t), (gage, "stage_m", Some(0.4), t), (grid, "wind_ms", Some(5.0), t)]).await;
+        insert_readings(&state.obs, vec![(cell, "sst_c", Some(29.0), t)]).await;
+        let reading = |station: i64, param: &str| format!("reading:{station}:{param}:{t}:measured");
+        let ev = evidence(&state, &reading(buoy, "air_c")).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://www.ndbc.noaa.gov/station_page.php?station=kywf1"));
+        let ev = evidence(&state, &reading(gage, "stage_m")).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://waterdata.usgs.gov/monitoring-location/USGS-02290930/"));
+        // Modelled grid points and GOES cells have no page.
+        assert_eq!(page(&evidence(&state, &reading(grid, "wind_ms")).await.unwrap()), None);
+        assert_eq!(page(&evidence(&state, &reading(cell, "sst_c")).await.unwrap()), None);
+
+        let alerts = state
+            .obs
+            .write(|tx| {
+                let mut ids = Vec::new();
+                for ext in ["vtec:KKEY.SC.Y.0019.2026:GMZ052,GMZ053", "urn:oid:2.49.0.1.840.0.f0378ab3.001.1", "nwws:11723.44102:0"] {
+                    tx.execute(
+                        "insert into alerts (source_id, ext_id, event, severity) values ('nws', ?1, 'Small Craft Advisory', 'Minor')",
+                        [ext],
+                    )?;
+                    ids.push(tx.last_insert_rowid());
+                }
+                Ok(ids)
+            })
+            .await
+            .unwrap();
+        let ev = evidence(&state, &format!("alert:{}", alerts[0])).await.unwrap();
+        assert_eq!(
+            page(&ev).as_deref(),
+            Some("https://mesonet.agron.iastate.edu/vtec/?wfo=KKEY&phenomena=SC&significance=Y&eventid=0019&year=2026")
+        );
+        let ev = evidence(&state, &format!("alert:{}", alerts[1])).await.unwrap();
+        assert_eq!(page(&ev).as_deref(), Some("https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.f0378ab3.001.1"));
+        assert_eq!(page(&evidence(&state, &format!("alert:{}", alerts[2])).await.unwrap()), None);
+
+        // Kinds with no publisher row: fetch runs, hotspots, backtests.
+        assert_eq!(page(&evidence(&state, &format!("fetch:{run}")).await.unwrap()), None);
+        assert_eq!(page(&evidence(&state, &format!("hotspot:python:100:100:{t}")).await.unwrap()), None);
+        assert_eq!(page(&evidence(&state, "backtest:python:2").await.unwrap()), None);
     }
 
     #[tokio::test]

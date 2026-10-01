@@ -14,6 +14,7 @@ mod ingest;
 mod media;
 mod model;
 mod realtime;
+mod source_pages;
 mod state;
 
 use tokio::net::TcpListener;
