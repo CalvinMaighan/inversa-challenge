@@ -193,14 +193,22 @@ pub struct Taxon {
     pub photo_url: Option<String>,
     /// The taxon's page at iNaturalist, for a new-tab link.
     pub page_url: Option<String>,
+    /// iNat ancestor taxon ids, root first (the web app derives the category: snakes, lizards, ...). Null when unknown.
+    pub ancestor_ids: Option<Vec<ID>>,
+}
+
+/// `taxa.ancestor_ids` JSON text to ids; unreadable text reads as unknown.
+pub fn ancestry_from_db(text: Option<String>) -> Option<Vec<ID>> {
+    let ids: Vec<i64> = serde_json::from_str(text?.as_str()).ok()?;
+    Some(ids.into_iter().map(|n| ID(n.to_string())).collect())
 }
 
 impl Taxon {
     /// Column order of [`Taxon::COLUMNS`] in a `select` over `taxa t`.
     pub const COLUMNS: &'static str =
-        "t.id, t.scientific_name, t.common_name, t.focus, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url";
+        "t.id, t.scientific_name, t.common_name, t.focus, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url, t.ancestor_ids";
 
-    /// Read the eight [`Taxon::COLUMNS`] starting at `at`.
+    /// Read the nine [`Taxon::COLUMNS`] starting at `at`.
     pub fn from_row(r: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<Taxon> {
         let id: i64 = r.get(at)?;
         let inat: Option<i64> = r.get(at + 4)?;
@@ -215,6 +223,7 @@ impl Taxon {
             summary: r.get(at + 6)?,
             photo_url: photo.map(|_| format!("/v1/media/taxon/{id}")),
             page_url: inat.map(crate::taxon_info::page_url),
+            ancestor_ids: ancestry_from_db(r.get(at + 8)?),
         })
     }
 }

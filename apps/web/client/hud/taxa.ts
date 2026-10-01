@@ -6,26 +6,29 @@
  */
 import { get, set } from "@calvinjs/active-state";
 
-import { TAXA, type TaxaState, type TaxonInfo } from "client/state/taxa";
+import { categoryOfTaxon, TAXA, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { gqlRequest, getFrameSightings, onFrameSightings, type FrameSightings } from "client/threads/api";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 export const TAXA_QUERY = `query HudTaxa($ids: [ID!]!) {
-  taxa(ids: $ids) { id scientificName commonName focus iconicGroup summary photoUrl pageUrl }
+  taxa(ids: $ids) { id scientificName commonName focus iconicGroup summary photoUrl pageUrl ancestorIds }
 }`;
 
 /** Ids per request; Axum caps `taxa` at 500. */
 const BATCH = 400;
 
-type RawTaxon = { id: string; scientificName: string; commonName: string; focus: boolean; iconicGroup: string | null; summary: string | null; photoUrl: string | null; pageUrl: string | null };
+type RawTaxon = { id: string; scientificName: string; commonName: string; focus: boolean; iconicGroup: string | null; summary: string | null; photoUrl: string | null; pageUrl: string | null; ancestorIds?: (string | number)[] | null };
 
 export function normalizeTaxon(raw: RawTaxon): TaxonInfo {
+  const ancestorIds = Array.isArray(raw.ancestorIds) ? raw.ancestorIds.map(Number).filter((n) => Number.isFinite(n)) : null;
   return {
     id: Number(raw.id),
     scientificName: raw.scientificName ?? "",
     commonName: raw.commonName ?? "",
     focus: raw.focus === true,
     iconicGroup: raw.iconicGroup ?? null,
+    ancestorIds,
+    category: categoryOfTaxon({ ancestorIds, iconicGroup: raw.iconicGroup }),
     summary: raw.summary ?? null,
     photoUrl: raw.photoUrl ?? null,
     pageUrl: raw.pageUrl ?? null,
@@ -43,7 +46,7 @@ export function putTaxa(list: readonly TaxonInfo[]): void {
     for (const t of list) {
       const key = String(t.id);
       const old = byId[key];
-      if (old && old.commonName === t.commonName && old.iconicGroup === t.iconicGroup && old.summary === t.summary && old.photoUrl === t.photoUrl) continue;
+      if (old && old.commonName === t.commonName && old.category === t.category && old.summary === t.summary && old.photoUrl === t.photoUrl) continue;
       byId[key] = t;
       changed = true;
     }

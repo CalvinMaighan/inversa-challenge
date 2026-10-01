@@ -293,6 +293,7 @@ impl Taxon {
                 common_name: self.preferred_common_name.clone().unwrap_or_default(),
                 inat_taxon_id: Some(self.id),
                 iconic_group: Some(crate::taxon_info::iconic_group(self.iconic_taxon_name.as_deref()).to_string()),
+                ancestor_ids: self.ancestor_ids.clone(),
             },
         }
     }

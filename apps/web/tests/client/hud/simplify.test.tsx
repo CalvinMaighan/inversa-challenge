@@ -128,6 +128,7 @@ const anole: Evidence = {
       focus: false,
       inatTaxonId: "116461",
       iconicGroup: "Reptilia",
+      ancestorIds: ["48460", "1", "2", "355675", "26036", "26172", "85552", "116461"],
       summary: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
       photoUrl: "/v1/media/taxon/17",
       pageUrl: "https://www.inaturalist.org/taxa/116461",
@@ -184,7 +185,8 @@ describe("plain evidence summary", () => {
     expect(s.species).toEqual({
       name: "Brown anole",
       scientificName: "Anolis sagrei",
-      status: "introduced reptile",
+      status: "introduced lizard",
+      category: "lizards",
       about: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
       moreUrl: "https://www.inaturalist.org/taxa/116461",
       moreLabel: "More about Brown anole on iNaturalist",
@@ -193,16 +195,19 @@ describe("plain evidence summary", () => {
     expect(s.photo).toBe("/v1/media/taxon/17");
     expect(plainSummary("sighting", { ...anole.record, mediaUrl: "/v1/media/18598" }, NOW)!.photo).toBe("/v1/media/18598");
     // A focus species keeps Inversa's one-liner as its About line.
-    expect(plainSummary("sighting", sighting.record, NOW)!.species).toMatchObject({ name: "Green iguana", scientificName: "Iguana iguana", about: "Tree-climbing lizard that burrows into seawalls and canal banks." });
+    expect(plainSummary("sighting", sighting.record, NOW)!.species).toMatchObject({ name: "Green iguana", scientificName: "Iguana iguana", category: "lizards", status: "introduced lizard", about: "Tree-climbing lizard that burrows into seawalls and canal banks." });
     // Never a placeholder title: a taxon with no common name reads by its Latin name; an unsafe page URL is dropped.
-    expect(speciesCard({ id: "9", scientificName: "Agama picticauda", commonName: "", pageUrl: "https://evil.example/taxa/1" })).toMatchObject({ name: "Agama picticauda", scientificName: null, status: "introduced species", moreUrl: null });
+    expect(speciesCard({ id: "9", scientificName: "Agama picticauda", commonName: "", pageUrl: "https://evil.example/taxa/1" })).toMatchObject({ name: "Agama picticauda", scientificName: null, status: "introduced species", category: "other", moreUrl: null });
+    expect(speciesCard({ id: "9", scientificName: "Osteopilus septentrionalis", commonName: "Cuban Treefrog", iconicGroup: "Amphibia", ancestorIds: ["48460", "1", "20979"] })).toMatchObject({ status: "introduced frog or toad", category: "frogs" });
     expect(speciesCard({ id: "9" }).name).toBe("Unnamed species");
     expect(speciesCard({ id: "9" }).name).not.toContain("Other");
 
     const lead = html(<Summary kind="sighting" evidence={anole} atMs={NOW} />);
     expect(lead).toContain("<h3>Brown anole spotted near Coral Gables</h3>");
     expect(lead).toContain('<i lang="la">Anolis sagrei</i>');
-    expect(lead).toContain("introduced reptile");
+    expect(lead).toContain("introduced lizard");
+    // The card carries its kind's icon in the category colour (T44).
+    expect(lead).toMatch(/data-category-icon="lizards"/);
     expect(lead).toContain('src="/v1/media/taxon/17"');
     expect(lead).toMatch(/data-testid="species-about"[^>]*>The brown anole/);
     expect(lead).toMatch(/<a[^>]*href="https:\/\/www\.inaturalist\.org\/taxa\/116461"[^>]*target="_blank"[^>]*rel="[^"]*noopener[^"]*"/);

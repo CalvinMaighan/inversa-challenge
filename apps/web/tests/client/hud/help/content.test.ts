@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { ABOUT_SENTENCE, EXAMPLE_QUESTIONS, GROUP_GUIDE, HELP_ENTRIES, HELP_GROUPS, SPECIES_GUIDE, WELCOME, WINDOW_NOTE } from "client/hud/help/content";
+import { ABOUT_SENTENCE, EXAMPLE_QUESTIONS, HELP_ENTRIES, HELP_GROUPS, SPECIES_GUIDE, WELCOME, WINDOW_NOTE } from "client/hud/help/content";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 const README = readFileSync(path.resolve(import.meta.dir, "../../../../../../README.md"), "utf8");
@@ -29,8 +29,7 @@ describe("help sheet content", () => {
     expect(WELCOME.split(/(?<=[.;!?])\s+(?=[A-Z])/).filter(Boolean).length).toBeLessThanOrEqual(2);
     expect(WELCOME).toContain("last 7 days");
     expect(WINDOW_NOTE).toBe("Most people upload sightings a few days after they see them, so the last 7 days shows the most.");
-    expect(Object.keys(GROUP_GUIDE)).toEqual(["plants", "others"]);
-    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...SPECIES_IDS, "animals"]);
+    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...SPECIES_IDS, "other"]);
     for (const s of SPECIES_GUIDE) expect(s.line.length).toBeGreaterThan(10);
     expect(SPECIES_GUIDE[0]).toMatchObject({ full: "Burmese python", line: "giant constrictor eating Everglades wildlife" });
     expect(ABOUT_SENTENCE.split(". ").length).toBe(1);

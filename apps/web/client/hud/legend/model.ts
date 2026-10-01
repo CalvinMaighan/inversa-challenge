@@ -8,26 +8,26 @@ import { statusColor } from "client/globe/layers/missions";
 import { STATION_SOURCES, stationColor } from "client/globe/layers/stations";
 import type { LayerStats } from "client/globe/layers/types";
 import { HATCH_RGBA, HEAT_STOPS, LST_RANGE_C, SST_RANGE_C, TEMP_STOPS, type RampStop } from "client/globe/ramp";
-import { groupShown, NEUTRAL_COLOR, SPECIES_COLORS, TAXON_PALETTE } from "client/globe/species";
-import { sightingHoursOf, SPECIES_GROUP_IDS, type LayerId, type LayersState, type SpeciesFilterId, type SpeciesGroupId, type SpeciesId } from "client/state/layers";
-import { isFocusTaxon, taxonGroup, type TaxonInfo } from "client/state/taxa";
+import { categoryShown, SPECIES_COLORS } from "client/globe/species";
+import { sightingHoursOf, type LayerId, type LayersState, type SpeciesFilterId, type SpeciesId } from "client/state/layers";
+import { isFocusTaxon, taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { windowLabel } from "shared/frames";
+import { CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { NETWORK_LABELS, SPECIES_NAMES } from "../tooltip/model";
 
-/** Legend labels of the species groups (T44). */
-export const GROUP_LABELS: Record<SpeciesGroupId, string> = { animals: "Other introduced animals", plants: "Plants", others: "Insects & others" };
-
 const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
 
-export type SwatchShape = "dot" | "square" | "diamond" | "area" | "hatch";
+export type SwatchShape = "dot" | "square" | "diamond" | "area" | "hatch" | "icon";
 
 export type LegendSwatch = {
   key: string;
   label: string;
   color: string;
   shape: SwatchShape;
+  /** The category icon drawn when `shape` is "icon" (T44). */
+  icon?: CategoryId;
   /** What the layer draws of this kind right now; null when the layer does not count it separately. */
   count: number | null;
   /** Species sub-rows toggle through `setSpeciesVisible`. */
@@ -75,16 +75,16 @@ const part = (s: LayerStats | null, key: string): number | null => (s?.breakdown
 const SEVERITIES = ["Extreme", "Severe", "Moderate", "Minor"] as const;
 
 /**
- * Sightings per species group from the layer's per-taxon breakdown (keys are taxon ids), using the TAXA store
- * for each taxon's group; a taxon not loaded yet counts as an animal. Null before the globe reported.
+ * Sightings per category from the layer's per-taxon breakdown (keys are taxon ids), using the TAXA store for
+ * each taxon's category; a taxon not loaded yet counts as `other`. Null before the globe reported.
  */
-export function groupCounts(breakdown: Readonly<Record<string, number>> | undefined, taxa: Readonly<Record<string, TaxonInfo>>): Record<SpeciesGroupId, number> | null {
+export function categoryCounts(breakdown: Readonly<Record<string, number>> | undefined, taxa: Readonly<Record<string, TaxonInfo>>): Record<CategoryId, number> | null {
   if (!breakdown) return null;
-  const out: Record<SpeciesGroupId, number> = { animals: 0, plants: 0, others: 0 };
+  const out = Object.fromEntries(CATEGORY_IDS.map((id) => [id, 0])) as Record<CategoryId, number>;
   for (const [key, n] of Object.entries(breakdown)) {
     const id = Number(key);
     if (!Number.isInteger(id) || isFocusTaxon(id)) continue;
-    out[taxonGroup(taxa, id)] += n;
+    out[taxonCategory(taxa, id) ?? "other"] += n;
   }
   return out;
 }
@@ -98,32 +98,33 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
   const sightings = statsFor(stats, SIGHTINGS);
   const stationStats = statsFor(stats, STATIONS);
   const pinned = layers.species[HOTSPOTS];
-  const groups = groupCounts(sightings?.breakdown, taxa);
+  const categories = categoryCounts(sightings?.breakdown, taxa);
 
   return [
     row(SIGHTINGS, {
       label: "Sightings",
-      note: `One dot per sighting in the last ${windowLabel(sightingHoursOf(layers))}, fading with age, each species in its own colour. Red ring: the IDs conflict.`,
+      note: `One marker per sighting in the last ${windowLabel(sightingHoursOf(layers))}, its kind's icon in its colour, fading with age. White ring: selected. Red ring: the IDs conflict.`,
       unit: "drawn",
       swatches: [
         ...SPECIES_IDS.map((id, i) => ({
           key: id,
           label: SPECIES_NAMES[i]!,
           color: SPECIES_COLORS[i]!,
-          shape: "dot" as const,
+          shape: "icon" as const,
+          icon: FOCUS_CATEGORIES[i]!,
           count: part(sightings, String(i + 1)),
           species: id,
           on: layers.species[id] !== false,
         })),
-        // The groups: other animals draw in their own palette colours; a group that is off reads neutral.
-        ...SPECIES_GROUP_IDS.map((id, i) => ({
+        ...CATEGORY_IDS.map((id) => ({
           key: id,
-          label: GROUP_LABELS[id],
-          color: groupShown(layers.species, id) ? TAXON_PALETTE[i * 4]! : NEUTRAL_COLOR,
-          shape: "dot" as const,
-          count: groups ? groups[id] : null,
+          label: id === "other" ? "Other kinds" : CATEGORY_LABELS[id],
+          color: CATEGORY_COLORS[id],
+          shape: "icon" as const,
+          icon: id,
+          count: categories ? categories[id] : null,
           species: id as SpeciesFilterId,
-          on: groupShown(layers.species, id),
+          on: categoryShown(layers.species, id),
         })),
       ],
     }),

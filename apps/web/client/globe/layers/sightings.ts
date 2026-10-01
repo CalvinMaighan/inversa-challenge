@@ -1,28 +1,32 @@
 /**
- * Sightings: a PointPrimitiveCollection dot per record, coloured by taxon and fading with age over the trailing
- * window (LAYERS.sightingHours: 2, 7 or 30 days, T44) ending at the time cursor, plus a BillboardCollection icon
- * for the four focus species once the camera is close enough to read it.
+ * Sightings: one icon billboard per record, the icon of the species' category (snake, lizard, bird, …) tinted in
+ * its label colour, fading with age over the trailing window (LAYERS.sightingHours: 2, 7 or 30 days, T44)
+ * ending at the time cursor. A second BillboardCollection draws a ring behind the selected marker (white) and
+ * behind markers whose IDs conflict (red).
+ *
+ * Images come from `client/globe/species-icons.ts`: one canvas per category and colour, registered with Cesium
+ * under a stable id (`Billboard.setImage(id, image)`), so the texture atlas holds about a dozen regions however
+ * many markers there are, and nothing is drawn per marker.
  *
  * Records are the decoded EVF2 sighting sections of the window's frames (C16 FrameSightings). Each carries its
- * `sightings.id`, so every primitive is stamped `sighting:<id>` for `pick()` with no request of its own.
- *
- * Every taxon has its own colour (`client/globe/species.ts`); the filter hides focus species by key, other taxa
- * by their group (animals, plants, others) or their own `t<id>` override. Taxon groups come from the TAXA store
- * through `ctx.taxa()`; a taxon not loaded yet draws as an animal.
+ * `sightings.id`, so every billboard is stamped `sighting:<id>` for `pick()` with no request of its own. The
+ * filter hides focus species by key, other taxa by their category or their own `t<id>` override; categories come
+ * from the TAXA store through `ctx.taxa()`, and a taxon not loaded yet draws with the generic icon.
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
-import type { BillboardCollection, PointPrimitiveCollection } from "cesium";
+import type { BillboardCollection } from "cesium";
 
 import { sightingHoursOf } from "client/state/layers";
-import type { TaxonInfo } from "client/state/taxa";
+import { taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
+import type { CategoryId } from "shared/species-categories";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
 import { sightingEvidenceId } from "../evidence";
 import { stepMsOf } from "../frame-index";
-import { colorOfTaxon, enabledSpecies, SPECIES_COLORS, speciesIndexOfTaxon, taxonShown } from "../species";
-import { createCanvas } from "./raster-surface";
+import { colorOfTaxon, enabledSpecies, speciesIndexOfTaxon, taxonShown } from "../species";
+import { markerImage, markerImageCount, ringImage } from "../species-icons";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
 
 const [SIGHTINGS] = LAYER_IDS;
@@ -31,18 +35,16 @@ const [SIGHTINGS] = LAYER_IDS;
 export const SIGHTING_TRAIL_MS = SIGHTING_WINDOW_HOURS * 60 * 60_000;
 export const trailMs = (hours: number) => hours * 60 * 60_000;
 const OLDEST_ALPHA = 0.3;
-/** Icons only when the camera is within this range; from the region overview the dots carry it. */
-const ICON_MAX_DISTANCE_M = 250_000;
-/** Depth test off within this camera distance so dots stay on top of terrain and 3D tiles. */
+/** Depth test off within this camera distance so markers stay on top of terrain and 3D tiles. */
 const NO_DEPTH_TEST_WITHIN_M = 200_000;
-const CONFLICT_OUTLINE = "#ff3b3b";
+const CONFLICT_RING = "#ff3b3b";
+const SELECTED_RING = "#ffffff";
 /** QUALITY_CODES indices drawn at full strength (research grade, curated); needs_id and casual draw dimmer. */
 const STRONG_QUALITY: ReadonlySet<number> = new Set([0, 3]);
-const OUTLINE = "#0b0d12";
-/** Dot sizes, px: big enough to hit with a mouse; the selected sighting larger still, ringed in white. */
-const FOCUS_PX = 10;
-const OTHER_PX = 8;
-const SELECTED_PX = 15;
+/** Marker scale: the focus species a little larger than the rest, the selected one larger still. */
+const FOCUS_SCALE = 1;
+const OTHER_SCALE = 0.85;
+const SELECTED_SCALE = 1.35;
 
 /** A record with its age in ms at the cursor. */
 export type TrailRecord = SightingRecord & { ageMs: number };
@@ -91,7 +93,7 @@ export function distinctRecords(records: readonly TrailRecord[]): TrailRecord[] 
 
 /**
  * Records the layer draws: duplicates hidden, the species filter applied (focus species by key, other taxa by
- * their group or their own override, `taxonShown`).
+ * their category or their own override, `taxonShown`).
  */
 export function visibleRecords(records: readonly TrailRecord[], filter: Readonly<Record<string, unknown>> | undefined, byId: Readonly<Record<string, TaxonInfo>> = {}): TrailRecord[] {
   const on = new Set(enabledSpecies(filter, SIGHTINGS));
@@ -120,45 +122,13 @@ export function trailAlpha(ageMs: number, trail: number = SIGHTING_TRAIL_MS): nu
   return 1 - (1 - OLDEST_ALPHA) * t;
 }
 
-/** Round species badge with the species initial, drawn once per species. */
-function speciesIcon(index: number): HTMLCanvasElement {
-  const size = 22;
-  const canvas = createCanvas(size, size);
-  const g = canvas.getContext("2d");
-  if (g) {
-    g.beginPath();
-    g.arc(size / 2, size / 2, size / 2 - 1.5, 0, Math.PI * 2);
-    g.fillStyle = SPECIES_COLORS[index]!;
-    g.fill();
-    g.lineWidth = 2;
-    g.strokeStyle = OUTLINE;
-    g.stroke();
-    g.fillStyle = OUTLINE;
-    g.font = "bold 12px ui-sans-serif, system-ui, sans-serif";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillText(SPECIES_IDS[index]!.charAt(0).toUpperCase(), size / 2, size / 2 + 0.5);
-  }
-  return canvas;
-}
-
 export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
   let viewer: GlobeViewer | null = null;
-  let points: PointPrimitiveCollection | null = null;
   let icons: BillboardCollection | null = null;
-  const iconImages = new Map<number, HTMLCanvasElement>();
+  let rings: BillboardCollection | null = null;
   let enabled = false;
   let drawnKey = "";
   const stats: LayerStats = { id: SIGHTINGS, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
-
-  const iconFor = (species: number) => {
-    let img = iconImages.get(species);
-    if (!img) {
-      img = speciesIcon(species);
-      iconImages.set(species, img);
-    }
-    return img;
-  };
 
   /** Drawn records by evidence id, for `describe`. */
   let drawnById = new Map<string, TrailRecord>();
@@ -166,18 +136,19 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
   let windowKey = "";
 
   const clear = () => {
-    if (!points || !icons || drawnKey === "none") return;
-    points.removeAll();
+    if (!icons || !rings || drawnKey === "none") return;
     icons.removeAll();
+    rings.removeAll();
     drawnKey = "none";
     drawnById = new Map();
     stats.breakdown = sightingBreakdown([]);
     stats.count = 0;
+    stats.marker = { kind: "billboard", categories: 0, dots: 0, images: markerImageCount() };
     ctx.requestRender();
   };
 
   const draw = (frame: number, grid: FrameGrid | null) => {
-    if (!points || !icons) return;
+    if (!icons || !rings) return;
     const meta = ctx.meta();
     if (frame < 0 || !meta) {
       clear();
@@ -195,7 +166,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     if (key === drawnKey) return;
     drawnKey = key;
 
-    const { Cartesian2, Cartesian3, Color, DistanceDisplayCondition, VerticalOrigin } = cesium();
+    const { Cartesian3, Color, VerticalOrigin } = cesium();
     // The index follows the published sighting set (revision) and the grid's axis; a scrub step only slices it.
     const indexKey = `${ctx.revision()}|${meta.frame0UnixMs}|${meta.frameCount}|${meta.stepMinutes}`;
     if (indexKey !== windowKey) {
@@ -205,39 +176,42 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     const trail = distinctRecords(windowRecords(windowIndex!, frame, hours));
     const visible = visibleRecords(trail, filter, taxa.byId);
     const trailLength = trailMs(hours);
-    points.removeAll();
     icons.removeAll();
-    const iconRange = new DistanceDisplayCondition(0, ICON_MAX_DISTANCE_M);
-    // The selected dot goes in last, so it draws over its neighbours.
+    rings.removeAll();
+    // The selected marker goes in last, so it draws over its neighbours.
     const selectedIndex = selected ? visible.findIndex((r) => sightingEvidenceId(r.id) === selected) : -1;
     const ordered = selectedIndex < 0 ? visible : [...visible.slice(0, selectedIndex), ...visible.slice(selectedIndex + 1), visible[selectedIndex]!];
+    const categories = new Set<CategoryId>();
     for (const r of ordered) {
       const position = Cartesian3.fromDegrees(r.lon, r.lat);
       const alpha = trailAlpha(r.ageMs, trailLength) * (STRONG_QUALITY.has(r.quality) ? 1 : 0.8);
       const s = speciesIndexOfTaxon(r.taxon);
+      const category = taxonCategory(taxa.byId, r.taxon) ?? "other";
+      categories.add(category);
       const conflict = (r.flags & SIGHTING_FLAG.conflict) !== 0;
       const id = sightingEvidenceId(r.id);
       const isSelected = id === selected;
-      points.add({
+      const image = markerImage(category, colorOfTaxon(r.taxon, taxa.byId));
+      const marker = icons.add({
         id,
         position,
-        pixelSize: isSelected ? SELECTED_PX : s >= 0 ? FOCUS_PX : OTHER_PX,
-        color: Color.fromCssColorString(colorOfTaxon(r.taxon)).withAlpha(isSelected ? 1 : alpha),
-        outlineColor: isSelected ? Color.WHITE : Color.fromCssColorString(conflict ? CONFLICT_OUTLINE : OUTLINE).withAlpha(Math.max(alpha, 0.6)),
-        outlineWidth: isSelected ? 3 : conflict ? 2 : 1.5,
+        scale: isSelected ? SELECTED_SCALE : s >= 0 ? FOCUS_SCALE : OTHER_SCALE,
+        color: Color.WHITE.withAlpha(isSelected ? 1 : alpha),
+        verticalOrigin: VerticalOrigin.CENTER,
         disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
       });
-      if (s >= 0) {
-        icons.add({
+      marker.setImage(image.id, image.image);
+      if (isSelected || conflict) {
+        const ring = ringImage(isSelected ? SELECTED_RING : CONFLICT_RING);
+        const halo = rings.add({
           id,
           position,
-          image: iconFor(s),
-          verticalOrigin: VerticalOrigin.BOTTOM,
-          pixelOffset: new Cartesian2(0, -5),
-          color: Color.WHITE.withAlpha(alpha),
-          distanceDisplayCondition: iconRange,
+          scale: isSelected ? SELECTED_SCALE : OTHER_SCALE,
+          color: Color.WHITE.withAlpha(isSelected ? 1 : Math.max(alpha, 0.6)),
+          verticalOrigin: VerticalOrigin.CENTER,
           disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
         });
+        halo.setImage(ring.id, ring.image);
       }
     }
     drawnById = new Map(visible.map((r) => [sightingEvidenceId(r.id), r]));
@@ -245,6 +219,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     stats.count = visible.length;
     stats.frame = frame;
     stats.updatedAt = ctx.now();
+    stats.marker = { kind: "billboard", categories: categories.size, dots: 0, images: markerImageCount() };
     ctx.requestRender();
   };
 
@@ -253,25 +228,25 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     init(v) {
       viewer = v;
       const C = cesium();
-      points = v.scene.primitives.add(new C.PointPrimitiveCollection({ show: false }));
+      rings = v.scene.primitives.add(new C.BillboardCollection({ show: false }));
       icons = v.scene.primitives.add(new C.BillboardCollection({ show: false }));
     },
     enable() {
       enabled = stats.enabled = true;
-      if (points && icons) points.show = icons.show = true;
+      if (icons && rings) icons.show = rings.show = true;
       drawnKey = "";
     },
     disable() {
       enabled = stats.enabled = false;
-      if (points && icons) {
-        points.show = icons.show = false;
+      if (icons && rings) {
+        icons.show = rings.show = false;
         ctx.requestRender();
       }
     },
     update(frameIndex, grid) {
       if (enabled) draw(frameIndex, grid);
     },
-    stats: () => ({ ...stats, breakdown: stats.breakdown && { ...stats.breakdown } }),
+    stats: () => ({ ...stats, breakdown: stats.breakdown && { ...stats.breakdown }, marker: stats.marker && { ...stats.marker } }),
     describe(id) {
       const r = enabled ? drawnById.get(id) : undefined;
       return r
@@ -281,10 +256,10 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     destroy() {
       drawnById = new Map();
       if (viewer) {
-        if (points) viewer.scene.primitives.remove(points);
         if (icons) viewer.scene.primitives.remove(icons);
+        if (rings) viewer.scene.primitives.remove(rings);
       }
-      points = icons = null;
+      icons = rings = null;
       viewer = null;
       enabled = stats.enabled = false;
     },

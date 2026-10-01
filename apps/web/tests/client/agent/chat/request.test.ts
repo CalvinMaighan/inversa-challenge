@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { agentView, buildAgentRequest, validBBox } from "client/agent/chat/request";
+import { LAYERS } from "client/state/layers";
 import { REGION_BBOX } from "client/state/view";
 
 const NOW = Date.parse("2026-09-30T12:00:00Z");
@@ -43,15 +44,16 @@ describe("agent request view", () => {
   });
 
   test("the species filter travels only when it hides an animal", () => {
-    const all = { python: true, tegu: true, iguana: true, lionfish: true, animals: true, plants: false, others: false };
+    const all = { ...LAYERS.defaults.species };
+    const animals = ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"];
     expect(agentView({ layers: { visible: { sightings: true }, species: all } }, NOW).species).toBeUndefined();
     // Switching plants on hides nothing: no filter travels.
     expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, plants: true } } }, NOW).species).toBeUndefined();
-    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, python: false, tegu: false, lionfish: false, animals: false } } }, NOW).species).toEqual([
-      "iguana",
-    ]);
-    // One animal chip hidden on its own counts as a filter too.
-    expect(agentView({ layers: { species: { ...all, t116461: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", "animals"]);
+    const none = Object.fromEntries(animals.map((id) => [id, false]));
+    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, ...none, python: false, tegu: false, lionfish: false } } }, NOW).species).toEqual(["iguana"]);
+    // A category off is a filter; so is one animal chip hidden on its own.
+    expect(agentView({ layers: { species: { ...all, birds: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", ...animals.filter((id) => id !== "birds")]);
+    expect(agentView({ layers: { species: { ...all, t116461: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", ...animals]);
     // A hotspot pin is not a species.
     expect(agentView({ layers: { species: { ...all, hotspots: "python" } } }, NOW).species).toBeUndefined();
   });

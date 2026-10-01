@@ -3,40 +3,30 @@
 import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { colorOfTaxon, groupShown, NEUTRAL_COLOR, SPECIES_COLORS, taxonShown } from "client/globe/species";
-import {
-  isSpeciesFiltered,
-  LAYERS,
-  setSightingHours,
-  setSpeciesVisible,
-  setTaxonVisible,
-  showAllSpecies,
-  showOnlySpecies,
-  showOnlyTaxon,
-  sightingHoursOf,
-  SPECIES_GROUP_IDS,
-  type LayersState,
-  type SpeciesFilterId,
-  type SpeciesGroupId,
-} from "client/state/layers";
-import { groupOf, isFocusTaxon, TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
+import { SPECIES_COLORS } from "client/globe/species";
+import { isSpeciesFiltered, LAYERS, setSightingHours, setSpeciesVisible, setTaxonVisible, showAllSpecies, showOnlySpecies, showOnlyTaxon, sightingHoursOf, type LayersState } from "client/state/layers";
+import { TAXA, type TaxaState } from "client/state/taxa";
 import styled from "client/styled";
 import { SIGHTING_WINDOW_OPTIONS, windowLabel } from "shared/frames";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { CATEGORY_COLORS } from "shared/species-categories";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { GROUP_GUIDE, SPECIES_GUIDE, WINDOW_NOTE } from "../help/content";
+import { WINDOW_NOTE } from "../help/content";
 import { formatCount } from "../legend/model";
 import { useGlobeStats } from "../legend/useGlobeStats";
 import { MOBILE, Mono, Surface } from "../primitives";
+import { usePopover } from "../topbar/TopBar";
+import CategoriesPopover from "./CategoriesPopover";
+import CategoryIcon from "./CategoryIcon";
+import { categoryRows, MOBILE_ANIMAL_CHIPS, speciesChips, type ChipModel } from "./model";
 
-/** Chip colours, indexed like SPECIES_GUIDE: the four focus colours, then the neutral of a group chip. */
-export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, NEUTRAL_COLOR];
+export { firstSentence, MOBILE_ANIMAL_CHIPS, speciesChips, TOP_ANIMAL_CHIPS, type ChipModel } from "./model";
+
+/** Chip colours, indexed like SPECIES_GUIDE: the four focus colours, then the "Other" chip's neutral. */
+export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, CATEGORY_COLORS.other];
 const [SIGHTINGS] = LAYER_IDS;
 /** A touch held this long shows only that species. */
 const LONG_PRESS_MS = 500;
-/** Non-focus animal chips in the bar: the most-seen taxa of the window. A phone shows the first MOBILE_ANIMAL_CHIPS of them. */
-export const TOP_ANIMAL_CHIPS = 6;
-export const MOBILE_ANIMAL_CHIPS = 3;
 
 const Bar = styled(Surface)`
   display: flex;
@@ -58,7 +48,7 @@ const Slot = styled.span`
   position: relative;
   display: inline-flex;
 
-  /* A phone keeps the bar to two rows: the focus four, the top three other animals and the groups. */
+  /* A phone keeps the bar to two rows: the focus four, the top three other animals and Other. */
   ${MOBILE} {
     &[data-extra] {
       display: none;
@@ -96,7 +86,7 @@ const Chip = styled.button<{ $color: string }>`
   align-items: center;
   gap: 6px;
   height: 30px;
-  padding: 0 9px;
+  padding: 0 9px 0 7px;
   border: 1px solid transparent;
   border-radius: var(--radius-s);
   background: transparent;
@@ -108,13 +98,8 @@ const Chip = styled.button<{ $color: string }>`
   -webkit-touch-callout: none;
   max-width: 190px;
 
-  i {
-    flex: none;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    border: 2px solid ${(p) => p.$color};
-    background: transparent;
+  svg {
+    opacity: 0.55;
   }
 
   span.name {
@@ -123,13 +108,15 @@ const Chip = styled.button<{ $color: string }>`
     white-space: nowrap;
   }
 
-  &[aria-pressed="true"] {
+  /* On: a pressed chip, the Other chip while any category is on, and the Other chip while its popover is open. */
+  &[aria-pressed="true"],
+  &[data-on="true"],
+  &[aria-expanded="true"] {
     color: var(--text);
     border-color: var(--border);
     background: color-mix(in oklch, ${(p) => p.$color} 16%, transparent);
-    i {
-      background: ${(p) => p.$color};
-      border: 1.5px solid #0b0d12;
+    svg {
+      opacity: 1;
     }
   }
 
@@ -144,7 +131,7 @@ const Chip = styled.button<{ $color: string }>`
 
   ${MOBILE} {
     height: 28px;
-    padding: 0 6px;
+    padding: 0 6px 0 5px;
     gap: 4px;
     font-size: 12px;
     max-width: 150px;
@@ -189,89 +176,21 @@ const Window = styled.select`
   }
 `;
 
-/** One chip of the bar: a focus species, a top animal, or a whole group. */
-export type ChipModel = {
-  /** `python`…`lionfish`, `animals|plants|others`, or `t<taxon id>`. */
-  key: string;
-  /** What the chip toggles. */
-  target: { kind: "species"; id: SpeciesFilterId } | { kind: "taxon"; id: number };
-  name: string;
-  /** The description line under the name on hover. */
-  full: string;
-  line: string;
-  color: string;
-  on: boolean;
-  count: number | null;
-  /** Rank among the non-focus animal chips (0 = most seen); absent on focus and group chips. */
-  rank?: number;
-};
-
-/** First sentence of a taxon summary, for the chip's one-line description. */
-export function firstSentence(text: string | null | undefined): string | null {
-  const t = text?.trim();
-  if (!t) return null;
-  const m = /^(.*?[.!?])(?:\s|$)/.exec(t);
-  return (m ? m[1]! : t).trim();
-}
-
-/**
- * The bar's chips (T44): the four focus species pinned first, then the TOP_ANIMAL_CHIPS most-seen other animals
- * of the window (a hidden one stays listed while it has sightings, so it can be turned back on), then the
- * Plants and "Insects & others" group chips. Pure over the filter, the TAXA store and the layer breakdown
- * (counts per taxon id, before the filter).
- */
-export function speciesChips(filter: LayersState["species"], taxa: Readonly<Record<string, TaxonInfo>>, breakdown: Readonly<Record<string, number>> | null): ChipModel[] {
-  const count = (key: string) => (breakdown ? (breakdown[key] ?? 0) : null);
-  const chips: ChipModel[] = SPECIES_IDS.map((id, i) => {
-    const guide = SPECIES_GUIDE[i]!;
-    return { key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: SPECIES_COLORS[i]!, on: filter[id] !== false, count: count(String(i + 1)) };
-  });
-  const totals: Record<SpeciesGroupId, number> = { animals: 0, plants: 0, others: 0 };
-  const animals: { id: number; n: number; info: TaxonInfo | undefined }[] = [];
-  for (const [key, n] of Object.entries(breakdown ?? {})) {
-    const id = Number(key);
-    if (!Number.isInteger(id) || isFocusTaxon(id)) continue;
-    const info = taxa[key];
-    const group = info ? groupOf(info.iconicGroup) : "animals";
-    totals[group] += n;
-    if (group === "animals" && n > 0) animals.push({ id, n, info });
-  }
-  animals.sort((a, b) => b.n - a.n || a.id - b.id);
-  for (const [rank, { id, n, info }] of animals.slice(0, TOP_ANIMAL_CHIPS).entries()) {
-    const name = taxonName(info, `Species ${id}`);
-    chips.push({
-      key: `t${id}`,
-      rank,
-      target: { kind: "taxon", id },
-      name,
-      full: name,
-      line: firstSentence(info?.summary) ?? (info?.scientificName ? `${info.scientificName}, an introduced species` : "an introduced animal people reported"),
-      color: colorOfTaxon(id),
-      on: taxonShown(filter, id, taxa, SIGHTINGS),
-      count: breakdown ? n : null,
-    });
-  }
-  for (const id of SPECIES_GROUP_IDS) {
-    if (id === "animals") continue;
-    const guide = GROUP_GUIDE[id];
-    const on = groupShown(filter, id);
-    chips.push({ key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: NEUTRAL_COLOR, on, count: breakdown ? totals[id] : null });
-  }
-  return chips;
-}
-
 function toggle(chip: ChipModel, only: boolean): void {
   if (chip.target.kind === "taxon") {
     if (only) showOnlyTaxon(chip.target.id);
     else setTaxonVisible(chip.target.id, !chip.on);
-  } else if (only) showOnlySpecies(chip.target.id);
-  else setSpeciesVisible(chip.target.id, !chip.on);
+  } else if (chip.target.kind === "species") {
+    if (only) showOnlySpecies(chip.target.id);
+    else setSpeciesVisible(chip.target.id, !chip.on);
+  }
 }
 
-function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
+function SpeciesChip({ chip, hours, onOpen, open, triggerRef, popId }: { chip: ChipModel; hours: number; onOpen?: () => void; open?: boolean; triggerRef?: React.RefObject<HTMLButtonElement | null>; popId?: string }) {
   const tipId = useId();
   const [pressing, setPressing] = useState(false);
   const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean }>({ timer: null, fired: false });
+  const opens = chip.target.kind === "categories";
   const cancel = () => {
     if (press.current.timer) clearTimeout(press.current.timer);
     press.current.timer = null;
@@ -279,7 +198,7 @@ function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
   };
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
     press.current.fired = false;
-    if (e.pointerType !== "touch") return;
+    if (e.pointerType !== "touch" || opens) return;
     cancel();
     setPressing(true);
     press.current.timer = setTimeout(() => {
@@ -291,11 +210,17 @@ function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
   return (
     <Slot data-pressing={pressing ? "" : undefined} data-extra={chip.rank !== undefined && chip.rank >= MOBILE_ANIMAL_CHIPS ? "" : undefined}>
       <Chip
+        ref={triggerRef}
         type="button"
         $color={chip.color}
-        aria-pressed={chip.on}
+        aria-pressed={opens ? undefined : chip.on}
+        aria-expanded={opens ? open : undefined}
+        aria-haspopup={opens ? "dialog" : undefined}
+        aria-controls={opens && open ? popId : undefined}
         aria-describedby={tipId}
         data-species-chip={chip.key}
+        data-category={chip.category}
+        data-on={opens ? (chip.on ? "true" : "false") : undefined}
         data-empty={chip.count === 0 ? "" : undefined}
         onPointerDown={onPointerDown}
         onPointerUp={cancel}
@@ -309,15 +234,16 @@ function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
             press.current.fired = false;
             return;
           }
-          toggle(chip, e.altKey);
+          if (opens) onOpen?.();
+          else toggle(chip, e.altKey);
         }}
       >
-        <i aria-hidden="true" />
+        <CategoryIcon category={chip.category} color={chip.color} size={18} />
         <span className="name">{chip.name}</span>
         <Count data-species-count="">{formatCount(chip.count)}</Count>
       </Chip>
       <span role="tooltip" id={tipId}>
-        <b>{chip.full}</b>: {chip.line.replace(/\.$/, "")}. {seen} Alt-click or hold to show only these.
+        <b>{chip.full}</b>: {chip.line.replace(/\.$/, "")}. {seen} {opens ? "Click to pick which kinds show." : "Alt-click or hold to show only these."}
       </span>
     </Slot>
   );
@@ -348,9 +274,10 @@ function WindowSelect({ hours }: { hours: number }) {
 
 /**
  * Species filter bar (T41, T44), top left of the map: the four focus species pinned, then the most-seen other
- * animals of the window, then Plants and "Insects & others" (off by default), each chip with its globe colour
- * and how many sightings there are in the window (GlobeApi stats breakdown, counted whatever the filter), plus
- * the window selector. Click toggles; Alt-click or a long press shows only that species; "All" brings every
+ * animals of the window, then "Other", which opens every category (snakes, lizards, …, plants) with its icon,
+ * colour, count and switch, and each category's top species. Every chip carries its category's icon in its
+ * colour and how many sightings there are in the window (GlobeApi stats breakdown, counted whatever the filter),
+ * plus the window selector. Click toggles; Alt-click or a long press shows only that species; "All" brings every
  * animal back. It writes the LAYERS species filter, which the globe, the legend, the timeline sparkline and the
  * agent's view all read.
  */
@@ -362,18 +289,28 @@ export default function SpeciesBar() {
   const stats = useGlobeStats();
   const breakdown = stats?.find((s) => s.id === SIGHTINGS)?.breakdown ?? null;
   const chips = useMemo(() => speciesChips(filter, taxa, breakdown), [filter, taxa, breakdown]);
+  const rows = useMemo(() => categoryRows(filter, taxa, breakdown), [filter, taxa, breakdown]);
   const filtered = isSpeciesFiltered(filter);
+  const otherRef = useRef<HTMLButtonElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const popId = useId();
+  const popover = usePopover(otherRef, popRef);
   return (
-    <Bar role="group" aria-label="Species filter" data-hud-obstacle="" data-testid="species-bar">
-      {chips.map((chip) => (
-        <SpeciesChip key={chip.key} chip={chip} hours={hours} />
-      ))}
+    <Bar role="group" aria-label="Species filter" data-hud-obstacle="" data-testid="species-bar" style={{ position: "relative" }}>
+      {chips.map((chip) =>
+        chip.target.kind === "categories" ? (
+          <SpeciesChip key={chip.key} chip={chip} hours={hours} onOpen={popover.toggle} open={popover.open} triggerRef={otherRef} popId={popId} />
+        ) : (
+          <SpeciesChip key={chip.key} chip={chip} hours={hours} />
+        ),
+      )}
       {filtered ? (
         <All type="button" onClick={showAllSpecies} data-testid="species-all" title="Show every animal again">
           All
         </All>
       ) : null}
       <WindowSelect hours={hours} />
+      {popover.open ? <CategoriesPopover id={popId} rows={rows} hours={windowLabel(hours)} popRef={popRef} onClose={popover.close} /> : null}
     </Bar>
   );
 }

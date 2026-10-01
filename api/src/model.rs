@@ -127,6 +127,9 @@ pub struct TaxonRef {
     /// Arachnida, Plantae, Fungi or other.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub iconic_group: Option<String>,
+    /// iNat `ancestor_ids`, root first; the web app derives the category (snakes, lizards, ...) from it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ancestor_ids: Option<Vec<i64>>,
 }
 
 impl TaxonRef {

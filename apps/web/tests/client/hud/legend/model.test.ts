@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import type { LayerStats } from "client/globe/layers/types";
 import { HEAT_STOPS, TEMP_STOPS } from "client/globe/ramp";
-import { NEUTRAL_COLOR, SPECIES_COLORS, TAXON_PALETTE } from "client/globe/species";
-import { formatCount, GAP_SWATCHES, groupCounts, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
+import { SPECIES_COLORS } from "client/globe/species";
+import { categoryCounts, formatCount, GAP_SWATCHES, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
+import { CATEGORY_ANCESTORS, CATEGORY_COLORS, CATEGORY_IDS, categoryFromAncestry } from "shared/species-categories";
 import type { TaxonInfo } from "client/state/taxa";
 import { statsSignature } from "client/hud/legend/useGlobeStats";
 import { LAYERS, type LayersState } from "client/state/layers";
@@ -30,21 +31,27 @@ describe("legend", () => {
     expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].sort());
   });
 
-  test("sightings: a row per focus species in the layer's own colours, plus the animal, plant and insect groups, with live counts", () => {
-    const taxon = (id: number, iconicGroup: string): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup, summary: null, photoUrl: null, pageUrl: null });
-    const taxa = { "42": taxon(42, "Reptilia"), "43": taxon(43, "Plantae"), "44": taxon(44, "Insecta") };
+  test("sightings: a row per focus species in the layer's own colours with its kind's icon, then every category with its icon, colour and live count", () => {
+    const taxon = (id: number, ancestor: number): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: [1, ancestor], category: categoryFromAncestry([ancestor]), summary: null, photoUrl: null, pageUrl: null });
+    const taxa = { "42": taxon(42, CATEGORY_ANCESTORS.lizards), "43": taxon(43, CATEGORY_ANCESTORS.plants), "44": taxon(44, CATEGORY_ANCESTORS.insects) };
     const breakdown = { "1": 2, "2": 0, "3": 6, "4": 0, "42": 1, "43": 3, "44": 2, "45": 1 };
     const stats = [stat(SIGHTINGS, 9, breakdown)];
     const row = legendRows(layers(), stats, taxa).find((r) => r.layer === SIGHTINGS)!;
     expect(row.count).toBe(9);
-    expect(row.swatches.map((s) => s.label)).toEqual(["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish", "Other introduced animals", "Plants", "Insects & others"]);
-    // Animals on in a palette colour; plants and insects off read neutral.
-    expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, TAXON_PALETTE[0]!, NEUTRAL_COLOR, NEUTRAL_COLOR]);
-    // 45 is not loaded yet: counted as an animal.
-    expect(row.swatches.map((s) => s.count)).toEqual([2, 0, 6, 0, 2, 3, 2]);
-    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, "animals", "plants", "others"]);
-    expect(row.swatches.map((s) => s.on)).toEqual([true, true, true, true, true, false, false]);
-    expect(groupCounts(undefined, taxa)).toBeNull();
+    expect(row.swatches.slice(0, 5).map((s) => s.label)).toEqual(["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish", "Snakes"]);
+    expect(row.swatches.map((s) => s.shape).every((s) => s === "icon")).toBe(true);
+    expect(row.swatches.slice(0, 4).map((s) => s.icon)).toEqual(["snakes", "lizards", "lizards", "fish"]);
+    expect(row.swatches.slice(4).map((s) => s.icon)).toEqual([...CATEGORY_IDS]);
+    // Focus colours, then each category's own colour (an off category keeps its colour, dimmed by the panel).
+    expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, ...CATEGORY_IDS.map((id) => CATEGORY_COLORS[id])]);
+    const by = Object.fromEntries(row.swatches.map((s) => [s.key, s]));
+    // 45 is not loaded yet: counted under Other.
+    expect([by.python, by.iguana, by.lizards, by.plants, by.insects, by.other].map((s) => s!.count)).toEqual([2, 6, 1, 3, 2, 1]);
+    expect(by.birds!.count).toBe(0);
+    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, ...CATEGORY_IDS]);
+    expect([by.python, by.lizards, by.plants, by.insects, by.other].map((s) => s!.on)).toEqual([true, true, false, false, false]);
+    expect(by.other!.label).toBe("Other kinds");
+    expect(categoryCounts(undefined, taxa)).toBeNull();
     expect(row.note).toContain("last 7 days");
   });
 

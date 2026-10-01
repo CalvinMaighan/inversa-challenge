@@ -9,6 +9,17 @@
       "rank": "species",
       "preferred_common_name": "Burmese Python",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85553,
+        67532,
+        32149
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Python bivittatus",
       "wikipedia_summary": "The <b>Burmese python</b> (<i>Python bivittatus</i>) is one of the five largest species of snakes in the world (about the third-largest as measured either by length or weight). It is native to a large area of tropical South and Southeast Asia. Until 2009, it was considered a subspecies of <i>Python molurus</i>, but now is recognized as belonging to a distinct species.",
       "default_photo": {
@@ -25,6 +36,19 @@
       "rank": "species",
       "preferred_common_name": "Argentine Black-and-white Tegu",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1567777,
+        38634,
+        797539,
+        318367
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Salvator merianae",
       "wikipedia_summary": "The <b>Argentine black and white tegu</b> (<i>Salvator merianae</i>), also called commonly the <b>Argentine giant tegu</b>, the <b>black and white tegu</b>, the <b>huge tegu</b>, and in Spanish as the <b>lagarto overo</b> is a species of lizard in the family Teiidae. The species is the largest of the \"tegu lizards\". It is an omnivorous species which inhabits the tropical rain forests, savannas, and semi-deserts of eastern and central South America.",
       "default_photo": {
@@ -41,6 +65,19 @@
       "rank": "species",
       "preferred_common_name": "Green Iguana",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1563907,
+        1567779,
+        35278,
+        35341
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Iguana_iguana",
       "wikipedia_summary": "The <b>green iguana</b> (<i>Iguana iguana</i>), also known as the <b>American iguana</b>, is a large, arboreal, mostly herbivorous species of lizard of the genus <i>Iguana</i>. It is native to Central, South America, and the Caribbean. Usually, this animal is simply called the <b>iguana</b>. The green iguana ranges over a large geographic area, from southern Brazil and Paraguay as far north as Mexico and the Caribbean Islands. They have been introduced from South America to Puerto Rico and...",
       "default_photo": {
@@ -57,6 +94,18 @@
       "rank": "genus",
       "preferred_common_name": null,
       "iconic_taxon_name": "Actinopterygii",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        47178,
+        1632273,
+        47233,
+        1303568,
+        47285,
+        788499
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Pterois",
       "wikipedia_summary": "<i><b>Pterois</b></i> is a genus of venomous marine fish, commonly known as <b>lionfish</b>, native to the Indo-Pacific. Also called <b>zebrafish</b>, <b>firefish</b>, <b>turkeyfish</b> or <b>butterfly-cod</b>, it is characterized by conspicuous warning coloration with red, white, creamy, or black bands, showy pectoral fins, and venomous spiky fin rays. <i>Pterois radiata</i>, <i>Pterois volitans</i>, and <i>Pterois miles</i> are the most commonly studied species in the genus. <i>Pterois</i> species are popular aquarium fish. <i>P. volitans</i> and <i>P. miles</i> are a recent and...",
       "default_photo": {
@@ -73,6 +122,19 @@
       "rank": "species",
       "preferred_common_name": "Common Lionfish",
       "iconic_taxon_name": "Actinopterygii",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        47178,
+        1632273,
+        47233,
+        1303568,
+        47285,
+        788499,
+        47284
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Pterois volitans",
       "wikipedia_summary": "The <b>red lionfish</b> (<i>Pterois volitans</i>) is a venomous coral reef fish in the family Scorpaenidae, order Scorpaeniformes. <i>P. volitans</i> is natively found in the Indo-Pacific region, but has become an invasive problem in the Caribbean Sea, as well as along the East Coast of the United States. This and a similar species, <i>Pterois miles</i>, have both been deemed as invasive species. Red lionfish are clad in white stripes alternated with red/maroon/brown stripes. Adults in this species...",
       "default_photo": {
@@ -89,6 +151,19 @@
       "rank": "species",
       "preferred_common_name": "Black Spiny-tailed Iguana",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1563907,
+        1567779,
+        35278,
+        35302
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Ctenosaura similis",
       "wikipedia_summary": "<i><b>Ctenosaura similis</b></i>, commonly known as the <b>black spiny-tailed iguana</b>, <b>black iguana</b>, or <b>black ctenosaur</b>, is a lizard native to Mexico and Central America that has been introduced to the United States in the state of Florida. It is the largest species in the genus <i>Ctenosaura</i> and has been recorded as the fastest-running species of lizard.",
       "default_photo": {
@@ -105,6 +180,20 @@
       "rank": "species",
       "preferred_common_name": "Peters's Rock Agama",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1563907,
+        1567778,
+        31096,
+        797574,
+        31115
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Agama picticauda",
       "wikipedia_summary": "<i><b>Agama picticauda</b></i>, the <b>Peter's rock agama</b> or <b>African redhead agama</b>, is a species of agamid lizard. It is native to West Africa.",
       "default_photo": {
@@ -121,6 +210,19 @@
       "rank": "species",
       "preferred_common_name": "Brown Anole",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1563907,
+        1567779,
+        200152,
+        36362
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Anolis sagrei",
       "wikipedia_summary": "The <b>brown anole</b> (<i>Anolis sagrei</i>), also known as the <b>Bahaman anole</b> or <b>De la Sagra's Anole</b>, is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere, by being sold as a pet lizard, and is now found in Florida and as far north in the United States as southern Georgia, Texas, Louisiana, Mississippi, Alabama, Hawaii, and Southern California. It has also been introduced to other Caribbean islands and Taiwan in Asia.",
       "default_photo": {
@@ -137,6 +239,19 @@
       "rank": "species",
       "preferred_common_name": "Northern Curly-tailed Lizard",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        1563907,
+        1567779,
+        145823,
+        39279
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Leiocephalus carinatus",
       "wikipedia_summary": "<i><b>Leiocephalus carinatus</b></i>, commonly known as the <b>northern curly-tailed lizard</b>, is a species of lizard in the family Leiocephalidae (curly-tailed lizards).",
       "default_photo": {
@@ -153,6 +268,16 @@
       "rank": "species",
       "preferred_common_name": "Cuban Tree Frog",
       "iconic_taxon_name": "Amphibia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        20978,
+        20979,
+        1658175,
+        24374
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Osteopilus septentrionalis",
       "wikipedia_summary": "The <b>Cuban tree frog</b> (<i>Osteopilus septentrionalis</i>) is an amphibian native to the Caribbean region of the Western Hemisphere. It is the largest tree frog of North America. Its wide diet and ability to thrive amongst humans has made it a highly invasive species with established colonies throughout peninsular Florida, the Hawaiian island of Oahu, and throughout the Caribbean Islands. They range in size from 3 to 5.5 in (76 to 140 mm) and vary in color from olive-brown...",
       "default_photo": {
@@ -169,6 +294,16 @@
       "rank": "species",
       "preferred_common_name": "Cane Toad",
       "iconic_taxon_name": "Amphibia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        20978,
+        20979,
+        21359,
+        64819
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Rhinella marina",
       "wikipedia_summary": "The <b>cane toad</b> (<i>Rhinella marina</i>), also known as the <b>giant neotropical toad</b> or <b>marine toad</b>, is a large, terrestrial true toad which is native to South and mainland Central America, but has been introduced to various islands throughout Oceania and the Caribbean, as well as Northern Australia. It is a member of the genus <i>Rhinella</i>, but was formerly in the genus <i>Bufo</i>, which includes many different true toad species found throughout Central and South America. The...",
       "default_photo": {
@@ -185,6 +320,16 @@
       "rank": "species",
       "preferred_common_name": "Egyptian Goose",
       "iconic_taxon_name": "Aves",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        3,
+        6888,
+        6912,
+        7129
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Alopochen aegyptiaca",
       "wikipedia_summary": "The <b>Egyptian goose</b> (<i>Alopochen aegyptiaca</i>) is a member of the duck, goose, and swan family Anatidae. It is native to Africa south of the Sahara and the Nile Valley.",
       "default_photo": {
@@ -201,6 +346,18 @@
       "rank": "species",
       "preferred_common_name": "Tropical House Gecko",
       "iconic_taxon_name": "Reptilia",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        26036,
+        26172,
+        85552,
+        371057,
+        33177,
+        34434
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Hemidactylus mabouia",
       "wikipedia_summary": "The <b>tropical house gecko</b>, <b>Afro-American house gecko</b> or <b>cosmopolitan house gecko</b> (<i>Hemidactylus mabouia</i>) is a species of house gecko native to sub-Saharan Africa. It is also currently found in North, Central and South America and the Caribbean, where it has been inadvertently introduced by humans.",
       "default_photo": {
@@ -217,6 +374,16 @@
       "rank": "species",
       "preferred_common_name": "Muscovy Duck",
       "iconic_taxon_name": "Aves",
+      "ancestor_ids": [
+        48460,
+        1,
+        2,
+        355675,
+        3,
+        6888,
+        6912,
+        7118
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Cairina moschata",
       "wikipedia_summary": "The <b>Muscovy duck</b> (<i>Cairina moschata</i>) is a large duck native to Mexico and Central and South America. Small wild and feral breeding populations have established themselves in the United States, particularly in Florida, Louisiana, Massachusetts, and the lower Rio Grande Valley of Texas as well as in many other parts of North America, including southern Canada. Feral Muscovy ducks are found in New Zealand, Australia, and in parts of Europe.",
       "default_photo": {
@@ -233,6 +400,23 @@
       "rank": "species",
       "preferred_common_name": "Six-spotted Carpenter Ant",
       "iconic_taxon_name": "Insecta",
+      "ancestor_ids": [
+        48460,
+        1,
+        47120,
+        372739,
+        47158,
+        184884,
+        47201,
+        124417,
+        326777,
+        1269340,
+        47336,
+        244834,
+        334375,
+        62781,
+        1244932
+      ],
       "wikipedia_url": "http://en.wikipedia.org/wiki/Camponotus_sexguttatus",
       "wikipedia_summary": "<i><b>Camponotus sexguttatus</b></i> is a species of ant in the family Formicidae.",
       "default_photo": {
@@ -249,6 +433,19 @@
       "rank": "species",
       "preferred_common_name": "oleander",
       "iconic_taxon_name": "Plantae",
+      "ancestor_ids": [
+        48460,
+        47126,
+        211194,
+        47125,
+        47124,
+        47363,
+        47362,
+        427366,
+        632351,
+        632352,
+        47564
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Nerium oleander",
       "wikipedia_summary": "<i><b>Nerium oleander</b></i> /ˈnɪəriəm ˈoʊliː.ændər/ is a shrub or small tree in the dogbane family Apocynaceae, toxic in all its parts. It is the only species currently classified in the genus <i><b>Nerium</b></i>. It is most commonly known as <b>nerium</b> or <b>oleander</b>, from its superficial resemblance to the unrelated olive <i>Olea</i>. It is so widely cultivated that no precise region of origin has been identified, though southwest Asia has been suggested. The ancient city of Volubilis in Morocco...",
       "default_photo": {
@@ -265,6 +462,17 @@
       "rank": "species",
       "preferred_common_name": "Chinese banyan",
       "iconic_taxon_name": "Plantae",
+      "ancestor_ids": [
+        48460,
+        47126,
+        211194,
+        47125,
+        47124,
+        47132,
+        50998,
+        1529470,
+        50999
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Ficus microcarpa",
       "wikipedia_summary": "<i><b>Ficus microcarpa</b></i>, also known as <b>Chinese banyan</b>, <b>Malayan banyan</b>, <b>Taiwan banyan</b>, <b>Indian laurel</b>, <b>curtain fig</b>, or <b>gajumaru</b> (ガジュマル), is a tree native in the range from China through Nepal, Bhutan, Sikkim, India, Sri Lanka, Taiwan, the Malay Archipelago, New Guinea, Australia, the Ryukyu Islands, and New Caledonia. It is widely planted as a shade tree and frequently misidentified as <i>F. retusa</i> or as <i>F. nitida</i> (<i>F. benjamina</i>).",
       "default_photo": {
@@ -281,6 +489,19 @@
       "rank": "species",
       "preferred_common_name": "crown flower",
       "iconic_taxon_name": "Plantae",
+      "ancestor_ids": [
+        48460,
+        47126,
+        211194,
+        47125,
+        47124,
+        47363,
+        47362,
+        373579,
+        632307,
+        632069,
+        67577
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Calotropis gigantea",
       "wikipedia_summary": "<i><b>Calotropis gigantea</b></i> (<b>crown flower</b>) is a species of <i>Calotropis</i> native to Cambodia, Indonesia, Malaysia, the Philippines, Thailand, Sri Lanka, India, China, Pakistan, Nepal, and tropical Africa.",
       "default_photo": {
@@ -297,6 +518,23 @@
       "rank": "species",
       "preferred_common_name": "Red Imported Fire Ant",
       "iconic_taxon_name": "Insecta",
+      "ancestor_ids": [
+        48460,
+        1,
+        47120,
+        372739,
+        47158,
+        184884,
+        47201,
+        124417,
+        326777,
+        1269340,
+        47336,
+        69143,
+        469106,
+        67597,
+        1373022
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Solenopsis invicta",
       "wikipedia_summary": "The <b>red imported fire ant</b> (<i>Solenopsis invicta</i>), also known as the <b>fire ant</b> or <b>RIFA</b>, is a species of ant native to South America. A member of the genus <i>Solenopsis</i> in the subfamily Myrmicinae, it was described by Swiss entomologist Felix Santschi as a variant in 1916. Its current name <i>invicta</i> was given to the ant in 1972 as a separate species. However, the variant and species were the same ant, and the name was preserved...",
       "default_photo": {
@@ -313,6 +551,22 @@
       "rank": "species",
       "preferred_common_name": "Longhorn Crazy Ant",
       "iconic_taxon_name": "Insecta",
+      "ancestor_ids": [
+        48460,
+        1,
+        47120,
+        372739,
+        47158,
+        184884,
+        47201,
+        124417,
+        326777,
+        1269340,
+        47336,
+        244834,
+        637569,
+        69391
+      ],
       "wikipedia_url": "https://en.wikipedia.org/wiki/Paratrechina longicornis",
       "wikipedia_summary": "The <b>longhorn crazy ant</b> (<i>Paratrechina longicornis</i>), also known as \"black crazy ant\", is a species of small, dark-coloured insect in the family Formicidae. These ants are commonly called \"crazy ants\" because instead of following straight lines, they dash around erratically. They have a broad distribution, including much of the tropics and subtropics, and are also found in buildings in more temperate regions, making them one of the most widespread ant species in the world. This species,...",
       "default_photo": {

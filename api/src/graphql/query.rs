@@ -249,8 +249,8 @@ impl QueryRoot {
                 let rows = st.query_map(params![from.0, to.0, bbox.south, bbox.north, bbox.west, bbox.east, groups, other, top as i64], |r| {
                     Ok(SpeciesCount {
                         taxon: Taxon::from_row(r, 0)?,
-                        count: r.get::<_, i64>(8)? as i32,
-                        latest_sighting_id: r.get::<_, Option<i64>>(9)?.map(|id| ID(id.to_string())),
+                        count: r.get::<_, i64>(9)? as i32,
+                        latest_sighting_id: r.get::<_, Option<i64>>(10)?.map(|id| ID(id.to_string())),
                     })
                 })?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()

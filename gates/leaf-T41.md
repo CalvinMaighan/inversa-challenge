@@ -18,7 +18,7 @@ Scope:
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail
 
-- [x] G3: the species bar toggles filter the globe (since T44 the bar holds the four focus chips, the most-seen other animals and the Plants and Insects & others groups; counts are per taxon); e2e prints `SPECIES iguana_only=<n> all=<m> counts=ok drawer=1` with n < m, and clicking an iguana sighting opens the evidence card
+- [x] G3: the species bar toggles filter the globe (since T44 the bar holds the four focus chips, the most-seen other animals and an Other chip that opens every category, snakes to plants, with a switch each; counts are per taxon; every chip and marker carries its kind's icon); e2e prints `SPECIES iguana_only=<n> all=<m> counts=ok drawer=1` with n < m, and clicking an iguana sighting opens the evidence card
   CHECK: cd apps/web && bun run e2e:species 2>&1 | grep SPECIES
   EXPECT: /SPECIES iguana_only=\d+ all=\d+ counts=ok drawer=1/
   EVIDENCE: SPECIES iguana_only=6 all=8 counts=ok drawer=1

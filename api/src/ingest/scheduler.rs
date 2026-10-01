@@ -477,6 +477,11 @@ fn insert_fetch_run(
     Ok(tx.last_insert_rowid())
 }
 
+/// `taxa.ancestor_ids` text: a JSON array of the ids, or null when the adapter knows none.
+pub fn ancestry_json(ids: Option<&[i64]>) -> Option<String> {
+    ids.filter(|ids| !ids.is_empty()).map(|ids| serde_json::to_string(ids).expect("integer list"))
+}
+
 fn valid_coord(lat: f64, lon: f64) -> bool {
     lat.is_finite() && lon.is_finite() && (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)
 }
@@ -547,16 +552,18 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         // clears them, and the first adapter to know a value fills it in on an existing row.
         self.tx
             .prepare_cached(
-                "insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group) values (?1, ?2, 0, ?3, ?4)
+                "insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group, ancestor_ids) values (?1, ?2, 0, ?3, ?4, ?5)
                  on conflict(scientific_name) do update set
                    inat_taxon_id = coalesce(taxa.inat_taxon_id, excluded.inat_taxon_id),
                    iconic_group = coalesce(taxa.iconic_group, excluded.iconic_group),
+                   ancestor_ids = coalesce(taxa.ancestor_ids, excluded.ancestor_ids),
                    common_name = case when taxa.common_name = '' then excluded.common_name else taxa.common_name end
                  where taxa.inat_taxon_id is null and excluded.inat_taxon_id is not null
                     or taxa.iconic_group is null and excluded.iconic_group is not null
+                    or taxa.ancestor_ids is null and excluded.ancestor_ids is not null
                     or taxa.common_name = '' and excluded.common_name <> ''",
             )?
-            .execute(params![name, t.common_name.trim(), t.inat_taxon_id, t.iconic_group])?;
+            .execute(params![name, t.common_name.trim(), t.inat_taxon_id, t.iconic_group, ancestry_json(t.ancestor_ids.as_deref())])?;
         let id: i64 =
             self.tx.prepare_cached("select id from taxa where scientific_name = ?1")?.query_row([name], |r| r.get(0))?;
         self.taxa.insert(name.to_string(), id);
@@ -785,7 +792,13 @@ mod tests {
             }),
             Row::Sighting(SightingRow {
                 ext_id: "obs-2".into(),
-                taxon: TaxonRef { scientific_name: "Anolis sagrei".into(), common_name: "Brown anole".into(), inat_taxon_id: Some(116461), iconic_group: Some("Reptilia".into()) },
+                taxon: TaxonRef {
+                    scientific_name: "Anolis sagrei".into(),
+                    common_name: "Brown anole".into(),
+                    inat_taxon_id: Some(116461),
+                    iconic_group: Some("Reptilia".into()),
+                    ancestor_ids: Some(vec![48460, 1, 2, 355675, 26036, 26172, 85552, 1563907, 1567779, 200152, 36362]),
+                },
                 lat: 25.7,
                 lon: -80.3,
                 accuracy_m: None,

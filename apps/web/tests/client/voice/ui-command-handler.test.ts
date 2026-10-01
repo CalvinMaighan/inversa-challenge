@@ -161,7 +161,7 @@ describe("ui command handler", () => {
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
     expect(hud.layers).toEqual(["sightings", "missions", "peers", "notes"]);
-    expect(hud.species).toEqual(["python", "tegu", "lionfish", "animals"]);
+    expect(hud.species).toEqual(["python", "tegu", "lionfish", "snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");
   });
 

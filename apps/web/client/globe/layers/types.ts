@@ -40,6 +40,11 @@ export type LayerStats = {
    * for stations. Absent for layers the legend counts as a whole.
    */
   breakdown?: Record<string, number>;
+  /**
+   * How the sightings layer draws (T44): icon billboards from one texture atlas, the number of distinct species
+   * categories drawn, and how many plain dots (point primitives) remain, which is none.
+   */
+  marker?: { kind: "billboard" | "point"; categories: number; dots: number; images: number };
 };
 
 /** What layers read besides the frame grid. The globe wires it to active-state and the threads API. */

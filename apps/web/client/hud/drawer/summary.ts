@@ -7,9 +7,10 @@
  * Pure over the evidence record (C14 shapes from Axum) and the time cursor. Never shows raw coordinates or ids;
  * those stay under "Details for experts".
  */
-import { GROUP_WORDS, isFocusTaxon, taxonName } from "client/state/taxa";
+import { categoryOfTaxon, isFocusTaxon, taxonName } from "client/state/taxa";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
+import { CATEGORY_NOUNS, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
 
 import { SPECIES_GUIDE } from "../help/content";
 import { feedLabel } from "../topbar/feed-chips";
@@ -38,6 +39,8 @@ export type SpeciesCard = {
   status: string;
   /** One About line: Inversa's one-liner for a focus species, else the plain Wikipedia summary. */
   about: string | null;
+  /** Its kind (snakes, lizards, …): the icon and colour the globe draws it with. */
+  category: CategoryId;
   /** "More about <name> on iNaturalist" target, opened in a new tab. */
   moreUrl: string | null;
   moreLabel: string | null;
@@ -51,14 +54,14 @@ export function speciesCard(taxon: Record<string, unknown>): SpeciesCard {
   const name = taxonName({ commonName: common ?? "", scientificName: sci ?? "" }, "Unnamed species");
   const focusIndex = isFocusTaxon(id) ? id - 1 : -1;
   const guide = focusIndex >= 0 ? SPECIES_GUIDE[focusIndex] : undefined;
-  const group = str(taxon.iconicGroup);
-  const word = group ? GROUP_WORDS[group] : undefined;
+  const category = focusIndex >= 0 ? FOCUS_CATEGORIES[focusIndex]! : categoryOfTaxon(taxon as Parameters<typeof categoryOfTaxon>[0]);
   const summary = str(taxon.summary);
   const pageUrl = str(taxon.pageUrl);
   return {
     name,
     scientificName: sci && sci !== name ? sci : null,
-    status: word ? `introduced ${word}` : "introduced species",
+    category,
+    status: `introduced ${CATEGORY_NOUNS[category]}`,
     about: guide ? sentence(guide.line) + "." : summary,
     moreUrl: pageUrl && /^https:\/\/www\.inaturalist\.org\/taxa\/\d+$/.test(pageUrl) ? pageUrl : null,
     moreLabel: pageUrl ? `More about ${name} on iNaturalist` : null,

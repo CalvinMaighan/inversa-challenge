@@ -181,7 +181,7 @@ const Choices = styled.div`
  * A button with a popover under it. Esc (inside the popover) or a click outside closes it; Esc and the
  * popover's own actions hand focus back to the button.
  */
-function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>) {
+export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -200,11 +200,12 @@ function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: Ref
   return { open, toggle: () => setOpen((v) => !v), close };
 }
 
-function PopoverBox({ id, label, testId, popRef, onClose, children }: { id: string; label: string; testId: string; popRef: RefObject<HTMLDivElement | null>; onClose: () => void; children: ReactNode }) {
+export function PopoverBox({ id, label, testId, popRef, onClose, children, align = "right" }: { id: string; label: string; testId: string; popRef: RefObject<HTMLDivElement | null>; onClose: () => void; children: ReactNode; align?: "left" | "right" }) {
   return (
     <Popover
       ref={popRef}
       id={id}
+      style={align === "left" ? { left: 0, right: "auto" } : undefined}
       role="dialog"
       aria-label={label}
       tabIndex={-1}

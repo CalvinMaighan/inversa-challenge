@@ -29,7 +29,7 @@ afterAll(() => restore());
 const STEP = 60 * 60_000;
 const T0 = Date.parse("2026-09-30T00:00:00Z");
 
-const taxon = (id: number, iconicGroup: string): TaxonInfo => ({ id, scientificName: `Taxon ${id}`, commonName: "", focus: false, iconicGroup, summary: null, photoUrl: null, pageUrl: null });
+const taxon = (id: number, category: TaxonInfo["category"]): TaxonInfo => ({ id, scientificName: `Taxon ${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: null, category, summary: null, photoUrl: null, pageUrl: null });
 
 const rec = (over: Partial<SightingRecord> = {}): SightingRecord => ({ id: 1, lon: -80.9, lat: 25.6, taxon: 1, quality: 0, flags: 0, ...over });
 
@@ -204,45 +204,50 @@ describe("sightings", () => {
     expect(trailAlpha(trailMs(48), trailMs(48))).toBeCloseTo(0.3);
   });
 
-  test("duplicates hidden, species filter applied, other taxa follow their group or their own override", () => {
+  test("duplicates hidden, species filter applied, other taxa follow their category or their own override", () => {
     const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ taxon: 3 }), rec({ taxon: 42 }), rec({ taxon: 43 })].map((r) => ({ ...r, ageMs: 0 }));
-    const taxa = { "42": taxon(42, "Reptilia"), "43": taxon(43, "Plantae") };
+    const taxa = { "42": taxon(42, "lizards"), "43": taxon(43, "plants") };
     const only = (keys: Record<string, unknown>) => ({ ...LAYERS.defaults.species, ...keys });
-    // Python on, animals on (default): the anole draws, the plant does not.
+    // Python on, lizards on (default): the anole draws, the plant does not.
     expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false }), taxa).map((r) => r.taxon)).toEqual([1, 42]);
-    // Animals off: only the focus python.
-    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false, animals: false }), taxa).map((r) => r.taxon)).toEqual([1]);
+    // Lizards off: only the focus python.
+    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false, lizards: false }), taxa).map((r) => r.taxon)).toEqual([1]);
     // Plants on: the plant draws too; a taxon override hides the anole alone.
     expect(visibleRecords(records, only({ python: false, tegu: false, lionfish: false, plants: true, t42: false }), taxa).map((r) => r.taxon)).toEqual([3, 43]);
     // 'Only this one': every key off, one override on.
-    expect(visibleRecords(records, only({ python: false, tegu: false, iguana: false, lionfish: false, animals: false, t43: true }), taxa).map((r) => r.taxon)).toEqual([43]);
-    // A taxon not loaded yet draws as an animal.
+    expect(visibleRecords(records, only({ python: false, tegu: false, iguana: false, lionfish: false, lizards: false, t43: true }), taxa).map((r) => r.taxon)).toEqual([43]);
+    // A taxon not loaded yet draws (with the generic icon).
     expect(visibleRecords(records, only({}), {}).map((r) => r.taxon)).toEqual([1, 3, 42, 43]);
   });
 
-  test("draws the frame's records as points plus focus-species icons, each carrying sighting:<id>", () => {
+  test("draws the frame's records as icon billboards from one atlas (no point dots), each carrying sighting:<id>", () => {
     const ctx = fakeContext({
       meta: fakeMeta(T0, 4),
       sightings: (f) => (f === 3 ? [rec({ id: 4_000_123 }), rec({ id: 77, taxon: 99 })] : f === 2 ? [rec({ id: 5, taxon: 4 })] : []),
+      taxa: { byId: { "99": taxon(99, "birds") }, version: 1 },
     });
     const viewer = fakeViewer();
     const layer = createSightingsLayer(ctx);
     layer.init(viewer);
     layer.enable();
     layer.update(3, smallGrid(4));
-    const [points, icons] = viewer.added as [PointPrimitiveCollection, BillboardCollection];
-    expect(points.length).toBe(3); // frame 2 (older, drawn first) then frame 3, both in the window
-    expect(icons.length).toBe(2); // taxon 99 is not a focus species
-    expect([0, 1, 2].map((i) => points.get(i).id)).toEqual(["sighting:5", "sighting:4000123", "sighting:77"]);
-    expect(icons.get(1).id).toBe("sighting:4000123");
-    expect(layer.stats()).toMatchObject({ count: 3, frame: 3, error: null });
+    const [rings, icons] = viewer.added as [BillboardCollection, BillboardCollection];
+    expect(viewer.added.length).toBe(2);
+    expect(icons.length).toBe(3); // frame 2 (older, drawn first) then frame 3, both in the window
+    expect(rings.length).toBe(0); // nothing selected, no conflict
+    expect([0, 1, 2].map((i) => icons.get(i).id)).toEqual(["sighting:5", "sighting:4000123", "sighting:77"]);
+    // One image per category and colour: fish (lionfish), snake (python), bird; never one per marker.
+    expect(new Set([0, 1, 2].map((i) => icons.get(i).image)).size).toBe(3);
+    expect(layer.stats()).toMatchObject({ count: 3, frame: 3, error: null, marker: { kind: "billboard", categories: 3, dots: 0 } });
+    expect(layer.stats().marker!.images).toBeGreaterThanOrEqual(3);
   });
 
-  test("the selected sighting draws last and larger; the breakdown counts every species while the filter hides some", () => {
+  test("the selected sighting draws last and larger with a ring; the breakdown counts every species while the filter hides some", () => {
     const base = fakeContext({
       meta: fakeMeta(T0, 4),
       sightings: (f) => (f === 3 ? [rec({ id: 1, taxon: 3 }), rec({ id: 2, taxon: 1 }), rec({ id: 3, taxon: 77 })] : []),
-      layers: { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, python: false, animals: false } },
+      layers: { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, python: false, birds: false } },
+      taxa: { byId: { "77": taxon(77, "birds") }, version: 1 },
     });
     const ctx = { ...base, selection: () => "sighting:1" };
     const viewer = fakeViewer();
@@ -250,12 +255,14 @@ describe("sightings", () => {
     layer.init(viewer);
     layer.enable();
     layer.update(3, smallGrid(4));
-    const [points] = viewer.added as [PointPrimitiveCollection];
-    expect(points.length).toBe(1);
-    expect(points.get(0).id).toBe("sighting:1");
-    expect(points.get(0).pixelSize).toBeGreaterThan(10);
+    const [rings, icons] = viewer.added as [BillboardCollection, BillboardCollection];
+    expect(icons.length).toBe(1);
+    expect(icons.get(0).id).toBe("sighting:1");
+    expect(icons.get(0).scale).toBeGreaterThan(1);
+    expect(rings.length).toBe(1);
+    expect(rings.get(0).id).toBe("sighting:1");
     // The breakdown is per taxon id (the four focus ids always present), counted before the filter.
-    expect(layer.stats()).toMatchObject({ count: 1, breakdown: { "1": 1, "2": 0, "3": 1, "4": 0, "77": 1 } });
+    expect(layer.stats()).toMatchObject({ count: 1, breakdown: { "1": 1, "2": 0, "3": 1, "4": 0, "77": 1 }, marker: { categories: 1, dots: 0 } });
   });
 
   test("no frame (outside the grid) or no meta clears the dots; no network is used", () => {
@@ -276,7 +283,7 @@ describe("sightings", () => {
     expect(layer.stats().count).toBe(2);
     layer.update(-1, smallGrid(2));
     expect(layer.stats().count).toBe(0);
-    expect((viewer.added[0] as PointPrimitiveCollection).length).toBe(0);
+    expect((viewer.added[1] as BillboardCollection).length).toBe(0);
     ctx.state.meta = null;
     layer.update(1, null);
     expect(layer.stats().count).toBe(0);

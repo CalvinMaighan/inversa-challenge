@@ -82,6 +82,8 @@ impl Focus {
             common_name: self.common_name().into(),
             inat_taxon_id: Some(self.inat_taxon_id()),
             iconic_group: Some(self.iconic_group().into()),
+            // The seeded rows carry their ancestry (migration 0005); the adapter need not repeat it.
+            ancestor_ids: None,
         }
     }
 }

@@ -16,13 +16,16 @@ import {
   shownSpecies,
   sightingHoursOf,
   SPECIES_FILTER_IDS,
-  SPECIES_GROUP_IDS,
   taxonKey,
   taxonOverrides,
   type LayersState,
 } from "client/state/layers";
 import { SIGHTING_WINDOW_HOURS, SIGHTING_WINDOW_OPTIONS } from "shared/frames";
+import { ANIMAL_CATEGORIES, CATEGORY_IDS } from "shared/species-categories";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+
+/** The default shown keys: the focus four and every animal category. */
+const DEFAULT_SHOWN = [...SPECIES_IDS, ...ANIMAL_CATEGORIES];
 
 init(state);
 
@@ -30,10 +33,10 @@ const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] 
 const now = () => get<LayersState>(LAYERS)!;
 
 describe("LAYERS", () => {
-  test("has a visibility entry for every layer id and a filter entry for every focus species plus the three groups", () => {
+  test("has a visibility entry for every layer id and a filter entry for every focus species plus the thirteen categories", () => {
     expect(Object.keys(LAYERS.defaults.visible)).toEqual([...LAYER_IDS]);
-    expect(SPECIES_GROUP_IDS).toEqual(["animals", "plants", "others"]);
-    expect(SPECIES_FILTER_IDS).toEqual([...SPECIES_IDS, ...SPECIES_GROUP_IDS]);
+    expect(CATEGORY_IDS).toEqual(["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"]);
+    expect(SPECIES_FILTER_IDS).toEqual([...SPECIES_IDS, ...CATEGORY_IDS]);
     expect(Object.keys(LAYERS.defaults.species)).toEqual([...SPECIES_FILTER_IDS]);
   });
 
@@ -42,9 +45,11 @@ describe("LAYERS", () => {
     expect(on).toEqual([SIGHTINGS, MISSIONS, PEERS, NOTES]);
     for (const id of [STATIONS, ALERTS, HOTSPOTS, LST, SST]) expect(LAYERS.defaults.visible[id]).toBe(false);
     expect(SPECIES_IDS.every((id) => LAYERS.defaults.species[id])).toBe(true);
-    expect(LAYERS.defaults.species.animals).toBe(true);
+    expect(ANIMAL_CATEGORIES.every((id) => LAYERS.defaults.species[id])).toBe(true);
     expect(LAYERS.defaults.species.plants).toBe(false);
-    expect(LAYERS.defaults.species.others).toBe(false);
+    expect(LAYERS.defaults.species.insects).toBe(false);
+    expect(LAYERS.defaults.species.spiders).toBe(false);
+    expect(LAYERS.defaults.species.other).toBe(false);
     expect(LAYERS.defaults.sightingHours).toBe(SIGHTING_WINDOW_HOURS);
     expect(SIGHTING_WINDOW_HOURS).toBe(168);
     expect(SIGHTING_WINDOW_OPTIONS).toEqual([48, 168, 720]);
@@ -82,7 +87,7 @@ describe("LAYERS", () => {
     expect(shownSpecies(now().species)).toEqual([]);
     expect(taxonOverrides(now().species)).toEqual([[24382, true]]);
     showAllSpecies();
-    expect(shownSpecies(now().species)).toEqual([...SPECIES_IDS, "animals"]);
+    expect(shownSpecies(now().species)).toEqual(DEFAULT_SHOWN);
     expect(taxonOverrides(now().species)).toEqual([]);
     set(LAYERS, LAYERS.defaults);
   });
@@ -95,10 +100,10 @@ describe("LAYERS", () => {
     showOnlySpecies("plants");
     expect(shownSpecies(now().species)).toEqual(["plants"]);
     showAllSpecies();
-    expect(shownSpecies(now().species)).toEqual([...SPECIES_IDS, "animals", "plants"]);
+    expect(shownSpecies(now().species)).toEqual([...DEFAULT_SHOWN, "plants"]);
     expect(now().species[HOTSPOTS]).toBe("python");
-    // A filter saved before the groups existed reads as the defaults for them.
-    expect(shownSpecies({ python: true, tegu: true, iguana: true, lionfish: true })).toEqual([...SPECIES_IDS, "animals"]);
+    // A filter saved before the categories existed reads as the defaults for them.
+    expect(shownSpecies({ python: true, tegu: true, iguana: true, lionfish: true })).toEqual(DEFAULT_SHOWN);
     set(LAYERS, LAYERS.defaults);
   });
 

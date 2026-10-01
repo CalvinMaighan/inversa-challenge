@@ -22,6 +22,7 @@ import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { ANIMAL_CATEGORIES, CATEGORY_IDS } from "../shared/species-categories";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
@@ -39,8 +40,8 @@ const IGUANA = "iguana";
 const IGUANA_TAXON = "3";
 /** The focus chips and their `taxa.id`s; the breakdown is keyed by taxon id (T44). */
 const FOCUS_KEYS = ["python", "tegu", "iguana", "lionfish"] as const;
-/** Every species filter key: the focus four and the three groups. */
-const FILTER_KEYS = [...FOCUS_KEYS, "animals", "plants", "others"] as const;
+/** Every species filter key: the focus four and the categories (T44). */
+const FILTER_KEYS = [...FOCUS_KEYS, ...CATEGORY_IDS] as const;
 
 const log = (...a: unknown[]) => console.error("[e2e:species]", ...a);
 
@@ -151,8 +152,10 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   const chipsOnly = await chipCounts(page);
   if (chipsOnly[IGUANA] !== n) fail(`iguana chip ${chipsOnly[IGUANA]} while the globe draws ${n}`);
   for (const k of Object.keys(chipsOnly)) {
-    const pressed = await page.locator(`[data-species-chip="${k}"]`).getAttribute("aria-pressed");
-    if (pressed !== String(k === IGUANA)) fail(`${k} chip aria-pressed=${pressed}`);
+    // The Other chip opens the categories instead of toggling: it reports `data-on` (any category on), not aria-pressed.
+    const chip = page.locator(`[data-species-chip="${k}"]`);
+    const on = k === "other" ? await chip.getAttribute("data-on") : await chip.getAttribute("aria-pressed");
+    if (on !== String(k === IGUANA)) fail(`${k} chip on=${on}`);
   }
 
   // An iguana Axum holds for the same window: fly to it, hover it (tooltip), click it (evidence card).
@@ -200,8 +203,10 @@ async function species(browser: Browser, stack: Stack): Promise<string> {
   await page.locator('[data-testid="species-all"]').click();
   await page.waitForFunction(() => {
     const sp = (window.__inversa?.state("LAYERS") as { species: Record<string, unknown> }).species;
-    return ["python", "tegu", "iguana", "lionfish", "animals"].every((k) => sp[k] !== false);
+    return ["python", "tegu", "iguana", "lionfish", "snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"].every((k) => sp[k] !== false);
   });
+  const shownAfterAll = (await speciesFilter(page)) as Record<string, unknown>;
+  if (!ANIMAL_CATEGORIES.every((id) => shownAfterAll[id] !== false)) fail(`All left a category off: ${JSON.stringify(shownAfterAll)}`);
   if (errors.length) fail(`page errors: ${errors.join(" | ")}`);
   await context.close();
   return `SPECIES iguana_only=${n} all=${all} counts=ok drawer=1`;

@@ -13,6 +13,7 @@ import { LAYERS, type LayersState } from "client/state/layers";
 import { MISSIONS, type MissionsState } from "client/state/missions";
 import type { NotePin } from "client/state/notes";
 import type { Peer } from "client/state/peers";
+import { TAXA, type TaxaState } from "client/state/taxa";
 import type { FrameMeta } from "client/threads/api";
 import {
   ENV_MISSING,
@@ -112,6 +113,7 @@ export type ContextState = {
   missions: MissionsState;
   peers: Peer[];
   notes: NotePin[];
+  taxa: TaxaState;
   gql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
   renders: number;
 };
@@ -132,6 +134,7 @@ export function fakeContext(overrides: Partial<ContextState> = {}): LayerContext
     missions: MISSIONS.defaults,
     peers: [],
     notes: [],
+    taxa: TAXA.defaults,
     gql: () => new Promise(() => {}),
     renders: 0,
     ...overrides,
@@ -149,6 +152,7 @@ export function fakeContext(overrides: Partial<ContextState> = {}): LayerContext
     missions: () => state.missions,
     peers: () => state.peers,
     notes: () => state.notes,
+    taxa: () => state.taxa,
     gql: <T>(query: string, variables?: Record<string, unknown>) => state.gql(query, variables) as Promise<T>,
   };
 }

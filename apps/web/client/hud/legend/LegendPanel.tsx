@@ -10,6 +10,7 @@ import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { Mono } from "../primitives";
 import { SPECIES_NAMES } from "../tooltip/model";
+import CategoryIcon from "../species/CategoryIcon";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
 
@@ -147,15 +148,21 @@ const ErrorNote = styled(Note)`
   color: var(--danger);
 `;
 
+/** A swatch: the category's icon in its colour (sightings, T44) or a coloured shape. An off species reads dimmer, never grey. */
+function SwatchMark({ swatch }: { swatch: LegendSwatch }) {
+  if (swatch.shape === "icon" && swatch.icon) return <CategoryIcon category={swatch.icon} color={swatch.color} size={16} />;
+  return <Swatch $color={swatch.color} $shape={swatch.shape} aria-hidden="true" />;
+}
+
 function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolean }) {
   const count = swatch.count === null ? null : <Count data-testid={`legend-count-${swatch.key}`}>{formatCount(swatch.count)}</Count>;
   if (swatch.species) {
     const species = swatch.species;
     return (
-      <Sub data-legend-swatch={swatch.key}>
+      <Sub data-legend-swatch={swatch.key} style={swatch.on === false ? { opacity: 0.6 } : undefined}>
         <label>
           <Check type="checkbox" checked={swatch.on !== false} disabled={!layerOn} onChange={(e) => setSpeciesVisible(species, e.currentTarget.checked)} data-testid={`legend-species-${species}`} />
-          <Swatch $color={swatch.color} $shape={swatch.shape} aria-hidden="true" />
+          <SwatchMark swatch={swatch} />
           {swatch.label}
         </label>
         {count}
@@ -164,7 +171,9 @@ function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolea
   }
   return (
     <Sub data-legend-swatch={swatch.key}>
-      <Swatch $color={swatch.color} $shape={swatch.shape} aria-hidden="true" style={{ marginLeft: swatch.shape === "dot" ? 24 : undefined }} />
+      <span style={{ marginLeft: swatch.shape === "dot" || swatch.shape === "icon" ? 24 : undefined, display: "inline-flex" }}>
+        <SwatchMark swatch={swatch} />
+      </span>
       <span data-label="">{swatch.label}</span>
       {count}
     </Sub>

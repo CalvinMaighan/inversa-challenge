@@ -30,7 +30,7 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "species",
     group: "Map",
     control: "Species chips",
-    what: `Top left. Python, tegu, iguana and lionfish first, then the six animals seen most in the window (three on a phone), each with its colour and count; Plants and Insects & others are off until you switch them on. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back.`,
+    what: `Top left. Python, tegu, iguana and lionfish first, then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles, frogs, birds, mammals, fish, snails, insects, spiders, plants, …) with a switch each and its most-seen species; insects, spiders and plants are off until you switch them on.`,
   },
   {
     id: "window",
@@ -41,8 +41,8 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
   {
     id: "dots",
     group: "Map",
-    control: "Sighting dots",
-    what: `Each dot is one animal someone reported in the window, in its species' colour, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
+    control: "Sighting markers",
+    what: `Each marker is one animal someone reported in the window: its kind's icon (a snake, a lizard, a bird, …) in its colour, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
   },
   {
     id: "drawer",
@@ -169,26 +169,20 @@ export const WINDOW_NOTE = `Most people upload sightings a few days after they s
 
 /** First-visit welcome: two sentences at most. */
 export const WELCOME =
-  `Each dot is an invasive animal someone reported in South Florida in the last ${DEFAULT_WINDOW}; click one to see what it is. ` +
+  `Each marker is an invasive animal someone reported in South Florida in the last ${DEFAULT_WINDOW}, drawn as its kind's icon; click one to see what it is. ` +
   "Filter by species at the top of the map, or ask the agent below.";
 
 /**
- * The species chips: short name, full name and one plain line each. The four focus species, then the other
- * animals (ids follow SPECIES_FILTER_IDS; the plant and insect groups are in GROUP_GUIDE).
+ * The species chips: short name, full name and one plain line each. The four focus species, then "Other", the
+ * chip that opens every category (snakes, lizards, …, plants; `shared/species-categories.ts`).
  */
 export const SPECIES_GUIDE: readonly { id: string; name: string; full: string; line: string }[] = [
   { id: PYTHON, name: "Python", full: "Burmese python", line: "giant constrictor eating Everglades wildlife" },
   { id: TEGU, name: "Tegu", full: "Argentine tegu", line: "big lizard that raids the nests of birds, turtles and alligators" },
   { id: IGUANA, name: "Iguana", full: "Green iguana", line: "tree-climbing lizard that burrows into seawalls and canal banks" },
   { id: LIONFISH, name: "Lionfish", full: "Red lionfish", line: "venomous reef fish that eats young native fish" },
-  { id: "animals", name: "Other animals", full: "Other introduced animals", line: "every other non-native animal people reported, each in its own colour, the most seen as chips" },
+  { id: "other", name: "Other", full: "Every other introduced species", line: "every other non-native species people reported, by kind: snakes, lizards, frogs, birds, fish, plants and more, the most-seen animals as chips" },
 ];
-
-/** The group chips after the animals: off until switched on. */
-export const GROUP_GUIDE: Record<"plants" | "others", { name: string; full: string; line: string }> = {
-  plants: { name: "Plants", full: "Introduced plants", line: "non-native plants and fungi people reported; off until you switch them on" },
-  others: { name: "Insects & others", full: "Insects and everything else", line: "non-native insects, spiders and anything not yet grouped; off until you switch them on" },
-};
 
 /** Example questions for the welcome. Each works against the fixtures and live data. */
 export const EXAMPLE_QUESTIONS: readonly string[] = [

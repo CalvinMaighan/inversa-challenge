@@ -5,7 +5,9 @@ import { cellAt, gridBounds } from "client/globe/geometry";
 import { polygonsOf } from "client/globe/layers/geojson";
 import { alertBucket, alertQueryTime } from "client/globe/layers/alerts";
 import { bucketOfKey, createKeyedFetch, dataKey } from "client/globe/layers/keyed-fetch";
-import { colorOfTaxon, enabledSpecies, OTHER_TAXON_COLOR, SPECIES_COLORS, speciesIndexOfTaxon, TAXON_PALETTE } from "client/globe/species";
+import { categoryShown, colorOfTaxon, enabledSpecies, NEUTRAL_COLOR, recordShown, SPECIES_COLORS, speciesIndexOfTaxon, taxonShown } from "client/globe/species";
+import type { TaxonInfo } from "client/state/taxa";
+import { CATEGORY_ANCESTORS, CATEGORY_COLORS } from "shared/species-categories";
 import { parseEvidenceId } from "client/state/selection";
 
 import { flush } from "./fakes";
@@ -41,15 +43,27 @@ describe("grid geometry", () => {
 });
 
 describe("species", () => {
-  test("taxon ids 1–4 map to SPECIES_IDS order; every other taxon gets a stable palette colour, never grey", () => {
+  test("taxon ids 1–4 map to SPECIES_IDS order; every other taxon draws in its category's colour, neutral only until loaded", () => {
     expect([1, 2, 3, 4, 0, 5].map(speciesIndexOfTaxon)).toEqual([0, 1, 2, 3, -1, -1]);
     expect(colorOfTaxon(4)).toBe(SPECIES_COLORS[3]!);
-    expect(colorOfTaxon(17)).toBe(colorOfTaxon(17));
-    expect(TAXON_PALETTE).toContain(colorOfTaxon(17));
-    expect(colorOfTaxon(17)).not.toBe(OTHER_TAXON_COLOR);
-    expect(SPECIES_COLORS).not.toContain(colorOfTaxon(17));
-    // Neighbouring ids spread over the palette.
-    expect(new Set([5, 6, 7, 8, 9, 10].map(colorOfTaxon)).size).toBeGreaterThanOrEqual(5);
+    const info = (id: number, category: TaxonInfo["category"]): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: [CATEGORY_ANCESTORS.birds], category, summary: null, photoUrl: null, pageUrl: null });
+    const byId = { "17": info(17, "birds"), "18": info(18, "plants") };
+    expect(colorOfTaxon(17, byId)).toBe(CATEGORY_COLORS.birds);
+    expect(colorOfTaxon(18, byId)).toBe(CATEGORY_COLORS.plants);
+    expect(colorOfTaxon(19, byId)).toBe(NEUTRAL_COLOR);
+    expect(SPECIES_COLORS).not.toContain(colorOfTaxon(17, byId));
+    // Filters: a category's switch (default on for animals), a taxon's own override, a layer pinned to one focus species.
+    expect(categoryShown(undefined, "birds")).toBe(true);
+    expect(categoryShown(undefined, "plants")).toBe(false);
+    expect(categoryShown({ plants: true }, "plants")).toBe(true);
+    expect(taxonShown({}, 17, byId)).toBe(true);
+    expect(taxonShown({ birds: false }, 17, byId)).toBe(false);
+    expect(taxonShown({ birds: false, t17: true }, 17, byId)).toBe(true);
+    expect(taxonShown({}, 18, byId)).toBe(false);
+    expect(taxonShown({}, 19, byId)).toBe(true);
+    expect(taxonShown({ sightings: "python" }, 17, byId, "sightings")).toBe(false);
+    expect(recordShown({ python: false }, 1, byId)).toBe(false);
+    expect(recordShown({ python: false }, 17, byId)).toBe(true);
   });
 
   test("filter: booleans per species, or a voice pin of one layer to one species", () => {

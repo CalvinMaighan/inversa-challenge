@@ -8,9 +8,10 @@
  * - `c`: lat, lon (5 decimals, about 1 m), altitude in metres, heading and pitch in degrees (1 decimal).
  * - `t`: the TIME cursor, UTC to the minute (frames are 15-minute steps, so nothing finer exists).
  * - `l`: visible layers, explicit, so layers hidden by default come back on too. Empty means none visible.
- * - `sp`: species filter keys shown (the four focus species and the groups `animals`, `plants`, `others`),
- *   omitted when it is the default (every focus species and animals on, plants and others off).
- * - `st`: taxon overrides on top of the groups (T44): taxon ids shown, hidden ones with a leading `-`.
+ * - `sp`: species filter keys shown (the four focus species and the categories `snakes` … `other`, T44),
+ *   omitted when it is the default (every focus species and animal category on; insects, spiders, plants and
+ *   other off).
+ * - `st`: taxon overrides on top of the categories (T44): taxon ids shown, hidden ones with a leading `-`.
  * - `w`: the sightings window in hours (48, 168 or 720), omitted at the default.
  * - `e`: selected evidence id (PLAN.md C14).
  *

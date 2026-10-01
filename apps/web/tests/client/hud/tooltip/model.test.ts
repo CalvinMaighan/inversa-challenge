@@ -42,7 +42,7 @@ describe("tooltip text", () => {
     expect(speciesName(99)).toBe("Introduced species");
     expect(speciesName(1)).toBe("Burmese python");
     // Once the TAXA store knows the taxon, the dot is named before its evidence loads; iNat's Title Case reads in sentence case.
-    const anole = { id: 99, scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false, iconicGroup: "Reptilia", summary: null, photoUrl: null, pageUrl: null };
+    const anole = { id: 99, scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false, iconicGroup: "Reptilia", ancestorIds: null, category: "other" as const, summary: null, photoUrl: null, pageUrl: null };
     expect(speciesName(99, null, { "99": anole })).toBe("Brown anole");
     expect(speciesName(99, null, { "99": { ...anole, commonName: "" } })).toBe("Anolis sagrei");
     expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW, { taxon: { commonName: "Cuban Tree Frog" } }))).toBe("Cuban tree frog · research · 2 h ago");

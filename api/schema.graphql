@@ -44,6 +44,8 @@ type Taxon {
   photoUrl: String
   """The taxon's page at iNaturalist, for a new-tab link."""
   pageUrl: String
+  """iNat ancestor taxon ids, root first; the web app derives the category (snakes, lizards, ...). Null when unknown."""
+  ancestorIds: [ID!]
 }
 
 """Distinct sightings of one taxon in a window (T44)."""

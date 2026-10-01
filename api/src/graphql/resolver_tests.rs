@@ -347,11 +347,16 @@ async fn resolver_taxon_info_taxa_and_species_counts() {
     insert_sighting(&state.obs, "inat", mystery, 25.6, -80.8, t, "casual", None).await;
     insert_sighting(&state.obs, "inat", anole, 25.6, -80.8, t - 3 * DAY, "research", None).await;
 
-    let body = gql(&state, "query($ids: [ID!]) { taxa(ids: $ids) { id scientificName commonName focus inatTaxonId iconicGroup summary photoUrl pageUrl } }", json!({"ids": [anole.to_string(), "python"]})).await;
+    let body = gql(&state, "query($ids: [ID!]) { taxa(ids: $ids) { id scientificName commonName focus inatTaxonId iconicGroup summary photoUrl pageUrl ancestorIds } }", json!({"ids": [anole.to_string(), "python", mystery.to_string()]})).await;
     let rows = body["data"]["taxa"].as_array().unwrap();
-    assert_eq!(rows.len(), 2, "{body}");
+    assert_eq!(rows.len(), 3, "{body}");
     assert_eq!(rows[0]["scientificName"], "Python bivittatus", "focus first: {body}");
     assert_eq!(rows[0]["pageUrl"], "https://www.inaturalist.org/taxa/238252");
+    // The seeded python carries its ancestry (Serpentes 85553); the enriched anole got Sauria 85552 from /v1/taxa;
+    // a taxon nobody enriched has none.
+    assert!(rows[0]["ancestorIds"].as_array().unwrap().contains(&json!("85553")), "{body}");
+    assert!(rows[1]["ancestorIds"].as_array().unwrap().contains(&json!("85552")), "{body}");
+    assert_eq!(rows[2]["ancestorIds"], Value::Null, "{body}");
     let a = &rows[1];
     assert_eq!(a["commonName"], "Brown Anole");
     assert_eq!(a["inatTaxonId"], "116461");
@@ -403,6 +408,7 @@ async fn resolver_taxon_info_taxa_and_species_counts() {
     assert_eq!(taxon["photoUrl"], format!("/v1/media/taxon/{anole}"));
     assert_eq!(taxon["pageUrl"], "https://www.inaturalist.org/taxa/116461");
     assert!(taxon["summary"].as_str().unwrap().starts_with("The brown anole"));
+    assert!(taxon["ancestorIds"].as_array().unwrap().contains(&json!(85552)), "{body}");
 }
 
 #[tokio::test]

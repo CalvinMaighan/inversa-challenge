@@ -1,23 +1,23 @@
 import { key, set } from "@calvinjs/active-state";
 
 import { SIGHTING_WINDOW_HOURS, SIGHTING_WINDOW_OPTIONS, type SightingWindowHours } from "shared/frames";
+import { CATEGORY_DEFAULT_ON, CATEGORY_IDS, type CategoryId } from "shared/species-categories";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 export type LayerId = (typeof LAYER_IDS)[number];
 export type SpeciesId = (typeof SPECIES_IDS)[number];
 
 /**
- * Species groups outside the four focus species (T44): every other introduced animal, the plants, and insects
- * with everything else. Animals start on; plants and insects start off.
+ * Species filter keys (T44): the four focus species, then the categories every other sighting falls into
+ * (snakes, lizards, turtles, ..., plants, other). Animal categories start on; insects, spiders, plants and the
+ * rest start off.
  */
-export const SPECIES_GROUP_IDS = ["animals", "plants", "others"] as const;
-export type SpeciesGroupId = (typeof SPECIES_GROUP_IDS)[number];
-
-/** Species filter keys: the four focus species, then the three groups. */
-export const SPECIES_FILTER_IDS = [...SPECIES_IDS, ...SPECIES_GROUP_IDS] as const;
+export const SPECIES_FILTER_IDS = [...SPECIES_IDS, ...CATEGORY_IDS] as const;
 export type SpeciesFilterId = (typeof SPECIES_FILTER_IDS)[number];
+export { CATEGORY_IDS };
+export type { CategoryId };
 
-/** Filter key of one non-focus taxon (`taxa.id`): an override on top of its group. */
+/** Filter key of one non-focus taxon (`taxa.id`): an override on top of its category. */
 export const taxonKey = (taxonId: number | string): `t${string}` => `t${taxonId}`;
 export const TAXON_KEY = /^t(\d+)$/;
 
@@ -25,10 +25,10 @@ export type LayersState = {
   /** Visibility per globe layer. */
   visible: Record<LayerId, boolean>;
   /**
-   * Species filter applied to sightings and hotspots (the four focus species). Focus and group keys read as
-   * shown when missing; a `t<taxon id>` key overrides its taxon's group either way (a chip hidden on its own,
-   * or "only this one" with its group off). A layer id key pins that layer to one focus species, whatever the
-   * booleans say (`client/globe/species.ts` `enabledSpecies`); the legend's hotspot pin writes it.
+   * Species filter applied to sightings and hotspots (the four focus species). Focus and category keys read as
+   * their default when missing; a `t<taxon id>` key overrides its taxon's category either way (a species hidden
+   * on its own, or "only this one" with its category off). A layer id key pins that layer to one focus species,
+   * whatever the booleans say (`client/globe/species.ts` `enabledSpecies`); the legend's hotspot pin writes it.
    */
   species: Record<SpeciesFilterId, boolean> & Partial<Record<LayerId, SpeciesId>> & Partial<Record<`t${string}`, boolean>>;
   /** The trailing sightings window the globe draws and the bar counts, hours (T44). */
@@ -42,11 +42,10 @@ export type LayersState = {
  */
 // eslint-disable-next-line inversa/prefer-catalog-constants -- typed as LayerId, so tsc checks them against LAYER_IDS.
 const HIDDEN_BY_DEFAULT: ReadonlySet<LayerId> = new Set<LayerId>(["stations", "alerts", "hotspots", "lst", "sst"]);
-const GROUPS_OFF_BY_DEFAULT: ReadonlySet<SpeciesGroupId> = new Set<SpeciesGroupId>(["plants", "others"]);
 
 const defaults: LayersState = {
   visible: Object.fromEntries(LAYER_IDS.map((id) => [id, !HIDDEN_BY_DEFAULT.has(id)])) as Record<LayerId, boolean>,
-  species: Object.fromEntries(SPECIES_FILTER_IDS.map((id) => [id, !GROUPS_OFF_BY_DEFAULT.has(id as SpeciesGroupId)])) as Record<SpeciesFilterId, boolean>,
+  species: Object.fromEntries(SPECIES_FILTER_IDS.map((id) => [id, (CATEGORY_IDS as readonly string[]).includes(id) ? CATEGORY_DEFAULT_ON[id as CategoryId] : true])) as Record<SpeciesFilterId, boolean>,
   sightingHours: SIGHTING_WINDOW_HOURS,
 };
 
@@ -60,7 +59,7 @@ export function setSpeciesVisible(species: SpeciesFilterId, visible: boolean): v
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => ({ ...prev, species: { ...prev.species, [species]: visible } }));
 }
 
-/** Show or hide one non-focus taxon on its own (its chip). `null` drops the override: the taxon follows its group again. */
+/** Show or hide one non-focus taxon on its own (its chip or popover row). `null` drops the override: the taxon follows its category again. */
 export function setTaxonVisible(taxonId: number | string, visible: boolean | null): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
     const next = { ...prev.species };
@@ -70,7 +69,7 @@ export function setTaxonVisible(taxonId: number | string, visible: boolean | nul
   });
 }
 
-/** Every focus and group key off, every taxon override dropped; layer pins kept. */
+/** Every focus and category key off, every taxon override dropped; layer pins kept. */
 function nothing(prev: LayersState["species"]): LayersState["species"] {
   const next = { ...prev };
   for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k as `t${string}`];
@@ -78,7 +77,7 @@ function nothing(prev: LayersState["species"]): LayersState["species"] {
   return next;
 }
 
-/** Show `species` (a focus species or a group) alone (Alt-click or long press on its chip). Layer pins are kept. */
+/** Show `species` (a focus species or a category) alone (Alt-click or long press on its chip). Layer pins are kept. */
 export function showOnlySpecies(species: SpeciesFilterId): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => ({ ...prev, species: { ...nothing(prev.species), [species]: true } }));
 }
@@ -88,13 +87,17 @@ export function showOnlyTaxon(taxonId: number | string): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => ({ ...prev, species: { ...nothing(prev.species), [taxonKey(taxonId)]: true } }));
 }
 
-/** Every animal shown again (the bar's "All"): focus species and animals on, taxon overrides dropped. Plants and insects keep their own switches; layer pins are kept. */
+/**
+ * Every animal shown again (the bar's "All"): the focus species and the categories that start on, taxon
+ * overrides dropped. Categories that start off (insects, spiders, plants, other) keep their own switches; layer
+ * pins are kept.
+ */
 export function showAllSpecies(): void {
   set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
     const next = { ...prev.species };
     for (const k of Object.keys(next)) if (TAXON_KEY.test(k)) delete next[k as `t${string}`];
     for (const id of SPECIES_IDS) next[id] = true;
-    next.animals = true;
+    for (const id of CATEGORY_IDS) if (CATEGORY_DEFAULT_ON[id]) next[id] = true;
     return { ...prev, species: next };
   });
 }
@@ -114,9 +117,10 @@ export function taxonOverrides(filter: Readonly<Record<string, unknown>> | undef
   return out.sort((a, b) => a[0] - b[0]);
 }
 
-/** Whether the filter hides any animal the bar shows by default (the bar then offers "All"). */
+/** Whether the filter hides something that shows by default (the bar then offers "All"). */
 export function isSpeciesFiltered(filter: Readonly<Record<string, unknown>> | undefined): boolean {
-  if (SPECIES_IDS.some((id) => filter?.[id] === false) || filter?.animals === false) return true;
+  if (SPECIES_IDS.some((id) => filter?.[id] === false)) return true;
+  if (CATEGORY_IDS.some((id) => CATEGORY_DEFAULT_ON[id] && filter?.[id] === false)) return true;
   return taxonOverrides(filter).some(([, shown]) => !shown);
 }
 

@@ -63,7 +63,7 @@ export function viewContext(view: AgentView | undefined, now: Date): string {
     if (view.species) {
       const shown = view.species.length > 0 ? view.species.join(", ") : "none";
       lines.push(
-        `Species filter: the globe shows only ${shown} sightings ("animals" means every introduced animal outside the four focus species, "plants" the introduced plants, "others" insects and the rest). Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
+        `Species filter: the globe shows only ${shown} sightings (the focus species by name; the rest are kinds of introduced species outside the focus four: snakes, lizards, turtles, crocodilians, frogs, birds, mammals, fish, snails, insects, spiders, plants, other). Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
       );
     }
   }

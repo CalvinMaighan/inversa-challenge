@@ -78,6 +78,8 @@ pub struct TaxonInfo {
     pub id: i64,
     pub preferred_common_name: Option<String>,
     pub iconic_taxon_name: Option<String>,
+    #[serde(default)]
+    pub ancestor_ids: Option<Vec<i64>>,
     pub wikipedia_url: Option<String>,
     pub wikipedia_summary: Option<String>,
     pub default_photo: Option<Photo>,
@@ -213,7 +215,8 @@ pub fn apply(tx: &Transaction, infos: &[TaxonInfo], now_ms: i64) -> rusqlite::Re
            summary_plain = ?4,
            photo_url = ?5,
            wikipedia_url = ?6,
-           fetched_at = ?7
+           fetched_at = ?7,
+           ancestor_ids = coalesce(?8, ancestor_ids)
          where inat_taxon_id = ?1",
     )?;
     let mut n = 0;
@@ -226,6 +229,7 @@ pub fn apply(tx: &Transaction, infos: &[TaxonInfo], now_ms: i64) -> rusqlite::Re
             t.photo_url(),
             t.wikipedia_url(),
             now_ms,
+            crate::ingest::scheduler::ancestry_json(t.ancestor_ids.as_deref()),
         ])?;
     }
     Ok(n)
@@ -339,12 +343,13 @@ pub async fn backfill_ids_from_archive(state: &AppState) -> anyhow::Result<usize
             .obs
             .write(move |tx| {
                 let mut st = tx.prepare_cached(
-                    "update taxa set inat_taxon_id = coalesce(inat_taxon_id, ?2), iconic_group = coalesce(iconic_group, ?3)
-                     where scientific_name = ?1 and (inat_taxon_id is null or iconic_group is null)",
+                    "update taxa set inat_taxon_id = coalesce(inat_taxon_id, ?2), iconic_group = coalesce(iconic_group, ?3),
+                       ancestor_ids = coalesce(ancestor_ids, ?4)
+                     where scientific_name = ?1 and (inat_taxon_id is null or iconic_group is null or ancestor_ids is null)",
                 )?;
                 let mut n = 0;
                 for t in &refs {
-                    n += st.execute(params![t.scientific_name, t.inat_taxon_id, t.iconic_group])?;
+                    n += st.execute(params![t.scientific_name, t.inat_taxon_id, t.iconic_group, crate::ingest::scheduler::ancestry_json(t.ancestor_ids.as_deref())])?;
                 }
                 Ok(n)
             })

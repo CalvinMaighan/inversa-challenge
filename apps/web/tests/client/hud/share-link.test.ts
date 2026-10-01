@@ -22,7 +22,7 @@ const sample: ShareState = {
   camera: { lat: 25.7617, lon: -80.1918, altitudeM: 45000, heading: 12.5, pitch: -62 },
   at: "2026-09-30T20:30:00.000Z",
   layers: [SIGHTINGS, HOTSPOTS, LST, ALERTS],
-  species: [PYTHON, IGUANA, "animals", "plants"],
+  species: [PYTHON, IGUANA, "snakes", "lizards", "plants"],
   taxa: [[24382, false], [116461, true]],
   hours: 48,
   evidenceId: "reading:ndbc_vakf1:water_c:1727700000000:measured",
@@ -56,8 +56,8 @@ describe("share link encode/decode", () => {
     expect(decodeShareLink(encodeShareLink({})).layers).toBeUndefined();
   });
 
-  test("share link omits the species filter at its default (focus species and animals on, plants and others off), and the window at 7 days", () => {
-    const hash = encodeShareLink({ species: [...SPECIES_IDS, "animals"], hours: 168, taxa: [] });
+  test("share link omits the species filter at its default (focus species and animal categories on; insects, spiders, plants and other off), and the window at 7 days", () => {
+    const hash = encodeShareLink({ species: [...SPECIES_IDS, "snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"], hours: 168, taxa: [] });
     expect(new URLSearchParams(hash).has("sp")).toBe(false);
     expect(new URLSearchParams(hash).has("w")).toBe(false);
     expect(new URLSearchParams(hash).has("st")).toBe(false);

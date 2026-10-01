@@ -1,13 +1,13 @@
 import { key } from "@calvinjs/active-state";
 
+import { categoryFromAncestry, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
-
-import type { SpeciesGroupId } from "./layers";
 
 /**
  * What the client knows about a taxon (T44): the GraphQL `Taxon`, keyed by `taxa.id` (the EVF2 record's
- * `taxon`). Filled by `client/hud/TaxaSync` from the ids on the published frames; read by the species bar, the
- * sightings layer (group filter and colour), the tooltip and the legend.
+ * `taxon`), with its category derived from the iNat ancestry. Filled by `client/hud/taxa.ts` from the ids on
+ * the published frames; read by the species bar, the sightings layer (category filter, icon and colour), the
+ * tooltip and the legend.
  */
 export type TaxonInfo = {
   id: number;
@@ -16,6 +16,10 @@ export type TaxonInfo = {
   focus: boolean;
   /** iNat iconic group (Reptilia, Aves, Plantae, …) or null when unknown. */
   iconicGroup: string | null;
+  /** iNat ancestor taxon ids, root first; null when unknown. */
+  ancestorIds: readonly number[] | null;
+  /** Snakes, lizards, …: from the ancestry, else the iconic group, else `other`. */
+  category: CategoryId;
   summary: string | null;
   /** Same-origin photo (`/v1/media/taxon/<id>`). */
   photoUrl: string | null;
@@ -33,28 +37,24 @@ const defaults: TaxaState = { byId: {}, version: 0 };
 
 export const TAXA = key("TAXA", defaults);
 
-/** iNat groups that count as animals for the bar and the `animals` filter key. */
-export const ANIMAL_GROUPS: readonly string[] = ["Reptilia", "Amphibia", "Aves", "Mammalia", "Actinopterygii", "Mollusca"];
-export const PLANT_GROUPS: readonly string[] = ["Plantae", "Fungi"];
-
-/** Which filter group a taxon belongs to. An unknown group (not yet loaded, or `other`) is "others". */
-export function groupOf(group: string | null | undefined): SpeciesGroupId {
-  if (!group) return "others";
-  if (ANIMAL_GROUPS.includes(group)) return "animals";
-  if (PLANT_GROUPS.includes(group)) return "plants";
-  return "others";
-}
-
-/** Group of a taxon id in the store; a taxon not loaded yet reads as an animal (it is drawn until known). */
-export function taxonGroup(byId: Readonly<Record<string, TaxonInfo>>, taxonId: number): SpeciesGroupId {
-  if (isFocusTaxon(taxonId)) return "animals";
-  const info = byId[String(taxonId)];
-  return info ? groupOf(info.iconicGroup) : "animals";
-}
-
 /** `taxa.id` 1-4 are the focus species, in SPECIES_IDS order (PLAN.md C4). */
 export function isFocusTaxon(taxonId: number): boolean {
   return Number.isInteger(taxonId) && taxonId >= 1 && taxonId <= SPECIES_IDS.length;
+}
+
+/**
+ * The category of a taxon id: the focus four are known without the store; any other taxon reads the store, and
+ * one not loaded yet is `null` (drawn with the generic icon until it arrives).
+ */
+export function taxonCategory(byId: Readonly<Record<string, TaxonInfo>>, taxonId: number): CategoryId | null {
+  if (isFocusTaxon(taxonId)) return FOCUS_CATEGORIES[taxonId - 1]!;
+  return byId[String(taxonId)]?.category ?? null;
+}
+
+/** The category of a raw taxon record (an evidence record's `taxon`, a GraphQL row). */
+export function categoryOfTaxon(taxon: { ancestorIds?: readonly (number | string)[] | null; iconicGroup?: string | null } | null | undefined): CategoryId {
+  const ids = taxon?.ancestorIds?.map(Number).filter((n) => Number.isFinite(n));
+  return categoryFromAncestry(ids, taxon?.iconicGroup);
 }
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -70,17 +70,3 @@ export function taxonName(info: Pick<TaxonInfo, "commonName" | "scientificName">
   const sci = info?.scientificName?.trim();
   return sci || fallback;
 }
-
-/** Plain words for an iNat group, for chips and cards. */
-export const GROUP_WORDS: Record<string, string> = {
-  Reptilia: "reptile",
-  Amphibia: "amphibian",
-  Aves: "bird",
-  Mammalia: "mammal",
-  Actinopterygii: "fish",
-  Mollusca: "snail or mollusc",
-  Insecta: "insect",
-  Arachnida: "spider or arachnid",
-  Plantae: "plant",
-  Fungi: "fungus",
-};

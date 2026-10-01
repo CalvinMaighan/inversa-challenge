@@ -25,6 +25,7 @@ import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { apiDefaultCount } from "./species-count";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
@@ -34,8 +35,6 @@ const LOAD_TIMEOUT_MS = 120_000;
 const REGION = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
 /** The default sightings window (T44: 7 days; the selector offers 2, 7 and 30). */
 const WINDOW_HOURS = 168;
-/** What draws by default: every introduced animal; plants and insects sit behind their own chips. */
-const ANIMAL_GROUPS = ["Reptilia", "Amphibia", "Aves", "Mammalia", "Actinopterygii", "Mollusca"];
 
 const log = (...a: unknown[]) => console.error("[e2e:firstload]", ...a);
 
@@ -115,8 +114,8 @@ async function chrome(page: Page): Promise<{ icons: number; text: number }> {
 }
 
 /**
- * Distinct animal sightings Axum holds for the frames the sightings layer draws (the trailing window of frames,
- * 7 days by default), summed over `speciesCounts` for the animal groups: what the globe draws by default.
+ * Distinct sightings Axum holds for the frames the sightings layer draws (the trailing window of frames, 7 days
+ * by default) whose category starts on (`e2e/species-count.ts`): what the globe draws by default.
  */
 async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<{ count: number; from: string; to: string }> {
   const meta = (await page.evaluate(() => window.__inversa!.snapshot().meta)) ?? fail("no frame meta");
@@ -126,11 +125,8 @@ async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<
   const from = new Date(meta.frame0UnixMs + first * step).toISOString();
   // Frames hold [start, start + step); the API's window is inclusive at both ends.
   const to = new Date(meta.frame0UnixMs + (frame + 1) * step - 1).toISOString();
-  const { speciesCounts } = await stack.graphql<{ speciesCounts: { count: number }[] }>(
-    "query($bbox: BBox!, $from: Time!, $to: Time!, $groups: [String!]) { speciesCounts(bbox: $bbox, from: $from, to: $to, groups: $groups, top: 500) { count } }",
-    { bbox: REGION, from, to, groups: ANIMAL_GROUPS },
-  );
-  return { count: speciesCounts.reduce((n, r) => n + r.count, 0), from, to };
+  const { drawn } = await apiDefaultCount(stack, REGION, { from, to });
+  return { count: drawn, from, to };
 }
 
 async function popovers(page: Page): Promise<string> {
