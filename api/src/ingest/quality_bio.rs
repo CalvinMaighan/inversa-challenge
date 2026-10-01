@@ -19,12 +19,119 @@
 //! of the table on every poll. Each pass runs from whichever side was just written, so links
 //! form in either arrival order. Links are only set or corrected, never cleared.
 
-use rusqlite::{params, OptionalExtension, Transaction};
+use rusqlite::{params, Connection, OptionalExtension, Transaction};
+use serde::Serialize;
 
+use crate::app::config::App;
 use crate::ingest::poll::gbif;
 
 pub const NAS_RADIUS_M: f64 = 50.0;
 pub const NAS_WINDOW_MS: i64 = 24 * 3600 * 1000;
+
+/// SQL predicate on a `sightings` row aliased `s`: an independent record. Duplicates (any
+/// `canonical_id`) are out, and so is every GBIF row from the iNat dataset, even one whose iNat
+/// original is not stored yet: a GBIF copy of iNat is never a second source (L1: 90.7 % of
+/// Belize's GBIF lionfish records are iNat copies).
+pub const INDEPENDENT_SQL: &str = "(s.canonical_id is null and not (s.source_id = 'gbif'
+     and s.ext_id >= '50c9509d-22c7-4a22-a47d-8c48425ef4a7:' and s.ext_id < '50c9509d-22c7-4a22-a47d-8c48425ef4a7;'))";
+
+/// iNat ids of stored GBIF iNat-dataset rows that are not linked to an iNat sighting yet, oldest
+/// GBIF row first. The iNat poller asks for these by id (`inat::mirror_catch_up`).
+pub fn unlinked_inat_mirrors(c: &Connection) -> rusqlite::Result<Vec<String>> {
+    let (lo, hi) = (format!("{}:", gbif::INAT_DATASET_KEY), format!("{};", gbif::INAT_DATASET_KEY));
+    let mut st = c.prepare_cached(
+        "select ext_id from sightings where source_id = 'gbif' and canonical_id is null and ext_id >= ?1 and ext_id < ?2 order by id",
+    )?;
+    let rows = st.query_map(params![lo, hi], |r| r.get::<_, String>(0))?;
+    let mut out = Vec::new();
+    for ext in rows {
+        if let Some(id) = gbif::mirrored_inat_id(&ext?) {
+            out.push(id.to_string());
+        }
+    }
+    Ok(out)
+}
+
+/// SQL predicate on a root sighting aliased `s`: another source holds the same record (a row
+/// linked to `s` by `canonical_id`, e.g. a NAS report of the same fish) and that row is not a
+/// GBIF copy of iNat. A GBIF mirror is a duplicate, never corroboration.
+pub const CORROBORATED_SQL: &str = "exists (select 1 from sightings d where d.canonical_id = s.id and d.source_id != s.source_id
+     and not (d.source_id = 'gbif' and d.ext_id >= '50c9509d-22c7-4a22-a47d-8c48425ef4a7:' and d.ext_id < '50c9509d-22c7-4a22-a47d-8c48425ef4a7;'))";
+
+/// Which date a window counts by. Windows default to the observed date (L1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DateBasis {
+    #[default]
+    Observed,
+    Submitted,
+}
+
+/// One (area, source) row of [`area_summary`]: what the score, UI and agent read per area.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AreaSource {
+    pub region: String,
+    pub code: String,
+    pub thin: bool,
+    pub source: String,
+    /// Every stored record of the source in the area.
+    pub total: i64,
+    /// Records in the window, by `basis`.
+    pub in_window: i64,
+    /// Of those, independent records ([`INDEPENDENT_SQL`]).
+    pub independent_in_window: i64,
+    /// Of those, research grade (iNat) or curated (GBIF institutional, NAS).
+    pub vetted_in_window: i64,
+    /// Of the independent ones, records another source also holds ([`CORROBORATED_SQL`]).
+    pub corroborated_in_window: i64,
+    /// Newest observed date of any stored record (NAS: Colombia's is 2016).
+    pub newest_observed_at: Option<i64>,
+    pub newest_submitted_at: Option<i64>,
+}
+
+/// Per area and per bio source: counts in `[from, to)` by `basis`, and the newest record dates
+/// (staleness). Areas in config order, sources inat, gbif, nas.
+pub fn area_summary(c: &Connection, app: &App, from: i64, to: i64, basis: DateBasis) -> rusqlite::Result<Vec<AreaSource>> {
+    let at = match basis {
+        DateBasis::Observed => "s.observed_at",
+        DateBasis::Submitted => "s.submitted_at",
+    };
+    let sql = format!(
+        "select count(*),
+           coalesce(sum({at} >= ?6 and {at} < ?7), 0),
+           coalesce(sum({at} >= ?6 and {at} < ?7 and {INDEPENDENT_SQL}), 0),
+           coalesce(sum({at} >= ?6 and {at} < ?7 and s.quality in ('research', 'curated')), 0),
+           coalesce(sum({at} >= ?6 and {at} < ?7 and {INDEPENDENT_SQL} and {CORROBORATED_SQL}), 0),
+           max(s.observed_at), max(s.submitted_at)
+         from sightings s join taxa t on t.id = s.taxon_id
+         where s.source_id = ?1 and t.focus = 1 and s.lat between ?2 and ?3 and s.lon between ?4 and ?5"
+    );
+    let mut st = c.prepare_cached(&sql)?;
+    let mut out = Vec::new();
+    for r in &app.regions {
+        let b = r.bbox();
+        for source in ["inat", "gbif", "nas"] {
+            let row = st.query_row(params![source, b.south, b.north, b.west, b.east, from, to], |x| {
+                Ok(AreaSource {
+                    region: r.cfg.id.clone(),
+                    code: r.cfg.code().to_string(),
+                    thin: r.cfg.thin,
+                    source: source.to_string(),
+                    total: x.get(0)?,
+                    in_window: x.get(1)?,
+                    independent_in_window: x.get(2)?,
+                    vetted_in_window: x.get(3)?,
+                    corroborated_in_window: x.get(4)?,
+                    newest_observed_at: x.get(5)?,
+                    newest_submitted_at: x.get(6)?,
+                })
+            })?;
+            out.push(row);
+        }
+    }
+    Ok(out)
+}
 
 /// A sighting written by the current payload.
 struct Touched {
@@ -208,6 +315,7 @@ mod tests {
     use crate::app::test_support::test_state;
     use crate::ingest::poll::inat::tests::{fixture, payload};
     use crate::ingest::poll::{gbif::Gbif, inat::Inat, nas::Nas};
+    use crate::ingest::quality_bio::{area_summary, AreaSource, DateBasis};
     use crate::ingest::scheduler::ingest_payload;
     use crate::ingest::source::Source;
     use crate::model::{Quality, Row, SightingRow, TaxonRef};
@@ -309,6 +417,7 @@ mod tests {
             lon,
             accuracy_m: None,
             observed_at: at,
+            submitted_at: None,
             quality: Quality::Curated,
             photo_url: None,
         })
@@ -379,5 +488,122 @@ mod tests {
             assert_eq!(out.rows_written, 0, "{name}");
         }
         assert_eq!(links(&state).await, before);
+    }
+
+    // ---- Lionfish Watch (L4, gates/leaf-L4.md G2) ----
+
+    const AREAS: [&str; 4] = ["fl-keys", "mx-caribbean", "belize", "co-caribbean"];
+
+    /// iNat (area pages and mirror originals), GBIF and NAS lionfish fixtures in one Lionfish
+    /// Watch state, GBIF first so the links form from the iNat side too.
+    async fn lionfish_all() -> AppState {
+        let state = crate::app::test_support::test_state_for("lionfish");
+        let gbif = Gbif::new(state.app.clone());
+        for a in AREAS {
+            ingest(&state, &gbif, &format!("gbif/lionfish-{a}.json")).await;
+        }
+        let inat = Inat::new(state.app.clone());
+        for a in AREAS {
+            ingest(&state, &inat, &format!("inat/lionfish-{a}.json")).await;
+        }
+        ingest(&state, &inat, "inat/lionfish-mirrors.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-global.json").await;
+        state
+    }
+
+    /// Every GBIF record from the iNat dataset is `duplicate_of` the iNat record with the same
+    /// id (its `catalogNumber`); records from other datasets stay independent.
+    #[tokio::test]
+    async fn lionfish_gbif_dedupe_links_inat_copies_by_inat_id() {
+        let state = lionfish_all().await;
+        let rows: Vec<(String, Option<String>, Option<String>)> = state
+            .obs
+            .read(|c| {
+                c.prepare(
+                    "select g.ext_id, i.ext_id, i.source_id from sightings g left join sightings i on i.id = g.canonical_id
+                     where g.source_id = 'gbif' order by g.id",
+                )?
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+                .collect()
+            })
+            .await
+            .unwrap();
+        let copies: Vec<_> = rows.iter().filter(|(ext, ..)| gbif::mirrored_inat_id(ext).is_some()).collect();
+        let others: Vec<_> = rows.iter().filter(|(ext, ..)| gbif::mirrored_inat_id(ext).is_none()).collect();
+        // Measured in the recorded pages: 121 of 125 GBIF lionfish records in the four areas (one
+        // year of event dates) are iNat copies; Belize 26 of 26 (L1: 90.7 % all time).
+        assert_eq!((copies.len(), others.len()), (121, 4));
+        for (ext, inat_ext, inat_src) in &copies {
+            assert_eq!(inat_src.as_deref(), Some("inat"), "{ext}");
+            assert_eq!(inat_ext.as_deref(), gbif::mirrored_inat_id(ext), "{ext} links to the iNat record with its catalogNumber");
+        }
+        assert!(others.iter().all(|(_, canon, _)| canon.is_none()), "{others:?}");
+
+        // The evidence card names the relation.
+        let (gid, iid): (i64, i64) = state
+            .obs
+            .read(|c| c.query_row("select id, canonical_id from sightings where source_id = 'gbif' and canonical_id is not null order by id limit 1", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        let ev = crate::evidence::evidence(&state, &format!("sighting:{gid}")).await.unwrap();
+        assert!(ev.links.iter().any(|l| l.id.as_str() == format!("sighting:{iid}") && l.relation == "duplicate_of"), "{:?}", ev.links);
+        let ev = crate::evidence::evidence(&state, &format!("sighting:{iid}")).await.unwrap();
+        assert!(ev.record["submittedAt"].is_string(), "{}", ev.record);
+    }
+
+    /// A GBIF copy of iNat is never a second source: not independent (even with its original
+    /// missing), and never what makes an iNat record corroborated.
+    #[tokio::test]
+    async fn lionfish_gbif_dedupe_is_never_corroboration() {
+        let state = lionfish_all().await;
+        let app = state.app.clone();
+        let (rows, check) = state
+            .obs
+            .read(move |c| {
+                let rows = area_summary(c, &app, 0, i64::MAX, DateBasis::Observed)?;
+                // Ground truth, straight from the links: iNat roots with a NAS row pointing at
+                // them, and iNat roots whose only other-source rows are GBIF copies.
+                let nas: i64 = c.query_row(
+                    "select count(distinct i.id) from sightings i join sightings n on n.canonical_id = i.id
+                     where i.source_id = 'inat' and n.source_id = 'nas'",
+                    [],
+                    |r| r.get(0),
+                )?;
+                let only_copies: i64 = c.query_row(
+                    "select count(*) from sightings i where i.source_id = 'inat'
+                       and exists (select 1 from sightings g where g.canonical_id = i.id and g.source_id = 'gbif')
+                       and not exists (select 1 from sightings n where n.canonical_id = i.id and n.source_id != 'gbif')",
+                    [],
+                    |r| r.get(0),
+                )?;
+                Ok((rows, (nas, only_copies)))
+            })
+            .await
+            .unwrap();
+        let (nas_corroborated, copy_only) = check;
+        assert_eq!(copy_only, 99, "iNat records whose only other-source row is a GBIF copy");
+        assert!(nas_corroborated > 0, "some iNat records are also NAS reports");
+        let sum = |source: &str, f: fn(&AreaSource) -> i64| rows.iter().filter(|r| r.source == source).map(f).sum::<i64>();
+        assert_eq!(sum("inat", |r| r.corroborated_in_window), nas_corroborated, "only NAS reports corroborate here");
+        assert_eq!(sum("gbif", |r| r.independent_in_window), 4, "the four non-iNat GBIF records");
+        assert_eq!(sum("gbif", |r| r.in_window), 125);
+
+        // A GBIF copy whose iNat original was never fetched is still not independent.
+        let lone = crate::app::test_support::test_state_for("lionfish");
+        ingest(&lone, &Gbif::new(lone.app.clone()), "gbif/lionfish-belize.json").await;
+        let app = lone.app.clone();
+        let bz = lone
+            .obs
+            .read(move |c| area_summary(c, &app, 0, i64::MAX, DateBasis::Observed))
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.code == "bz" && r.source == "gbif")
+            .unwrap();
+        assert_eq!((bz.in_window, bz.independent_in_window, bz.corroborated_in_window), (26, 0, 0));
+        let unlinked = lone.obs.read(unlinked_inat_mirrors).await.unwrap();
+        assert_eq!(unlinked.len(), 26, "the iNat poller asks for these originals by id");
+        // Daily poll over the four boxes, one taxon key.
+        assert_eq!(Gbif::new(lone.app.clone()).info().cadence, std::time::Duration::from_secs(86_400));
     }
 }

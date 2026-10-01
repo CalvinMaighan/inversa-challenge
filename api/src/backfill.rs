@@ -50,6 +50,7 @@ use crate::ingest::poll::bio::{self, Pacer, Pager};
 use crate::ingest::poll::gbif::{self, Gbif};
 use crate::ingest::poll::inat::{self, Inat};
 use crate::ingest::poll::nas::{self, Nas};
+use crate::ingest::poll::crw;
 use crate::ingest::poll::openmeteo::OpenMeteo;
 use crate::ingest::poll::usgs::Usgs;
 use crate::ingest::push::nwws::Nwws;
@@ -65,7 +66,8 @@ const MAX_ATTEMPTS: u32 = 6;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Args {
     pub app: Option<String>,
-    pub days: u32,
+    /// `None`: the app's iNat `backfillDays` (30 unless the config says otherwise; Lionfish Watch 90).
+    pub days: Option<u32>,
     pub baseline_years: u32,
     pub dry_run: bool,
     pub fixtures: bool,
@@ -74,7 +76,7 @@ pub struct Args {
 
 impl Default for Args {
     fn default() -> Self {
-        Args { app: None, days: 30, baseline_years: 5, dry_run: false, fixtures: false, scene: None }
+        Args { app: None, days: None, baseline_years: 5, dry_run: false, fixtures: false, scene: None }
     }
 }
 
@@ -105,7 +107,7 @@ pub fn parse_args(args: &[String]) -> anyhow::Result<Args> {
                 anyhow::ensure!(APP_IDS.contains(&v.as_str()), "--app: unknown app {v:?}; apps are {}", APP_IDS.join(", "));
                 out.app = Some(v);
             }
-            "--days" => out.days = value("--days")?,
+            "--days" => out.days = Some(value("--days")?),
             "--baseline-years" => out.baseline_years = value("--baseline-years")?,
             "--dry-run" if inline.is_none() => out.dry_run = true,
             "--fixtures" if inline.is_none() => out.fixtures = true,
@@ -218,12 +220,21 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
     }
 
 
+    let days = args.days.unwrap_or_else(|| inat::backfill_days(&target.app));
+    // The end of the area-count window: now, or the fixtures' recording time.
+    let mut window_end = chrono::Utc::now().timestamp_millis();
     let tallies: Vec<(&'static str, Tally)> = if args.fixtures {
         let root = fixtures_root();
         let mut out = Vec::new();
+        let mut recorded = None;
         for source in fixture_sources(&target) {
-            out.push((source.info().id, ingest_fixtures(&target, source.as_ref(), &root).await?));
+            let (tally, at) = ingest_fixtures_at(&target, source.as_ref(), &root).await?;
+            if [inat::ID, nas::ID, gbif::ID].contains(&source.info().id) {
+                recorded = recorded.max(Some(at));
+            }
+            out.push((source.info().id, tally));
         }
+        window_end = recorded.unwrap_or(window_end);
         out
     } else {
         let app = target.app.clone();
@@ -231,20 +242,49 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         let today = now.date_naive();
         let baseline_from = today.checked_sub_months(Months::new(12 * args.baseline_years)).context("baseline start")?;
         let mut out = Vec::new();
+        let inat_src = Inat::new(app.clone());
         if app.cfg.has_feed(inat::ID) {
-            let src = Inat::new(app.clone());
-            let mut pager = src.pager(None, (now - chrono::Duration::days(args.days as i64)).timestamp_millis());
-            out.push((inat::ID, walk(&target, &src, src.pacer(), &mut pager).await?));
+            let mut pager = inat_src.pager(None, (now - chrono::Duration::days(days as i64)).timestamp_millis());
+            out.push((inat::ID, walk(&target, &inat_src, inat_src.pacer(), &mut pager).await?));
         }
         if app.cfg.has_feed(nas::ID) {
             let src = Nas::new(app.clone());
-            let mut pager = src.pager(baseline_from.year(), today.year());
-            out.push((nas::ID, walk(&target, &src, src.pacer(), &mut pager).await?));
+            if nas::global(&app) {
+                // NAS has no bbox and Lionfish Watch's areas lie outside the US: every record of
+                // the genus, pages in parallel, filtered to the areas by `normalize`.
+                let pages = retry(nas::ID, || nas::fetch_global(&target, src.pacer(), &app)).await?;
+                out.push((nas::ID, ingest_all(&target, &src, pages).await?));
+            } else {
+                let mut pager = src.pager(baseline_from.year(), today.year());
+                out.push((nas::ID, walk(&target, &src, src.pacer(), &mut pager).await?));
+            }
         }
         if app.cfg.has_feed(gbif::ID) {
             let src = Gbif::new(app.clone());
             let mut pager = src.pager(gbif::Filter::EventDate { from: baseline_from, to: today }, None);
             out.push((gbif::ID, walk(&target, &src, src.pacer(), &mut pager).await?));
+        }
+        if app.cfg.has_feed(inat::ID) && inat::mirror_catch_up(&app) {
+            // GBIF copies of iNat records older than the iNat window: fetch their originals by id
+            // so every copy is linked as a duplicate (quality_bio), batch by batch.
+            let mut tally = Tally::default();
+            loop {
+                let ids = inat_src.mirror_batch(&target).await?;
+                if ids.is_empty() {
+                    break;
+                }
+                let url = inat::ids_url(&ids);
+                let page = retry(inat::ID, || bio::get_page(&target, inat_src.pacer(), &url)).await?;
+                tally.add(&ingest_payload(&target, &inat_src, page, None).await?);
+            }
+            println!("inat-mirrors: payloads={} rows_in={} written={}", tally.payloads, tally.rows_in, tally.rows_written);
+            if let Some((_, t)) = out.iter_mut().find(|(id, _)| *id == inat::ID) {
+                t.payloads += tally.payloads;
+                t.rows_in += tally.rows_in;
+                t.rows_written += tally.rows_written;
+                t.rows_skipped += tally.rows_skipped;
+                t.errors += tally.errors;
+            }
         }
         out
     };
@@ -299,9 +339,104 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
             m.alerts
         );
     }
+    if target.app.is_species() && target.app.cfg.has_feed(inat::ID) {
+        area_lines(&target, days, window_end, !args.fixtures).await?;
+    }
     anyhow::ensure!(errors == 0, "{errors} payloads failed to normalize (see fetch_runs)");
     println!("{}", if args.dry_run { "BACKFILL-DRY-RUN-OK" } else { "BACKFILL-OK" });
     Ok(())
+}
+
+/// Start of the UTC day `days` before `end_ms`: the iNat `d1` boundary.
+pub fn window_start(end_ms: i64, days: u32) -> i64 {
+    let end = chrono::DateTime::from_timestamp_millis(end_ms).unwrap_or_default().date_naive();
+    (end - chrono::Duration::days(days as i64)).and_hms_opt(0, 0, 0).expect("midnight").and_utc().timestamp_millis()
+}
+
+fn ymd(ms: Option<i64>) -> String {
+    ms.and_then(chrono::DateTime::from_timestamp_millis).map(|t| t.format("%Y-%m-%d").to_string()).unwrap_or_else(|| "none".into())
+}
+
+/// Per-area result lines (L4, C-A8): `<APP>-DATA` iNat records observed in the window, one
+/// `area` line per area and source, and with `live` the iNat API's own counts for the same
+/// boxes and `d1` as `<APP>-LIVE`, so the two can be compared.
+async fn area_lines(state: &AppState, days: u32, end_ms: i64, live: bool) -> anyhow::Result<()> {
+    use crate::ingest::quality_bio::{area_summary, DateBasis};
+    let from = window_start(end_ms, days);
+    let app = state.app.clone();
+    let (observed, submitted) = {
+        let app = app.clone();
+        state
+            .obs
+            .read(move |c| Ok((area_summary(c, &app, from, i64::MAX, DateBasis::Observed)?, area_summary(c, &app, from, i64::MAX, DateBasis::Submitted)?)))
+            .await?
+    };
+    let tag = app.id().to_uppercase();
+    let pick = |rows: &[crate::ingest::quality_bio::AreaSource], source: &str| -> String {
+        rows.iter().filter(|r| r.source == source).map(|r| format!("{}={}", r.code, r.in_window)).collect::<Vec<_>>().join(" ")
+    };
+    println!("window: observed or submitted since {} ({days} d)", ymd(Some(from)));
+    for (o, s) in observed.iter().zip(&submitted) {
+        println!(
+            "area {} {}: total={} observed={} submitted={} independent={} vetted={} corroborated={} newest_observed={} newest_submitted={}",
+            o.code,
+            o.source,
+            o.total,
+            o.in_window,
+            s.in_window,
+            o.independent_in_window,
+            o.vetted_in_window,
+            o.corroborated_in_window,
+            ymd(o.newest_observed_at),
+            ymd(o.newest_submitted_at)
+        );
+    }
+    println!("{tag}-SUBMITTED {}", pick(&submitted, inat::ID));
+    if live {
+        let d1 = ymd(Some(from));
+        let pacer = Pacer::shared(inat::ID, inat::REQUEST_INTERVAL);
+        let mut parts = Vec::new();
+        for r in &app.regions {
+            let url = inat::count_url(&r.bbox(), &inat::focus_taxon_ids(&app), &d1);
+            let page = retry(inat::ID, || bio::get_page(state, &pacer, &url)).await?;
+            let n = serde_json::from_slice::<serde_json::Value>(&page.bytes)?["total_results"].as_i64().unwrap_or(-1);
+            parts.push(format!("{}={n}", r.cfg.code()));
+        }
+        println!("{tag}-LIVE {}", parts.join(" "));
+    }
+    println!("{tag}-DATA {}", pick(&observed, inat::ID));
+    Ok(())
+}
+
+/// Up to [`MAX_ATTEMPTS`] tries of one request, backing off 2^n s between them.
+async fn retry<T, F, Fut>(id: &str, mut f: F) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<T>>,
+{
+    let mut attempt = 0;
+    loop {
+        match f().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                attempt += 1;
+                if attempt >= MAX_ATTEMPTS {
+                    return Err(e.context(format!("{id}: gave up after {attempt} attempts")));
+                }
+                tracing::warn!(source = id, "backfill request failed ({attempt}/{MAX_ATTEMPTS}): {e:#}");
+                tokio::time::sleep(std::time::Duration::from_secs(1 << attempt.min(5))).await;
+            }
+        }
+    }
+}
+
+/// Ingest already-fetched payloads in order.
+async fn ingest_all(state: &AppState, source: &dyn Source, pages: Vec<RawPayload>) -> anyhow::Result<Tally> {
+    let mut tally = Tally::default();
+    for raw in pages {
+        tally.add(&ingest_payload(state, source, raw, None).await?);
+    }
+    Ok(tally)
 }
 
 /// Rebuild the stored hourly frames of the whole window (PLAN.md C15) and tell subscribers.
@@ -318,15 +453,39 @@ pub async fn rebuild_frames(state: &AppState) -> anyhow::Result<(i64, i64)> {
 pub fn fixture_sources(state: &AppState) -> Vec<Arc<dyn Source>> {
     let app = &state.app;
     let mut out = crate::ingest::poll::physical::sources(&state.config, app);
-    if app.cfg.has_feed(goes_sqs::SOURCE_ID) {
+    if goes_sqs::feed_id(app).is_some() {
         let regions = app.clone();
-        out.push(Arc::new(Replay { info: goes_sqs::info(), normalize: Box::new(move |raw| goes_sqs::normalize_object(raw, &regions)) }));
+        out.push(Arc::new(Replay { info: goes_sqs::info_for(app), normalize: Box::new(move |raw| goes_sqs::normalize_object(raw, &regions)) }));
     }
     if app.cfg.has_feed("nwws") {
         out.push(Arc::new(Replay { info: nwws::info(), normalize: Box::new(|raw| nwws::normalize_stanza(&raw.bytes, raw.fetched_at)) }));
     }
+    if app.cfg.has_feed(crw::SOURCE_ID) {
+        out.push(Arc::new(crw::Crw::new(app.clone())));
+    }
     out.extend(crate::ingest::poll::bio::sources(&state.config, app));
     out
+}
+
+/// Fixture directory of a source id: `goes` for both GOES forms (shared with T7's decoder
+/// tests), `openmeteo` for the marine form, the id otherwise.
+pub fn fixture_dir(id: &str) -> &str {
+    match id {
+        goes_sqs::SOURCE_ID | goes_sqs::SST_SOURCE_ID => "goes",
+        crate::ingest::poll::openmeteo::MARINE_SOURCE_ID => "openmeteo",
+        other => other,
+    }
+}
+
+/// The manifest of `dir` for `app`: `manifest.<app>.json` when the app has its own recordings
+/// (Lionfish Watch's four areas), else the shared `manifest.json`.
+pub fn manifest_path(dir: &Path, app: &str) -> PathBuf {
+    let own = dir.join(format!("manifest.{app}.json"));
+    if own.is_file() {
+        own
+    } else {
+        dir.join("manifest.json")
+    }
 }
 
 /// A push source replayed from recorded payloads: the adapter's own `info` and `normalize`,
@@ -384,12 +543,17 @@ fn http_ok() -> Option<u16> {
     Some(200)
 }
 
-/// Feed `<root>/<source>/manifest.json`'s payloads through the pipeline, in manifest order.
+/// Feed `<root>/<source>/manifest.json`'s payloads (or the app's own `manifest.<app>.json`)
+/// through the pipeline, in manifest order.
+#[cfg(test)]
 pub async fn ingest_fixtures(state: &AppState, source: &dyn Source, root: &std::path::Path) -> anyhow::Result<Tally> {
-    // Fixture directories are named by source id, except GOES (`goes`, shared with T7's decoder tests).
-    let id = source.info().id;
-    let dir = root.join(if id == goes_sqs::SOURCE_ID { "goes" } else { id });
-    let manifest_path = dir.join("manifest.json");
+    Ok(ingest_fixtures_at(state, source, root).await?.0)
+}
+
+/// [`ingest_fixtures`], also returning the manifest's `recorded_at` (unix ms).
+pub async fn ingest_fixtures_at(state: &AppState, source: &dyn Source, root: &std::path::Path) -> anyhow::Result<(Tally, i64)> {
+    let dir = root.join(fixture_dir(source.info().id));
+    let manifest_path = manifest_path(&dir, state.app.id());
     let manifest: Manifest = serde_json::from_slice(
         &std::fs::read(&manifest_path).with_context(|| format!("read {}", manifest_path.display()))?,
     )
@@ -412,7 +576,7 @@ pub async fn ingest_fixtures(state: &AppState, source: &dyn Source, root: &std::
         };
         tally.add(&ingest_payload(state, source, raw, None).await?);
     }
-    Ok(tally)
+    Ok((tally, fetched_at))
 }
 
 /// `fixtures/scenes/<name>/manifest.json`, written by the scene's `fetch.sh`. Extra keys
@@ -614,7 +778,7 @@ mod tests {
         assert_eq!(parse_args(&[]).unwrap(), Args::default());
         assert_eq!(
             parse_args(&s(&["--days", "7", "--baseline-years=2", "--dry-run", "--fixtures"])).unwrap(),
-            Args { app: None, days: 7, baseline_years: 2, dry_run: true, fixtures: true, scene: None }
+            Args { app: None, days: Some(7), baseline_years: 2, dry_run: true, fixtures: true, scene: None }
         );
         assert_eq!(parse_args(&s(&["--app", "python"])).unwrap().app.as_deref(), Some("python"));
         assert_eq!(parse_args(&s(&["--app=lionfish", "--fixtures"])).unwrap().app.as_deref(), Some("lionfish"));
@@ -664,7 +828,7 @@ mod tests {
         run(lf.clone(), &s(&["--fixtures", "--app", "lionfish", "--dry-run"])).await.unwrap();
         assert!(run(lf.clone(), &s(&["--fixtures", "--app", "python"])).await.unwrap_err().to_string().contains("--app python"));
         let ids: Vec<&str> = fixture_sources(&lf).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["ndbc", "coops", "openmeteo", "goes19", "inat", "nas", "gbif"]);
+        assert_eq!(ids, ["ndbc", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
         assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 23, "python's database is untouched");
     }
 

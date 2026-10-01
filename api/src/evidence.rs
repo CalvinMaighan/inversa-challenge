@@ -283,7 +283,7 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                     "select s.id, s.source_id, s.ext_id, s.taxon_id, t.scientific_name, t.common_name, s.lat, s.lon,
                             s.accuracy_m, s.observed_at, s.quality, s.photo_url, s.raw_object_id, s.canonical_id,
                             s.conflict, s.ingested_at, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url, t.focus,
-                            t.ancestor_ids
+                            t.ancestor_ids, s.submitted_at
                      from sightings s join taxa t on t.id = s.taxon_id where s.id = ?1",
                 )?
                 .query_row([sid], |r| {
@@ -308,6 +308,8 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                             "lon": r.get::<_, f64>(7)?,
                             "accuracyM": r.get::<_, Option<f64>>(8)?,
                             "observedAt": iso(r.get(9)?),
+                            // When the record reached its source (iNat upload); can lag years (L4).
+                            "submittedAt": iso_opt(r.get(22)?),
                             "quality": r.get::<_, String>(10)?,
                             "photoUrl": r.get::<_, Option<String>>(11)?,
                             // Same-origin copy for pages under COEP (`media.rs`).

@@ -1,0 +1,1312 @@
+{
+  "offset": 0,
+  "limit": 300,
+  "endOfRecords": true,
+  "count": 56,
+  "results": [
+    {
+      "key": 6130115890,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "334299978",
+      "occurrenceID": "https://www.inaturalist.org/observations/334299978",
+      "decimalLatitude": 25.321734,
+      "decimalLongitude": -80.269429,
+      "coordinateUncertaintyInMeters": 212.0,
+      "eventDate": "2026-01-03T17:28",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/607058422/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6130125371,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "334151254",
+      "occurrenceID": "https://www.inaturalist.org/observations/334151254",
+      "decimalLatitude": 26.782612,
+      "decimalLongitude": -80.042728,
+      "coordinateUncertaintyInMeters": 31.0,
+      "eventDate": "2026-01-09T13:41",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/606753057/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6130208706,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "335951135",
+      "occurrenceID": "https://www.inaturalist.org/observations/335951135",
+      "decimalLatitude": 26.782507,
+      "decimalLongitude": -80.0408,
+      "coordinateUncertaintyInMeters": 203.0,
+      "eventDate": "2026-01-23",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/610403941/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6130547202,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "335304866",
+      "occurrenceID": "https://www.inaturalist.org/observations/335304866",
+      "decimalLatitude": 26.260967,
+      "decimalLongitude": -80.083542,
+      "coordinateUncertaintyInMeters": 9.0,
+      "eventDate": "2026-01-17T14:26:10",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/609101688/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6130623527,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "336049293",
+      "occurrenceID": "https://www.inaturalist.org/observations/336049293",
+      "decimalLatitude": 26.701293,
+      "decimalLongitude": -79.909854,
+      "coordinateUncertaintyInMeters": 113808.0,
+      "eventDate": "2026-01-24T09:10:26",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/610600185/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6130701656,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "335508189",
+      "occurrenceID": "https://www.inaturalist.org/observations/335508189",
+      "decimalLatitude": 26.51123,
+      "decimalLongitude": -80.048609,
+      "coordinateUncertaintyInMeters": 2.0,
+      "eventDate": "2026-01-11T01:50",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/609511322/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6131041119,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "335128080",
+      "occurrenceID": "https://www.inaturalist.org/observations/335128080",
+      "decimalLatitude": 26.262526,
+      "decimalLongitude": -80.115412,
+      "coordinateUncertaintyInMeters": 29868.0,
+      "eventDate": "2026-01-16T23:41",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/608749158/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6131300833,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "334089308",
+      "occurrenceID": "https://www.inaturalist.org/observations/334089308",
+      "decimalLatitude": 25.678542,
+      "decimalLongitude": -80.153941,
+      "coordinateUncertaintyInMeters": 44.0,
+      "eventDate": "2026-01-08T15:08:03",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/606628924/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6131410152,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "336044957",
+      "occurrenceID": "https://www.inaturalist.org/observations/336044957",
+      "decimalLatitude": 26.78298,
+      "decimalLongitude": -80.043387,
+      "coordinateUncertaintyInMeters": 671.0,
+      "eventDate": "2026-01-23T12:14:50",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/610591472/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6159553013,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "338498980",
+      "occurrenceID": "https://www.inaturalist.org/observations/338498980",
+      "decimalLatitude": 25.731455,
+      "decimalLongitude": -80.16584,
+      "coordinateUncertaintyInMeters": 30.0,
+      "eventDate": "2026-02-13T16:56:45",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/615600473/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6171087102,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "340079069",
+      "occurrenceID": "https://www.inaturalist.org/observations/340079069",
+      "decimalLatitude": 26.337068,
+      "decimalLongitude": -80.061489,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2026-02-19T09:14",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/618791476/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6185472447,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "346137060",
+      "occurrenceID": "https://www.inaturalist.org/observations/346137060",
+      "decimalLatitude": 24.909725,
+      "decimalLongitude": -80.648195,
+      "coordinateUncertaintyInMeters": 6.0,
+      "eventDate": "2026-03-26T15:47:07",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/630909043/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6185496323,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "345528326",
+      "occurrenceID": "https://www.inaturalist.org/observations/345528326",
+      "decimalLatitude": 25.731494,
+      "decimalLongitude": -80.165909,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2026-03-27T13:16",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/629708826/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6186000944,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "344366153",
+      "occurrenceID": "https://www.inaturalist.org/observations/344366153",
+      "decimalLatitude": 26.784992,
+      "decimalLongitude": -80.042769,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2026-03-22T00:39:54",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/627448686/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6186065400,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "346141658",
+      "occurrenceID": "https://www.inaturalist.org/observations/346141658",
+      "decimalLatitude": 24.909722,
+      "decimalLongitude": -80.648195,
+      "coordinateUncertaintyInMeters": 6.0,
+      "eventDate": "2026-03-26T15:47:11",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/630918200/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6352759095,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "367158577",
+      "occurrenceID": "https://www.inaturalist.org/observations/367158577",
+      "decimalLatitude": 25.78923,
+      "decimalLongitude": -80.145028,
+      "coordinateUncertaintyInMeters": 14.0,
+      "eventDate": "2026-03-08T09:29:20",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/670479228/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6234792336,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "351318734",
+      "occurrenceID": "https://www.inaturalist.org/observations/351318734",
+      "decimalLatitude": 26.783239,
+      "decimalLongitude": -80.040262,
+      "coordinateUncertaintyInMeters": 57.0,
+      "eventDate": "2026-04-18T08:18",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/641089260/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6236383525,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "354897570",
+      "occurrenceID": "https://www.inaturalist.org/observations/354897570",
+      "decimalLatitude": 26.06314,
+      "decimalLongitude": -80.109351,
+      "coordinateUncertaintyInMeters": 202.0,
+      "eventDate": "2026-04-26T09:50",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": []
+    },
+    {
+      "key": 6499560577,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "392426390",
+      "occurrenceID": "https://www.inaturalist.org/observations/392426390",
+      "decimalLatitude": 26.78267,
+      "decimalLongitude": -80.04205,
+      "coordinateUncertaintyInMeters": 496.0,
+      "eventDate": "2026-04-26T17:30",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/719170108/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6276883301,
+      "datasetKey": "d6cc311c-c5ab-4f23-9a20-10514f9eb9c4",
+      "catalogNumber": "1932809",
+      "occurrenceID": "urn:USGS:NAS:1932809",
+      "decimalLatitude": 24.5461,
+      "decimalLongitude": -81.78818,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2026-05-10",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": "lionfish",
+      "countryCode": "US",
+      "institutionCode": null,
+      "media": []
+    },
+    {
+      "key": 6320243787,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "361799577",
+      "occurrenceID": "https://www.inaturalist.org/observations/361799577",
+      "decimalLatitude": 26.782512,
+      "decimalLongitude": -80.044203,
+      "coordinateUncertaintyInMeters": 44.0,
+      "eventDate": "2026-05-15T07:40",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/660307990/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6334111093,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "363163652",
+      "occurrenceID": "https://www.inaturalist.org/observations/363163652",
+      "decimalLatitude": 26.261073,
+      "decimalLongitude": -80.083627,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2026-05-18T14:53:49",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/662894158/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6352329946,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "365752468",
+      "occurrenceID": "https://www.inaturalist.org/observations/365752468",
+      "decimalLatitude": 26.782812,
+      "decimalLongitude": -80.042919,
+      "coordinateUncertaintyInMeters": 301.0,
+      "eventDate": "2026-05-26T17:40",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/667798823/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6399469720,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "369596991",
+      "occurrenceID": "https://www.inaturalist.org/observations/369596991",
+      "decimalLatitude": 24.54488,
+      "decimalLongitude": -81.810536,
+      "coordinateUncertaintyInMeters": 30.0,
+      "eventDate": "2026-05-05T14:47:13",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/675138715/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6431049670,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "378460749",
+      "occurrenceID": "https://www.inaturalist.org/observations/378460749",
+      "decimalLatitude": 26.783144,
+      "decimalLongitude": -80.040402,
+      "coordinateUncertaintyInMeters": 105.0,
+      "eventDate": "2026-05-07T12:59",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/692177366/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6441781500,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "379842352",
+      "occurrenceID": "https://www.inaturalist.org/observations/379842352",
+      "decimalLatitude": 24.672419,
+      "decimalLongitude": -81.345684,
+      "coordinateUncertaintyInMeters": 2308.0,
+      "eventDate": "2026-05-09T13:11",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/694849803/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6398906436,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "367937678",
+      "occurrenceID": "https://www.inaturalist.org/observations/367937678",
+      "decimalLatitude": 25.139532,
+      "decimalLongitude": -80.294155,
+      "coordinateUncertaintyInMeters": 200.0,
+      "eventDate": "2026-06-02T11:01",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/671974569/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6422886942,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "374570855",
+      "occurrenceID": "https://www.inaturalist.org/observations/374570855",
+      "decimalLatitude": 26.773469,
+      "decimalLongitude": -80.032793,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2026-06-22T16:58",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/684662189/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6551042575,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "401276050",
+      "occurrenceID": "https://www.inaturalist.org/observations/401276050",
+      "decimalLatitude": 26.777808,
+      "decimalLongitude": -80.039894,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2026-06-30T08:13:32",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/736490400/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6430944795,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "378841635",
+      "occurrenceID": "https://www.inaturalist.org/observations/378841635",
+      "decimalLatitude": 25.018499,
+      "decimalLongitude": -80.369722,
+      "coordinateUncertaintyInMeters": 13167.0,
+      "eventDate": "2026-07-04T13:54",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/692907850/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6431634924,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "377207479",
+      "occurrenceID": "https://www.inaturalist.org/observations/377207479",
+      "decimalLatitude": 25.835837,
+      "decimalLongitude": -80.109642,
+      "coordinateUncertaintyInMeters": 2.0,
+      "eventDate": "2026-07-01T13:57:13",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/689758894/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6431645446,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "378637548",
+      "occurrenceID": "https://www.inaturalist.org/observations/378637548",
+      "decimalLatitude": 26.490724,
+      "decimalLongitude": -80.017209,
+      "coordinateUncertaintyInMeters": 977.0,
+      "eventDate": "2026-07-03T22:53",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/692519595/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6431762516,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "378047131",
+      "occurrenceID": "https://www.inaturalist.org/observations/378047131",
+      "decimalLatitude": 25.63208,
+      "decimalLongitude": -80.094872,
+      "coordinateUncertaintyInMeters": 5.0,
+      "eventDate": "2026-07-03T12:23:36",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/691590911/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6452689905,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "382791782",
+      "occurrenceID": "https://www.inaturalist.org/observations/382791782",
+      "decimalLatitude": 24.842368,
+      "decimalLongitude": -80.752246,
+      "coordinateUncertaintyInMeters": 4.0,
+      "eventDate": "2026-07-18T09:25",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/700552081/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6499015895,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "393649622",
+      "occurrenceID": "https://www.inaturalist.org/observations/393649622",
+      "decimalLatitude": 26.232648,
+      "decimalLongitude": -80.083073,
+      "coordinateUncertaintyInMeters": 158.0,
+      "eventDate": "2026-08-22T10:50",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": []
+    },
+    {
+      "key": 6500230544,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "390161518",
+      "occurrenceID": "https://www.inaturalist.org/observations/390161518",
+      "decimalLatitude": 24.900984,
+      "decimalLongitude": -80.541518,
+      "coordinateUncertaintyInMeters": 122.0,
+      "eventDate": "2026-08-01T08:59",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/714751345/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6520341511,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "397251937",
+      "occurrenceID": "https://www.inaturalist.org/observations/397251937",
+      "decimalLatitude": 24.545112,
+      "decimalLongitude": -81.409006,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2026-09-03T11:34",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/728581722/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6550949626,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "400847398",
+      "occurrenceID": "https://www.inaturalist.org/observations/400847398",
+      "decimalLatitude": 26.339728,
+      "decimalLongitude": -80.072211,
+      "coordinateUncertaintyInMeters": 6.0,
+      "eventDate": "2026-09-07T21:28:16",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/735649986/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5889524241,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "324429103",
+      "occurrenceID": "https://www.inaturalist.org/observations/324429103",
+      "decimalLatitude": 25.052326,
+      "decimalLongitude": -80.332017,
+      "coordinateUncertaintyInMeters": 202.0,
+      "eventDate": "2025-10-19T09:52",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": []
+    },
+    {
+      "key": 5892390693,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "325808591",
+      "occurrenceID": "https://www.inaturalist.org/observations/325808591",
+      "decimalLatitude": 26.722422,
+      "decimalLongitude": -80.030568,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2025-11-06T23:09",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/589960873/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5892416286,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "325392953",
+      "occurrenceID": "https://www.inaturalist.org/observations/325392953",
+      "decimalLatitude": 26.713902,
+      "decimalLongitude": -80.013388,
+      "coordinateUncertaintyInMeters": 1076.0,
+      "eventDate": "2025-11-07",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/589131411/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5897123787,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "326237226",
+      "occurrenceID": "https://www.inaturalist.org/observations/326237226",
+      "decimalLatitude": 26.258628,
+      "decimalLongitude": -80.08232,
+      "coordinateUncertaintyInMeters": 357.0,
+      "eventDate": "2025-11-08T09:59",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/590817333/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5897273488,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "326894358",
+      "occurrenceID": "https://www.inaturalist.org/observations/326894358",
+      "decimalLatitude": 25.17734,
+      "decimalLongitude": -80.34677,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2025-11-16T13:44",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/592128027/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5897689648,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "326552021",
+      "occurrenceID": "https://www.inaturalist.org/observations/326552021",
+      "decimalLatitude": 26.783058,
+      "decimalLongitude": -80.042698,
+      "coordinateUncertaintyInMeters": 161.0,
+      "eventDate": "2025-11-14",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/591444507/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5897802685,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "327084216",
+      "occurrenceID": "https://www.inaturalist.org/observations/327084216",
+      "decimalLatitude": 26.622552,
+      "decimalLongitude": -80.188763,
+      "coordinateUncertaintyInMeters": 29822.0,
+      "eventDate": "2025-11-18T01:17:21",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/592505228/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5909070684,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "328275288",
+      "occurrenceID": "https://www.inaturalist.org/observations/328275288",
+      "decimalLatitude": 26.782566,
+      "decimalLongitude": -80.043185,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2025-11-22T12:38",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/594814736/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5939103709,
+      "datasetKey": "d6cc311c-c5ab-4f23-9a20-10514f9eb9c4",
+      "catalogNumber": "1886818",
+      "occurrenceID": "urn:USGS:NAS:1886818",
+      "decimalLatitude": 26.78361,
+      "decimalLongitude": -80.04073,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2025-11-19",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": "lionfish",
+      "countryCode": "US",
+      "institutionCode": null,
+      "media": []
+    },
+    {
+      "key": 5939103940,
+      "datasetKey": "d6cc311c-c5ab-4f23-9a20-10514f9eb9c4",
+      "catalogNumber": "1886819",
+      "occurrenceID": "urn:USGS:NAS:1886819",
+      "decimalLatitude": 24.54498,
+      "decimalLongitude": -81.81133,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2025-11-25",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": "lionfish",
+      "countryCode": "US",
+      "institutionCode": null,
+      "media": []
+    },
+    {
+      "key": 5932645125,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "330585387",
+      "occurrenceID": "https://www.inaturalist.org/observations/330585387",
+      "decimalLatitude": 26.126134,
+      "decimalLongitude": -80.093151,
+      "coordinateUncertaintyInMeters": 267.0,
+      "eventDate": "2025-12-06T11:31",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": []
+    },
+    {
+      "key": 5935276337,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "331862112",
+      "occurrenceID": "https://www.inaturalist.org/observations/331862112",
+      "decimalLatitude": 26.782593,
+      "decimalLongitude": -80.041734,
+      "coordinateUncertaintyInMeters": 136.0,
+      "eventDate": "2025-12-23",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/602121450/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5935550937,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "331989183",
+      "occurrenceID": "https://www.inaturalist.org/observations/331989183",
+      "decimalLatitude": 26.78499,
+      "decimalLongitude": -80.043463,
+      "coordinateUncertaintyInMeters": 122.0,
+      "eventDate": "2025-12-23T00:15",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/602388803/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5935744584,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "331483941",
+      "occurrenceID": "https://www.inaturalist.org/observations/331483941",
+      "decimalLatitude": 26.78263,
+      "decimalLongitude": -80.041543,
+      "coordinateUncertaintyInMeters": 38.0,
+      "eventDate": "2025-12-20T11:44",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/601358538/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5935998621,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "332534521",
+      "occurrenceID": "https://www.inaturalist.org/observations/332534521",
+      "decimalLatitude": 25.177338,
+      "decimalLongitude": -80.34669,
+      "coordinateUncertaintyInMeters": 25.0,
+      "eventDate": "2025-12-28T11:30",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/603509428/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 5938507954,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "332775177",
+      "occurrenceID": "https://www.inaturalist.org/observations/332775177",
+      "decimalLatitude": 26.784716,
+      "decimalLongitude": -80.042559,
+      "coordinateUncertaintyInMeters": 439.0,
+      "eventDate": "2025-12-28T14:00:26",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/604000419/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6170937346,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "340700937",
+      "occurrenceID": "https://www.inaturalist.org/observations/340700937",
+      "decimalLatitude": 24.57357,
+      "decimalLongitude": -81.739547,
+      "coordinateUncertaintyInMeters": 8.0,
+      "eventDate": "2025-12-19T13:19:48",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "US",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/620054036/original.jpg"
+        }
+      ]
+    },
+    {
+      "key": 6256782303,
+      "datasetKey": "d6cc311c-c5ab-4f23-9a20-10514f9eb9c4",
+      "catalogNumber": "1932792",
+      "occurrenceID": "urn:USGS:NAS:1932792",
+      "decimalLatitude": 25.05222,
+      "decimalLongitude": -80.33194,
+      "coordinateUncertaintyInMeters": null,
+      "eventDate": "2025-12-13",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": "lionfish",
+      "countryCode": "US",
+      "institutionCode": null,
+      "media": []
+    }
+  ]
+}

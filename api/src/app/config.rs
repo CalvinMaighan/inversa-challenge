@@ -25,8 +25,10 @@ pub const DEFAULT_APP: &str = "carp";
 /// Every source id a `feeds[]` entry may name, with the mode its adapter runs in. `nwps` has no
 /// adapter yet (leaf C2); a config may list it, and the scheduler registers it as down with that
 /// reason so the feed chips are honest. `crw` is a poller here; at runtime it also takes ERDDAP
-/// nudges and reports itself as `webhook` (`ingest::poll::crw`).
-pub const SOURCES: [(&str, Mode); 13] = [
+/// nudges and reports itself as `webhook` (`ingest::poll::crw`). `openmeteo-marine` (waves and
+/// currents, gated on the model run) and `goes19-sst` (the GOES-19 consumer narrowed to full-disk
+/// SST) are the Lionfish Watch forms of `openmeteo` and `goes19` (L4).
+pub const SOURCES: [(&str, Mode); 15] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
     ("gbif", Mode::Poll),
@@ -40,6 +42,8 @@ pub const SOURCES: [(&str, Mode); 13] = [
     ("web", Mode::Push),
     ("crw", Mode::Poll),
     ("nwps", Mode::Poll),
+    ("openmeteo-marine", Mode::Poll),
+    ("goes19-sst", Mode::Push),
 ];
 
 /// Sources listed in `SOURCES` whose adapter does not exist yet.
@@ -167,6 +171,15 @@ pub struct RegionCfg {
     pub camera: Camera,
     #[serde(default)]
     pub thin: bool,
+    /// Short area code for result lines and labels (`fl`, `mx`); the id when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+impl RegionCfg {
+    pub fn code(&self) -> &str {
+        self.code.as_deref().unwrap_or(&self.id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

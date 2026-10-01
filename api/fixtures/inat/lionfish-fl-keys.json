@@ -1,0 +1,4987 @@
+{
+  "total_results": 35,
+  "page": 1,
+  "per_page": 200,
+  "results": [
+    {
+      "id": 377879402,
+      "quality_grade": "research",
+      "observed_on": "2026-07-03",
+      "time_observed_at": "2026-07-03T13:09:58-04:00",
+      "created_at": "2026-07-03T18:58:15-04:00",
+      "updated_at": "2026-07-03T21:09:09-04:00",
+      "positional_accuracy": 3,
+      "public_positional_accuracy": 3,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.01591945,
+          26.70843
+        ]
+      },
+      "location": "26.70843,-80.01591945",
+      "place_guess": "FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 691062477,
+          "url": "https://static.inaturalist.org/photos/691062477/square.jpg",
+          "license_code": null,
+          "attribution": "(c) Amy McCarthy Musick, all rights reserved"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 843856821,
+          "created_at": "2026-07-03T18:58:15-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 843930554,
+          "created_at": "2026-07-03T21:09:09-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378047131,
+      "quality_grade": "research",
+      "observed_on": "2026-07-03",
+      "time_observed_at": "2026-07-03T12:23:36-04:00",
+      "created_at": "2026-07-04T09:47:40-04:00",
+      "updated_at": "2026-07-04T15:28:26-04:00",
+      "positional_accuracy": 5,
+      "public_positional_accuracy": 5,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0948721667,
+          25.63208
+        ]
+      },
+      "location": "25.63208,-80.0948721667",
+      "place_guess": "Straits of Florida, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 691590911,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691590911/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) ddeatienza, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 844227181,
+          "created_at": "2026-07-04T13:47:40+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          }
+        },
+        {
+          "id": 844241155,
+          "created_at": "2026-07-04T14:14:41+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          }
+        },
+        {
+          "id": 844242143,
+          "created_at": "2026-07-04T14:16:34+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378168303,
+      "quality_grade": "research",
+      "observed_on": "2017-06-28",
+      "time_observed_at": "2017-06-28T19:02:00-04:00",
+      "created_at": "2026-07-04T16:11:21-04:00",
+      "updated_at": "2026-07-04T16:33:30-04:00",
+      "positional_accuracy": 10,
+      "public_positional_accuracy": 10,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.1386861111,
+          25.7694694444
+        ]
+      },
+      "location": "25.7694694444,-80.1386861111",
+      "place_guess": "South of Fifth, Miami Beach, FL 33139, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 691617409,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691617409/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) vleid001, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 844448061,
+          "created_at": "2026-07-04T20:11:21+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 844459961,
+          "created_at": "2026-07-04T20:33:30+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378460749,
+      "quality_grade": "research",
+      "observed_on": "2026-05-07",
+      "time_observed_at": "2026-05-07T12:59:00-04:00",
+      "created_at": "2026-07-05T13:07:29-04:00",
+      "updated_at": "2026-07-05T14:10:25-04:00",
+      "positional_accuracy": 105,
+      "public_positional_accuracy": 105,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0404020217,
+          26.7831436489
+        ]
+      },
+      "location": "26.7831436489,-80.0404020217",
+      "place_guess": "Riviera Beach, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 692177366,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/692177366/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Kerri Mannino-Cuva, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 844988380,
+          "created_at": "2026-07-05T17:07:29+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 845029406,
+          "created_at": "2026-07-05T18:10:25+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378925868,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-02",
+      "time_observed_at": null,
+      "created_at": "2026-07-06T20:04:44-04:00",
+      "updated_at": "2026-07-06T20:04:50-04:00",
+      "positional_accuracy": 4315,
+      "public_positional_accuracy": 4315,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.2946000174,
+          25.139946785
+        ]
+      },
+      "location": "25.139946785,-80.2946000174",
+      "place_guess": "United States",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [],
+      "identifications": [
+        {
+          "id": 845893809,
+          "created_at": "2026-07-07T00:04:44+00:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378841635,
+      "quality_grade": "research",
+      "observed_on": "2026-07-04",
+      "time_observed_at": "2026-07-04T13:54:00-04:00",
+      "created_at": "2026-07-06T14:50:14-04:00",
+      "updated_at": "2026-07-07T08:57:26-04:00",
+      "positional_accuracy": 13167,
+      "public_positional_accuracy": 13167,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.3697217854,
+          25.0184993064
+        ]
+      },
+      "location": "25.0184993064,-80.3697217854",
+      "place_guess": null,
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 692907850,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/692907850/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) orion-, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 845729704,
+          "created_at": "2026-07-06T14:50:14-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 846175146,
+          "created_at": "2026-07-07T08:57:26-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 845807134,
+          "created_at": "2026-07-06T17:04:34-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 379688454,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-09",
+      "time_observed_at": "2026-07-09T10:05:53-04:00",
+      "created_at": "2026-07-09T10:06:04-04:00",
+      "updated_at": "2026-07-09T11:16:29-04:00",
+      "positional_accuracy": 18,
+      "public_positional_accuracy": 18,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0504855351,
+          26.7637080988
+        ]
+      },
+      "location": "26.7637080988,-80.0504855351",
+      "place_guess": "Broadway Ave, Riviera Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 694555800,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/694555800/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Scott Sullivan, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 847494028,
+          "created_at": "2026-07-09T11:16:29-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 847451055,
+          "created_at": "2026-07-09T10:06:04-04:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 379842352,
+      "quality_grade": "research",
+      "observed_on": "2026-05-09",
+      "time_observed_at": "2026-05-09T13:11:00-04:00",
+      "created_at": "2026-07-09T19:29:34-04:00",
+      "updated_at": "2026-07-09T20:48:14-04:00",
+      "positional_accuracy": 2308,
+      "public_positional_accuracy": 2308,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -81.3456841664,
+          24.6724190634
+        ]
+      },
+      "location": "24.6724190634,-81.3456841664",
+      "place_guess": "Avenue E, Big Pine Key, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 694849803,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/694849803/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) hpoland2025, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 847770445,
+          "created_at": "2026-07-09T19:30:12-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": null
+        },
+        {
+          "id": 847800642,
+          "created_at": "2026-07-09T20:48:14-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 135550832,
+      "quality_grade": "research",
+      "observed_on": "2016-02-15",
+      "time_observed_at": "2016-02-15T08:28:00-05:00",
+      "created_at": "2022-09-18T14:02:57-04:00",
+      "updated_at": "2026-07-13T12:06:29-04:00",
+      "positional_accuracy": 61,
+      "public_positional_accuracy": 61,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -82.438280001,
+          27.0493835088
+        ]
+      },
+      "location": "27.0493835088,-82.438280001",
+      "place_guess": "Casperson Beach, Venice, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 231208330,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/231208330/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Cindy O'Leary, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 298584368,
+          "created_at": "2022-09-18T18:02:57+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 298823033,
+          "created_at": "2022-09-19T13:54:09+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 593673806,
+          "created_at": "2025-02-18T18:30:33+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 381453440,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-14",
+      "time_observed_at": "2026-07-14T14:18:41-04:00",
+      "created_at": "2026-07-14T14:53:46-04:00",
+      "updated_at": "2026-07-14T15:26:03-04:00",
+      "positional_accuracy": 18,
+      "public_positional_accuracy": 18,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0565028333,
+          26.8848616667
+        ]
+      },
+      "location": "26.8848616667,-80.0565028333",
+      "place_guess": "US-1 N, Juno Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 697968741,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/697968741/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) loqa2_1, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 850917056,
+          "created_at": "2026-07-14T14:53:47-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 850934771,
+          "created_at": "2026-07-14T15:26:03-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 381453334,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-14",
+      "time_observed_at": "2026-07-14T14:18:42-04:00",
+      "created_at": "2026-07-14T14:53:25-04:00",
+      "updated_at": "2026-07-14T15:29:08-04:00",
+      "positional_accuracy": 14,
+      "public_positional_accuracy": 14,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0565038221,
+          26.8848619911
+        ]
+      },
+      "location": "26.8848619911,-80.0565038221",
+      "place_guess": "US-1 N, Juno Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 697968531,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/697968531/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) loqa2_1, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 850916851,
+          "created_at": "2026-07-14T14:53:25-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 850936466,
+          "created_at": "2026-07-14T15:29:08-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 381452595,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-14",
+      "time_observed_at": "2026-07-14T14:19:00-04:00",
+      "created_at": "2026-07-14T14:51:06-04:00",
+      "updated_at": "2026-07-14T15:29:11-04:00",
+      "positional_accuracy": 19,
+      "public_positional_accuracy": 19,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0564418551,
+          26.884844369
+        ]
+      },
+      "location": "26.884844369,-80.0564418551",
+      "place_guess": "US-1 N, Juno Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 697967182,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/697967182/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) londondeyo, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 850915390,
+          "created_at": "2026-07-14T14:51:06-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 850936496,
+          "created_at": "2026-07-14T15:29:11-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 381442392,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-14",
+      "time_observed_at": "2026-07-14T14:18:49-04:00",
+      "created_at": "2026-07-14T14:19:11-04:00",
+      "updated_at": "2026-07-14T15:29:16-04:00",
+      "positional_accuracy": 19,
+      "public_positional_accuracy": 19,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0564867262,
+          26.8848556505
+        ]
+      },
+      "location": "26.8848556505,-80.0564867262",
+      "place_guess": "US-1 N, Juno Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 697948544,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/697948544/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) lynnetteleon29, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 850896339,
+          "created_at": "2026-07-14T14:19:11-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 850936555,
+          "created_at": "2026-07-14T15:29:16-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 381477437,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-14",
+      "time_observed_at": "2026-07-14T14:20:07-04:00",
+      "created_at": "2026-07-14T16:22:06-04:00",
+      "updated_at": "2026-07-14T17:00:09-04:00",
+      "positional_accuracy": 15,
+      "public_positional_accuracy": 15,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0565306486,
+          26.884899892
+        ]
+      },
+      "location": "26.884899892,-80.0565306486",
+      "place_guess": "US-1 N, Juno Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 698015967,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/698015967/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Sky Mood, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 850968541,
+          "created_at": "2026-07-14T15:22:06-05:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 850990354,
+          "created_at": "2026-07-14T16:00:09-05:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 382791782,
+      "quality_grade": "research",
+      "observed_on": "2026-07-18",
+      "time_observed_at": "2026-07-18T09:25:00-04:00",
+      "created_at": "2026-07-18T21:53:16-04:00",
+      "updated_at": "2026-07-18T22:47:32-04:00",
+      "positional_accuracy": 4,
+      "public_positional_accuracy": 4,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.7522459441,
+          24.8423677589
+        ]
+      },
+      "location": "24.8423677589,-80.7522459441",
+      "place_guess": "Monroe County, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 700552081,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/700552081/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) larvalfishguy, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 853574304,
+          "created_at": "2026-07-18T18:53:16-07:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 853596986,
+          "created_at": "2026-07-18T19:47:27-07:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 317666742,
+      "quality_grade": "research",
+      "observed_on": "2025-09-26",
+      "time_observed_at": "2025-09-26T20:48:00-04:00",
+      "created_at": "2025-09-29T21:01:22-04:00",
+      "updated_at": "2026-07-19T17:43:41-04:00",
+      "positional_accuracy": 61,
+      "public_positional_accuracy": 61,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0094890858,
+          26.7112519293
+        ]
+      },
+      "location": "26.7112519293,-80.0094890858",
+      "place_guess": "Palm Beach County, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 574042798,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/574042798/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Gabriel Jensen, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 716816071,
+          "created_at": "2025-10-24T19:45:45+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 705397346,
+          "created_at": "2025-09-30T01:01:22+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 722906020,
+          "created_at": "2025-11-07T01:51:39+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 705611392,
+          "created_at": "2025-09-30T13:29:23+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 757078613,
+          "created_at": "2026-02-01T19:18:05+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 383684727,
+      "quality_grade": "casual",
+      "observed_on": "2026-06-27",
+      "time_observed_at": "2026-06-27T13:31:00-04:00",
+      "created_at": "2026-07-21T13:38:32-04:00",
+      "updated_at": "2026-07-21T13:38:32-04:00",
+      "positional_accuracy": 16,
+      "public_positional_accuracy": 16,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0565416667,
+          26.8848694444
+        ]
+      },
+      "location": "26.8848694444,-80.0565416667",
+      "place_guess": "Juno Beach, FL 33408, USA",
+      "taxon": {
+        "id": 47284,
+        "name": "Pterois",
+        "rank": "genus",
+        "preferred_common_name": null,
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 702266993,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/702266993/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) sberrios, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 855339783,
+          "created_at": "2026-07-21T12:38:32-05:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 383971269,
+      "quality_grade": "casual",
+      "observed_on": "2026-07-22",
+      "time_observed_at": "2026-07-22T12:24:37-04:00",
+      "created_at": "2026-07-22T12:25:03-04:00",
+      "updated_at": "2026-07-22T12:25:04-04:00",
+      "positional_accuracy": 14,
+      "public_positional_accuracy": 14,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -82.4521097183,
+          27.3804131474
+        ]
+      },
+      "location": "27.3804131474,-82.4521097183",
+      "place_guess": "Sarasota County, US-FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 702818921,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/702818921/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) kirkyturkey, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 855926689,
+          "created_at": "2026-07-22T16:25:03+00:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 385004189,
+      "quality_grade": "research",
+      "observed_on": "2015-12-22",
+      "time_observed_at": "2015-12-22T15:39:09-05:00",
+      "created_at": "2026-07-25T15:55:55-04:00",
+      "updated_at": "2026-07-25T19:16:34-04:00",
+      "positional_accuracy": null,
+      "public_positional_accuracy": null,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.8764833333,
+          24.7430716667
+        ]
+      },
+      "location": "24.7430716667,-80.8764833333",
+      "place_guess": "FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 704808751,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/704808751/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Matt Henning, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 857960355,
+          "created_at": "2026-07-25T15:55:55-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 858074406,
+          "created_at": "2026-07-25T19:16:34-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 388229146,
+      "quality_grade": "casual",
+      "observed_on": "2026-08-04",
+      "time_observed_at": "2026-08-04T13:21:48-04:00",
+      "created_at": "2026-08-04T13:22:03-04:00",
+      "updated_at": "2026-08-04T13:22:04-04:00",
+      "positional_accuracy": 26,
+      "public_positional_accuracy": 26,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.4060954416,
+          25.1250211233
+        ]
+      },
+      "location": "25.1250211233,-80.4060954416",
+      "place_guess": "Key Largo, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 711010421,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/711010421/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Rob Lilly, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 864561166,
+          "created_at": "2026-08-04T17:22:03+00:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 388517527,
+      "quality_grade": "research",
+      "observed_on": "2026-08-05",
+      "time_observed_at": "2026-08-05T13:11:00-04:00",
+      "created_at": "2026-08-05T13:17:43-04:00",
+      "updated_at": "2026-08-05T17:44:41-04:00",
+      "positional_accuracy": 488,
+      "public_positional_accuracy": 488,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0543045682,
+          26.1121155067
+        ]
+      },
+      "location": "26.1121155067,-80.0543045682",
+      "place_guess": "Broward County, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 711569559,
+          "url": "https://static.inaturalist.org/photos/711569559/square.jpg",
+          "license_code": null,
+          "attribution": "(c) Owen Ridgen, all rights reserved"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 865188473,
+          "created_at": "2026-08-05T13:17:43-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 865348147,
+          "created_at": "2026-08-05T17:44:41-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 390161518,
+      "quality_grade": "research",
+      "observed_on": "2026-08-01",
+      "time_observed_at": "2026-08-01T08:59:00-04:00",
+      "created_at": "2026-08-10T21:20:15-04:00",
+      "updated_at": "2026-08-11T00:20:36-04:00",
+      "positional_accuracy": 122,
+      "public_positional_accuracy": 122,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.5415179996,
+          24.9009835464
+        ]
+      },
+      "location": "24.9009835464,-80.5415179996",
+      "place_guess": null,
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 714751345,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/714751345/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Wesley McGee, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 868542215,
+          "created_at": "2026-08-10T21:20:15-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 868614547,
+          "created_at": "2026-08-11T00:20:36-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 392426390,
+      "quality_grade": "research",
+      "observed_on": "2026-04-26",
+      "time_observed_at": "2026-04-26T17:30:00-04:00",
+      "created_at": "2026-08-18T13:15:44-04:00",
+      "updated_at": "2026-08-18T14:41:21-04:00",
+      "positional_accuracy": 496,
+      "public_positional_accuracy": 496,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0420495908,
+          26.7826698872
+        ]
+      },
+      "location": "26.7826698872,-80.0420495908",
+      "place_guess": "Lake Worth, Riviera Beach, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 719170108,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/719170108/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) nat427, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 873405331,
+          "created_at": "2026-08-18T13:15:44-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 873447062,
+          "created_at": "2026-08-18T14:41:21-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 392640382,
+      "quality_grade": "casual",
+      "observed_on": "2015-03-08",
+      "time_observed_at": "2015-03-08T11:37:50-04:00",
+      "created_at": "2026-08-19T08:54:24-04:00",
+      "updated_at": "2026-08-19T09:05:22-04:00",
+      "positional_accuracy": null,
+      "public_positional_accuracy": null,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -81.8071966667,
+          24.5590366667
+        ]
+      },
+      "location": "24.5590366667,-81.8071966667",
+      "place_guess": "Wall St, Key West, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 719591216,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/719591216/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Eric Jedrewski, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 873899310,
+          "created_at": "2026-08-19T07:54:24-05:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 393232005,
+      "quality_grade": "casual",
+      "observed_on": "2026-08-21",
+      "time_observed_at": "2026-08-21T12:37:00-04:00",
+      "created_at": "2026-08-21T12:37:11-04:00",
+      "updated_at": "2026-08-21T19:41:12-04:00",
+      "positional_accuracy": 18,
+      "public_positional_accuracy": 18,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -81.7009964595,
+          26.0499214689
+        ]
+      },
+      "location": "26.0499214689,-81.7009964595",
+      "place_guess": "Tower Rd, Naples, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 720742962,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/720742962/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) SeaBean Sarah, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 875158651,
+          "created_at": "2026-08-21T12:37:11-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 875170928,
+          "created_at": "2026-08-21T13:02:05-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 875360840,
+          "created_at": "2026-08-21T19:41:11-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 393649622,
+      "quality_grade": "research",
+      "observed_on": "2026-08-22",
+      "time_observed_at": "2026-08-22T10:50:00-04:00",
+      "created_at": "2026-08-22T20:26:03-04:00",
+      "updated_at": "2026-08-24T14:59:45-04:00",
+      "positional_accuracy": 158,
+      "public_positional_accuracy": 158,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0830729647,
+          26.2326475696
+        ]
+      },
+      "location": "26.2326475696,-80.0830729647",
+      "place_guess": "pompano drop off dive site",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 721552401,
+          "url": "https://static.inaturalist.org/photos/721552401/square.jpg",
+          "license_code": null,
+          "attribution": "(c) vadermom, all rights reserved"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 875982174,
+          "created_at": "2026-08-23T00:26:03+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 875985027,
+          "created_at": "2026-08-23T00:31:55+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 877090597,
+          "created_at": "2026-08-24T18:59:45+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 378637548,
+      "quality_grade": "research",
+      "observed_on": "2026-07-03",
+      "time_observed_at": "2026-07-03T22:53:00-04:00",
+      "created_at": "2026-07-05T23:03:38-04:00",
+      "updated_at": "2026-08-25T20:13:34-04:00",
+      "positional_accuracy": 977,
+      "public_positional_accuracy": 977,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.017208945,
+          26.4907239931
+        ]
+      },
+      "location": "26.4907239931,-80.017208945",
+      "place_guess": "Palm Beach County, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 692519595,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/692519595/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Gabriel Jensen, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 845713634,
+          "created_at": "2026-07-06T11:23:53-07:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 845305158,
+          "created_at": "2026-07-05T20:03:38-07:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 395753457,
+      "quality_grade": "casual",
+      "observed_on": "2026-08-29",
+      "time_observed_at": "2026-08-29T12:05:27-04:00",
+      "created_at": "2026-08-30T06:02:44-04:00",
+      "updated_at": "2026-08-30T10:19:44-04:00",
+      "positional_accuracy": 15,
+      "public_positional_accuracy": 15,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.1876533333,
+          25.7854616667
+        ]
+      },
+      "location": "25.7854616667,-80.1876533333",
+      "place_guess": "Pérez Art Museum, Miami, FL, US",
+      "taxon": {
+        "id": 47284,
+        "name": "Pterois",
+        "rank": "genus",
+        "preferred_common_name": null,
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 725684266,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/725684266/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) ivangmz, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 880293865,
+          "created_at": "2026-08-30T06:02:44-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          }
+        },
+        {
+          "id": 880399462,
+          "created_at": "2026-08-30T10:19:44-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47284,
+            "name": "Pterois",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 335508189,
+      "quality_grade": "research",
+      "observed_on": "2026-01-11",
+      "time_observed_at": "2026-01-11T01:50:00-05:00",
+      "created_at": "2026-01-20T14:00:16-05:00",
+      "updated_at": "2026-09-09T08:34:45-04:00",
+      "positional_accuracy": 2,
+      "public_positional_accuracy": 2,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0486087189,
+          26.5112304039
+        ]
+      },
+      "location": "26.5112304039,-80.0486087189",
+      "place_guess": "Ocean Ridge, FL 33435, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 609511322,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/609511322/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) elinetsky, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 752606133,
+          "created_at": "2026-01-20T13:00:16-06:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 752608252,
+          "created_at": "2026-01-20T13:06:28-06:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 752658131,
+          "created_at": "2026-01-20T15:43:04-06:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 758138265,
+          "created_at": "2026-02-04T10:03:06-06:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 886277869,
+          "created_at": "2026-09-09T07:34:45-05:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 397251937,
+      "quality_grade": "research",
+      "observed_on": "2026-09-03",
+      "time_observed_at": "2026-09-03T11:34:00-04:00",
+      "created_at": "2026-09-04T15:51:49-04:00",
+      "updated_at": "2026-09-11T21:18:14-04:00",
+      "positional_accuracy": null,
+      "public_positional_accuracy": null,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -81.4090057433,
+          24.54511202
+        ]
+      },
+      "location": "24.54511202,-81.4090057433",
+      "place_guess": null,
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 728581722,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/728581722/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) pclark2, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 883481600,
+          "created_at": "2026-09-04T21:35:03+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 883435448,
+          "created_at": "2026-09-04T19:51:49+00:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 887814064,
+          "created_at": "2026-09-12T01:18:14+00:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 400229094,
+      "quality_grade": "research",
+      "observed_on": "2026-08-01",
+      "time_observed_at": "2026-08-01T10:06:00-04:00",
+      "created_at": "2026-09-14T12:17:07-04:00",
+      "updated_at": "2026-09-14T12:27:58-04:00",
+      "positional_accuracy": 80,
+      "public_positional_accuracy": 80,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0411900673,
+          26.7832128668
+        ]
+      },
+      "location": "26.7832128668,-80.0411900673",
+      "place_guess": "Riviera Beach, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 734392764,
+          "url": "https://static.inaturalist.org/photos/734392764/square.jpg",
+          "license_code": null,
+          "attribution": "(c) Aaron_G14, all rights reserved"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 889418099,
+          "created_at": "2026-09-14T11:17:07-05:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 889423225,
+          "created_at": "2026-09-14T11:27:58-05:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 401276050,
+      "quality_grade": "research",
+      "observed_on": "2026-06-30",
+      "time_observed_at": "2026-06-30T08:13:32-04:00",
+      "created_at": "2026-09-18T12:25:05-04:00",
+      "updated_at": "2026-09-18T13:16:21-04:00",
+      "positional_accuracy": null,
+      "public_positional_accuracy": null,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0398944444,
+          26.7778083333
+        ]
+      },
+      "location": "26.7778083333,-80.0398944444",
+      "place_guess": "LAKE DR at CLAREMONT LN, Palm Beach Shores, FL 33404, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 736490400,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/736490400/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Alexis Stasko, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 891620073,
+          "created_at": "2026-09-18T12:25:05-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 891642622,
+          "created_at": "2026-09-18T13:16:21-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 401373594,
+      "quality_grade": "casual",
+      "observed_on": "2026-09-18",
+      "time_observed_at": "2026-09-18T16:14:04-04:00",
+      "created_at": "2026-09-18T19:14:19-04:00",
+      "updated_at": "2026-09-18T19:14:19-04:00",
+      "positional_accuracy": 55598,
+      "public_positional_accuracy": 55598,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -79.9181072152,
+          26.4625806083
+        ]
+      },
+      "location": "26.4625806083,-79.9181072152",
+      "place_guess": "US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [],
+      "identifications": [
+        {
+          "id": 891812279,
+          "created_at": "2026-09-18T23:14:19+00:00",
+          "current": true,
+          "category": "leading",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 400847398,
+      "quality_grade": "research",
+      "observed_on": "2026-09-07",
+      "time_observed_at": "2026-09-07T21:28:16-04:00",
+      "created_at": "2026-09-16T18:47:05-04:00",
+      "updated_at": "2026-09-21T11:03:12-04:00",
+      "positional_accuracy": 6,
+      "public_positional_accuracy": 6,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0722111667,
+          26.3397283333
+        ]
+      },
+      "location": "26.3397283333,-80.0722111667",
+      "place_guess": "S Ocean Blvd, Boca Raton, FL, US",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 735649986,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/735649986/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) Zachary Lang, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 891265302,
+          "created_at": "2026-09-17T19:51:45-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 890713960,
+          "created_at": "2026-09-16T18:47:05-04:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 890731699,
+          "created_at": "2026-09-16T19:34:36-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 893404221,
+          "created_at": "2026-09-21T11:03:12-04:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": 403613385,
+      "quality_grade": "research",
+      "observed_on": "2011-06-30",
+      "time_observed_at": "2011-06-30T08:25:00-04:00",
+      "created_at": "2026-09-26T13:45:55-04:00",
+      "updated_at": "2026-09-26T21:23:44-04:00",
+      "positional_accuracy": null,
+      "public_positional_accuracy": null,
+      "obscured": false,
+      "geojson": {
+        "type": "Point",
+        "coordinates": [
+          -80.0443366667,
+          26.7825983333
+        ]
+      },
+      "location": "26.7825983333,-80.0443366667",
+      "place_guess": "Palm Beach County, FL, USA",
+      "taxon": {
+        "id": 47280,
+        "name": "Pterois volitans",
+        "rank": "species",
+        "preferred_common_name": "Common Lionfish",
+        "ancestor_ids": [
+          48460,
+          1,
+          2,
+          355675,
+          47178,
+          1632273,
+          47233,
+          1303568,
+          47285,
+          788499,
+          47284,
+          47280
+        ],
+        "iconic_taxon_name": "Actinopterygii"
+      },
+      "photos": [
+        {
+          "id": 741081159,
+          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/741081159/square.jpg",
+          "license_code": "cc-by-nc",
+          "attribution": "(c) taxono-my, some rights reserved (CC BY-NC)"
+        }
+      ],
+      "identifications": [
+        {
+          "id": 896294964,
+          "created_at": "2026-09-26T12:45:55-05:00",
+          "current": true,
+          "category": "improving",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 896332356,
+          "created_at": "2026-09-26T14:00:02-05:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        },
+        {
+          "id": 896505659,
+          "created_at": "2026-09-26T20:23:44-05:00",
+          "current": true,
+          "category": "supporting",
+          "taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284
+            ]
+          },
+          "previous_observation_taxon": {
+            "id": 47280,
+            "name": "Pterois volitans",
+            "ancestor_ids": [
+              48460,
+              1,
+              2,
+              355675,
+              47178,
+              1632273,
+              47233,
+              1303568,
+              47285,
+              788499,
+              47284,
+              47280
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

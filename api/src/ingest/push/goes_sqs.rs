@@ -32,6 +32,14 @@ use crate::state::Config;
 use decode::Product;
 
 pub const SOURCE_ID: &str = "goes19";
+/// The same consumer registered for SST only (Lionfish Watch, L4): its own feed id so `/health`
+/// and the feed chips name what it carries.
+pub const SST_SOURCE_ID: &str = "goes19-sst";
+
+/// The GOES feed id `app` lists (`goes19` or `goes19-sst`), if any.
+pub fn feed_id(app: &App) -> Option<&'static str> {
+    [SOURCE_ID, SST_SOURCE_ID].into_iter().find(|id| app.cfg.has_feed(id))
+}
 pub const BUCKET_URL: &str = "https://noaa-goes19.s3.amazonaws.com/";
 const WAIT_SECONDS: u32 = 20;
 const MAX_MESSAGES: u32 = 10;
@@ -72,14 +80,29 @@ pub fn info() -> SourceInfo {
     }
 }
 
-/// ABI product prefixes the app's `goes19` feed takes (`params.products`); empty = every product.
+/// The description under the id `app`'s config lists: `goes19-sst` names the SST-only form.
+pub fn info_for(app: &App) -> SourceInfo {
+    match feed_id(app) {
+        Some(SST_SOURCE_ID) => SourceInfo { id: SST_SOURCE_ID, name: "GOES-19 ABI L2 SST full disk (NOAA NODD)", ..info() },
+        _ => info(),
+    }
+}
+
+/// ABI product prefixes the app's GOES feed takes (`params.products`); empty = every product,
+/// except that `goes19-sst` defaults to `ABI-L2-SSTF`.
 pub fn products(app: &App) -> Vec<String> {
-    app.cfg
-        .feed(SOURCE_ID)
+    let id = feed_id(app).unwrap_or(SOURCE_ID);
+    let listed: Vec<String> = app
+        .cfg
+        .feed(id)
         .and_then(|f| f.params.get("products"))
         .and_then(|v| v.as_array())
         .map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if listed.is_empty() && id == SST_SOURCE_ID {
+        return vec!["ABI-L2-SSTF".to_string()];
+    }
+    listed
 }
 
 /// `wanted`, narrowed to the app's product list.
@@ -287,7 +310,7 @@ fn scan_start_minute(key: &str) -> Option<u32> {
 #[async_trait]
 impl Source for GoesSqs {
     fn info(&self) -> SourceInfo {
-        info()
+        info_for(&self.app)
     }
 
     fn min_interval(&self) -> Duration {

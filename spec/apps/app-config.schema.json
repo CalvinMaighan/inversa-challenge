@@ -55,7 +55,8 @@
             "required": ["lat", "lon", "heightM"],
             "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "heightM": { "type": "number", "exclusiveMinimum": 0 } }
           },
-          "thin": { "type": "boolean", "description": "Data proof found too few recent records for a ranked score; the UI labels it." }
+          "thin": { "type": "boolean", "description": "Data proof found too few recent records for a ranked score; the UI labels it." },
+          "code": { "type": "string", "pattern": "^[a-z][a-z0-9]*$", "description": "Short area code for result lines and labels (fl, mx); the id when absent." }
         }
       }
     },
@@ -86,7 +87,7 @@
         "additionalProperties": false,
         "required": ["source", "mode"],
         "properties": {
-          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps"] },
+          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps", "openmeteo-marine", "goes19-sst"] },
           "mode": { "type": "string", "enum": ["push", "poll"] },
           "name": { "type": "string" },
           "homepage": { "type": "string" },

@@ -1,0 +1,1 @@
+https://marine-api.open-meteo.com/v1/marine?latitude=16.250,16.250,16.750,16.750,17.250,17.250,17.750,17.750&longitude=-88.250,-87.750,-88.250,-87.750,-88.250,-87.750,-88.250,-87.750&hourly=wave_height,wave_period&models=meteofrance_wave&timeformat=unixtime&timezone=GMT&forecast_hours=72&cell_selection=nearest

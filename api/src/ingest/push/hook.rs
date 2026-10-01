@@ -174,6 +174,7 @@ mod tests {
             lon: -80.4,
             accuracy_m: Some(5.0),
             observed_at: 1_790_000_000_000,
+            submitted_at: None,
             quality: Quality::Curated,
             photo_url: None,
         })])

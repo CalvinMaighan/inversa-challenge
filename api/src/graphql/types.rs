@@ -85,6 +85,7 @@ db_text!(Param {
     LstC => "lst_c", AirC => "air_c", WaterC => "water_c", SstC => "sst_c", RainMm => "rain_mm",
     StageM => "stage_m", WaveM => "wave_m", WindMs => "wind_ms", FireFrp => "fire_frp",
     Sst => "sst", SstAnomaly => "sst_anomaly", Dhw => "dhw", Baa => "baa",
+    WavePeriodS => "wave_period_s", CurrentMs => "current_ms", CurrentDirDeg => "current_dir_deg",
 });
 db_text!(ReadingOrigin { Measured => "measured", Satellite => "satellite", Modeled => "modeled" });
 db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missing => "missing" });
@@ -137,6 +138,9 @@ pub enum Param {
     SstAnomaly,
     Dhw,
     Baa,
+    WavePeriodS,
+    CurrentMs,
+    CurrentDirDeg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

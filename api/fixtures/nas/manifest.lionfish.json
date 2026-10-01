@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-01T07:01:20Z",
+  "note": "Lionfish Watch (L4): built from the full global genus=Pterois pull (12,418 records, 4 x 4000-row pages in parallel): every record in mx, bz and co, the 60 newest dated Florida-box records, and the 5 newest records outside every area. Real records, trimmed fields.",
+  "files": [
+    {
+      "file": "pterois-global.json",
+      "url": "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Pterois&offset=0&limit=4000"
+    }
+  ]
+}

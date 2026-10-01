@@ -13,7 +13,7 @@ use crate::state::Config;
 /// Every push source the app's `feeds[]` lists and config enables.
 pub fn all(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     let mut out = Vec::new();
-    if app.cfg.has_feed(goes_sqs::SOURCE_ID) {
+    if goes_sqs::feed_id(app).is_some() {
         out.extend(goes_sqs::sources(config, app));
     }
     if app.cfg.has_feed("nwws") {
@@ -26,9 +26,9 @@ pub fn all(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
 /// still registered, so `feeds` lists them as down with the reason as the note instead of omitting them.
 pub fn disabled(config: &Config, app: &Arc<App>) -> Vec<(SourceInfo, String)> {
     let mut out = Vec::new();
-    if app.cfg.has_feed(goes_sqs::SOURCE_ID) {
+    if goes_sqs::feed_id(app).is_some() {
         if let Err(reason) = goes_sqs::configure(config, app) {
-            out.push((goes_sqs::info(), reason));
+            out.push((goes_sqs::info_for(app), reason));
         }
     }
     if app.cfg.has_feed("nwws") {

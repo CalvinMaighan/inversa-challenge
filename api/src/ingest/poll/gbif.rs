@@ -293,6 +293,7 @@ pub fn normalize(bytes: &[u8], app: &App) -> anyhow::Result<Vec<Row>> {
             lon,
             accuracy_m: o.coordinate_uncertainty_in_meters,
             observed_at,
+            submitted_at: None,
             quality,
             photo_url,
         }));

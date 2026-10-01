@@ -1,0 +1,1 @@
+https://api.gbif.org/v1/occurrence/search?decimalLatitude=16.0,18.2&decimalLongitude=-88.5,-87.3&taxonKey=2334432&occurrenceStatus=PRESENT&hasCoordinate=true&hasGeospatialIssue=false&eventDate=2025-10-01,2026-10-01&limit=300&offset=0

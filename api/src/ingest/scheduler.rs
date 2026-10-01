@@ -22,7 +22,7 @@ use crate::app::config::App;
 use crate::ingest::archive::raw_key;
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::source::{FetchCtx, RawPayload, Source, SourceInfo};
-use crate::model::{AlertRow, ReadingRow, RevisionRow, Row, SightingRow, StationRef, TaxonRef};
+use crate::model::{AlertRow, ForecastRow, ReadingRow, RevisionRow, Row, SightingRow, StationRef, TaxonRef};
 use crate::realtime::Event;
 use crate::state::AppState;
 
@@ -246,8 +246,18 @@ async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<
     // A `webhook` source sleeps until its backstop poll or a provider nudge, whichever is first.
     let nudge = (info.mode == crate::ingest::source::Mode::Webhook).then(|| state.nudges.waker(info.id));
     let mut cursor = load_cursor(&state, info.id).await?;
+    // The governor is shared by every app polling the same upstream (one backoff per host), and
+    // keeps the interval of the first app to register. A poller also keeps its own app's cadence
+    // (Lionfish Watch polls iNat every 10 min while the python app polls every 2).
+    let own_floor = (info.mode == crate::ingest::source::Mode::Poll).then(|| source.min_interval());
+    let mut last_start: Option<Instant> = None;
     loop {
-        let wait = gov.wait(Instant::now());
+        let now = Instant::now();
+        let own = match (own_floor, last_start) {
+            (Some(floor), Some(at)) => (at + floor).saturating_duration_since(now),
+            _ => Duration::ZERO,
+        };
+        let wait = gov.wait(now).max(own);
         if !wait.is_zero() {
             match &nudge {
                 // A nudge never cuts a 429/5xx backoff short: the provider asked us to slow down.
@@ -261,6 +271,7 @@ async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<
             }
         }
         let fetched_at = now_ms();
+        last_start = Some(Instant::now());
         let result = source.fetch(&FetchCtx { state: &state, cursor: cursor.clone() }).await;
         match result {
             Ok(payloads) => {
@@ -605,6 +616,7 @@ impl<'t, 'c> RowWriter<'t, 'c> {
             Row::Alert(a) => self.alert(a)?,
             Row::Station(s) => self.station(s)?.map(|(_, changed)| changed),
             Row::Revision(r) => self.revision(r)?,
+            Row::Forecast(f) => self.forecast(f)?,
         };
         match changed {
             None => self.skipped += 1,
@@ -678,17 +690,20 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         let n = self
             .tx
             .prepare_cached(
+                // `submitted_at` is set once known and never cleared by a source that lacks it.
                 "insert into sightings (source_id, ext_id, taxon_id, lat, lon, accuracy_m, observed_at, quality,
-                   photo_url, raw_object_id, ingested_at)
-                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                   photo_url, raw_object_id, ingested_at, submitted_at)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  on conflict(source_id, ext_id) do update set taxon_id = excluded.taxon_id, lat = excluded.lat,
                    lon = excluded.lon, accuracy_m = excluded.accuracy_m, observed_at = excluded.observed_at,
                    quality = excluded.quality, photo_url = excluded.photo_url,
-                   raw_object_id = excluded.raw_object_id, ingested_at = excluded.ingested_at
+                   raw_object_id = excluded.raw_object_id, ingested_at = excluded.ingested_at,
+                   submitted_at = coalesce(excluded.submitted_at, sightings.submitted_at)
                  where sightings.taxon_id is not excluded.taxon_id or sightings.lat is not excluded.lat
                    or sightings.lon is not excluded.lon or sightings.accuracy_m is not excluded.accuracy_m
                    or sightings.observed_at is not excluded.observed_at or sightings.quality is not excluded.quality
-                   or sightings.photo_url is not excluded.photo_url",
+                   or sightings.photo_url is not excluded.photo_url
+                   or (excluded.submitted_at is not null and sightings.submitted_at is not excluded.submitted_at)",
             )?
             .execute(params![
                 self.source_id,
@@ -701,11 +716,44 @@ impl<'t, 'c> RowWriter<'t, 'c> {
                 s.quality.as_str(),
                 s.photo_url,
                 self.raw_object_id,
-                self.now
+                self.now,
+                s.submitted_at
             ])?;
         if n > 0 {
             self.widen(s.observed_at);
         }
+        Ok(Some(n > 0))
+    }
+
+    /// A forecast value with its run (`marine_forecasts`). One run's value at a valid time is
+    /// written once; a later run is a new row, so every issued forecast stays replayable.
+    fn forecast(&mut self, f: &ForecastRow) -> rusqlite::Result<Option<bool>> {
+        let Some((station_id, station_changed)) = self.station(&f.station)? else { return Ok(None) };
+        if station_changed {
+            self.written += 1;
+        }
+        let n = self
+            .tx
+            .prepare_cached(
+                "insert into marine_forecasts (station_id, param, issued_at, valid_at, value, unit, source_unit, model, raw_object_id)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 on conflict(station_id, param, issued_at, valid_at) do update set value = excluded.value,
+                   unit = excluded.unit, source_unit = excluded.source_unit, model = excluded.model,
+                   raw_object_id = excluded.raw_object_id
+                 where marine_forecasts.value is not excluded.value or marine_forecasts.unit is not excluded.unit
+                   or marine_forecasts.source_unit is not excluded.source_unit or marine_forecasts.model is not excluded.model",
+            )?
+            .execute(params![
+                station_id,
+                f.param.as_str(),
+                f.issued_at,
+                f.valid_at,
+                f.value.filter(|v| v.is_finite()),
+                f.unit,
+                f.source_unit,
+                f.model,
+                self.raw_object_id
+            ])?;
         Ok(Some(n > 0))
     }
 
@@ -861,6 +909,7 @@ mod tests {
                 lon: -80.6,
                 accuracy_m: Some(12.0),
                 observed_at: 1_790_000_000_000,
+                submitted_at: None,
                 quality: Quality::Research,
                 photo_url: Some("https://example.test/p.jpg".into()),
             }),
@@ -877,6 +926,7 @@ mod tests {
                 lon: -80.3,
                 accuracy_m: None,
                 observed_at: 1_790_000_600_000,
+                submitted_at: Some(1_790_100_000_000),
                 quality: Quality::NeedsId,
                 photo_url: None,
             }),
@@ -1111,6 +1161,7 @@ mod tests {
             lon: -91.2,
             accuracy_m: None,
             observed_at: 1_790_000_000_000,
+            submitted_at: None,
             quality: Quality::Research,
             photo_url: None,
         }));
@@ -1306,13 +1357,13 @@ mod tests {
 
         let lionfish = crate::app::test_support::test_state_for("lionfish");
         let p = plan(&lionfish);
-        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "crw"]);
+        assert_eq!(p.runnable_ids(), ["ndbc", "openmeteo-marine", "inat", "nas", "gbif", "crw"]);
         assert!(!p.known_ids().contains(&"nws") && !p.known_ids().contains(&"nwws") && !p.known_ids().contains(&"usgs"));
         let crw = p.known.iter().find(|(i, _)| i.id == "crw").expect("crw registered");
         assert_eq!(crw.0.name, "NOAA Coral Reef Watch");
         assert_eq!(crw.0.mode, crate::ingest::source::Mode::Webhook);
         assert_eq!(crw.1.as_deref(), Some("INVERSA_SOURCES=off"), "tests run with sources off");
-        assert!(p.known.iter().any(|(i, r)| i.id == "goes19" && r.as_deref().is_some_and(|r| r.contains("GOES_SQS_URL"))));
+        assert!(p.known.iter().any(|(i, r)| i.id == "goes19-sst" && r.as_deref().is_some_and(|r| r.contains("GOES_SQS_URL"))));
 
         let carp = crate::app::test_support::test_state_for("carp");
         let p = plan(&carp);

@@ -21,9 +21,18 @@
 //! `Row::Revision` on field `taxon`; `quality_bio::post_write` marks such sightings `conflict`.
 //! Taxa are compared after the focus mapping, so a swap between a species and its own
 //! subspecies, or between Pterois species, is not a flip.
+//!
+//! Dates: `observed_at` is when the animal was seen (`time_observed_at`, else `observed_on`),
+//! `submitted_at` when the record was uploaded (`created_at`). Both are stored; time windows count
+//! by `observed_at` (L1: median lag 5 d, p90 2099 d).
+//!
+//! Per-app feed params (`spec/apps/<app>.json`): `cadenceMinutes` (default 2; Lionfish Watch 10),
+//! `backfillDays` (first-fetch lookback and the backfill default; default 30, Lionfish Watch 90),
+//! `mirrorCatchUp` (each fetch also asks for the iNat originals of stored GBIF iNat-dataset
+//! mirrors that have none, by id, so the GBIF copy links to it as a duplicate).
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -48,14 +57,67 @@ pub const MAX_REQUESTS_PER_FETCH: usize = 5;
 /// First live fetch with no cursor looks back this far.
 pub const INITIAL_LOOKBACK: Duration = Duration::from_secs(30 * 24 * 3600);
 
+/// Ids per `id=` request (the API's `per_page` maximum).
+pub const MAX_IDS_PER_REQUEST: usize = 200;
+
 pub struct Inat {
     app: Arc<App>,
     pacer: Arc<Pacer>,
+    /// iNat ids already asked for by the mirror catch-up in this process (a deleted or private
+    /// observation never comes back; it is not asked for again until restart).
+    asked: Mutex<HashSet<String>>,
+}
+
+fn param_u64(app: &App, key: &str) -> Option<u64> {
+    app.cfg.feed(ID).and_then(|f| f.params.get(key)).and_then(|v| v.as_u64()).filter(|n| *n > 0)
+}
+
+/// Poll cadence of the app's iNat feed (`params.cadenceMinutes`, default [`CADENCE`]).
+pub fn cadence(app: &App) -> Duration {
+    param_u64(app, "cadenceMinutes").map(|m| Duration::from_secs(m * 60)).unwrap_or(CADENCE)
+}
+
+/// First-fetch lookback and backfill default in days (`params.backfillDays`, default 30).
+pub fn backfill_days(app: &App) -> u32 {
+    param_u64(app, "backfillDays").map(|d| d as u32).unwrap_or((INITIAL_LOOKBACK.as_secs() / 86_400) as u32)
+}
+
+/// Does the feed fetch iNat originals of unlinked GBIF mirrors (`params.mirrorCatchUp`)?
+pub fn mirror_catch_up(app: &App) -> bool {
+    app.cfg.feed(ID).and_then(|f| f.params.get("mirrorCatchUp")).and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
+/// The API's own count of focus observations in `bbox` observed on or after `d1` (YYYY-MM-DD):
+/// `total_results` of a zero-row page. The backfill quotes it next to the stored count.
+pub fn count_url(bbox: &BBox, taxon_ids: &[i64], d1: &str) -> String {
+    format!(
+        "{API}?swlat={}&swlng={}&nelat={}&nelng={}&taxon_id={}&d1={d1}&per_page=0",
+        bbox.south,
+        bbox.west,
+        bbox.north,
+        bbox.east,
+        taxon_ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")
+    )
+}
+
+/// Observations by id, oldest id first.
+pub fn ids_url(ids: &[String]) -> String {
+    format!("{API}?id={}&order_by=id&order=asc&per_page={MAX_IDS_PER_REQUEST}", ids.join(","))
 }
 
 impl Inat {
     pub fn new(app: Arc<App>) -> Self {
-        Inat { app, pacer: Pacer::shared(ID, REQUEST_INTERVAL) }
+        Inat { app, pacer: Pacer::shared(ID, REQUEST_INTERVAL), asked: Mutex::new(HashSet::new()) }
+    }
+
+    /// The next batch of mirror originals to ask for: stored GBIF iNat-dataset rows with no
+    /// iNat link, minus ids already asked for. Marks the batch as asked.
+    pub async fn mirror_batch(&self, state: &crate::state::AppState) -> anyhow::Result<Vec<String>> {
+        let missing = state.obs.read(crate::ingest::quality_bio::unlinked_inat_mirrors).await?;
+        let mut asked = self.asked.lock().unwrap_or_else(|p| p.into_inner());
+        let batch: Vec<String> = missing.into_iter().filter(|id| !asked.contains(id)).take(MAX_IDS_PER_REQUEST).collect();
+        asked.extend(batch.iter().cloned());
+        Ok(batch)
     }
 
     pub fn pacer(&self) -> &Pacer {
@@ -76,19 +138,28 @@ impl Source for Inat {
             name: "iNaturalist",
             homepage: "https://www.inaturalist.org",
             mode: Mode::Poll,
-            cadence: CADENCE,
+            cadence: cadence(&self.app),
             max_latency: Duration::from_secs(6 * 3600),
         }
     }
 
     fn min_interval(&self) -> Duration {
-        CADENCE
+        cadence(&self.app)
     }
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
         let now = chrono::Utc::now().timestamp_millis();
-        let mut pager = self.pager(ctx.cursor.as_deref(), now - INITIAL_LOOKBACK.as_millis() as i64);
-        bio::collect_pages(ctx.state, &self.pacer, &mut pager, Some(MAX_REQUESTS_PER_FETCH)).await
+        let lookback = i64::from(backfill_days(&self.app)) * 86_400_000;
+        let mut pager = self.pager(ctx.cursor.as_deref(), now - lookback);
+        let mut out = bio::collect_pages(ctx.state, &self.pacer, &mut pager, Some(MAX_REQUESTS_PER_FETCH)).await?;
+        if mirror_catch_up(&self.app) {
+            let ids = self.mirror_batch(ctx.state).await?;
+            if !ids.is_empty() {
+                // No cursor: the id page does not move the `updated_since` walk.
+                out.push(bio::get_page(ctx.state, &self.pacer, &ids_url(&ids)).await?);
+            }
+        }
+        Ok(out)
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
@@ -320,6 +391,7 @@ struct Obs {
     quality_grade: Option<String>,
     time_observed_at: Option<String>,
     observed_on: Option<String>,
+    created_at: Option<String>,
     positional_accuracy: Option<f64>,
     public_positional_accuracy: Option<f64>,
     obscured: Option<bool>,
@@ -464,6 +536,7 @@ pub fn normalize(bytes: &[u8], app: &App) -> anyhow::Result<Vec<Row>> {
             lon,
             accuracy_m,
             observed_at,
+            submitted_at: o.created_at.as_deref().and_then(bio::parse_time_ms),
             quality: quality(o.quality_grade.as_deref()),
             photo_url,
         }));
@@ -787,5 +860,121 @@ pub(crate) mod tests {
         let resumed = InatPager::resume(&app, Some(legacy), 0);
         assert_eq!(resumed.cursor.region(0).focus.since, "2026-08-01T00:00:00Z");
         assert_eq!(resumed.cursor.region(1).focus.since, "1970-01-01T00:00:00Z");
+    }
+
+    // ---- Lionfish Watch (L4, gates/leaf-L4.md G1) ----
+
+    const AREAS: [&str; 4] = ["fl-keys", "mx-caribbean", "belize", "co-caribbean"];
+
+    /// Ingest the recorded lionfish iNat pages (and optionally the mirror originals) into a
+    /// Lionfish Watch state, through the real pipeline.
+    pub async fn lionfish_inat_state(with_mirrors: bool) -> AppState {
+        let state = crate::app::test_support::test_state_for("lionfish");
+        let src = Inat::new(state.app.clone());
+        for area in AREAS {
+            let out = ingest_payload(&state, &src, payload("fixture:lionfish", fixture(&format!("inat/lionfish-{area}.json"))), None).await.unwrap();
+            assert!(out.error.is_none(), "{area}: {out:?}");
+        }
+        if with_mirrors {
+            ingest_payload(&state, &src, payload("fixture:mirrors", fixture("inat/lionfish-mirrors.json")), None).await.unwrap();
+        }
+        state
+    }
+
+    fn ms(s: &str) -> i64 {
+        bio::parse_time_ms(s).unwrap()
+    }
+
+    /// Lionfish taxon only, no `introduced=true`, one pager per area box, 10 min cadence and a
+    /// 90-day first lookback; the python app keeps its 2 min cadence and both queries.
+    #[test]
+    fn lionfish_inat_query_is_taxon_only_per_area_every_10_min() {
+        let app = lionfish();
+        assert_eq!(queries(&app), [Query::Focus], "no introduced=true query (L1)");
+        assert_eq!(focus_taxon_ids(&app), [47284], "genus Pterois");
+        let mut p = InatPager::resume(&app, None, ms("2026-07-03T00:00:00Z"));
+        let mut boxes = Vec::new();
+        while let Some(url) = p.next_url() {
+            assert!(url.contains("&taxon_id=47284&") && !url.contains("introduced"), "{url}");
+            assert!(url.contains("updated_since=2026-07-03T00%3A00%3A00Z"), "{url}");
+            boxes.push(url.split("swlat=").nth(1).unwrap().split("&taxon_id").next().unwrap().to_string());
+            p.advance(br#"{"results":[]}"#).unwrap();
+        }
+        let want: Vec<String> =
+            app.regions.iter().map(|r| format!("{}&swlng={}&nelat={}&nelng={}", r.bbox().south, r.bbox().west, r.bbox().north, r.bbox().east)).collect();
+        assert_eq!(boxes, want, "one pager per area, south/west/north/east in that order");
+
+        let src = Inat::new(app.clone());
+        assert_eq!(src.info().cadence, Duration::from_secs(600));
+        assert_eq!(src.min_interval(), Duration::from_secs(600));
+        assert_eq!(backfill_days(&app), 90);
+        assert!(mirror_catch_up(&app));
+        let py = python();
+        assert_eq!((cadence(&py), backfill_days(&py), mirror_catch_up(&py)), (Duration::from_secs(120), 30, false));
+        assert_eq!(queries(&py), [Query::Focus, Query::Introduced]);
+        // The live-count URL the backfill quotes next to its own count.
+        let b = app.regions[0].bbox();
+        assert_eq!(
+            count_url(&b, &[47284], "2026-07-03"),
+            "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=47284&d1=2026-07-03&per_page=0"
+        );
+    }
+
+    /// Observed and submitted dates are both stored; a five-year-old photo uploaded last month
+    /// counts in a submitted window but not in an observed one.
+    #[tokio::test]
+    async fn lionfish_inat_stores_observed_and_submitted_dates() {
+        let state = lionfish_inat_state(false).await;
+        let row: (i64, Option<i64>) = state
+            .obs
+            .read(|c| c.query_row("select observed_at, submitted_at from sightings where source_id = 'inat' and ext_id = '388490885'", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        // Belize, observed 2025-07-03, uploaded 2026-08-05.
+        assert_eq!(chrono::DateTime::from_timestamp_millis(row.0).unwrap().format("%Y-%m-%d").to_string(), "2025-07-03");
+        assert_eq!(chrono::DateTime::from_timestamp_millis(row.1.unwrap()).unwrap().format("%Y-%m-%d").to_string(), "2026-08-05");
+        let missing: i64 = state.obs.read(|c| c.query_row("select count(*) from sightings where submitted_at is null", [], |r| r.get(0))).await.unwrap();
+        assert_eq!(missing, 0, "every iNat record carries created_at");
+
+        use crate::ingest::quality_bio::{area_summary, DateBasis};
+        let app = state.app.clone();
+        let (from, to) = (ms("2026-07-03T00:00:00Z"), ms("2026-10-01T06:58:36Z"));
+        let (obs, sub) = state
+            .obs
+            .read(move |c| Ok((area_summary(c, &app, from, to, DateBasis::Observed)?, area_summary(c, &app, from, to, DateBasis::Submitted)?)))
+            .await
+            .unwrap();
+        let inat = |rows: &[crate::ingest::quality_bio::AreaSource]| -> Vec<(String, i64)> {
+            rows.iter().filter(|r| r.source == "inat").map(|r| (r.code.clone(), r.in_window)).collect()
+        };
+        let pairs = |v: [(&str, i64); 4]| v.iter().map(|(c, n)| (c.to_string(), *n)).collect::<Vec<_>>();
+        // The live iNat API on 2026-10-01 (d1=2026-07-03): observed 22/24/1/4, created 32/36/2/6.
+        assert_eq!(inat(&obs), pairs([("fl", 22), ("mx", 24), ("bz", 1), ("co", 4)]));
+        assert_eq!(inat(&sub), pairs([("fl", 32), ("mx", 36), ("bz", 2), ("co", 6)]));
+        assert_eq!(DateBasis::default(), DateBasis::Observed, "windows default to the observed date");
+    }
+
+    /// GBIF iNat-dataset copies whose original is not stored are asked for by id, once.
+    #[tokio::test]
+    async fn lionfish_inat_mirror_catch_up_asks_by_id_once() {
+        let state = lionfish_inat_state(false).await;
+        let gbif = super::super::gbif::Gbif::new(state.app.clone());
+        for area in AREAS {
+            ingest_payload(&state, &gbif, payload("fixture:gbif", fixture(&format!("gbif/lionfish-{area}.json"))), None).await.unwrap();
+        }
+        let src = Inat::new(state.app.clone());
+        let batch = src.mirror_batch(&state).await.unwrap();
+        assert_eq!(batch.len(), 87, "GBIF copies of iNat records older than the 90-day pages");
+        assert!(src.mirror_batch(&state).await.unwrap().is_empty(), "asked once per process");
+        let url = ids_url(&batch);
+        assert!(url.starts_with("https://api.inaturalist.org/v1/observations?id=") && url.ends_with("&order_by=id&order=asc&per_page=200"));
+        // The recorded answer to exactly that request links every copy.
+        let manifest: serde_json::Value = serde_json::from_slice(&fixture("inat/manifest.lionfish.json")).unwrap();
+        let mut sorted = batch.clone();
+        sorted.sort_by_key(|id| id.parse::<i64>().unwrap());
+        assert_eq!(manifest["files"][4]["url"], ids_url(&sorted));
+        ingest_payload(&state, &src, payload(&url, fixture("inat/lionfish-mirrors.json")), None).await.unwrap();
+        let left = state.obs.read(crate::ingest::quality_bio::unlinked_inat_mirrors).await.unwrap();
+        assert!(left.is_empty(), "{left:?}");
     }
 }

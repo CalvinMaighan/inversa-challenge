@@ -23,13 +23,16 @@ pub fn sources(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
         out.push(Arc::new(usgs::Usgs::new()));
     }
     if app.cfg.has_feed("ndbc") {
-        out.push(Arc::new(ndbc::Ndbc::new()));
+        out.push(Arc::new(ndbc::Ndbc::for_app(app.clone())));
     }
     if app.cfg.has_feed("coops") {
         out.push(Arc::new(coops::Coops::new()));
     }
     if app.cfg.has_feed("openmeteo") {
         out.push(Arc::new(openmeteo::OpenMeteo::new(app.clone())));
+    }
+    if app.cfg.has_feed(openmeteo::MARINE_SOURCE_ID) {
+        out.push(Arc::new(openmeteo::OpenMeteoMarine::new(app.clone())));
     }
     out
 }
@@ -221,10 +224,10 @@ mod tests {
         assert!(!region.contains(28.5, -81.4), "Orlando");
         let ids: Vec<&str> = sources(&Config::for_tests(), &testing::python_app()).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["nws", "usgs", "ndbc", "coops", "openmeteo"]);
-        // Lionfish Watch lists no NWS or USGS feed; the carp skeleton lists USGS and NWS only.
+        // Lionfish Watch lists no NWS, USGS, CO-OPS or Open-Meteo forecast feed; the carp skeleton lists USGS and NWS only.
         let lf = Arc::new(App::builtin("lionfish").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &lf).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["ndbc", "coops", "openmeteo"]);
+        assert_eq!(ids, ["ndbc", "openmeteo-marine"], "bulk buoys and marine only (L4)");
         let carp = Arc::new(App::builtin("carp").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &carp).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["nws", "usgs"]);

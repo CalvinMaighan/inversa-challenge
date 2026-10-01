@@ -45,6 +45,12 @@ pub enum Param {
     Dhw,
     /// CRW bleaching alert area, 0-4 (no stress, watch, warning, alert 1, alert 2): the current state.
     Baa,
+    /// Open-Meteo Marine mean wave period, s (L4).
+    WavePeriodS,
+    /// Open-Meteo Marine ocean current speed, m/s (converted from the provider's km/h).
+    CurrentMs,
+    /// Open-Meteo Marine ocean current direction, degrees, the direction the water flows towards.
+    CurrentDirDeg,
 }
 
 impl Param {
@@ -63,6 +69,9 @@ impl Param {
             Param::SstAnomaly => "sst_anomaly",
             Param::Dhw => "dhw",
             Param::Baa => "baa",
+            Param::WavePeriodS => "wave_period_s",
+            Param::CurrentMs => "current_ms",
+            Param::CurrentDirDeg => "current_dir_deg",
         }
     }
 }
@@ -167,7 +176,12 @@ pub struct SightingRow {
     pub lat: f64,
     pub lon: f64,
     pub accuracy_m: Option<f64>,
+    /// When the animal was seen. Time windows count by this.
     pub observed_at: i64,
+    /// When the record reached its source (iNat `created_at`); `None` when the source has no
+    /// such time (GBIF, NAS). Can lag `observed_at` by years.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub submitted_at: Option<i64>,
     pub quality: Quality,
     pub photo_url: Option<String>,
 }
@@ -203,6 +217,21 @@ pub struct RevisionRow {
     pub changed_at: i64,
 }
 
+/// One modeled value from a forecast run, kept with the run's issuance time (`marine_forecasts`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ForecastRow {
+    pub station: StationRef,
+    pub param: Param,
+    pub value: Option<f64>,
+    /// Unit of `value` as stored (`m`, `s`, `m/s`, `deg`).
+    pub unit: String,
+    /// Unit the provider sent (`km/h` for currents).
+    pub source_unit: String,
+    pub model: String,
+    pub issued_at: i64,
+    pub valid_at: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Row {
     Sighting(SightingRow),
@@ -210,4 +239,5 @@ pub enum Row {
     Alert(AlertRow),
     Station(StationRef),
     Revision(RevisionRow),
+    Forecast(ForecastRow),
 }

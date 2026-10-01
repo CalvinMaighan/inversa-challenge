@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-10-01T06:56:39Z",
+  "note": "Lionfish Watch (L4): the NDBC bulk latest_obs.txt (one row per station, 887 stations).",
+  "files": [
+    {
+      "file": "latest_obs.txt",
+      "url": "https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt",
+      "content_type": "text/plain",
+      "http_status": 200
+    }
+  ]
+}

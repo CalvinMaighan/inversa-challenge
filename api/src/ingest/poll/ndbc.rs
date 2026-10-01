@@ -11,17 +11,25 @@
 //! 8 KB covers the latest ~8-80 hours, and `If-Modified-Since` turns an unchanged file into a
 //! 304, so most polls move a few hundred bytes. The partial last line of a ranged body is
 //! dropped. `MM` values are kept as missing readings.
+//!
+//! **Bulk mode** (`params.bulk`, Lionfish Watch, L4): one GET of `latest_obs/latest_obs.txt`
+//! (the newest observation of every NDBC station, ~890 rows, refreshed every 10 min) with
+//! `If-None-Match` / `If-Modified-Since`, so an unchanged file is a 304 and no payload. Rows are
+//! kept for stations inside the app's areas; in the lionfish areas that is Florida only (L1: no
+//! sea-temperature station in Mexico or Belize; 42058 sits 0.6° north of the Colombian box). These
+//! buoys are the in-situ side of the buoy-vs-satellite SST conflict.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
 use futures_util::stream::{self, StreamExt};
-use reqwest::header::{ACCEPT_ENCODING, IF_MODIFIED_SINCE, LAST_MODIFIED, RANGE};
+use reqwest::header::{ACCEPT_ENCODING, ETAG, IF_MODIFIED_SINCE, IF_NONE_MATCH, LAST_MODIFIED, RANGE};
 use reqwest::StatusCode;
 
+use crate::app::config::App;
 use crate::ingest::governor;
 use crate::ingest::poll::physical::{self, parse_num, reading};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
@@ -118,14 +126,49 @@ pub fn station_url(id: &str) -> String {
     format!("{BASE_URL}{id}.txt")
 }
 
+pub const BULK_URL: &str = "https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt";
+
 pub struct Ndbc {
     /// Last-Modified per station, for conditional ranged GETs.
     last_modified: Mutex<HashMap<&'static str, String>>,
+    /// Bulk mode: the app whose areas keep rows, and the bulk file's validators.
+    bulk: Option<Arc<App>>,
+    bulk_validators: Mutex<(Option<String>, Option<String>)>,
 }
 
 impl Ndbc {
+    /// Per-station realtime2 polling (the python app).
     pub fn new() -> Self {
-        Ndbc { last_modified: Mutex::new(HashMap::new()) }
+        Ndbc { last_modified: Mutex::new(HashMap::new()), bulk: None, bulk_validators: Mutex::new((None, None)) }
+    }
+
+    /// The adapter an app's `ndbc` feed asks for: bulk when `params.bulk` is true.
+    pub fn for_app(app: Arc<App>) -> Self {
+        let bulk = app.cfg.feed("ndbc").and_then(|f| f.params.get("bulk")).and_then(|v| v.as_bool()).unwrap_or(false);
+        Ndbc { bulk: bulk.then_some(app), ..Ndbc::new() }
+    }
+
+    /// One conditional GET of the bulk file at `url`; a 304 is no payload.
+    pub async fn fetch_bulk(&self, http: &reqwest::Client, url: &str) -> anyhow::Result<Vec<RawPayload>> {
+        let (etag, modified) = self.bulk_validators.lock().expect("validators").clone();
+        let mut req = http.get(url);
+        if let Some(e) = &etag {
+            req = req.header(IF_NONE_MATCH, e);
+        }
+        if let Some(m) = &modified {
+            req = req.header(IF_MODIFIED_SINCE, m);
+        }
+        let res = req.send().await.context("ndbc latest_obs")?;
+        if res.status() == StatusCode::NOT_MODIFIED {
+            return Ok(Vec::new());
+        }
+        let res = governor::check_response(res)?;
+        let status = res.status().as_u16();
+        let header = |h| res.headers().get(h).and_then(|v: &reqwest::header::HeaderValue| v.to_str().ok()).map(String::from);
+        let validators = (header(ETAG), header(LAST_MODIFIED));
+        let bytes = res.bytes().await.context("ndbc latest_obs body")?.to_vec();
+        *self.bulk_validators.lock().expect("validators") = validators;
+        Ok(vec![physical::payload(url, "text/plain", bytes, status, None)])
     }
 }
 
@@ -151,6 +194,9 @@ impl Source for Ndbc {
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
         let http = &ctx.state.http;
+        if self.bulk.is_some() {
+            return self.fetch_bulk(http, BULK_URL).await;
+        }
         let results: Vec<(&'static str, anyhow::Result<Option<(RawPayload, Option<String>)>>)> = stream::iter(0..STATIONS.len())
             .map(|i| async move {
                 let id = STATIONS[i].id;
@@ -190,6 +236,9 @@ impl Source for Ndbc {
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
+        if raw.source_url.ends_with("/latest_obs.txt") {
+            return normalize_latest_obs(&raw.bytes, raw.fetched_at, self.bulk.as_deref());
+        }
         let id = raw
             .source_url
             .rsplit('/')
@@ -272,6 +321,60 @@ pub fn normalize_txt(st: &NdbcStation, bytes: &[u8], fetched_at: i64) -> anyhow:
         rows.push(reading(&station, Param::AirC, value(atmp), at, Origin::Measured));
         rows.push(reading(&station, Param::WindMs, value(wspd), at, Origin::Measured));
         rows.push(reading(&station, Param::WaveM, value(wvht), at, Origin::Measured));
+    }
+    Ok(rows)
+}
+
+/// The parameter a station's WTMP maps to: the verified table first; otherwise moored buoys
+/// (numeric ids) and C-MAN measure the sea, anything else is treated as estuarine water.
+fn water_param(id: &str) -> Param {
+    match station(id) {
+        Some(s) => s.water,
+        None if id.bytes().all(|b| b.is_ascii_digit()) => Param::SstC,
+        None => Param::WaterC,
+    }
+}
+
+/// Parse `latest_obs.txt`: one row per station, `#STN LAT LON YYYY MM DD hh mm ...` (UTC).
+/// Stations outside `app`'s areas (when given) and observations older than [`MAX_AGE_MS`]
+/// before `fetched_at` are dropped.
+pub fn normalize_latest_obs(bytes: &[u8], fetched_at: i64, app: Option<&App>) -> anyhow::Result<Vec<Row>> {
+    let text = String::from_utf8_lossy(bytes);
+    let mut lines = text.lines();
+    let header = lines.next().context("ndbc latest_obs: empty file")?;
+    let cols: Vec<&str> = header.trim_start_matches('#').split_whitespace().collect();
+    let col = |name: &str| cols.iter().position(|c| *c == name);
+    let need = ["STN", "LAT", "LON", "YYYY", "MM", "DD", "hh", "mm", "WSPD", "WVHT", "ATMP", "WTMP"];
+    for n in need {
+        anyhow::ensure!(col(n).is_some(), "ndbc latest_obs: no {n} column in {header:?}");
+    }
+    let at = |n: &str| col(n).expect("checked");
+    let mut rows = Vec::new();
+    for line in lines {
+        if line.starts_with('#') || line.trim().is_empty() {
+            continue;
+        }
+        let f: Vec<&str> = line.split_whitespace().collect();
+        if f.len() != cols.len() {
+            continue;
+        }
+        let (Some(lat), Some(lon)) = (parse_num(f[at("LAT")]), parse_num(f[at("LON")])) else { continue };
+        if app.is_some_and(|a| a.region_of(lat, lon).is_none()) {
+            continue;
+        }
+        let stamp = ["YYYY", "MM", "DD", "hh", "mm"].map(|n| f[at(n)]).join(" ");
+        let Some(observed_at) = physical::parse_utc_ms(&stamp, "%Y %m %d %H %M") else { continue };
+        if observed_at < fetched_at - MAX_AGE_MS {
+            continue;
+        }
+        let id = f[at("STN")];
+        let name = station(id).map(|s| s.name.to_string()).unwrap_or_else(|| format!("NDBC {id}"));
+        let st = StationRef { ext_id: id.to_string(), name, lat, lon, kind: StationKind::Buoy };
+        let value = |n: &str| Some(f[at(n)]).filter(|v| *v != "MM").and_then(parse_num);
+        rows.push(reading(&st, water_param(id), value("WTMP"), observed_at, Origin::Measured));
+        rows.push(reading(&st, Param::AirC, value("ATMP"), observed_at, Origin::Measured));
+        rows.push(reading(&st, Param::WindMs, value("WSPD"), observed_at, Origin::Measured));
+        rows.push(reading(&st, Param::WaveM, value("WVHT"), observed_at, Origin::Measured));
     }
     Ok(rows)
 }
@@ -369,5 +472,113 @@ mod tests {
         let stations: i64 =
             state.obs.read(|c| c.query_row("select count(*) from stations where kind = 'buoy'", [], |r| r.get(0))).await.unwrap();
         assert_eq!(stations, 4);
+    }
+
+    // ---- Lionfish Watch buoys (L4, gates/leaf-L4.md G4) ----
+
+    /// `latest_obs.txt` recorded 2026-10-01T06:56:39Z.
+    const BULK_AT: i64 = 1_790_837_799_000;
+
+    /// The bulk file keeps the stations inside the lionfish areas: all in Florida (the three
+    /// Caribbean buoys in the file, 42056, 42057 and 42058, sit outside every area).
+    #[test]
+    fn lionfish_marine_ndbc_bulk_is_florida_only() {
+        let app = crate::app::config::App::builtin("lionfish").unwrap();
+        let rows = normalize_latest_obs(&fixture("ndbc/latest_obs.txt"), BULK_AT, Some(&app)).unwrap();
+        let readings: Vec<ReadingRow> = rows.into_iter().map(|r| match r { Row::Reading(r) => r, other => panic!("{other:?}") }).collect();
+        let mut ids: Vec<&str> = readings.iter().map(|r| r.station.ext_id.as_str()).collect();
+        ids.dedup();
+        assert_eq!(ids.len(), 52);
+        assert!(readings.iter().all(|r| app.region_of(r.station.lat, r.station.lon).map(|g| g.id()) == Some("fl-keys")));
+        for outside in ["42056", "42057", "42058"] {
+            assert!(!ids.contains(&outside), "{outside}");
+        }
+        let get = |id: &str, p: Param| readings.iter().find(|r| r.station.ext_id == id && r.param == p).unwrap();
+        // 41122 Hollywood Beach: WTMP 29.6 is sea surface temperature, the in-situ side of the
+        // buoy-vs-satellite conflict; KYWF1 is a harbour pier (water_c, not sst_c).
+        assert_eq!(get("41122", Param::SstC).value, Some(29.6));
+        assert_eq!(get("41122", Param::SstC).origin, Origin::Measured);
+        assert_eq!(get("KYWF1", Param::WaterC).value, Some(29.2));
+        assert_eq!((get("SMKF1", Param::SstC).value, get("SMKF1", Param::SstC).flag), (None, Flag::Missing), "MM kept as missing");
+        assert_eq!(water_param("99999"), Param::SstC);
+        assert_eq!(water_param("ZZZF1"), Param::WaterC);
+        // Ten-minute poll, and the python app keeps per-station realtime2.
+        assert!(Ndbc::for_app(Arc::new(app)).bulk.is_some());
+        assert!(Ndbc::for_app(crate::ingest::poll::physical::testing::python_app()).bulk.is_none());
+        assert_eq!(Ndbc::new().info().cadence, Duration::from_secs(600));
+        // Observations older than 4 days are not re-read.
+        assert!(normalize_latest_obs(&fixture("ndbc/latest_obs.txt"), BULK_AT + 5 * 86_400_000, None).unwrap().is_empty());
+    }
+
+    /// Conditional GET: 200 with validators, then 304 and no payload.
+    #[tokio::test]
+    async fn lionfish_marine_ndbc_bulk_answers_304_with_no_payload() {
+        use axum::http::{header, HeaderMap, StatusCode as S};
+        let body = fixture("ndbc/latest_obs.txt");
+        let handler = move |headers: HeaderMap| {
+            let body = body.clone();
+            async move {
+                if headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) == Some("\"v1\"") {
+                    return (S::NOT_MODIFIED, HeaderMap::new(), Vec::new());
+                }
+                let mut h = HeaderMap::new();
+                h.insert(header::ETAG, "\"v1\"".parse().unwrap());
+                h.insert(header::LAST_MODIFIED, "Thu, 01 Oct 2026 06:55:32 GMT".parse().unwrap());
+                (S::OK, h, body)
+            }
+        };
+        let router = axum::Router::new().route("/data/latest_obs/latest_obs.txt", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let url = format!("http://{addr}/data/latest_obs/latest_obs.txt");
+        let src = Ndbc::for_app(Arc::new(crate::app::config::App::builtin("lionfish").unwrap()));
+        let http = reqwest::Client::new();
+        let first = src.fetch_bulk(&http, &url).await.unwrap();
+        assert_eq!(first.len(), 1);
+        assert_eq!((first[0].bytes.as_slice(), first[0].http_status), (fixture("ndbc/latest_obs.txt").as_slice(), Some(200)));
+        assert!(src.fetch_bulk(&http, &url).await.unwrap().is_empty(), "304: nothing to ingest");
+    }
+
+    /// The buoy-vs-satellite SST conflict works in Lionfish Watch: a GOES-19 SST pixel 2 km from
+    /// buoy 41122 that reads 2.1 °C warmer is the buoy reading's `conflict` partner.
+    #[tokio::test]
+    async fn lionfish_marine_buoy_vs_goes_sst_conflict_in_florida() {
+        use crate::hotspot::score::testkit::insert_station;
+        let state = crate::app::test_support::test_state_for("lionfish");
+        crate::ingest::scheduler::start(state.clone(), Default::default()).await.unwrap();
+        let src = Ndbc::for_app(state.app.clone());
+        let raw = recorded(BULK_URL, "text/plain", fixture("ndbc/latest_obs.txt"), 200, BULK_AT);
+        let out = crate::ingest::scheduler::ingest_payload(&state, &src, raw, None).await.unwrap();
+        assert!(out.error.is_none() && out.rows_written > 0, "{out:?}");
+        let (buoy, at, lat, lon): (i64, i64, f64, f64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select s.id, r.observed_at, s.lat, s.lon from readings r join stations s on s.id = r.station_id
+                     where s.source_id = 'ndbc' and s.ext_id = '41122' and r.param = 'sst_c'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+            })
+            .await
+            .unwrap();
+        let pixel = insert_station(&state.obs, "goes19-sst", "g5:1", lat + 0.018, lon, "goes_cell").await;
+        state
+            .obs
+            .write(move |tx| {
+                tx.execute(
+                    "insert into readings (station_id, param, value, flag, observed_at, origin) values (?1, 'sst_c', 31.7, 'ok', ?2, 'satellite')",
+                    rusqlite::params![pixel, at],
+                )
+            })
+            .await
+            .unwrap();
+        let ev = crate::evidence::evidence(&state, &format!("reading:{buoy}:sst_c:{at}:measured")).await.unwrap();
+        assert!(
+            ev.links.iter().any(|l| l.relation == "conflict" && l.source == "goes19-sst" && l.id.as_str().starts_with(&format!("reading:{pixel}:sst_c:"))),
+            "{:?}",
+            ev.links
+        );
     }
 }

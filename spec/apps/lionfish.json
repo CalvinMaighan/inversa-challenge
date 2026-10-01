@@ -24,6 +24,7 @@
   "regions": [
     {
       "id": "fl-keys",
+      "code": "fl",
       "name": "Florida Keys / South Florida",
       "bbox": [-83.2, 24.3, -79.8, 27.5],
       "cellDeg": 0.01,
@@ -31,6 +32,7 @@
     },
     {
       "id": "mx-caribbean",
+      "code": "mx",
       "name": "Mexican Caribbean",
       "bbox": [-87.9, 18.3, -86.6, 21.7],
       "cellDeg": 0.01,
@@ -38,6 +40,7 @@
     },
     {
       "id": "belize",
+      "code": "bz",
       "name": "Belize",
       "bbox": [-88.5, 16.0, -87.3, 18.2],
       "cellDeg": 0.01,
@@ -46,6 +49,7 @@
     },
     {
       "id": "co-caribbean",
+      "code": "co",
       "name": "Colombian Caribbean",
       "bbox": [-81.8, 9.7, -74.0, 13.5],
       "cellDeg": 0.01,
@@ -55,15 +59,13 @@
   ],
   "locations": [],
   "feeds": [
-    { "source": "inat", "mode": "poll", "params": { "queries": ["focus"] } },
+    { "source": "inat", "mode": "poll", "params": { "queries": ["focus"], "cadenceMinutes": 10, "backfillDays": 90, "mirrorCatchUp": true } },
     { "source": "gbif", "mode": "poll", "params": { "dedupeAgainst": "inat" } },
-    { "source": "nas", "mode": "poll", "params": { "state": null } },
+    { "source": "nas", "mode": "poll", "params": { "state": null, "global": true, "pageLimit": 4000, "parallelPages": 4, "cadenceDays": 7 } },
     { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },
-    { "source": "openmeteo", "mode": "poll", "params": { "stepDeg": 0.25, "marine": ["wave_height", "wave_period", "ocean_current_velocity", "ocean_current_direction"] } },
-    { "source": "ndbc", "mode": "poll", "params": { "note": "Florida only; no sea-temperature buoys in the other areas" } },
-    { "source": "coops", "mode": "poll", "params": { "note": "Florida only" } },
-    { "source": "goes19", "mode": "push", "params": { "products": ["ABI-L2-SSTF"] } },
-    { "source": "web", "mode": "push", "params": {} }
+    { "source": "openmeteo-marine", "mode": "poll", "name": "Open-Meteo Marine", "homepage": "https://open-meteo.com/en/docs/marine-weather-api", "params": { "stepDeg": 0.5, "forecastHours": 72, "waveModel": "meteofrance_wave", "currentModel": "meteofrance_currents", "metaCheckMinutes": 15 } },
+    { "source": "ndbc", "mode": "poll", "params": { "bulk": true, "note": "latest_obs.txt; only Florida has sea-temperature buoys inside the areas" } },
+    { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } }
   ],
   "score": {
     "label": "Survey priority (four components shown separately; no single risk percent)",
