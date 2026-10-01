@@ -719,10 +719,13 @@ const alerts = {
   inputSchema: alertsInput,
   async execute(input: z.infer<typeof alertsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const siteName = given(input.site);
-    // One site, or a preset's sites ("Atchafalaya"), or no site: the asked-for area.
-    const sites = siteName ? resolveSites(ctx.app, [siteName]) : [];
+    // One site, or a preset's sites ("Atchafalaya"), or no site: the asked-for area. A species app has no configured
+    // locations, so a `site` there is a place name resolved from the gazetteer (an unknown one keeps the asked-for box).
+    const sites = siteName && ctx.app.locations.length > 0 ? resolveSites(ctx.app, [siteName]) : [];
     const site = sites.length === 1 ? sites[0]! : null;
-    const bbox = sites.length > 0 ? sitesBox(sites, 0.15) : resolveBbox(input.bbox, ctx);
+    const placeName = siteName && ctx.app.locations.length === 0 ? siteName : null;
+    const place = placeName ? (findArea(ctx.app, placeName)?.bbox ?? (() => { const p = lookupGazetteer(placeName); return p && inRegion(ctx.app, p.lat, p.lon) ? p.bbox : null; })()) : null;
+    const bbox = sites.length > 0 ? sitesBox(sites, 0.15) : resolveBbox(place ?? input.bbox, ctx);
     const at = atTime(given(input.at), ctx);
     const data = await gqlWithFeeds<{ alerts: GqlAlert[]; feeds: GqlFeedState[] }>(
       "AgentAlerts",
@@ -742,7 +745,7 @@ const alerts = {
             checkedLocal: check.lastFetchAt ? localTime(ctx.app, check.lastFetchAt) : null,
           }
         : {};
-    return withView(output({ bbox, ...(site ? { site: site.lid, siteName: site.name } : sites.length > 1 ? { sites: sites.map((s) => s.lid) } : {}), at, atLocal: localTime(ctx.app, at), ...empty, rows }, evidenceRows, feeds, data.alerts.length), alertsView(rows, bbox, at));
+    return withView(output({ bbox, ...(site ? { site: site.lid, siteName: site.name } : sites.length > 1 ? { sites: sites.map((s) => s.lid) } : {}), ...(placeName ? (place ? { place: placeName } : { placeIgnored: `"${placeName}" is not a place the app knows; the asked-for area was used` }) : {}), at, atLocal: localTime(ctx.app, at), ...empty, rows }, evidenceRows, feeds, data.alerts.length), alertsView(rows, bbox, at));
   },
 };
 
@@ -915,13 +918,20 @@ const backtest = (species: SpeciesSchema) => ({
 
 const FEEDS_ONLY_QUERY = "query AgentFeedState { feeds { ...FeedFields } }";
 
+const feedStateInput = z.object({
+  feed: z.string().min(2).max(40).optional().describe("One feed id (inat, gbif, nas, crw, openmeteo, ndbc, goes19, nws, usgs, ...) when the question is about that feed only. Omit for every feed."),
+});
+
 const feedState = {
   name: "feed_state",
-  description: "Freshness of every data feed (nominal, lagging, stale, down), with newest observation and last fetch times.",
-  inputSchema: z.object({}),
-  async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+  description: "Freshness of every data feed, or of one feed (nominal, lagging, stale, down), with newest observation and last fetch times, citable as fetch markers.",
+  inputSchema: feedStateInput,
+  async execute(input: z.infer<typeof feedStateInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
-    const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation, last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], data.feeds, data.feeds.length);
+    const asked = given(input.feed)?.toLowerCase();
+    const feeds = asked ? data.feeds.filter((f) => f.source === asked || f.source.startsWith(`${asked}-`) || asked.startsWith(`${f.source}-`) || asked.includes(f.source)) : data.feeds;
+    if (asked && feeds.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${data.feeds.map((f) => f.source).join(", ")}).`);
+    const out = output({ asOf: ctx.now.toISOString(), ...(asked ? { feed: feeds.map((f) => f.source) } : {}), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], feeds, feeds.length);
     return withView(out, feedsView(out.feeds));
   },
 };

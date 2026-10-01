@@ -1476,7 +1476,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "(30 days|month)",
+          "(30[- ]days?|month)",
           "report|sighting"
         ],
         "forbid": [],
@@ -1982,6 +1982,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "python-replay-scores-during-cold: the change phrase accepted five verbs; \"declined\", \"lower\", \"unchanged\" and the like describe the same movement, so the pattern now takes them (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "python-replay-30d: the span phrase accepted only \"30 days\"; \"30-day replay\" names the same span, so the pattern now takes either spelling (1 pattern)."
     }
   ]
 }

@@ -176,6 +176,7 @@ export const evidenceTool = {
         record: row.record,
         sourceUrl: row.sourceUrl,
         sourcePageUrl: row.sourcePageUrl,
+        ...(row.sourcePageUrl ? { pageLine: `Publisher page: ${row.sourcePageUrl} (write this URL out in full)` } : {}),
         fetchedAt: row.fetchedAt,
         fetchedLocal: row.fetchedAt ? localTime(ctx.app, row.fetchedAt) : null,
         issuedLocal: stamp("issuedAt") ? localTime(ctx.app, stamp("issuedAt")!) : null,
