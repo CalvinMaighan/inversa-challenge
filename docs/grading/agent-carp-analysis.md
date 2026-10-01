@@ -70,10 +70,21 @@ Criteria fixed in `spec/apps/questions/carp.json` (each logged in the file's `ch
 | | | change-morgan-city-flow | **ungrounded** "-47,548 cfs": the model's own subtraction, wrong | none; the one real grounding miss in 17 runs | model variance |
 | round 3, held-out 1 | 42/42 | | | | |
 | round 3, held-out 2 | 41/42 | holdout-planning-butte-or-krotz | forbid hit "neither site stands out as a safer choice" | criterion: guard covers neither/nor/not/cannot | yes |
+| final, run 1 (11:41Z) | 67/69 | quality-krotz-datum | datum explained, but no word for the thresholds | none | model variance |
+| | | sources-past-forecasts | `river_forecast` not called beside `source_info` | none | model variance |
+| final, run 2 (11:43Z) | 69/69 | | | | |
+| final, run 3 (11:45Z) | 65/69 | explain-monroe-low-water | `site_status` only; the answer says the threshold is missing | none | model variance (2nd time) |
+| | | relevance-stage-discharge | over-refusal, no tool | none | model variance (3rd time, despite its own prompt bullet) |
+| | | planning-best-days-simmesport | picked a day; no conditions-only clause | none | model variance |
+| | | team-messages-morgan | quoted the message; wrote neither "Morgan City" nor the thread name | none | model variance |
+| final, held-out 1 (11:46Z) | 41/42 | holdout-quality-iem-up-to-date | `feed_state` called, fetch marker not cited | none | model variance |
+| final, held-out 2 (11:47Z) | 41/42 | holdout-quality-iem-up-to-date | same | none | model variance |
 
 ## Residual failure rate
 
 Over the ten golden runs on near-final code (trial 5 and rounds 1 to 3): 69, 66, 68, 68, 69, 68, 64, 69, 65, 67 of 69, mean 67.3 (97.5%), 17 failures in 690 answers. Of those 17, 9 were criterion defects or over-prescriptions fixed afterwards with a logged reason (wording synonyms, a negation-blind forbid, markdown bold, tools the answer did not need) and 8 were model variance that no general rule has removed: a tool left out (`river_forecast` beside `site_status`, `alerts` and `source_info`, a one-feed `source_info` call), a secondary fact dropped (publisher, tidal mean), one over-refusal and one bare refusal where a caveated answer was due, and one invented number. The honest residual rate on the final criteria is therefore about 1 failure per 69-question run (97 to 99%), with `ungrounded=0` in 15 of the 16 golden runs made on this branch and `boundary` 9/9 in 13 of 16 (the three misses were bare refusals of caveat questions, two of them before the boundary rule was split).
+
+The final three golden runs on the committed code scored 67, 69 and 65 of 69 (boundary 9/9 and `ungrounded=0` in all three); the final two held-out runs 41 and 41 of 42 (boundary 6/6, `ungrounded=0`). Every one of those eight misses is model variance on the final criteria: a second tool not called, a secondary fact or clause dropped, one over-refusal.
 
 What that means for the bars: `overall >= 95` holds in most runs; `every category >= 90` is the hard one, because with 6 to 9 questions per category any single miss is below 90%, so the per-category bar is in effect 100% on every run. Three consecutive clean runs happen, but not reliably. The variance is the model's, not the harness's: the same question passes and fails across runs with the same prompt, tools and data. Raising the reasoning effort to `medium` was measured earlier (apps/web/server/agent/runtime/model.ts) and did not reduce it while doubling first-token latency past the 1.2 s bar.
 
