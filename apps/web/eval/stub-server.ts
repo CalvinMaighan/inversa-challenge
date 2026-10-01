@@ -205,7 +205,7 @@ function readingAt(param: string, centre: { lat: number; lon: number }, at: numb
 type Term = { name: string; value: number; rationale: string };
 
 /** Activity and access multipliers at a cell centre and time, with the rule's rationale and the reading it used. */
-function rulesAt(centre: { lat: number; lon: number }, at: number): { activity: Term; access: Term } {
+function rulesAt(centre: { lat: number; lon: number }, at: number, place: string | null = null): { activity: Term; access: Term } {
   const temp = readingAt("AIR_C", centre, at) ?? readingAt("LST_C", centre, at);
   const activity: Term = temp
     ? (() => {
@@ -216,7 +216,7 @@ function rulesAt(centre: { lat: number; lon: number }, at: number): { activity: 
     : { name: "activity", value: 1, rationale: `no data: no air or land-surface temperature reading within 6 hours before ${new Date(at).toISOString()} in reach of this cell, neutral 1.0 (${PYTHON_RULES.activity})` };
   const stage = readingAt("STAGE_M", centre, at);
   const access: Term = stage
-    ? { name: "access", value: Number(Math.min(1.2, Math.max(0.6, 1.5 - 0.3 * stage.value)).toFixed(3)), rationale: `${PYTHON_RULES.access} Input: stage ${stage.value} m at ${stage.station}, observed ${stage.observedAt}.` }
+    ? { name: "access", value: Number(Math.min(1.2, Math.max(0.6, 1.5 - 0.3 * stage.value)).toFixed(3)), rationale: `${PYTHON_RULES.access} Input: stage ${stage.value} m at ${stage.station}, observed ${stage.observedAt}.${place ? ` Cell: ${place}.` : ""}` }
     : { name: "access", value: 1, rationale: `no data: no stage reading within 6 hours before ${new Date(at).toISOString()} in reach of this cell, neutral 1.0 (${PYTHON_RULES.access})` };
   return { activity, access };
 }
@@ -248,7 +248,7 @@ function scoreGrid(key: keyof typeof fixture.hotspots, at: number) {
   const max = Math.max(0, ...cells.map((c) => c.density.value));
   return cells.map((c) => {
     const density = max > 0 ? c.density.value / max : 0;
-    const { activity, access } = rulesAt(c, at);
+    const { activity, access } = rulesAt(c, at, c.place);
     const score = Number((density * activity.value * access.value).toFixed(2));
     const densityTerm: Term = {
       name: "density",

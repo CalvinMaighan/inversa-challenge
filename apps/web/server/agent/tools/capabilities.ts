@@ -392,7 +392,7 @@ const speciesCountsInput = z.object({
 const speciesCounts = {
   name: "species_counts",
   description:
-    "Which species were seen in an area and window (this app tracks one), with its count and newest sighting to cite. Default window: the last 7 days. Use it for 'what invasive animals…', 'which species…', 'what has been reported…' questions; use sightings for the records of the species: how many reports came in, duplicates, late reports.",
+    "Which species were seen in an area and window (this app tracks one), with its count and newest sighting to cite. Default window: the last 7 days. Only for 'what invasive animals…', 'which species…', 'what has been reported…' questions. Never for how many reports, duplicates, late or needs-ID records, or a listing of sightings: those need sightings (every record with its marker).",
   inputSchema: speciesCountsInput,
   async execute(input: z.infer<typeof speciesCountsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
