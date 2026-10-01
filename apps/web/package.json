@@ -42,6 +42,7 @@
     "e2e:feeds": "bun e2e/feeds.ts",
     "e2e:vessels": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/vessels.ts",
     "e2e:replay": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/replay.ts",
+    "e2e:look": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/look.ts",
     "e2e:evidence": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/evidence.ts",
     "e2e:developer": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/developer.ts",
     "e2e:media": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/media.ts",

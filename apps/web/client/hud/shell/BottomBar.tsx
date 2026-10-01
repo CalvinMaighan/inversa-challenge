@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import styled from "client/styled";
 
+import LookBar from "../look/LookBar";
 import { MOBILE } from "../primitives";
 
 /**
@@ -16,7 +17,7 @@ import { MOBILE } from "../primitives";
  * Each leaf appends its one entry to `ITEMS` and nothing else. The bar draws no surface of its own, so with no
  * entries it shows nothing. Popovers opened from it open upwards (`bottom: calc(100% + 6px)`).
  */
-const ITEMS: readonly ReactNode[] = [];
+const ITEMS: readonly ReactNode[] = [<LookBar key="look" />];
 
 const Bar = styled.div`
   position: absolute;

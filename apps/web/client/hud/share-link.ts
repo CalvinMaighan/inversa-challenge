@@ -14,6 +14,8 @@
  * - `e`: selected evidence id (PLAN.md C14).
  * - `site`, `asof` (carp): the selected location's NWPS id and the "what we knew" time, UTC to the minute; no
  *   `asof` means live.
+ * - `look`, `scope`, `feather` (docs/GODS_EYE.md GC2): the visual preset, the scope mask (`0` off) and its edge
+ *   feather (0..100), each omitted at its default (normal, on, 11).
  *
  * Decoding is defensive: a link is untrusted input, so each field is validated and clamped, and a bad field is
  * dropped instead of failing the whole link. Encode and decode are pure; `client/hud/ShareLinkSync.tsx` wires
@@ -23,6 +25,7 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { activeApp, V1_APP } from "client/state/app";
 import { layersFor, type SpeciesId } from "client/state/layers";
+import { DEFAULT_LOOK, DEFAULT_SCOPE_FEATHER, DEFAULT_SCOPE_ON, featherOf, isLookId, type LookId } from "client/state/look";
 import { parseEvidenceId } from "client/state/selection";
 import { getApp, isAppId, speciesIds, type AppConfig, type AppId } from "shared/apps";
 
@@ -45,6 +48,10 @@ export type ShareState = {
   /** Carp (conditions apps): the selected location's NWPS id and the "what we knew" time (absent: live). */
   site?: string;
   asOf?: string;
+  /** The globe's look (GC2); absent means the default. */
+  look?: LookId;
+  scope?: boolean;
+  feather?: number;
 };
 
 /** An app's default species filter as a shown-key list. */
@@ -106,6 +113,9 @@ export function encodeShareLink(state: ShareState): string {
     const k = compactIso(state.asOf);
     if (k) params.set("asof", k);
   }
+  if (state.look && state.look !== DEFAULT_LOOK && isLookId(state.look)) params.set("look", state.look);
+  if (state.scope !== undefined && state.scope !== DEFAULT_SCOPE_ON) params.set("scope", state.scope ? "1" : "0");
+  if (state.feather !== undefined && featherOf(state.feather) !== DEFAULT_SCOPE_FEATHER) params.set("feather", String(featherOf(state.feather)));
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
   // link stays readable.
   return params.toString().replace(/%2C/g, ",").replace(/%3A/g, ":");
@@ -159,6 +169,12 @@ export function decodeShareLink(hash: string): ShareState {
   if (site && SITE_ID.test(site)) out.site = site.toUpperCase();
   const asof = params.get("asof");
   if (asof && Number.isFinite(Date.parse(asof))) out.asOf = new Date(Date.parse(asof)).toISOString();
+  const look = params.get("look");
+  if (isLookId(look)) out.look = look;
+  const scope = params.get("scope");
+  if (scope === "0" || scope === "1") out.scope = scope === "1";
+  const feather = params.get("feather");
+  if (feather !== null && /^\d{1,3}$/.test(feather) && Number(feather) <= 100) out.feather = Number(feather);
   return out;
 }
 
