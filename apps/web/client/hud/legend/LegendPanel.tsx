@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState, type SpeciesId } from "client/state/layers";
@@ -316,9 +316,15 @@ export default function LegendPanel({ open, onOpenChange }: { open: boolean; onO
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
   const stats = useGlobeStats(open);
   const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats), [layers, stats]);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  // Closing from inside the sheet (Esc, its close button) would drop focus on <body>: hand it back to Layers.
+  const closeFromInside = () => {
+    onOpenChange(false);
+    toggleRef.current?.focus({ preventScroll: true });
+  };
   return (
     <Anchor data-hud-obstacle="" data-testid="hud-legend">
-      <Toggle type="button" $active={open} aria-expanded={open} aria-controls="layers-legend" onClick={() => onOpenChange(!open)} data-testid="layers-button" title="Layers and legend">
+      <Toggle ref={toggleRef} type="button" $active={open} aria-expanded={open} aria-controls="layers-legend" onClick={() => onOpenChange(!open)} data-testid="layers-button" title="Layers and legend">
         <Icon name="layers" />
         Layers
       </Toggle>
@@ -330,13 +336,13 @@ export default function LegendPanel({ open, onOpenChange }: { open: boolean; onO
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();
-              onOpenChange(false);
+              closeFromInside();
             }
           }}
         >
           <Head>
             <h2>Layers & legend</h2>
-            <IconButton type="button" aria-label="Close layers" onClick={() => onOpenChange(false)}>
+            <IconButton type="button" aria-label="Close layers" onClick={closeFromInside}>
               <Icon name="close" />
             </IconButton>
           </Head>

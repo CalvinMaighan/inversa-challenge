@@ -130,8 +130,10 @@ export const ResizeHandle = styled.div`
     background: var(--accent);
   }
 
+  /* The accent line alone is 2 px: keyboard focus also gets the standard ring, drawn inside the strip. */
   &:focus-visible {
-    outline: none;
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
   }
 `;
 

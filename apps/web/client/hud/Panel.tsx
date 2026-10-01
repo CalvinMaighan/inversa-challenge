@@ -147,14 +147,17 @@ export type PanelProps = {
 const isTextEntry = (el: Element) => el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["button", "range", "checkbox", "radio"].includes(el.type)) || (el as HTMLElement).isContentEditable;
 
 /**
- * Focus follows the panel: opening it (a citation, a bracket label, its tab) moves focus into it, so the
- * keyboard and screen readers land on what just appeared; closing it hands focus back to whatever opened it,
- * or to the panel's tab. The first render never moves focus (the missions panel starts open on desktop).
+ * Focus follows the panel: opening it from a control (a citation, a bracket label, its tab) moves focus into
+ * it, so the keyboard and screen readers land on what just appeared; closing it hands focus back to whatever
+ * opened it, or to the panel's tab. Nothing is taken from an idle page (a share link or voice opening the
+ * drawer) or from a text field, and the first render never moves focus.
  */
 function usePanelFocus(open: boolean) {
   const frameRef = useRef<HTMLDivElement>(null);
   const tabRef = useRef<HTMLButtonElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
+  /** The collapsed tab was pressed: it unmounts before the effect runs, so focus is on <body> by then. */
+  const fromTabRef = useRef(false);
   const wasOpen = useRef(open);
   useLayoutEffect(() => {
     if (open === wasOpen.current) return;
@@ -163,7 +166,9 @@ function usePanelFocus(open: boolean) {
     const idle = !active || active === document.body;
     if (open) {
       const frame = frameRef.current;
-      if (!frame || (!idle && (frame.contains(active) || isTextEntry(active)))) return;
+      const byTab = fromTabRef.current;
+      fromTabRef.current = false;
+      if (!frame || (idle && !byTab) || (!idle && (frame.contains(active) || isTextEntry(active)))) return;
       returnTo.current = idle ? null : (active as HTMLElement);
       frame.focus({ preventScroll: true });
       return;
@@ -174,11 +179,11 @@ function usePanelFocus(open: boolean) {
     if (!idle) return;
     (back?.isConnected ? back : tabRef.current)?.focus({ preventScroll: true });
   }, [open]);
-  return { frameRef, tabRef };
+  return { frameRef, tabRef, fromTabRef };
 }
 
 export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, actions, children, ...rest }: PanelProps) {
-  const { frameRef, tabRef } = usePanelFocus(open);
+  const { frameRef, tabRef, fromTabRef } = usePanelFocus(open);
   if (!open) {
     return onOpen ? (
       <Tab
@@ -186,7 +191,10 @@ export default function Panel({ side, title, open, onClose, onOpen, tabLabel, wi
         $side={side}
         type="button"
         data-hud-obstacle=""
-        onClick={onOpen}
+        onClick={() => {
+          fromTabRef.current = true;
+          onOpen();
+        }}
         aria-expanded={false}
         data-testid={rest["data-testid"] && `${rest["data-testid"]}-tab`}
       >

@@ -48,6 +48,10 @@ const Body = styled.div`
   columns: 2 280px;
   column-gap: var(--gap-l);
   scrollbar-width: thin;
+
+  &:focus-visible {
+    outline-offset: -2px;
+  }
 `;
 
 const Group = styled.section`
@@ -116,7 +120,8 @@ export default function HelpSheet({ onClose }: { onClose: () => void }) {
           <Icon name="close" />
         </IconButton>
       </Head>
-      <Body>
+      {/* Text only and scrollable: focusable so the keyboard can scroll it (axe scrollable-region-focusable). */}
+      <Body tabIndex={0} role="region" aria-labelledby="help-title">
         {HELP_GROUPS.map((group) => (
           <Group key={group} aria-label={group}>
             <h3>{group}</h3>

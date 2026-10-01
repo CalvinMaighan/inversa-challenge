@@ -48,6 +48,10 @@ const globalCss = css`
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+  /* A control scrolled into view by Tab stops short of the scroll box's edge, so its ring is not cut off. */
+  * {
+    scroll-padding: 6px;
+  }
   ::selection {
     background: var(--hud-glow);
   }
@@ -87,7 +91,9 @@ const globalCss = css`
       /* One near-instant pass, so an endless pulse settles on its end state instead of flickering. */
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
+      /* No transitions at all: a forced 0.01 ms duration turns every property change (focus rings included)
+         into a transition, since transition-property defaults to all. Nothing here waits for transitionend. */
+      transition: none !important;
       scroll-behavior: auto !important;
     }
   }

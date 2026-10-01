@@ -111,7 +111,12 @@ export function TablePanel({ view, turnId, wide }: ViewProps & { view: TableView
 
   return (
     <>
-      <TableScroll $maxHeight={wide ? 360 : 220} onPointerLeave={() => hoverEvidence(turnId, null)}>
+      <TableScroll
+        $maxHeight={wide ? 360 : 220}
+        onPointerLeave={() => hoverEvidence(turnId, null)}
+        // Chromium leaves a partly visible control where it is on Tab: bring headers and rows fully into the box.
+        onFocus={(event) => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}
+      >
         <Table data-table-rows={sorted.length}>
           <thead>
             <tr>

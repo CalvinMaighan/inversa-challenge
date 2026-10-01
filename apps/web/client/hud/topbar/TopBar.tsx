@@ -198,7 +198,15 @@ function ChipList({ list, id, wrap }: { list: FeedState[]; id?: string; wrap?: b
         const chip = feedChip(feed);
         return (
           <li key={chip.source}>
-            <Pill $tone={chip.tone} title={chip.title} data-feed={chip.source} data-state={chip.state} tabIndex={0}>
+            <Pill
+              $tone={chip.tone}
+              title={chip.title}
+              data-feed={chip.source}
+              data-state={chip.state}
+              tabIndex={0}
+              // The row scrolls sideways; bring a chip reached by Tab fully into it, ring included.
+              onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
+            >
               <Dot $tone={chip.tone} $pulse={chip.state === "down"} />
               {chip.label}
               <ChipIcon role="img" aria-label={chip.mode}>

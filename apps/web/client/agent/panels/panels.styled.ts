@@ -114,11 +114,13 @@ export const HeadTitle = styled.span`
 
 export const Kind = styled.span`
   flex: 0 0 auto;
-  padding: 1px 4px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in oklab, ${({ theme }) => theme.color.accent} 70%, transparent);
   border-radius: 3px;
   background: color-mix(in oklab, ${({ theme }) => theme.color.accent} 18%, transparent);
-  color: ${({ theme }) => theme.color.accent};
-  font: 700 9px / 1.3 ${({ theme }) => theme.font.mono};
+  /* Body text on the tint: accent-on-tint was 2.9:1 (axe color-contrast); the border carries the accent. */
+  color: ${({ theme }) => theme.color.text};
+  font: 700 10px / 1.3 ${({ theme }) => theme.font.mono};
   letter-spacing: 0.08em;
   text-transform: uppercase;
 `;
@@ -221,6 +223,11 @@ export const SortButton = styled.button`
   &:focus-visible,
   &[data-sorted] {
     color: ${({ theme }) => theme.color.text};
+  }
+
+  /* The sticky header sits on the scroll box's top edge, which would cut an outside ring. */
+  &:focus-visible {
+    outline-offset: -2px;
   }
 `;
 
