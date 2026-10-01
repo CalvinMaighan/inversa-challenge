@@ -23,13 +23,16 @@
  * Apps (PLAN.md C-A1): `--app <id>` (default python, whose data the fixtures are) runs it in that app, its data dir
  * filled by `backfill --fixtures --app <id>`, the region and the species from its config, and appends `app=<id>`
  * to the FIRSTLOAD line. A conditions app (carp) has no sightings layer and no frames: step 2 checks that nothing
- * but its gauges and alerts can draw (`FIRSTLOAD kind=conditions sightings=0 hotspots=0 app=carp`).
+ * but its gauges and alerts can draw (`FIRSTLOAD kind=conditions sightings=0 hotspots=0 app=carp`). A survey app
+ * (lionfish) draws its reports itself: step 2 counts its report markers and checks that no stations or alerts draw
+ * (`FIRSTLOAD kind=survey reports=<n> sightings=0 stations=0 alerts=0 app=lionfish`).
  */
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { isSurveyApp } from "../client/lionfish/model";
 import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
@@ -47,6 +50,9 @@ const APP: AppId = process.argv.includes("--app") ? (isAppId(APP_ARG) ? APP_ARG 
 const CLOCK = APP === "python" ? PYTHON_CLOCK : FIXTURE_CLOCK;
 const CONFIG = getApp(APP);
 const SPECIES_APP = CONFIG.kind === "species";
+/** A survey app (Lionfish Watch) draws its reports itself (client/lionfish), not through the EVF sightings layer. */
+const SURVEY_APP = isSurveyApp(CONFIG);
+const REPORTS = '[data-kind="report"]:not([data-copy])';
 const REGION = appBBox(CONFIG);
 const shotName = (name: string) => (APP === "python" ? name : name.replace(/\.png$/, `-${APP}.png`));
 /** The app's default sightings window (`windows.defaultHours`: 7 days for python, 30 for lionfish). */
@@ -72,11 +78,19 @@ async function ready(page: Page, origin: string): Promise<void> {
     await page.waitForTimeout(4_000);
     return;
   }
-  await page.waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0 && (window.__inversa?.globe()?.layers.length ?? 0) > 0, undefined, {
-    timeout: LOAD_TIMEOUT_MS,
-  });
-  await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
-  await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+  const step = (what: string) => (err: unknown) => fail(`waiting for ${what}: ${err instanceof Error ? err.message : String(err)}`);
+  await page
+    .waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0 && (window.__inversa?.globe()?.layers.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS })
+    .catch(step("frames and globe layers"));
+  await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS }).catch(step("feeds"));
+  if (SURVEY_APP) {
+    await page.waitForFunction((sel) => document.querySelectorAll(sel).length > 0, REPORTS, { timeout: LOAD_TIMEOUT_MS }).catch(step("report markers"));
+    await page.waitForTimeout(4_000);
+    return;
+  }
+  await page
+    .waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS })
+    .catch(step("a sightings frame"));
   // Imagery, the stats sampler and the feed subscription settle.
   await page.waitForTimeout(4_000);
 }
@@ -191,7 +205,15 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
     return s && s.enabled ? s.count : 0;
   };
   log(`layers: ${stats.map((l) => `${l.id}=${l.enabled ? l.count : "off"}`).join(" ")}`);
-  if (SPECIES_APP) {
+  if (SURVEY_APP) {
+    // Reports are the app's own markers (GBIF copies of iNat records drawn but not counted; e2e:lionfish checks
+    // the count against Axum). The EVF sightings layer stays empty, and no stations or alerts draw.
+    const reports = await page.locator(REPORTS).count();
+    const [sightings, stations, alerts] = [drawn("sightings"), drawn("stations"), drawn("alerts")];
+    if (reports === 0) fail("no reports drawn at first load");
+    if (sightings || stations || alerts) fail(`survey app draws sightings=${sightings} stations=${stations} alerts=${alerts} at first load`);
+    lines.push(`FIRSTLOAD kind=survey reports=${reports} sightings=${sightings} stations=${stations} alerts=${alerts} app=${APP}`);
+  } else if (SPECIES_APP) {
     const sightings = stats.find((l) => l.id === "sightings") ?? fail("no sightings layer");
     const api = await apiWindowCount(page, stack, sightings.frame);
     log(`sightings layer frame ${sightings.frame}: ${sightings.count} drawn ${JSON.stringify(sightings.breakdown)}; Axum ${api.count} distinct in ${api.from}..${api.to}`);
@@ -230,7 +252,8 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   // A species app: one line for its species; a conditions app has no species chip.
   const wantSpecies = SPECIES_APP ? CONFIG.taxa.length : 0;
   if (species !== wantSpecies) fail(`the welcome lists ${species} species, want ${wantSpecies}`);
-  if (SPECIES_APP) await page.locator(`[data-species-chip="${CONFIG.taxa[0]!.id}"]`).hover();
+  // A survey app's species chip is its own (client/lionfish).
+  if (SPECIES_APP) await page.locator(SURVEY_APP ? '[data-testid="lionfish-chip"]' : `[data-species-chip="${CONFIG.taxa[0]!.id}"]`).hover();
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SHOT_DIR, shotName("simplify-welcome.png")) });
   log(`screenshot ${shotName("simplify-welcome.png")}`);
