@@ -48,8 +48,8 @@ export type StackOptions = {
   nextPrefix?: string[];
   /**
    * Also run a network backfill of this many days of iNaturalist (with a one-year NAS and GBIF baseline) on top
-   * of the fixtures, so the stack holds real, current sightings of every introduced species (T44). Needs the
-   * network; the taxon enrichment runs with it.
+   * of the fixtures, so the stack holds real, current sightings of the app's species. Needs the
+   * network.
    */
   backfillDays?: number;
   /** The app the page opens in and `graphql`/`hook` talk to (C-A2 `/v1/<app>/...`). Default python. */

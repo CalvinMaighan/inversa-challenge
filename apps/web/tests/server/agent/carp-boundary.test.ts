@@ -99,7 +99,7 @@ describe("carp boundary", () => {
 
   test("carp boundary: other species (another app's) are refused by the scope guard without a model call; common carp is left to the prompt's boundary", async () => {
     process.env.OPENROUTER_API_KEY = "test-key-never-used";
-    for (const question of ["Where are Burmese pythons active in the Everglades?", "Any lionfish sightings near Key Largo?", "How many iguanas were reported around Marathon this week?"]) {
+    for (const question of ["Where are Burmese pythons active in the Everglades?", "Any lionfish sightings near Key Largo?", "How many pythons were reported around Marathon this week?"]) {
       const events: AgentStreamEvent[] = [];
       const result = await runTurn({ app: "carp", sessionId: `boundary-${Date.now()}-${question.length}`, question, now: NOW, cache: false }, (e) => events.push(e));
       expect(result.model).toBe("scope-guard");

@@ -34,7 +34,7 @@ const API_BIN = path.join(REPO_DIR, "api/target/release/inversa-api");
 const SHOT = path.join(REPO_DIR, "docs/evidence/agent-panels.png");
 /** The answer with its panels in the chat column, before Expand (T40 layout evidence). */
 const LAYOUT_SHOT = path.join(REPO_DIR, "docs/evidence/layout-desktop.png");
-const QUESTION = "Show recent iguana sightings near Homestead and the water levels";
+const QUESTION = "Show recent python sightings near Homestead and the water levels";
 /** The Axum fixtures were recorded 2026-09-30T20:40Z. */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
 /**

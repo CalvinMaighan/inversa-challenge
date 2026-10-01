@@ -29,7 +29,7 @@ const textOf = (markup: string) =>
     .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
-const FORBIDDEN = /\b(python|tegu|iguana|lionfish|everglades)\b/i;
+const FORBIDDEN = /\b(python|lionfish|everglades)\b/i;
 const noop = () => {};
 
 const forecast = snap({ issuedAt: "2026-09-30T15:32:00Z", from: "2026-09-30T18:00:00Z", values: [3.6, 3.9, 4.0], peakStageFt: 4, peakAt: "2026-10-01T06:00:00Z", peakCategory: "ACTION" });

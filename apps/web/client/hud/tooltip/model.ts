@@ -2,18 +2,15 @@
  * Hover tooltip text (T40): the marker's name first, then its key value and age, e.g.
  *
  *   USGS gauge · Shark River · stage 1.21 m · 12 min ago
- *   Green iguana · research · iNat · 2 h ago
+ *   Burmese python · research · iNat · 2 h ago
  *   Freeze Warning until 09:00
  *
  * Pure over the layer's `HoverFacts`, the time cursor and, for sightings, the record the evidence cache may
  * already hold (source and exact time).
  */
-import { get } from "@calvinjs/active-state";
-
 import type { AlertFacts, HoverFacts, HotspotFacts, NoteFacts, SightingFacts, StationFacts } from "client/globe/hover";
 import { speciesIndexOfTaxon } from "client/globe/species";
 import { activeApp } from "client/state/app";
-import { TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { QUALITY_CODES } from "shared/frames";
 
 import { feedLabel } from "../topbar/feed-chips";
@@ -42,8 +39,8 @@ export const NETWORK_LABELS: Record<string, string> = {
 export function speciesNames(): string[] {
   return activeApp().taxa.map((t) => t.name);
 }
-/** Only while a taxon's name has not arrived from the API yet (T44: every taxon has a name once TAXA loads). */
-export const OTHER_SPECIES_NAME = "Introduced species";
+/** A taxon that is not the app's (never drawn; a stale record at most). */
+const UNNAMED_SPECIES = "Unnamed species";
 
 /** Quality codes as the tooltip shows them, indexed like QUALITY_CODES (`needs_id` reads "needs ID"). */
 const QUALITY_LABELS: readonly string[] = QUALITY_CODES.map((code) => code.replace(/_id$/, " ID").replace(/_/g, " "));
@@ -76,17 +73,10 @@ export function ago(ms: number, atMs: number): string {
   return future ? `in ${text}` : `${text} ago`;
 }
 
-/**
- * The species name for a taxon id: the focus names, else the evidence record's common name when given, else
- * what the TAXA store knows (common name in sentence case, or the scientific name), else a plain placeholder.
- */
-export function speciesName(taxon: number, commonName?: string | null, byId: Readonly<Record<string, TaxonInfo>> = get<TaxaState>(TAXA)?.byId ?? {}): string {
+/** The species name for a taxon id: the app's species name, else a plain placeholder. */
+export function speciesName(taxon: number): string {
   const s = speciesIndexOfTaxon(taxon);
-  if (s >= 0) return speciesNames()[s]!;
-  const given = commonName?.trim();
-  if (given) return taxonName({ commonName: given, scientificName: "" });
-  const info = byId[String(taxon)];
-  return info ? taxonName(info, OTHER_SPECIES_NAME) : OTHER_SPECIES_NAME;
+  return s >= 0 ? speciesNames()[s]! : UNNAMED_SPECIES;
 }
 
 export function formatReading(param: string, value: number | null): string | null {
@@ -103,16 +93,15 @@ function station(f: StationFacts, atMs: number): TooltipText {
 }
 
 /** The bits of a sighting's evidence record the tooltip uses, when the drawer cache already has it. */
-export type SightingRecordHint = { source?: unknown; observedAt?: unknown; taxon?: unknown };
+export type SightingRecordHint = { source?: unknown; observedAt?: unknown };
 
 function sighting(f: SightingFacts, atMs: number, record: SightingRecordHint | null): TooltipText {
-  const common = (record?.taxon as { commonName?: unknown } | undefined)?.commonName;
   const quality = QUALITY_LABELS[f.quality] ?? QUALITY_CODES[f.quality] ?? "unknown grade";
   const source = typeof record?.source === "string" && record.source ? feedLabel(record.source) : null;
   const observed = typeof record?.observedAt === "string" ? Date.parse(record.observedAt) : NaN;
   const when = Number.isFinite(observed) ? ago(observed, atMs) : f.ageMs < 60 * 60_000 ? "this hour" : `${ago(atMs - f.ageMs, atMs)}`;
   return {
-    title: speciesName(f.taxon, typeof common === "string" ? common : null),
+    title: speciesName(f.taxon),
     parts: [quality, ...(source ? [source] : []), when, ...(f.conflict ? ["IDs conflict"] : [])],
   };
 }

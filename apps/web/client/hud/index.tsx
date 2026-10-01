@@ -40,9 +40,7 @@ const Root = styled.div`
     pointer-events: none;
   }
 
-  /* The species bar wraps to two rows. */
   ${MOBILE} {
-    --hud-top: calc(max(var(--gap-s), env(safe-area-inset-top)) + 120px);
     --hud-bottom: calc(max(var(--gap-s), env(safe-area-inset-bottom)) + 88px);
   }
 
@@ -56,8 +54,8 @@ const Root = styled.div`
 `;
 
 /**
- * Top row: the species bar on the left, the two icon buttons (About, Theme) pinned top right with room kept for
- * them (78 px plus a gap); on a narrow pane the chips wrap. The row lets the pointer through; its surfaces take
+ * Top row: the app selector and the species chip on the left, the two icon buttons (About, Theme) pinned top right with room kept for
+ * them (78 px plus a gap); on a narrow pane the row wraps. The row lets the pointer through; its surfaces take
  * it back.
  */
 const TopRow = styled.div`
@@ -90,7 +88,7 @@ const noSubscribe = () => () => {};
 
 /**
  * HUD over the globe pane, sightings first (PRD §12, T40, T41): the title, LIVE/REPLAY and one status button
- * (feeds, theme, focus, help in its popover) on top, with the species filter bar beside it; the Layers legend
+ * (feeds, theme, focus, help in its popover) on top, with the species chip beside it; the Layers legend
  * top right; hover tooltips over markers; the timeline along the bottom; detection brackets and the scope mask
  * over the globe; the evidence drawer on the right (a bottom sheet on phones). Missions live in the chat
  * column's Missions tab. URL-hash share links keep the view shareable.

@@ -9,7 +9,6 @@ import type { LayerId, LayersState } from "client/state/layers";
 import type { MissionsState } from "client/state/missions";
 import type { NotePin } from "client/state/notes";
 import type { Peer } from "client/state/peers";
-import type { TaxaState } from "client/state/taxa";
 import type { FrameMeta, GqlVariables } from "client/threads/api";
 import type { SightingRecord } from "shared/frames";
 
@@ -36,15 +35,15 @@ export type LayerStats = {
   updatedAt: number | null;
   error: string | null;
   /**
-   * Drawn items split by what the legend shows per row: species ids (plus `other`) for sightings, networks
+   * Drawn items split by what the legend shows per row: taxon ids for sightings, networks
    * for stations. Absent for layers the legend counts as a whole.
    */
   breakdown?: Record<string, number>;
   /**
-   * How the sightings layer draws (T44): icon billboards from one texture atlas, the number of distinct species
-   * categories drawn, and how many plain dots (point primitives) remain, which is none.
+   * How the sightings layer draws: icon billboards from one texture atlas, and how many plain dots (point
+   * primitives) remain, which is none.
    */
-  marker?: { kind: "billboard" | "point"; categories: number; dots: number; images: number };
+  marker?: { kind: "billboard" | "point"; dots: number; images: number };
 };
 
 /** What layers read besides the frame grid. The globe wires it to active-state and the threads API. */
@@ -67,8 +66,6 @@ export type LayerContext = {
   peers(): readonly Peer[];
   /** Live field notes on the team board (NOTES.pins, T43). */
   notes(): readonly NotePin[];
-  /** What the client knows about taxa (TAXA, T44): groups for the filter, names for tooltips. Optional for stand-in contexts. */
-  taxa?(): TaxaState;
   gql<T>(query: string, variables?: GqlVariables, signal?: AbortSignal): Promise<T>;
 };
 

@@ -27,7 +27,7 @@ export function agentView(snapshot: ViewSnapshot, nowMs: number): NonNullable<Ag
   const bbox = snapshot.view?.bbox;
   const at = snapshot.time?.at;
   const atMs = typeof at === "string" ? Date.parse(at) : NaN;
-  // The species bar's filter, only when it hides an animal: "how many?" then counts what the globe shows.
+  // The species chip's filter, only when it hides the species: "how many?" then counts what the globe shows.
   const filter = snapshot.layers?.species;
   const species = shownSpecies(filter);
   return {

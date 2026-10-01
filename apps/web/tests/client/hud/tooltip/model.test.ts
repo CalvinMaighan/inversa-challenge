@@ -35,20 +35,14 @@ describe("tooltip text", () => {
   });
 
   test("sighting: species, grade, then source and exact time once the evidence cache has the record", () => {
-    const facts = { kind: "sighting" as const, id: 7, taxon: 3, quality: 0, ageMs: 2 * H, conflict: false, lon: -80.4, lat: 25.47 };
-    expect(tooltipLine(tooltipText(facts, NOW))).toBe("Green iguana · research · 2 h ago");
-    expect(tooltipLine(tooltipText(facts, NOW, { source: "inat", observedAt: new Date(NOW - 2 * H).toISOString() }))).toBe("Green iguana · research · iNat · 2 h ago");
-    expect(tooltipLine(tooltipText({ ...facts, quality: 1, ageMs: 0, conflict: true }, NOW))).toBe("Green iguana · needs ID · this hour · IDs conflict");
-    // A taxon outside the focus four takes its common name from the record.
-    expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW, { taxon: { commonName: "Cuban treefrog" } }))).toBe("Cuban treefrog · research · 2 h ago");
-    // No record and nothing in the TAXA store yet: a plain placeholder, never "Other introduced species".
-    expect(speciesName(99)).toBe("Introduced species");
+    const facts = { kind: "sighting" as const, id: 7, taxon: 1, quality: 0, ageMs: 2 * H, conflict: false, lon: -80.4, lat: 25.47 };
+    expect(tooltipLine(tooltipText(facts, NOW))).toBe("Burmese python · research · 2 h ago");
+    expect(tooltipLine(tooltipText(facts, NOW, { source: "inat", observedAt: new Date(NOW - 2 * H).toISOString() }))).toBe("Burmese python · research · iNat · 2 h ago");
+    expect(tooltipLine(tooltipText({ ...facts, quality: 1, ageMs: 0, conflict: true }, NOW))).toBe("Burmese python · needs ID · this hour · IDs conflict");
+    // The app's species by its config name; a taxon that is not the app's (never drawn) gets a plain placeholder.
     expect(speciesName(1)).toBe("Burmese python");
-    // Once the TAXA store knows the taxon, the dot is named before its evidence loads; iNat's Title Case reads in sentence case.
-    const anole = { id: 99, scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false, iconicGroup: "Reptilia", ancestorIds: null, category: "other" as const, summary: null, photoUrl: null, pageUrl: null };
-    expect(speciesName(99, null, { "99": anole })).toBe("Brown anole");
-    expect(speciesName(99, null, { "99": { ...anole, commonName: "" } })).toBe("Anolis sagrei");
-    expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW, { taxon: { commonName: "Cuban Tree Frog" } }))).toBe("Cuban tree frog · research · 2 h ago");
+    expect(speciesName(99)).toBe("Unnamed species");
+    expect(tooltipLine(tooltipText({ ...facts, taxon: 99 }, NOW))).toBe("Unnamed species · research · 2 h ago");
   });
 
   test("alert: event until its expiry in Miami time, then severity", () => {

@@ -29,7 +29,7 @@ const RTC_TIMEOUT_MS = 90_000;
 const CONVERGE_TIMEOUT_MS = 60_000;
 const KEY_TIMEOUT_MS = 10_000;
 /** 40 characters, no character of which is in a callsign ("Ranger-XXXX") or the panel's own copy. */
-const TEXT = "Two tegus by the canal gate heading west";
+const TEXT = "Two pythons by the canal gate going west";
 /** The mid-text insert goes after "Two " (caret at 4). */
 const INSERT_AT = 4;
 

@@ -1,26 +1,28 @@
 import { describe, expect, test } from "bun:test";
 
 import { fetchAppHealth, healthLabel, parseAppHealth, type AppHealth } from "client/hud/appselect/health";
-import { appIconCategory, appOptions, appTint, nextIndex } from "client/hud/appselect/model";
+import { appOptions, appTint, CONDITIONS_TINT, nextIndex } from "client/hud/appselect/model";
+import { APP_ICONS, appIconShape, isAppIconId } from "shared/app-icons";
 import { getApp, type AppId } from "shared/apps";
-import { CATEGORY_COLORS } from "shared/species-categories";
 
 describe("app selector model", () => {
   test("active app: one row per app in order, with name, question, icon and the current one marked", () => {
     const rows = appOptions("lionfish", { carp: "nominal", lionfish: "stale", python: "unknown" });
     expect(rows.map((r) => r.id)).toEqual(["carp", "lionfish", "python"]);
     expect(rows.map((r) => r.selected)).toEqual([false, true, false]);
-    expect(rows[0]).toMatchObject({ name: "Carp Field Conditions", icon: "fish", tone: "ok", healthLabel: "feeds running normally" });
+    expect(rows[0]).toMatchObject({ name: "Carp Field Conditions", icon: "carp", tone: "ok", healthLabel: "feeds running normally" });
     expect(rows[1]).toMatchObject({ question: getApp("lionfish").question, tone: "stale", tint: getApp("lionfish").taxa[0]!.color });
-    expect(rows[2]).toMatchObject({ icon: "snakes", tone: "muted", healthLabel: "feed health unknown" });
+    expect(rows[2]).toMatchObject({ icon: "python", tone: "muted", healthLabel: "feed health unknown" });
     expect(appOptions("carp", null).every((r) => r.health === "unknown")).toBe(true);
   });
 
-  test("icons: a category id, a known app icon name, else other; carp (no taxa) is tinted by its category", () => {
-    expect(appIconCategory("birds")).toBe("birds");
-    expect(appIconCategory("python")).toBe("snakes");
-    expect(appIconCategory("unicorn")).toBe("other");
-    expect(appTint(getApp("carp"))).toBe(CATEGORY_COLORS.fish);
+  test("icons: each app's config icon names its drawing in shared/app-icons.ts; carp (no taxa) takes the conditions tint", () => {
+    for (const id of ["carp", "lionfish", "python"] as const) expect(isAppIconId(getApp(id).icon)).toBe(true);
+    expect(appIconShape("python")).toBe(APP_ICONS.python);
+    expect(appIconShape("lionfish")).toBe(APP_ICONS.lionfish);
+    expect(appIconShape("unicorn")).toBe(APP_ICONS.carp);
+    expect(appTint(getApp("carp"))).toBe(CONDITIONS_TINT);
+    expect(appTint(getApp("python"))).toBe(getApp("python").taxa[0]!.color);
   });
 
   test("keyboard: arrows wrap, Home and End jump, other keys do nothing", () => {

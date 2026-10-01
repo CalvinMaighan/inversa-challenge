@@ -80,7 +80,7 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
         return;
       }
       const bounds = gridBounds(grid.shape, ctx.meta()?.geometry).hotspot;
-      const species = enabledSpecies(ctx.layers().species, HOTSPOTS).filter((s) => s < grid.shape.speciesCount);
+      const species = enabledSpecies(ctx.layers().species).filter((s) => s < grid.shape.speciesCount);
       const key = `${frameIndex}|${grid.version()}|${species.join(",")}|${grid.buffer.byteLength}|${boundsKey(bounds)}|${ctx.revision()}`;
       if (key === drawnKey && shown?.grid === grid) return;
       const target = ensureSurface(grid, bounds);

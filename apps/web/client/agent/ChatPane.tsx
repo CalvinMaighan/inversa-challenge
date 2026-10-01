@@ -4,7 +4,6 @@ import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, t
 
 import { useActiveApp } from "client/hud/appselect/use-active-app";
 import { exampleQuestions, speciesGuide, welcome } from "client/hud/help/content";
-import { speciesChipColors } from "client/hud/species/SpeciesBar";
 import type { VoiceState } from "client/state/voice";
 
 import {
@@ -324,7 +323,7 @@ export default function ChatPane({
             <ul aria-label="The species on the map">
               {speciesGuide(app).map((s, i) => (
                 <li key={s.id} data-welcome-species={s.id}>
-                  <i style={{ background: speciesChipColors()[i] }} aria-hidden="true" />
+                  <i style={{ background: app.taxa[i]?.color }} aria-hidden="true" />
                   <span>
                     <b>{s.full}</b> — {s.line}
                   </span>

@@ -10,8 +10,8 @@
  * 1. Clutter at load: interactive controls and elements with their own visible text, in the globe pane and on
  *    the whole page (text drawn on canvases is not counted). `SIMPLIFY pane_controls=… page_labels=…`.
  * 2. Only sightings on the globe: stations, alerts and hotspots draw nothing, and the sightings layer draws
- *    exactly the distinct (non-duplicate) animal sightings Axum holds for the same window of frames (7 days by
- *    default since T44; plants and insects sit behind their own chips, off).
+ *    exactly the distinct (non-duplicate) sightings of the app's species Axum holds for the same window of frames
+ *    (the app's default window).
  *    `FIRSTLOAD sightings>0 stations=0 alerts=0 hotspots=0 window=<drawn> api=<count>`.
  * 3. No always-visible top bar text: the chrome is two icon buttons. `CHROME icons=2 visible_text_labels=0`.
  * 4. The globe's data attribution is clickable (the element at its centre is the link). `ATTRIBUTION clickable=1`.
@@ -31,7 +31,6 @@ import path from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 
 import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
-import { apiDefaultCount } from "./species-count";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
@@ -44,7 +43,7 @@ const CONFIG = getApp(APP);
 const SPECIES_APP = CONFIG.kind === "species";
 const REGION = appBBox(CONFIG);
 const shotName = (name: string) => (APP === "python" ? name : name.replace(/\.png$/, `-${APP}.png`));
-/** The app's default sightings window (`windows.defaultHours`: 7 days for python, 30 for lionfish; T44). */
+/** The app's default sightings window (`windows.defaultHours`: 7 days for python, 30 for lionfish). */
 const WINDOW_HOURS = CONFIG.windows.defaultHours;
 
 const log = (...a: unknown[]) => console.error("[e2e:firstload]", ...a);
@@ -72,17 +71,6 @@ async function ready(page: Page, origin: string): Promise<void> {
   });
   await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
   await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
-  // The TAXA store knows every taxon on the frames (T44), so the group filter has settled.
-  await page.waitForFunction(
-    () => {
-      const b = window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.breakdown ?? {};
-      const taxa = (window.__inversa?.state("TAXA") as { byId: Record<string, unknown> } | undefined)?.byId ?? {};
-      const ids = Object.keys(b);
-      return ids.length > 0 && ids.every((id) => id in taxa);
-    },
-    undefined,
-    { timeout: LOAD_TIMEOUT_MS },
-  );
   // Imagery, the stats sampler and the feed subscription settle.
   await page.waitForTimeout(4_000);
 }
@@ -133,7 +121,7 @@ async function chrome(page: Page): Promise<{ icons: number; text: number }> {
 
 /**
  * Distinct sightings Axum holds for the frames the sightings layer draws (the trailing window of frames, 7 days
- * by default) whose category starts on (`e2e/species-count.ts`): what the globe draws by default.
+ * by default) of the app's species (`speciesCounts` counts the focus taxon only): what the globe draws by default.
  */
 async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<{ count: number; from: string; to: string }> {
   const meta = (await page.evaluate(() => window.__inversa!.snapshot().meta)) ?? fail("no frame meta");
@@ -143,8 +131,11 @@ async function apiWindowCount(page: Page, stack: Stack, frame: number): Promise<
   const from = new Date(meta.frame0UnixMs + first * step).toISOString();
   // Frames hold [start, start + step); the API's window is inclusive at both ends.
   const to = new Date(meta.frame0UnixMs + (frame + 1) * step - 1).toISOString();
-  const { drawn } = await apiDefaultCount(stack, REGION, { from, to });
-  return { count: drawn, from, to };
+  const { speciesCounts } = await stack.graphql<{ speciesCounts: { count: number }[] }>(
+    "query($bbox: BBox!, $from: Time!, $to: Time!) { speciesCounts(bbox: $bbox, from: $from, to: $to) { count } }",
+    { bbox: REGION, from, to },
+  );
+  return { count: speciesCounts.reduce((n, row) => n + row.count, 0), from, to };
 }
 
 async function popovers(page: Page): Promise<string> {
@@ -230,8 +221,8 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   const welcomeText = (await welcome.locator("[data-welcome]").textContent()) ?? "";
   const species = await welcome.locator("[data-welcome-species]").count();
   log(`welcome: "${welcomeText}" with ${species} species lines`);
-  // A species app: one line per focus species plus "Other"; a conditions app has no species chips.
-  const wantSpecies = SPECIES_APP ? CONFIG.taxa.length + 1 : 0;
+  // A species app: one line for its species; a conditions app has no species chip.
+  const wantSpecies = SPECIES_APP ? CONFIG.taxa.length : 0;
   if (species !== wantSpecies) fail(`the welcome lists ${species} species, want ${wantSpecies}`);
   if (SPECIES_APP) await page.locator(`[data-species-chip="${CONFIG.taxa[0]!.id}"]`).hover();
   await page.waitForTimeout(300);

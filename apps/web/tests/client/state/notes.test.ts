@@ -6,12 +6,12 @@ import { NOTES, resetNoteDraft, setNoteLive, setNotePick, setNotePicking, setNot
 
 init(state);
 
-const pin = (id: string, text = "two tegus"): NotePin => ({
+const pin = (id: string, text = "two pythons"): NotePin => ({
   id,
   text,
   lat: 25.47,
   lon: -80.48,
-  species: "tegu",
+  species: "python",
   sightingId: null,
   createdBy: "node-a",
   callsign: "Ranger-A",
@@ -30,9 +30,9 @@ describe("NOTES", () => {
     const first = get<NotesState>(NOTES);
     setNotePins([pin("a")]);
     expect(get<NotesState>(NOTES)).toBe(first);
-    setNotePins([pin("a", "three tegus")]);
+    setNotePins([pin("a", "three pythons")]);
     expect(get<NotesState>(NOTES)).not.toBe(first);
-    expect(get<NotesState>(NOTES)!.pins[0]!.text).toBe("three tegus");
+    expect(get<NotesState>(NOTES)!.pins[0]!.text).toBe("three pythons");
     setNotePins([]);
     expect(get<NotesState>(NOTES)!.pins).toEqual([]);
   });

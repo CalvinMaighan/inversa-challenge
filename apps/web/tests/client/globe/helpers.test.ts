@@ -8,9 +8,7 @@ import { cellAt, gridBounds } from "client/globe/geometry";
 import { polygonsOf } from "client/globe/layers/geojson";
 import { alertBucket, alertQueryTime } from "client/globe/layers/alerts";
 import { bucketOfKey, createKeyedFetch, dataKey } from "client/globe/layers/keyed-fetch";
-import { categoryShown, colorOfTaxon, enabledSpecies, NEUTRAL_COLOR, recordShown, speciesIndexOfTaxon, taxonShown } from "client/globe/species";
-import type { TaxonInfo } from "client/state/taxa";
-import { CATEGORY_ANCESTORS, CATEGORY_COLORS } from "shared/species-categories";
+import { colorOfTaxon, enabledSpecies, isFocusTaxon, recordShown, speciesIndexOfTaxon } from "client/globe/species";
 import { parseEvidenceId } from "client/state/selection";
 
 import { flush } from "./fakes";
@@ -25,10 +23,10 @@ describe("evidence ids (C14)", () => {
     expect(evidenceCell(-79.8001, 27.4999)).toBe("339:319");
     expect(evidenceCell(-79.8, 25)).toBeNull();
     expect(evidenceCell(-84, 25)).toBeNull();
-    const id = hotspotEvidenceId(2, -80.505, 25.405, 1_768_446_000_000)!;
-    expect(id).toBe("hotspot:iguana:269:110:1768446000000");
-    expect(parseEvidenceId(id)).toEqual({ kind: "hotspot", key: "iguana:269:110:1768446000000" });
-    expect(hotspotEvidenceId(7, -80.5, 25.4, 0)).toBeNull();
+    const id = hotspotEvidenceId(0, -80.505, 25.405, 1_768_446_000_000)!;
+    expect(id).toBe("hotspot:python:269:110:1768446000000");
+    expect(parseEvidenceId(id)).toEqual({ kind: "hotspot", key: "python:269:110:1768446000000" });
+    expect(hotspotEvidenceId(1, -80.5, 25.4, 0)).toBeNull();
   });
 });
 
@@ -48,35 +46,23 @@ describe("grid geometry", () => {
 });
 
 describe("species", () => {
-  test("taxon ids 1–4 map to SPECIES_IDS order; every other taxon draws in its category's colour, neutral only until loaded", () => {
-    expect([1, 2, 3, 4, 0, 5].map(speciesIndexOfTaxon)).toEqual([0, 1, 2, 3, -1, -1]);
-    expect(colorOfTaxon(4)).toBe(SPECIES_COLORS[3]!);
-    const info = (id: number, category: TaxonInfo["category"]): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: [CATEGORY_ANCESTORS.birds], category, summary: null, photoUrl: null, pageUrl: null });
-    const byId = { "17": info(17, "birds"), "18": info(18, "plants") };
-    expect(colorOfTaxon(17, byId)).toBe(CATEGORY_COLORS.birds);
-    expect(colorOfTaxon(18, byId)).toBe(CATEGORY_COLORS.plants);
-    expect(colorOfTaxon(19, byId)).toBe(NEUTRAL_COLOR);
-    expect(SPECIES_COLORS).not.toContain(colorOfTaxon(17, byId));
-    // Filters: a category's switch (default on for animals), a taxon's own override, a layer pinned to one focus species.
-    expect(categoryShown(undefined, "birds")).toBe(true);
-    expect(categoryShown(undefined, "plants")).toBe(false);
-    expect(categoryShown({ plants: true }, "plants")).toBe(true);
-    expect(taxonShown({}, 17, byId)).toBe(true);
-    expect(taxonShown({ birds: false }, 17, byId)).toBe(false);
-    expect(taxonShown({ birds: false, t17: true }, 17, byId)).toBe(true);
-    expect(taxonShown({}, 18, byId)).toBe(false);
-    expect(taxonShown({}, 19, byId)).toBe(true);
-    expect(taxonShown({ sightings: "python" }, 17, byId, "sightings")).toBe(false);
-    expect(recordShown({ python: false }, 1, byId)).toBe(false);
-    expect(recordShown({ python: false }, 17, byId)).toBe(true);
+  test("taxon id 1 is the app's one species; any other taxon is not the app's and has no colour", () => {
+    expect([1, 0, 2, 5].map(speciesIndexOfTaxon)).toEqual([0, -1, -1, -1]);
+    expect([1, 2].map(isFocusTaxon)).toEqual([true, false]);
+    expect(colorOfTaxon(1)).toBe(SPECIES_COLORS[0]!);
+    expect(colorOfTaxon(2)).toBeNull();
+    // Only the focus species draws, and only while the filter shows it.
+    expect(recordShown(undefined, 1)).toBe(true);
+    expect(recordShown({ python: false }, 1)).toBe(false);
+    expect(recordShown({}, 17)).toBe(false);
   });
 
-  test("filter: booleans per species, or a voice pin of one layer to one species", () => {
-    expect(enabledSpecies(undefined)).toEqual([0, 1, 2, 3]);
-    expect(enabledSpecies({ python: true, tegu: false, iguana: true, lionfish: false })).toEqual([0, 2]);
-    expect(enabledSpecies({ python: true, hotspots: "lionfish" }, "hotspots")).toEqual([3]);
-    expect(enabledSpecies({ python: true, hotspots: "lionfish" }, "sightings")).toEqual([0, 1, 2, 3]);
-    expect(enabledSpecies({ hotspots: "dodo" }, "hotspots")).toEqual([0, 1, 2, 3]);
+  test("filter: a boolean for the species; other keys (an old saved layer pin) change nothing", () => {
+    expect(enabledSpecies(undefined)).toEqual([0]);
+    expect(enabledSpecies({ python: true })).toEqual([0]);
+    expect(enabledSpecies({ python: false })).toEqual([]);
+    expect(enabledSpecies({ python: false, hotspots: "python" })).toEqual([]);
+    expect(enabledSpecies({ hotspots: "dodo" })).toEqual([0]);
   });
 });
 

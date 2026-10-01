@@ -3,21 +3,16 @@
  * icon, name, one-line question and feed-health dot. Pure over the configs and the parsed `/health`.
  */
 import { APP_IDS, getApp, type AppConfig, type AppId } from "shared/apps";
-import { CATEGORY_COLORS, CATEGORY_IDS, type CategoryId } from "shared/species-categories";
 
 import type { Tone } from "../primitives";
 import { healthLabel, type AppHealth } from "./health";
 
-/** App icons drawn with the category icon set: an app's `icon` is a category id, or one of these names. */
-const ICON_CATEGORY: Readonly<Record<string, CategoryId>> = { carp: "fish", lionfish: "fish", python: "snakes" };
+/** Tint of an app without a species (carp): a river blue, apart from the focus colours. */
+export const CONDITIONS_TINT = "#7f7fff";
 
-export function appIconCategory(icon: string): CategoryId {
-  return (CATEGORY_IDS as readonly string[]).includes(icon) ? (icon as CategoryId) : (ICON_CATEGORY[icon] ?? "other");
-}
-
-/** Icon tint: the app's first focus species' colour, else its category's. */
+/** Icon tint: the app's species colour, else the conditions tint. */
 export function appTint(app: AppConfig): string {
-  return app.taxa[0]?.color ?? CATEGORY_COLORS[appIconCategory(app.icon)];
+  return app.taxa[0]?.color ?? CONDITIONS_TINT;
 }
 
 const HEALTH_TONE: Record<AppHealth, Tone> = { nominal: "ok", lagging: "warn", stale: "stale", down: "danger", unknown: "muted" };
@@ -26,7 +21,7 @@ export type AppOption = {
   id: AppId;
   name: string;
   question: string;
-  icon: CategoryId;
+  icon: string;
   tint: string;
   health: AppHealth;
   tone: Tone;
@@ -38,7 +33,7 @@ export function appOptions(active: AppId, health: Readonly<Record<AppId, AppHeal
   return APP_IDS.map((id) => {
     const app = getApp(id);
     const h = health?.[id] ?? "unknown";
-    return { id, name: app.name, question: app.question, icon: appIconCategory(app.icon), tint: appTint(app), health: h, tone: HEALTH_TONE[h], healthLabel: healthLabel(h), selected: id === active };
+    return { id, name: app.name, question: app.question, icon: app.icon, tint: appTint(app), health: h, tone: HEALTH_TONE[h], healthLabel: healthLabel(h), selected: id === active };
   });
 }
 

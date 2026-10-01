@@ -27,11 +27,11 @@ describe("dev fixture", () => {
 
   test("synthetic frames: C4 grid, hourly C16 meta ending on the live edge, sightings with ids", () => {
     const { grid, meta, sightings } = syntheticFrames({ toMs: TO, frameCount: 24 });
-    expect(grid.shape).toMatchObject({ frameCount: 24, hsCols: 170, hsRows: 160, speciesCount: 4, envCols: 68, envRows: 64 });
+    expect(grid.shape).toMatchObject({ frameCount: 24, hsCols: 170, hsRows: 160, speciesCount: 1, envCols: 68, envRows: 64 });
     expect(meta).toMatchObject({ stepMinutes: 60, frameCount: 24, geometry: { west: -83.2, south: 24.3, hsCellDeg: 0.02, envCellDeg: 0.05 } });
     expect(frameForTime(TO, meta)).toBe(23);
     expect(frameForTime(meta.frame0UnixMs - 1, meta)).toBe(-1);
-    for (let s = 0; s < 4; s += 1) expect(Math.max(...grid.hotspot(0, s))).toBeGreaterThan(100);
+    expect(Math.max(...grid.hotspot(0, 0))).toBeGreaterThan(100);
     const lst = grid.lst(0);
     const sst = grid.sst(0);
     expect(lst.filter((v) => v !== ENV_MISSING).length).toBeGreaterThan(200);
@@ -62,13 +62,13 @@ describe("dev fixture", () => {
       hsCellDeg: 0.02,
       frame0UnixMs: Date.parse("2025-02-01T00:00:00Z"),
       stepMinutes: 60,
-      speciesCount: 4,
+      speciesCount: 1,
       envCols: 4,
       envRows: 2,
       envCellDeg: 0.05,
       hotspotScale: 0.01,
     };
-    const empty = { hotspot: new Array(200).fill(0), lst: new Array(8).fill(0), sst: new Array(8).fill(0) };
+    const empty = { hotspot: new Array(50).fill(0), lst: new Array(8).fill(0), sst: new Array(8).fill(0) };
     const bytes = encodeEvf(h, [
       { ...empty, sightings: [[42, -80.45, 25.25, 1, 0, 0]] },
       { ...empty, sightings: [] },

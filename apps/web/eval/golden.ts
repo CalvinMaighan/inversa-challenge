@@ -45,22 +45,10 @@ export const GOLDEN: Golden[] = [
     expect: { tools: ["hotspots", "explain_cell", "conditions"], phrases: [/heuristic/i, /lagging|missing|cloud/i], minCitations: 3 },
   },
   {
-    id: "iguana-cold-snap",
-    question: "Is tonight's cold snap a good iguana capture window around Homestead?",
-    quality: false,
-    expect: { tools: ["geocode", "conditions", "alerts", "hotspots"], phrases: [/cold/i, /heuristic/i], minCitations: 4 },
-  },
-  {
     id: "biscayne-dive-conditions",
     question: "What are dive conditions at Biscayne for lionfish removal right now?",
     quality: false,
     expect: { tools: ["geocode", "conditions", "set_view"], phrases: [/stale/i], minCitations: 3, view: true },
-  },
-  {
-    id: "tegu-sightings-homestead",
-    question: "Show me recent tegu sightings around Homestead.",
-    quality: false,
-    expect: { tools: ["geocode", "sightings", "set_view"], phrases: [/research/i], minCitations: 3, cites: { sighting: 2 }, view: true },
   },
   {
     id: "florida-bay-alerts",
@@ -87,17 +75,10 @@ export const GOLDEN: Golden[] = [
     expect: { tools: ["geocode", "hotspots", "conditions"], phrases: [/stale/i, /heuristic/i], minCitations: 3 },
   },
   {
-    id: "iguana-marathon-count",
-    question: "How many iguanas were reported around Marathon this week?",
-    quality: false,
-    expect: { tools: ["geocode", "sightings"], phrases: [/duplicate/i], minCitations: 2, cites: { sighting: 2 } },
-  },
-  {
     id: "homestead-species-counts",
     question: "What invasive animals were seen near Homestead this week?",
     quality: false,
-    // T44: species beyond the focus four, named with counts and a sighting citation per species.
-    expect: { tools: ["geocode", "species_counts"], phrases: [/brown anole/i, /tegu/i, /iguana/i, /cuban tree ?frog/i, /\b3\b/], minCitations: 3, cites: { sighting: 3 } },
+    expect: { tools: ["geocode", "species_counts"], phrases: [/python/i], minCitations: 1, cites: { sighting: 1 } },
   },
   {
     id: "flamingo-view",
@@ -133,12 +114,6 @@ export const GOLDEN: Golden[] = [
     question: "What is the land surface temperature at Shark Valley right now?",
     quality: true,
     expect: { tools: ["geocode", "conditions"], phrases: [/missing|cloud/i], minCitations: 2 },
-  },
-  {
-    id: "quality-id-conflict-tegu",
-    question: "Are there any tegu reports near Homestead I should double-check before sending a crew?",
-    quality: true,
-    expect: { tools: ["geocode", "sightings"], phrases: [/conflict/i, /casual/i], minCitations: 2, cites: { sighting: 2 } },
   },
 ];
 

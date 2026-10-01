@@ -41,7 +41,7 @@ const COLD_RUNS = Number(process.env.COLD_RUNS ?? 5);
 const LOAD_TIMEOUT_MS = 120_000;
 const AGENT_QUESTIONS = [
   "Which data feeds are stale or down right now?",
-  "Show me recent iguana sightings near Homestead.",
+  "Show me recent python sightings near Homestead.",
   "What are water levels like at Shark River Slough?",
   "Any NWS alerts in effect for the Keys right now?",
   "Where should python crews go tonight?",

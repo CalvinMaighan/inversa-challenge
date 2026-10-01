@@ -39,7 +39,7 @@ import { APP_DIR, buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 const AXE_PATH = Bun.resolveSync("axe-core/axe.min.js", APP_DIR);
 const MOBILE_DIR = path.join(REPO_DIR, "docs/evidence/mobile");
 const QUESTION =
-  "Fly the map to Coral Gables and show me the green iguana sightings there around 17:00 UTC on 1 February 2026, during the cold snap. Cite the sighting records.";
+  "Fly the map to Shark Valley and show me the Burmese python sightings there around 17:00 UTC on 1 February 2026, during the cold snap. Cite the sighting records.";
 const FOLLOW_UP = "Please move the map to those sightings with set_view (time 2026-02-01T17:00:00Z) and cite each sighting record you used.";
 const TURN_TIMEOUT_MS = 240_000;
 const LOAD_TIMEOUT_MS = 120_000;
@@ -56,7 +56,7 @@ const STATUS_BUTTON = "[data-testid=status-button]";
 const STATUS_POPOVER = "[data-testid=status-popover]";
 const THEME_BUTTON = "[data-testid=theme-button]";
 const THEME_POPOVER = "[data-testid=theme-popover]";
-const IGUANA_CHIP = '[data-species-chip="iguana"]';
+const PYTHON_CHIP = '[data-species-chip="python"]';
 const LAYERS_BUTTON = "[data-testid=layers-button]";
 const LEGEND = "[data-testid=layers-legend]";
 const HELP_BUTTON = "[data-testid=help-button]";
@@ -413,14 +413,14 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   mkdirSync(path.join(REPO_DIR, "docs/evidence"), { recursive: true });
   await page.screenshot({ path: path.join(REPO_DIR, "docs/evidence/a11y-scrubber-focus.png") });
 
-  // Species bar (T41): reach a chip, Enter hides that species, Enter again shows it.
-  const toChip = await tabTo(page, IGUANA_CHIP);
+  // Species chip (T41): reach it, Enter hides the species, Enter again shows it.
+  const toChip = await tabTo(page, PYTHON_CHIP);
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.iguana === false, undefined, { timeout: 10_000 });
+  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.python === false, undefined, { timeout: 10_000 });
   await page.keyboard.press("Enter");
-  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.iguana !== false, undefined, { timeout: 10_000 });
+  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.python !== false, undefined, { timeout: 10_000 });
   await recordStop(page);
-  log(`species chip after ${toChip} Tab: Enter hid and showed iguana`);
+  log(`species chip after ${toChip} Tab: Enter hid and showed python`);
 
   // About (ⓘ): Enter opens it with focus inside; More data opens the Layers legend; Tab reaches the legend; Esc
   // closes the popover and hands focus back to the button.

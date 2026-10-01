@@ -27,7 +27,7 @@ describe("prefer-catalog-constants", () => {
   test("allows other strings, capitalised labels and module specifiers", () => {
     expect(ids(run('const label = "Sightings"; const t = "python snake";'))).toEqual([]);
     // Species are config now (PLAN.md C-A3), not a shared constant.
-    expect(ids(run('const s = "tegu";'))).toEqual([]);
+    expect(ids(run('const s = "pterois";'))).toEqual([]);
     expect(ids(run('import x from "./hotspots";'))).toEqual([]);
   });
 

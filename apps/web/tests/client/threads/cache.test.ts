@@ -51,7 +51,7 @@ describe("ttlForQuery", () => {
 
   test("ttl follows the root table, unknown roots get the default", () => {
     expect(ttlForQuery("{ feeds { source } }")).toBe(ROOT_TTL_MS.feeds!);
-    expect(ttlForQuery("{ backtest(species: \"tegu\", days: 30) { hitRate } }")).toBe(ROOT_TTL_MS.backtest!);
+    expect(ttlForQuery("{ backtest(species: \"python\", days: 30) { hitRate } }")).toBe(ROOT_TTL_MS.backtest!);
     expect(ttlForQuery("{ board(id: \"b\") { id } }")).toBe(0);
     expect(ttlForQuery("{ opsSince(boardId: \"b\", seq: 0) { id } }")).toBe(0);
     expect(ttlForQuery("{ somethingNew { x } }")).toBe(DEFAULT_TTL_MS);

@@ -1,7 +1,7 @@
 import { get } from "@calvinjs/active-state";
 
 import { LAYERS, SELECTION, TIME, VIEW } from "client/state";
-import { shownSpecies, type LayerId, type LayersState, type SpeciesFilterId } from "client/state/layers";
+import { shownSpecies, type LayerId, type LayersState, type SpeciesId } from "client/state/layers";
 import type { SelectionState } from "client/state/selection";
 import type { TimeState } from "client/state/time";
 import type { ViewState } from "client/state/view";
@@ -16,7 +16,7 @@ export type HudState = {
   bbox: BBox;
   time: { at: string; live: boolean; playing: boolean; speed: number; from: string; to: string };
   layers: LayerId[];
-  species: SpeciesFilterId[];
+  species: SpeciesId[];
   selection: string | null;
   drawerOpen: boolean;
 };

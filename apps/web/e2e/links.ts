@@ -15,7 +15,7 @@ import { chromium, type Page } from "playwright";
 import { buildApi, buildWeb, startStack } from "./stack";
 
 const QUESTION =
-  "Show me the green iguana sightings around Miami between 30 January and 3 February 2026, during the cold snap, as a table. " +
+  "Show me the Burmese python sightings in the Everglades between 30 January and 3 February 2026, during the cold snap, as a table. " +
   "End your answer with a markdown link to https://www.inaturalist.org/ where readers can find more records.";
 const TURN_TIMEOUT_MS = 240_000;
 const DOPPLER = ["doppler", "run", "--project", "inversa", "--config", "dev", "--"];
@@ -115,7 +115,7 @@ async function main() {
     await ask(page, QUESTION);
     const rowLinks = page.locator("[data-chat-column] a[data-source-page]");
     if ((await rowLinks.count()) === 0) {
-      await ask(page, "Please call the sightings tool for green iguanas in Miami-Dade from 2026-01-30 to 2026-02-03 and show the table.");
+      await ask(page, "Please call the sightings tool for Burmese pythons in the Everglades from 2026-01-30 to 2026-02-03 and show the table.");
     }
     const rows = await rowLinks.count();
     if (rows === 0) fail("no sightings table row carries a source page link");

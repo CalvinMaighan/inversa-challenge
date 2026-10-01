@@ -30,10 +30,10 @@ describe("app config regions", () => {
     expect(cellCentre(region, "x")).toBeNull();
   });
 
-  test("app config: species ids and taxon ids follow config order", () => {
+  test("app config: one species id per species app, none for carp", () => {
     expect(speciesIds(getApp("lionfish"))).toEqual(["lionfish"]);
     expect(speciesIds(getApp("carp"))).toEqual([]);
-    expect(speciesIds(getApp("python"))).toEqual(["python", "tegu", "iguana", "lionfish"]);
+    expect(speciesIds(getApp("python"))).toEqual(["python"]);
   });
 
   test("app config: layers, copy and legend lookups", () => {

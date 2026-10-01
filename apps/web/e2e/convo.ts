@@ -23,7 +23,7 @@ import { chromium, type Page } from "playwright";
 import { buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 
 const QUESTION =
-  "Fly the map to Coral Gables and show me the green iguana sightings there around 17:00 UTC on 1 February 2026, during the cold snap. Cite the sighting records.";
+  "Fly the map to Shark Valley and show me the Burmese python sightings there around 17:00 UTC on 1 February 2026, during the cold snap. Cite the sighting records.";
 const FOLLOW_UP = "Please move the map to those sightings with set_view (time 2026-02-01T17:00:00Z) and cite each sighting record you used.";
 const TURN_TIMEOUT_MS = 240_000;
 const SHOT = path.join(REPO_DIR, "docs/evidence/convo.png");

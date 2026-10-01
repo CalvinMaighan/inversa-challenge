@@ -94,7 +94,7 @@ describe("ui tool validation", () => {
     expect(props("carp").species?.enum).toBeUndefined();
     expect(toggle("carp").description).not.toContain("python");
     expect(props("lionfish").species!.enum).toEqual(["lionfish"]);
-    expect(props("python").species!.enum).toEqual(["python", "tegu", "iguana", "lionfish"]);
+    expect(props("python").species!.enum).toEqual(["python"]);
     expect(validateUiToolCall("toggle_layer", { layer: "sightings", visible: true }, getApp("carp"))).toMatchObject({ ok: false });
     expect(validateUiToolCall("toggle_layer", { layer: "sightings", visible: true, species: "lionfish" }, getApp("lionfish"))).toMatchObject({ ok: true });
   });

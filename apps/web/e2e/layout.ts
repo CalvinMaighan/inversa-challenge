@@ -40,7 +40,7 @@ const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
 const LOAD_TIMEOUT_MS = 120_000;
 const STATIONS = "stations";
 const SIGHTINGS = "sightings";
-const IGUANA = "iguana";
+const PYTHON = "python";
 
 const log = (...a: unknown[]) => console.error("[e2e:layout]", ...a);
 
@@ -253,22 +253,22 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
   }, STATIONS);
   // A species switch: the layer stops drawing that species (the breakdown, per taxon id, still counts it, for the chips).
   const sightingsAll = (await layerStat(page, SIGHTINGS)) ?? fail("no sightings stats");
-  await page.click(`[data-testid="legend-species-${IGUANA}"]`);
-  await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === false, IGUANA);
+  await page.click(`[data-testid="legend-species-${PYTHON}"]`);
+  await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === false, PYTHON);
   await page.waitForFunction(
-    ([before, iguanas]) => {
+    ([before, pythons]) => {
       const l = window.__inversa?.globe()?.layers.find((x) => x.id === "sightings");
-      return !!l && l.count === before - iguanas;
+      return !!l && l.count === before - pythons;
     },
-    [sightingsAll.count, sightingsAll.breakdown?.["3"] ?? 0] as const,
+    [sightingsAll.count, sightingsAll.breakdown?.["1"] ?? 0] as const,
   );
-  if ((await page.getAttribute(`[data-species-chip="${IGUANA}"]`, "aria-pressed")) !== "false") fail("the species chip did not follow the legend's switch");
-  await page.click(`[data-testid="legend-species-${IGUANA}"]`);
-  await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === true, IGUANA);
+  if ((await page.getAttribute(`[data-species-chip="${PYTHON}"]`, "aria-pressed")) !== "false") fail("the species chip did not follow the legend's switch");
+  await page.click(`[data-testid="legend-species-${PYTHON}"]`);
+  await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === true, PYTHON);
   const after = await layersState(page);
-  if (!after.visible[STATIONS] || after.species[IGUANA] !== true) fail(`LAYERS after toggles ${JSON.stringify(after)}`);
+  if (!after.visible[STATIONS] || after.species[PYTHON] !== true) fail(`LAYERS after toggles ${JSON.stringify(after)}`);
   const sightingsStat = await layerStat(page, SIGHTINGS);
-  log(`legend toggles: stations on/off/on, iguana off/on; sightings ${JSON.stringify(sightingsStat?.breakdown)}`);
+  log(`legend toggles: stations on/off/on, python off/on; sightings ${JSON.stringify(sightingsStat?.breakdown)}`);
   result.legend = "ok";
   await page.keyboard.press("Escape");
   await legend.waitFor({ state: "detached" });

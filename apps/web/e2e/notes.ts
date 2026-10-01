@@ -247,12 +247,12 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   }
 
   // 1. A picks a spot and posts; B sees the list entry and the pin.
-  const textA = `Two tegus by the canal gate, heading west ${Math.random().toString(36).slice(2, 6)}`;
+  const textA = `Two pythons by the canal gate, heading west ${Math.random().toString(36).slice(2, 6)}`;
   await pickOnMap(a, HOMESTEAD);
   const place = await a.textContent('[data-testid="note-location"]');
   log(`A picked ${place}`);
   const seen = watchFor(b, '[data-testid="note-list"]', textA);
-  const t0 = await postNote(a, textA, "tegu");
+  const t0 = await postNote(a, textA, "python");
   const t1 = await seen;
   const rtcMs = t1 - t0;
   const [noteA] = await waitNotes(b, (n) => n.some((x) => x.text === textA), "note on B");
@@ -268,10 +268,10 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   log(`list and pin on B after ${rtcMs} ms; pick() answered ${picked}`);
 
   // 2. B posts too: two authors in the list. Screenshots.
-  const textB = `Iguana carcass on the levee after the cold night ${Math.random().toString(36).slice(2, 6)}`;
+  const textB = `Python shed skin on the levee after the cold night ${Math.random().toString(36).slice(2, 6)}`;
   await pickOnMap(b, ROYAL_PALM);
   const seenB = watchFor(a, '[data-testid="note-list"]', textB);
-  await postNote(b, textB, "iguana");
+  await postNote(b, textB, "python");
   await seenB;
   const [noteB] = await waitNotes(a, (n) => n.some((x) => x.text === textB), "B's note on A");
   await waitPins(a, 2, "A");

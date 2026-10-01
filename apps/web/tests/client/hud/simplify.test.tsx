@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { selectPython } from "@/tests/client/python-app";
+import { PYTHON, selectPython } from "@/tests/client/python-app";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@emotion/react";
@@ -98,7 +98,7 @@ const sighting: Evidence = {
     id: "48213",
     source: "inat",
     extId: "335508189",
-    taxon: { id: "3", scientificName: "Iguana iguana", commonName: "Green iguana" },
+    taxon: { id: "1", scientificName: "Python bivittatus", commonName: "Burmese Python", focus: true, inatTaxonId: "238252", pageUrl: "https://www.inaturalist.org/taxa/238252" },
     lat: 25.7231,
     lon: -80.2695,
     observedAt: "2026-09-30T19:00:00.000Z",
@@ -117,38 +117,14 @@ const sighting: Evidence = {
   degraded: [],
 };
 
-/** A non-focus sighting as the T44 API returns it: the taxon carries its card. */
-const anole: Evidence = {
-  ...sighting,
-  id: "sighting:18598",
-  record: {
-    ...sighting.record,
-    id: "18598",
-    taxon: {
-      id: "17",
-      scientificName: "Anolis sagrei",
-      commonName: "Brown Anole",
-      focus: false,
-      inatTaxonId: "116461",
-      iconicGroup: "Reptilia",
-      ancestorIds: ["48460", "1", "2", "355675", "26036", "26172", "85552", "116461"],
-      summary: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
-      photoUrl: "/v1/media/taxon/17",
-      pageUrl: "https://www.inaturalist.org/taxa/116461",
-    },
-    photoUrl: null,
-    mediaUrl: null,
-  },
-};
-
 describe("plain evidence summary", () => {
   test("plain evidence summary: what, where in place words, when, how sure, and the photo", () => {
     const s = plainSummary("sighting", sighting.record, NOW)!;
-    expect(s.line).toBe("Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community");
+    expect(s.line).toBe("Burmese python spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community");
     expect(s.photo).toBe("/v1/media/48213");
     expect(s.line).not.toMatch(/\d+\.\d{3}/); // never raw coordinates
     expect(plainSummary("sighting", { ...sighting.record, mediaUrl: null, quality: "needs_id", source: "gbif" }, NOW)!.line).toBe(
-      "Green iguana spotted near Coral Gables · 2 h ago · needs ID (not yet confirmed)",
+      "Burmese python spotted near Coral Gables · 2 h ago · needs ID (not yet confirmed)",
     );
     expect(plainSummary("fetch", { id: "9004", source: "inat", fetchedAt: "2026-09-30T20:50:00Z", rowsIn: 12, error: null }, NOW)!.line).toBe("Data check of iNaturalist · 10 min ago · 12 records received");
     expect(plainSummary("backtest", { species: "python" }, NOW)).toBeNull();
@@ -169,7 +145,7 @@ describe("plain evidence summary", () => {
 
   test("plain evidence summary: the card leads with it; the raw record and payload sit in a collapsed Details for experts", () => {
     const lead = html(<Summary kind="sighting" evidence={sighting} atMs={NOW} />);
-    expect(lead).toContain("<h3>Green iguana spotted near Coral Gables</h3>");
+    expect(lead).toContain("<h3>Burmese python spotted near Coral Gables</h3>");
     expect(lead).toContain('src="/v1/media/48213"');
     expect(lead).not.toContain("48213<"); // no id in the lead
     const expert = html(<ExpertDetails id={sighting.id} evidence={sighting} />).replace(/<style[\s\S]*?<\/style>/g, "");
@@ -182,40 +158,36 @@ describe("plain evidence summary", () => {
     expect(expert).toContain("raw/inat/2026/09/30/0412.json.gz");
   });
 
-  test("plain evidence summary: every species gets a card, with the Latin name, its status, an About line, the taxon photo and its iNaturalist page", () => {
-    const s = plainSummary("sighting", anole.record, NOW)!;
-    expect(s.title).toBe("Brown anole spotted near Coral Gables");
+  test("plain evidence summary: the species card gives the Latin name, its status, the app's About line, its icon and colour, and its iNaturalist page", () => {
+    const s = plainSummary("sighting", sighting.record, NOW)!;
+    expect(s.title).toBe("Burmese python spotted near Coral Gables");
     expect(s.species).toEqual({
-      name: "Brown anole",
-      scientificName: "Anolis sagrei",
-      status: "introduced lizard",
-      category: "lizards",
-      about: "The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere.",
-      moreUrl: "https://www.inaturalist.org/taxa/116461",
-      moreLabel: "More about Brown anole on iNaturalist",
+      name: "Burmese python",
+      scientificName: "Python bivittatus",
+      status: "introduced species",
+      about: "Giant constrictor eating Everglades wildlife.",
+      icon: "python",
+      color: PYTHON.taxa[0]!.color,
+      moreUrl: "https://www.inaturalist.org/taxa/238252",
+      moreLabel: "More about Burmese python on iNaturalist",
     });
-    // No observation photo: the species photo stands in. The observation's own photo wins when there is one.
-    expect(s.photo).toBe("/v1/media/taxon/17");
-    expect(plainSummary("sighting", { ...anole.record, mediaUrl: "/v1/media/18598" }, NOW)!.photo).toBe("/v1/media/18598");
-    // A focus species keeps Inversa's one-liner as its About line.
-    expect(plainSummary("sighting", sighting.record, NOW)!.species).toMatchObject({ name: "Green iguana", scientificName: "Iguana iguana", category: "lizards", status: "introduced lizard", about: "Tree-climbing lizard that burrows into seawalls and canal banks." });
-    // Never a placeholder title: a taxon with no common name reads by its Latin name; an unsafe page URL is dropped.
-    expect(speciesCard({ id: "9", scientificName: "Agama picticauda", commonName: "", pageUrl: "https://evil.example/taxa/1" })).toMatchObject({ name: "Agama picticauda", scientificName: null, status: "introduced species", category: "other", moreUrl: null });
-    expect(speciesCard({ id: "9", scientificName: "Osteopilus septentrionalis", commonName: "Cuban Treefrog", iconicGroup: "Amphibia", ancestorIds: ["48460", "1", "20979"] })).toMatchObject({ status: "introduced frog or toad", category: "frogs" });
+    // No observation photo: none (there is no species photo).
+    expect(plainSummary("sighting", { ...sighting.record, mediaUrl: null }, NOW)!.photo).toBeNull();
+    // A record of a taxon that is not the app's (a stale citation) still names itself, never a placeholder; an
+    // unsafe page URL is dropped.
+    expect(speciesCard({ id: "9", scientificName: "Python molurus", commonName: "", pageUrl: "https://evil.example/taxa/1" })).toMatchObject({ name: "Python molurus", scientificName: null, about: null, moreUrl: null });
+    expect(speciesCard({ id: "9", scientificName: "Python sebae", commonName: "African Rock Python" })).toMatchObject({ name: "African rock python", scientificName: "Python sebae" });
     expect(speciesCard({ id: "9" }).name).toBe("Unnamed species");
-    expect(speciesCard({ id: "9" }).name).not.toContain("Other");
 
-    const lead = html(<Summary kind="sighting" evidence={anole} atMs={NOW} />);
-    expect(lead).toContain("<h3>Brown anole spotted near Coral Gables</h3>");
-    expect(lead).toContain('<i lang="la">Anolis sagrei</i>');
-    expect(lead).toContain("introduced lizard");
-    // The card carries its kind's icon in the category colour (T44).
-    expect(lead).toMatch(/data-category-icon="lizards"/);
-    expect(lead).toContain('src="/v1/media/taxon/17"');
-    expect(lead).toMatch(/data-testid="species-about"[^>]*>The brown anole/);
-    expect(lead).toMatch(/<a[^>]*href="https:\/\/www\.inaturalist\.org\/taxa\/116461"[^>]*target="_blank"[^>]*rel="[^"]*noopener[^"]*"/);
-    expect(textOf(lead)).toContain("More about Brown anole on iNaturalist");
-    expect(textOf(lead)).not.toContain("Other introduced species");
+    const lead = html(<Summary kind="sighting" evidence={sighting} atMs={NOW} />);
+    expect(lead).toContain("<h3>Burmese python spotted near Coral Gables</h3>");
+    expect(lead).toContain('<i lang="la">Python bivittatus</i>');
+    expect(lead).toContain("introduced species");
+    // The card carries the app's icon in the species colour.
+    expect(lead).toMatch(/data-app-icon="python"/);
+    expect(lead).toMatch(/data-testid="species-about"[^>]*>Giant constrictor/);
+    expect(lead).toMatch(/<a[^>]*href="https:\/\/www\.inaturalist\.org\/taxa\/238252"[^>]*target="_blank"[^>]*rel="[^"]*noopener[^"]*"/);
+    expect(textOf(lead)).toContain("More about Burmese python on iNaturalist");
   });
 });
 
@@ -238,7 +210,7 @@ describe("schema tolerant evidence", () => {
     expect(ev.sourcePageUrl).toBeNull();
     expect(ev.degraded).toEqual(["sourcePageUrl"]);
     // The card renders, and the expert details say what to do.
-    expect(html(<Summary kind="sighting" evidence={ev} atMs={NOW} />)).toContain("<h3>Green iguana spotted near Coral Gables</h3>");
+    expect(html(<Summary kind="sighting" evidence={ev} atMs={NOW} />)).toContain("<h3>Burmese python spotted near Coral Gables</h3>");
     const expert = textOf(html(<ExpertDetails id={ev.id} evidence={ev} />));
     expect(expert).toContain("Restart the API to see links");
     // The next load leaves the field out from the start: one request, no error.

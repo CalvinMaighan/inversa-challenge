@@ -2,42 +2,19 @@ import { describe, expect, test } from "bun:test";
 import { get, init, set } from "@calvinjs/active-state";
 
 import { state } from "client/state";
-import {
-  isSpeciesFiltered,
-  LAYERS,
-  setLayerSpeciesPin,
-  setLayerVisible,
-  setSightingHours,
-  setSpeciesVisible,
-  setTaxonVisible,
-  showAllSpecies,
-  showOnlySpecies,
-  showOnlyTaxon,
-  shownSpecies,
-  sightingHoursOf,
-  layersFor,
-  speciesFilterIds,
-  taxonKey,
-  taxonOverrides,
-  type LayersState,
-} from "client/state/layers";
+import { isSpeciesFiltered, LAYERS, setLayerVisible, setSpeciesVisible, shownSpecies, sightingHoursOf, layersFor, type LayersState } from "client/state/layers";
 import { SIGHTING_WINDOW_HOURS, SIGHTING_WINDOW_OPTIONS } from "shared/frames";
-import { ANIMAL_CATEGORIES, CATEGORY_IDS } from "shared/species-categories";
 import { applyApp } from "client/state/app-switch";
 import { getApp, speciesIds } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 init(state);
-// These tests run in the python app (four focus species, every layer); the carp default is checked below.
+// These tests run in the python app (one focus species, every layer); the carp default is checked below.
 applyApp("python");
 const PYTHON = getApp("python");
 const SPECIES_IDS = speciesIds(PYTHON);
-const SPECIES_FILTER_IDS = speciesFilterIds(PYTHON);
 /** Python's LAYERS preset. */
 const PY = layersFor(PYTHON);
-
-/** The default shown keys: the focus four and every animal category. */
-const DEFAULT_SHOWN = [...SPECIES_IDS, ...ANIMAL_CATEGORIES];
 
 const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
 const now = () => get<LayersState>(LAYERS)!;
@@ -46,13 +23,12 @@ describe("LAYERS per app", () => {
   test("active app: LAYERS starts as carp's (the default app): gauges and alerts on, no sightings, no species", () => {
     const carp = LAYERS.defaults;
     expect(LAYER_IDS.filter((id) => carp.visible[id])).toEqual(["stations", "alerts", "missions", "peers", "notes"]);
-    expect(Object.keys(carp.species)).toEqual([...CATEGORY_IDS]);
-    expect(speciesFilterIds(getApp("carp"))).toEqual([...CATEGORY_IDS]);
+    expect(carp.species).toEqual({});
   });
 
-  test("lionfish lists one focus species and no land-surface layer", () => {
+  test("lionfish lists its one species and no land-surface layer; its window is 30 days", () => {
     const lionfish = layersFor(getApp("lionfish"));
-    expect(speciesFilterIds(getApp("lionfish"))).toEqual(["lionfish", ...CATEGORY_IDS]);
+    expect(lionfish.species).toEqual({ lionfish: true });
     expect(lionfish.visible.lst).toBe(false);
     expect(lionfish.visible.sightings).toBe(true);
     expect(lionfish.sightingHours).toBe(720);
@@ -60,100 +36,44 @@ describe("LAYERS per app", () => {
 });
 
 describe("LAYERS", () => {
-  test("has a visibility entry for every layer id and a filter entry for every focus species plus the thirteen categories", () => {
+  test("has a visibility entry for every layer id and a filter entry for the app's one species", () => {
     expect(Object.keys(PY.visible)).toEqual([...LAYER_IDS]);
-    expect(CATEGORY_IDS).toEqual(["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"]);
-    expect(SPECIES_FILTER_IDS).toEqual([...SPECIES_IDS, ...CATEGORY_IDS]);
-    expect(Object.keys(PY.species)).toEqual([...SPECIES_FILTER_IDS]);
+    expect(SPECIES_IDS).toEqual(["python"]);
+    expect(PY.species).toEqual({ python: true });
   });
 
-  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; team marks and field notes on; every animal on, plants and insects off; 7-day window", () => {
+  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; team marks and field notes on; the python shown; 7-day window", () => {
     const on = LAYER_IDS.filter((id) => PY.visible[id]);
     expect(on).toEqual([SIGHTINGS, MISSIONS, PEERS, NOTES]);
     for (const id of [STATIONS, ALERTS, HOTSPOTS, LST, SST]) expect(PY.visible[id]).toBe(false);
-    expect(SPECIES_IDS.every((id) => PY.species[id])).toBe(true);
-    expect(ANIMAL_CATEGORIES.every((id) => PY.species[id])).toBe(true);
-    expect(PY.species.plants).toBe(false);
-    expect(PY.species.insects).toBe(false);
-    expect(PY.species.spiders).toBe(false);
-    expect(PY.species.other).toBe(false);
     expect(PY.sightingHours).toBe(SIGHTING_WINDOW_HOURS);
     expect(SIGHTING_WINDOW_HOURS).toBe(168);
     expect(SIGHTING_WINDOW_OPTIONS).toEqual([48, 168, 720]);
     expect(isSpeciesFiltered(PY.species)).toBe(false);
+    expect(shownSpecies(PY.species)).toEqual(["python"]);
   });
 
   test("setLayerVisible and setSpeciesVisible change one entry and leave the rest", () => {
     setLayerVisible(STATIONS, true);
-    setSpeciesVisible(SPECIES_IDS[1], false);
-    setSpeciesVisible("plants", true);
+    setSpeciesVisible("python", false);
     expect(now().visible[STATIONS]).toBe(true);
     expect(now().visible[SIGHTINGS]).toBe(true);
-    expect(now().species[SPECIES_IDS[1]]).toBe(false);
-    expect(now().species.plants).toBe(true);
-    expect(now().species[SPECIES_IDS[0]]).toBe(true);
-    expect(isSpeciesFiltered(now().species)).toBe(true);
-    // Defaults are never mutated in place.
-    expect(PY.visible[STATIONS]).toBe(false);
-    expect(PY.species.plants).toBe(false);
-    set(LAYERS, PY);
-  });
-
-  test("taxon overrides: one chip off on its own, 'only this one', and All drops the overrides", () => {
-    setTaxonVisible(116461, false);
-    expect(now().species[taxonKey(116461)]).toBe(false);
-    expect(taxonOverrides(now().species)).toEqual([[116461, false]]);
-    expect(isSpeciesFiltered(now().species)).toBe(true);
-    setTaxonVisible(116461, null);
-    expect(taxonKey(116461) in now().species).toBe(false);
-    expect(isSpeciesFiltered(now().species)).toBe(false);
-
-    setSpeciesVisible("plants", true);
-    showOnlyTaxon(24382);
-    // "Only this one" switches every key off (plants included) and keeps one override on.
+    expect(now().species.python).toBe(false);
     expect(shownSpecies(now().species)).toEqual([]);
-    expect(taxonOverrides(now().species)).toEqual([[24382, true]]);
-    showAllSpecies();
-    expect(shownSpecies(now().species)).toEqual(DEFAULT_SHOWN);
-    expect(taxonOverrides(now().species)).toEqual([]);
-    set(LAYERS, PY);
-  });
-
-  test("showOnlySpecies keeps one species (and the layer pins); showAllSpecies brings every animal back and keeps the plant switch", () => {
-    setLayerSpeciesPin(HOTSPOTS, "python");
-    showOnlySpecies("iguana");
-    expect(shownSpecies(now().species)).toEqual(["iguana"]);
-    expect(now().species[HOTSPOTS]).toBe("python");
-    showOnlySpecies("plants");
-    expect(shownSpecies(now().species)).toEqual(["plants"]);
-    showAllSpecies();
-    expect(shownSpecies(now().species)).toEqual([...DEFAULT_SHOWN, "plants"]);
-    expect(now().species[HOTSPOTS]).toBe("python");
-    // A filter saved before the categories existed reads as the defaults for them.
-    expect(shownSpecies({ python: true, tegu: true, iguana: true, lionfish: true })).toEqual(DEFAULT_SHOWN);
-    set(LAYERS, PY);
-  });
-
-  test("setLayerSpeciesPin pins one layer to one species and unpins with null", () => {
-    const iguana = SPECIES_IDS[2];
-    setLayerSpeciesPin(HOTSPOTS, iguana);
-    expect(now().species[HOTSPOTS]).toBe(iguana);
-    // The species booleans are untouched.
-    expect(SPECIES_IDS.every((id) => now().species[id])).toBe(true);
-    setLayerSpeciesPin(HOTSPOTS, null);
-    expect(HOTSPOTS in now().species).toBe(false);
-    expect(PY.species[HOTSPOTS]).toBeUndefined();
+    expect(isSpeciesFiltered(now().species)).toBe(true);
+    setSpeciesVisible("python", true);
+    expect(isSpeciesFiltered(now().species)).toBe(false);
+    // Defaults are never mutated in place; a missing key reads as shown.
+    expect(PY.visible[STATIONS]).toBe(false);
+    expect(PY.species.python).toBe(true);
+    expect(shownSpecies({})).toEqual(["python"]);
     set(LAYERS, PY);
   });
 
   test("the sightings window is one of 2, 7 or 30 days; anything else reads as the default", () => {
-    setSightingHours(48);
-    expect(now().sightingHours).toBe(48);
-    expect(sightingHoursOf(now())).toBe(48);
-    setSightingHours(720);
-    expect(sightingHoursOf(now())).toBe(720);
+    expect(sightingHoursOf({ sightingHours: 48 })).toBe(48);
+    expect(sightingHoursOf({ sightingHours: 720 })).toBe(720);
     expect(sightingHoursOf({ sightingHours: 99 as never })).toBe(SIGHTING_WINDOW_HOURS);
     expect(sightingHoursOf(undefined)).toBe(SIGHTING_WINDOW_HOURS);
-    set(LAYERS, PY);
   });
 });

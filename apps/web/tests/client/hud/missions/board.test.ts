@@ -40,7 +40,7 @@ import type { Op } from "client/threads/crdt/types";
 
 selectPython();
 
-const [PYTHON, TEGU] = SPECIES_IDS;
+const [PYTHON] = SPECIES_IDS;
 const AT = Date.parse("2026-09-30T12:00:00Z");
 const HOTSPOT = `hotspot:${PYTHON}:120:80:${AT}`;
 
@@ -131,7 +131,7 @@ describe("op builders", () => {
 
 describe("field note ops (T43)", () => {
   const fields = (over: Partial<Parameters<typeof createFieldNoteOps>[1]> = {}) => ({
-    text: "Two tegus by the canal gate",
+    text: "Two pythons by the canal gate",
     lat: 25.4687,
     lon: -80.4776,
     createdBy: "node-a",
@@ -149,13 +149,13 @@ describe("field note ops (T43)", () => {
       expect(o).toMatchObject({ entity: "note", entityId: id, nodeId: "node-a", boardId: "everglades" });
     }
     expect(new Set(ops.map((o) => o.id)).size).toBe(ops.length);
-    const tagged = createFieldNoteOps(f, fields({ species: TEGU, sightingId: "77" }));
+    const tagged = createFieldNoteOps(f, fields({ species: PYTHON, sightingId: "77" }));
     expect(tagged.ops.map((o) => o.field)).toContain("species");
     expect(tagged.ops.map((o) => o.field)).toContain("sightingId");
     const view = viewBoard(applyOps(createState("everglades"), [...ops, ...tagged.ops]));
     expect(view.notes).toHaveLength(2);
-    expect(toFieldNote(view.notes.find((n) => n.id === id)!)).toEqual({ id, text: "Two tegus by the canal gate", lat: 25.4687, lon: -80.4776, species: null, sightingId: null, createdBy: "node-a", callsign: "Ranger-A", createdAt: "2026-09-30T12:00:00.000Z" });
-    expect(toFieldNote(view.notes.find((n) => n.id === tagged.id)!)).toMatchObject({ species: TEGU, sightingId: "77" });
+    expect(toFieldNote(view.notes.find((n) => n.id === id)!)).toEqual({ id, text: "Two pythons by the canal gate", lat: 25.4687, lon: -80.4776, species: null, sightingId: null, createdBy: "node-a", callsign: "Ranger-A", createdAt: "2026-09-30T12:00:00.000Z" });
+    expect(toFieldNote(view.notes.find((n) => n.id === tagged.id)!)).toMatchObject({ species: PYTHON, sightingId: "77" });
   });
 
   test("validation: empty text, the 500-character cap, and a missing place are refused before any op exists", () => {
@@ -175,10 +175,10 @@ describe("field note ops (T43)", () => {
     const f = factory();
     const { id, ops } = createFieldNoteOps(f, fields());
     f.t += 10;
-    const edit = editFieldNoteOp(f, id, "Three tegus by the canal gate");
+    const edit = editFieldNoteOp(f, id, "Three pythons by the canal gate");
     const stale: Op = { ...edit, id: "stale-op", hlc: "1600000000000:0:node-z", value: "older text" };
     const view = viewBoard(applyOps(createState("everglades"), [...ops, edit, stale]));
-    expect(toFieldNote(view.notes[0]!)!.text).toBe("Three tegus by the canal gate");
+    expect(toFieldNote(view.notes[0]!)!.text).toBe("Three pythons by the canal gate");
     const long = viewBoard(applyOps(createState("everglades"), [...ops, { ...edit, id: "long-op", value: "y".repeat(900) }]));
     expect(toFieldNote(long.notes[0]!)!.text).toHaveLength(MAX_NOTE_CHARS);
   });
@@ -234,17 +234,15 @@ describe("removal counters", () => {
     expect(merged.removals).toEqual({ m: 7 + 2 });
   });
 
-  test("totals per species and overall over live missions only", () => {
+  test("totals per species and overall over live missions only; a mission of a species the app does not track counts as its species", () => {
     const missions = [
       toMission({ id: "1", fields: { title: "a", species: PYTHON, cell: "1:1" } })!,
-      toMission({ id: "2", fields: { title: "b", species: TEGU, lon: -81, lat: 25.5 } })!,
+      toMission({ id: "2", fields: { title: "b", species: "boa", lon: -81, lat: 25.5 } })!,
       toMission({ id: "3", fields: { title: "c", species: PYTHON, lon: -81.2, lat: 25.1 } })!,
     ];
     const t = totals(missions, { "1": 4, "2": 2, "3": 1, ghost: 99 });
     expect(t.overall).toBe(7);
-    expect(t.bySpecies[PYTHON]).toBe(5);
-    expect(t.bySpecies[TEGU]).toBe(2);
-    expect(t.bySpecies[SPECIES_IDS[2]]).toBe(0);
+    expect(t.bySpecies).toEqual({ [PYTHON]: 7 });
   });
 });
 
@@ -259,7 +257,7 @@ describe("board model", () => {
     const state = applyOps(createState("everglades"), [...first.ops, ...second.ops, removalOp(f, first.id, 4), messageOp(f, "hi")]);
     const model = boardModel(viewBoard(state));
     expect(model.missions.map((m) => m.title)).toEqual(["second", "first"]);
-    expect(model.totals).toEqual({ overall: 4, bySpecies: { python: 4, tegu: 0, iguana: 0, lionfish: 0 } });
+    expect(model.totals).toEqual({ overall: 4, bySpecies: { python: 4 } });
     expect(model.messages.map((m) => m.body)).toEqual(["hi"]);
     expect(model.notes).toEqual([]);
   });
@@ -305,7 +303,7 @@ describe("board model", () => {
     const doomed = note("Carcass on the levee", 25.45);
     const committed = applyOps(createState("everglades"), [...kept.ops, ...doomed.ops]);
     f.t += 10;
-    const fresh = note("Tegu burrow by the canal", 25.3);
+    const fresh = note("Python track by the canal", 25.3);
     const pending = [
       editFieldNoteOp(f, kept.id, "Boat ramp open again"),
       deleteFieldNoteOp(f, doomed.id),
@@ -314,6 +312,6 @@ describe("board model", () => {
     ];
     const optimistic = boardModel(overlayOps(viewBoard(committed), pending));
     expect(optimistic).toEqual(boardModel(viewBoard(applyOps(committed, pending))));
-    expect(optimistic.fieldNotes.map((n) => n.text).sort()).toEqual(["Boat ramp open again", "Tegu burrow by the canal"]);
+    expect(optimistic.fieldNotes.map((n) => n.text).sort()).toEqual(["Boat ramp open again", "Python track by the canal"]);
   });
 });

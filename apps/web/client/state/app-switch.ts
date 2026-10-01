@@ -13,13 +13,12 @@ import { NOTES } from "./notes";
 import { PEERS } from "./peers";
 import { MESSAGES } from "./messages";
 import { SELECTION } from "./selection";
-import { TAXA } from "./taxa";
 import { VIEW, viewFor, type ViewState } from "./view";
 
 /**
  * Make `id` the active app (PLAN.md C-A5) and reset everything that belongs to the previous one: the map preset
  * (VIEW, with `seq` bumped so the globe flies there), the app's layers and species filter, the team board
- * (`<app>:main`, C-A6), feed envelopes, taxa, selection, the agent thread and highlights. TIME is kept: the
+ * (`<app>:main`, C-A6), feed envelopes, selection, the agent thread and highlights. TIME is kept: the
  * moment the viewer is looking at does not depend on the app. A no-op when `id` is already active.
  *
  * URL and localStorage are the caller's (`client/hud/appselect/switch.ts`); this touches the store only, so tests
@@ -36,7 +35,6 @@ export function applyApp(id: AppId): boolean {
   set(MESSAGES, MESSAGES.defaults);
   set(PEERS, PEERS.defaults);
   set<FeedState[]>(FEEDS, []);
-  set(TAXA, TAXA.defaults);
   set(SELECTION, SELECTION.defaults);
   set(CARP, CARP.defaults);
   set(AGENT_CHAT, AGENT_CHAT.defaults);

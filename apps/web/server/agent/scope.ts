@@ -8,8 +8,6 @@
 import { APP_IDS, loadApps, type AppConfig } from "@/shared/apps";
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-/** The python app: one focus taxon, the rest context (focusGuardPattern). */
-const PYTHON_APP = APP_IDS[2];
 
 const cache = new WeakMap<AppConfig, RegExp | null>();
 
@@ -37,28 +35,9 @@ export function foreignSpeciesPattern(app: AppConfig): RegExp | null {
 /** The refusal to answer with, or null when the question passes the guard. */
 export function scopeGuard(app: AppConfig, question: string): string | null {
   const pattern = foreignSpeciesPattern(app);
-  const hit = pattern?.exec(question) ?? focusGuardPattern(app)?.exec(question);
+  const hit = pattern?.exec(question);
   if (hit) return `${app.agent.refusal} "${hit[0]}" is outside what this app answers for.`;
   return topicGuard(app, question);
-}
-
-const focusCache = new WeakMap<AppConfig, RegExp | null>();
-
-/**
- * Python-scoped block (gates/leaf-AG2.md G6): Everglades Ops answers for its first taxon only; the other taxa it
- * lists (tegu, iguana, lionfish) are shown on the map as context but refused as questions, by name. Other apps
- * answer for every taxon they list.
- */
-function focusGuardPattern(app: AppConfig): RegExp | null {
-  if (app.id !== PYTHON_APP) return null;
-  const cached = focusCache.get(app);
-  if (cached !== undefined) return cached;
-  const [focus, ...context] = app.taxa;
-  const own = new Set([focus!.id, focus!.name, focus!.scientificName, ...(focus!.aliases ?? [])].map((s) => s.toLowerCase()));
-  const names = context.flatMap((t) => [t.id, t.name, t.scientificName, ...(t.aliases ?? [])]).map((s) => s.toLowerCase()).filter((n) => !own.has(n) && n.length >= 4);
-  const pattern = names.length ? new RegExp(`\\b(${[...new Set(names)].sort((a, b) => b.length - a.length).map(escape).join("|")})(es|s)?\\b`, "i") : null;
-  focusCache.set(app, pattern);
-  return pattern;
 }
 
 /**

@@ -8,13 +8,10 @@ import { statusColor } from "client/globe/layers/missions";
 import { STATION_SOURCES, stationColor } from "client/globe/layers/stations";
 import type { LayerStats } from "client/globe/layers/types";
 import { HATCH_RGBA, HEAT_STOPS, LST_RANGE_C, SST_RANGE_C, TEMP_STOPS, type RampStop } from "client/globe/ramp";
-import { categoryShown } from "client/globe/species";
 import { activeApp } from "client/state/app";
-import { sightingHoursOf, type LayerId, type LayersState, type SpeciesFilterId, type SpeciesId } from "client/state/layers";
-import { isFocusTaxon, taxonCategory, type TaxonInfo } from "client/state/taxa";
+import { sightingHoursOf, type LayerId, type LayersState, type SpeciesId } from "client/state/layers";
 import { windowLabel } from "shared/frames";
 import { hasLayer, speciesIds, type AppConfig } from "shared/apps";
-import { CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, type CategoryId } from "shared/species-categories";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { NETWORK_LABELS } from "../tooltip/model";
@@ -28,12 +25,12 @@ export type LegendSwatch = {
   label: string;
   color: string;
   shape: SwatchShape;
-  /** The category icon drawn when `shape` is "icon" (T44). */
-  icon?: CategoryId;
+  /** The app icon id drawn when `shape` is "icon". */
+  icon?: string;
   /** What the layer draws of this kind right now; null when the layer does not count it separately. */
   count: number | null;
   /** Species sub-rows toggle through `setSpeciesVisible`. */
-  species?: SpeciesFilterId;
+  species?: SpeciesId;
   /** Species filter state, for species sub-rows. */
   on?: boolean;
 };
@@ -52,8 +49,6 @@ export type LegendRow = {
   unit: string;
   swatches: LegendSwatch[];
   ramp?: LegendRamp;
-  /** Hotspots can be pinned to one species. */
-  pin?: SpeciesId | null;
   /** Layer error from its last fetch, shown under the row. */
   error: string | null;
 };
@@ -77,61 +72,32 @@ const part = (s: LayerStats | null, key: string): number | null => (s?.breakdown
 const SEVERITIES = ["Extreme", "Severe", "Moderate", "Minor"] as const;
 
 /**
- * Sightings per category from the layer's per-taxon breakdown (keys are taxon ids), using the TAXA store for
- * each taxon's category; a taxon not loaded yet counts as `other`. Null before the globe reported.
- */
-export function categoryCounts(breakdown: Readonly<Record<string, number>> | undefined, taxa: Readonly<Record<string, TaxonInfo>>): Record<CategoryId, number> | null {
-  if (!breakdown) return null;
-  const out = Object.fromEntries(CATEGORY_IDS.map((id) => [id, 0])) as Record<CategoryId, number>;
-  for (const [key, n] of Object.entries(breakdown)) {
-    const id = Number(key);
-    if (!Number.isInteger(id) || isFocusTaxon(id)) continue;
-    out[taxonCategory(taxa, id) ?? "other"] += n;
-  }
-  return out;
-}
-
-/**
  * Every legend row of the active app's layers (C-A3 `layers[]`: carp has no sightings or hotspots row), in globe
  * draw order top-down as a reader scans the map: points first, rasters last.
  */
-export function legendRows(layers: LayersState, stats: readonly LayerStats[] | null, taxa: Readonly<Record<string, TaxonInfo>> = {}, app: AppConfig = activeApp()): LegendRow[] {
+export function legendRows(layers: LayersState, stats: readonly LayerStats[] | null, app: AppConfig = activeApp()): LegendRow[] {
   const row = (layer: LayerId, rest: Omit<LegendRow, "layer" | "visible" | "count" | "error">): LegendRow => {
     const s = statsFor(stats, layer);
     return { layer, visible: layers.visible[layer] !== false, count: s ? s.count : null, error: s?.error ?? null, ...rest };
   };
   const sightings = statsFor(stats, SIGHTINGS);
   const stationStats = statsFor(stats, STATIONS);
-  const pinned = layers.species[HOTSPOTS];
-  const categories = categoryCounts(sightings?.breakdown, taxa);
 
   return [
     row(SIGHTINGS, {
       label: "Sightings",
-      note: `One marker per sighting in the last ${windowLabel(sightingHoursOf(layers))}, its kind's icon in its colour, fading with age. White ring: selected. Red ring: the IDs conflict.`,
+      note: `One marker per sighting in the last ${windowLabel(sightingHoursOf(layers))}, the species icon in its colour, fading with age. White ring: selected. Red ring: the IDs conflict.`,
       unit: "drawn",
-      swatches: [
-        ...app.taxa.map((taxon, i) => ({
-          key: speciesIds(app)[i]!,
-          label: taxon.name,
-          color: taxon.color,
-          shape: "icon" as const,
-          icon: taxon.category ?? ("other" as const),
-          count: part(sightings, String(i + 1)),
-          species: speciesIds(app)[i]!,
-          on: layers.species[speciesIds(app)[i]!] !== false,
-        })),
-        ...CATEGORY_IDS.map((id) => ({
-          key: id,
-          label: id === "other" ? "Other kinds" : CATEGORY_LABELS[id],
-          color: CATEGORY_COLORS[id],
-          shape: "icon" as const,
-          icon: id,
-          count: categories ? categories[id] : null,
-          species: id as SpeciesFilterId,
-          on: categoryShown(layers.species, id),
-        })),
-      ],
+      swatches: app.taxa.map((taxon, i) => ({
+        key: speciesIds(app)[i]!,
+        label: taxon.name,
+        color: taxon.color,
+        shape: "icon" as const,
+        icon: app.icon,
+        count: part(sightings, String(i + 1)),
+        species: speciesIds(app)[i]!,
+        on: layers.species[speciesIds(app)[i]!] !== false,
+      })),
     }),
     row(STATIONS, {
       label: "Stations",
@@ -151,7 +117,6 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
       unit: "cells",
       swatches: [],
       ramp: { css: rampGradient(HEAT_STOPS), min: "low", max: "high", caption: "heuristic score" },
-      pin: typeof pinned === "string" ? pinned : null,
     }),
     row(NOTES, {
       label: "Field notes",

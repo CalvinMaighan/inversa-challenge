@@ -4,19 +4,16 @@ import { useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import ExternalLink from "client/external-link";
-import { colorOfTaxon } from "client/globe/species";
 import { SELECTION } from "client/state/selection";
-import { isFocusTaxon } from "client/state/taxa";
 import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
-import { CATEGORY_COLORS, type CategoryId } from "shared/species-categories";
 
 import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
 import NoteCard, { AddNoteButton } from "../notes/NoteCard";
-import CategoryIcon from "../species/CategoryIcon";
+import AppIcon from "../appselect/AppIcon";
 import {
   evidenceBadges,
   evidenceLocation,
@@ -34,13 +31,6 @@ import JsonTree from "./JsonTree";
 import { plainSummary } from "./summary";
 import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
-
-/** The card's icon colour: the focus colour of a focus species, else the category's label colour. */
-function speciesCardColor(record: Record<string, unknown>, category: CategoryId): string {
-  const taxon = record.taxon as { id?: unknown } | undefined;
-  const id = Number(taxon?.id);
-  return isFocusTaxon(id) ? colorOfTaxon(id) : CATEGORY_COLORS[category];
-}
 
 const Section = styled.section`
   margin-bottom: var(--gap-l);
@@ -347,7 +337,7 @@ const Lead = styled.section`
     i {
       color: var(--text);
     }
-    /* The kind's icon sits in the line, before the Latin name. */
+    /* The species icon sits in the line, before the Latin name. */
     svg {
       display: inline-block;
       vertical-align: -3px;
@@ -413,7 +403,7 @@ export function ExpertDetails({ id, evidence }: { id: string | null; evidence: E
 
 /**
  * The plain-language lead: what, where, when, how sure, and the photo when there is one. A sighting adds its
- * species card (T44): the Latin name and status, one About line, and the iNaturalist page in a new tab.
+ * species card: the Latin name and status, one About line, and the iNaturalist page in a new tab.
  */
 export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evidence; atMs: number }) {
   const s = plainSummary(kind, evidence.record, atMs);
@@ -424,7 +414,7 @@ export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evid
       <h3>{s.title}</h3>
       {sp ? (
         <p className="species" data-testid="species-status">
-          <CategoryIcon category={sp.category} color={speciesCardColor(evidence.record, sp.category)} size={16} />{" "}
+          <AppIcon icon={sp.icon} color={sp.color} size={16} />{" "}
           {sp.scientificName ? <i lang="la">{sp.scientificName}</i> : null}
           {sp.scientificName ? " · " : null}
           {sp.status}

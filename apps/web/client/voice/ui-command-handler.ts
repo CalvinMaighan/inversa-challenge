@@ -101,7 +101,7 @@ function apply(command: UiCommand, nowMs: number): boolean {
     case "toggle_layer": {
       const { layer, visible, species } = command.args;
       if (species) {
-        // "Hide tegus" filters the species; it does not hide the whole layer. Showing one turns the layer on.
+        // "Hide pythons" filters the species; it does not hide the whole layer. Showing one turns the layer on.
         setSpeciesVisible(species, visible);
         if (visible) setLayerVisible(layer, true);
       } else {

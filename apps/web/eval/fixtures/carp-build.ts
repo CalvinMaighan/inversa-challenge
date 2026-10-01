@@ -289,7 +289,6 @@ function build() {
     { source: "nws-forecast", mode: "POLL", state: "NOMINAL", newestObservedAt: "2026-10-01T06:50:35Z", lastFetchAt: "2026-10-01T06:55:00Z", lagSeconds: 565, note: "gridpoint forecast hourly; newestObservedAt is the office updateTime", lastFetchRunId: "c-nwsf-4416" },
     { source: "iem", mode: "POLL", state: "NOMINAL", newestObservedAt: "2026-09-30T15:32:00Z", lastFetchAt: "2026-10-01T06:02:00Z", lagSeconds: Math.round((NOW_MS - Date.parse("2026-09-30T15:32:00Z")) / 1000), note: "IEM HML archive (Iowa State), daily backfill of past NWS river forecast issuances; archive rows are known from their issuance time", lastFetchRunId: "c-iem-4401" },
     { source: "nwws", mode: "PUSH", state: "DOWN", newestObservedAt: null, lastFetchAt: null, lagSeconds: null, note: "disabled: NWWS-OI application not submitted; alerts arrive by poll", lastFetchRunId: null },
-    { source: "web", mode: "PUSH", state: "NOMINAL", newestObservedAt: "2026-10-01T06:58:00Z", lastFetchAt: "2026-10-01T06:58:00Z", lagSeconds: 120, note: "signed ingest hook", lastFetchRunId: "c-web-4419" },
   ];
 
   const board = {

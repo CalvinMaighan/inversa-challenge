@@ -135,17 +135,18 @@ describe("ui command handler", () => {
     expect(applyUiCommand({ name: "toggle_layer", args: { layer: "lst", visible: true } }, NOW)).toBe(true);
     expect(layers().visible.lst).toBe(true);
 
-    // Hiding a species filters it without hiding the layer.
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false, species: "tegu" } }, NOW)).toBe(true);
-    expect(layers().species.tegu).toBe(false);
+    // Hiding the species filters it without hiding the layer; another app's species is refused.
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false, species: "lionfish" } }, NOW)).toBe(false);
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false, species: "python" } }, NOW)).toBe(true);
+    expect(layers().species.python).toBe(false);
     expect(layers().visible.sightings).toBe(true);
 
     // Showing a species on a hidden layer turns the layer on.
     applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false } }, NOW);
     expect(layers().visible.sightings).toBe(false);
-    applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: true, species: "tegu" } }, NOW);
+    applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: true, species: "python" } }, NOW);
     expect(layers().visible.sightings).toBe(true);
-    expect(layers().species.tegu).toBe(true);
+    expect(layers().species.python).toBe(true);
   });
 
   test("select and open_evidence drive SELECTION", () => {
@@ -158,13 +159,14 @@ describe("ui command handler", () => {
   test("hud state reflects the keys", () => {
     applyUiCommand({ name: "fly_to", args: { place: "Key West" } }, NOW);
     applyUiCommand({ name: "select", args: { evidenceId: "hotspot:python:10:20:1759190400000" } }, NOW);
-    applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: false, species: "iguana" } }, NOW);
+    applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: false, species: "python" } }, NOW);
     const hud = readHudState();
     expect(hud.camera.place).toBe("Key West");
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
     expect(hud.layers).toEqual(["sightings", "missions", "peers", "notes"]);
-    expect(hud.species).toEqual(["python", "tegu", "lionfish", "snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"]);
+    // "Hide pythons on hotspots" switches the species off: nothing is shown.
+    expect(hud.species).toEqual([]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");
   });
 

@@ -25,10 +25,10 @@ import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_
 import FixtureGlobe from "./FixtureGlobe";
 
 const STEP_MS = FIXTURE_STEP_MINUTES * 60_000;
-/** The fixture is python data: the C4 grid and the four focus species of the python app, in its EVF order. */
+/** The fixture is python data: the C4 grid and the focus species of the python app, in its EVF order. */
 const FIXTURE_APP: AppId = APP_IDS[2];
 const FIXTURE_SPECIES = speciesIds(getApp(FIXTURE_APP));
-const [PYTHON, , IGUANA] = FIXTURE_SPECIES;
+const [PYTHON] = FIXTURE_SPECIES;
 
 const Message = styled.p`
   position: absolute;
@@ -215,7 +215,7 @@ export default function HudFixture() {
             text: "Python activity peaks tonight near L-67.",
             citations: [
               { id: sightingId, kind: "sighting", label: "python 48213" },
-              { id: `hotspot:${IGUANA}:295:150:${from}`, kind: "hotspot", label: "iguana Miami" },
+              { id: `hotspot:${PYTHON}:243:146:${from}`, kind: "hotspot", label: "python Shark Valley" },
             ],
             status: "done",
             at: iso(to),
@@ -249,8 +249,8 @@ export default function HudFixture() {
                 <small>planned · python · 20:00–02:00 EDT</small>
               </li>
               <li>
-                Iguana cold-stun collection, Coral Gables
-                <small>in progress · iguana · 3 removals</small>
+                Python survey, Shark Valley
+                <small>in progress · python · 3 removals</small>
               </li>
             </MissionList>
           }

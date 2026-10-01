@@ -14,7 +14,6 @@ import { MISSIONS, type MissionsState } from "client/state/missions";
 import { NOTES, setNotePick, type NotesState } from "client/state/notes";
 import { PEERS, type Peer } from "client/state/peers";
 import { parseEvidenceId, SELECTION, type SelectionState } from "client/state/selection";
-import { TAXA, type TaxaState } from "client/state/taxa";
 import { TIME, type TimeState } from "client/state/time";
 import { VIEW } from "client/state/view";
 import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
@@ -119,7 +118,6 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     missions: () => ({ ...MISSIONS.defaults, ...get<MissionsState>(MISSIONS) }),
     peers: () => get<Peer[]>(PEERS) ?? [],
     notes: () => get<NotesState>(NOTES)?.pins ?? [],
-    taxa: () => get<TaxaState>(TAXA) ?? TAXA.defaults,
     gql: (query, variables, signal) => gqlRequest(query, variables, signal),
   };
 
@@ -182,7 +180,6 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   disposers.push(subscribe(SELECTION, scheduleRefresh));
   disposers.push(subscribe(PEERS, scheduleRefresh));
   disposers.push(subscribe(NOTES, scheduleRefresh));
-  disposers.push(subscribe(TAXA, scheduleRefresh));
 
   // Grid version: Atomics.waitAsync where it exists; elsewhere a slow poll (the ring fallback polls every ms).
   let watchToken = 0;

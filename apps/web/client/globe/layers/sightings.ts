@@ -1,25 +1,22 @@
 /**
- * Sightings: one icon billboard per record, the icon of the species' category (snake, lizard, bird, …) tinted in
- * its label colour, fading with age over the trailing window (LAYERS.sightingHours: 2, 7 or 30 days, T44)
+ * Sightings: one icon billboard per record of the app's species, the app's icon (a python is a snake) tinted in
+ * the species colour, fading with age over the trailing window (LAYERS.sightingHours, the app's default window)
  * ending at the time cursor. A second BillboardCollection draws a ring behind the selected marker (white) and
  * behind markers whose IDs conflict (red).
  *
- * Images come from `client/globe/species-icons.ts`: one canvas per category and colour, registered with Cesium
- * under a stable id (`Billboard.setImage(id, image)`), so the texture atlas holds about a dozen regions however
- * many markers there are, and nothing is drawn per marker.
+ * Images come from `client/globe/marker-icons.ts`: one canvas per icon and colour, registered with Cesium under a
+ * stable id (`Billboard.setImage(id, image)`), so the texture atlas holds one region however many markers there
+ * are, and nothing is drawn per marker.
  *
  * Records are the decoded EVF2 sighting sections of the window's frames (C16 FrameSightings). Each carries its
  * `sightings.id`, so every billboard is stamped `sighting:<id>` for `pick()` with no request of its own. The
- * filter hides focus species by key, other taxa by their category or their own `t<id>` override; categories come
- * from the TAXA store through `ctx.taxa()`, and a taxon not loaded yet draws with the generic icon.
+ * species filter hides the focus species by key; a record of any other taxon is not drawn.
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 import type { BillboardCollection } from "cesium";
 
 import { sightingHoursOf } from "client/state/layers";
-import { taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
-import type { CategoryId } from "shared/species-categories";
 import { isSurveyApp } from "client/lionfish/model";
 import { activeApp } from "client/state/app";
 import { LAYER_IDS } from "shared/voice/ui-tools";
@@ -27,8 +24,8 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 import { cesium } from "../cesium";
 import { sightingEvidenceId } from "../evidence";
 import { stepMsOf } from "../frame-index";
-import { colorOfTaxon, enabledSpecies, speciesIndexOfTaxon, taxonShown } from "../species";
-import { markerImage, markerImageCount, ringImage } from "../species-icons";
+import { markerImage, markerImageCount, ringImage } from "../marker-icons";
+import { colorOfTaxon, recordShown } from "../species";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
 
 const [SIGHTINGS] = LAYER_IDS;
@@ -43,9 +40,9 @@ const CONFLICT_RING = "#ff3b3b";
 const SELECTED_RING = "#ffffff";
 /** QUALITY_CODES indices drawn at full strength (research grade, curated); needs_id and casual draw dimmer. */
 const STRONG_QUALITY: ReadonlySet<number> = new Set([0, 3]);
-/** Marker scale: the focus species a little larger than the rest, the selected one larger still. */
-const FOCUS_SCALE = 1;
-const OTHER_SCALE = 0.85;
+/** Marker scale; the selected one larger. A conflict ring sits a little inside the marker. */
+const MARKER_SCALE = 1;
+const RING_SCALE = 0.85;
 const SELECTED_SCALE = 1.35;
 
 /** A record with its age in ms at the cursor. */
@@ -93,28 +90,21 @@ export function distinctRecords(records: readonly TrailRecord[]): TrailRecord[] 
   return records.filter((r) => !(r.flags & SIGHTING_FLAG.duplicate));
 }
 
-/**
- * Records the layer draws: duplicates hidden, the species filter applied (focus species by key, other taxa by
- * their category or their own override, `taxonShown`).
- */
-export function visibleRecords(records: readonly TrailRecord[], filter: Readonly<Record<string, unknown>> | undefined, byId: Readonly<Record<string, TaxonInfo>> = {}): TrailRecord[] {
-  const on = new Set(enabledSpecies(filter, SIGHTINGS));
-  return distinctRecords(records).filter((r) => {
-    const s = speciesIndexOfTaxon(r.taxon);
-    return s < 0 ? taxonShown(filter, r.taxon, byId, SIGHTINGS) : on.has(s);
-  });
+/** Records the layer draws: duplicates hidden, records of the focus species only, the species filter applied. */
+export function visibleRecords(records: readonly TrailRecord[], filter: Readonly<Record<string, unknown>> | undefined): TrailRecord[] {
+  return distinctRecords(records).filter((r) => recordShown(filter, r.taxon));
 }
 
 /**
- * Records per taxon id (as a string key), for the species bar, the chips' counts and the legend. The four
- * focus species are always present (so a chip reads 0, not "—"). Counted before the species filter, so a
- * hidden species still shows what turning it back on would draw.
+ * Records of the focus species per taxon id (as a string key), for the species chip's count and the legend. The
+ * focus species is always present (so the chip reads 0, not "—"). Counted before the species filter, so a hidden
+ * species still shows what turning it back on would draw.
  */
 export function sightingBreakdown(records: readonly Pick<SightingRecord, "taxon">[]): Record<string, number> {
   const out: Record<string, number> = Object.fromEntries(activeApp().taxa.map((_, i) => [String(i + 1), 0]));
   for (const r of records) {
     const key = String(r.taxon);
-    out[key] = (out[key] ?? 0) + 1;
+    if (key in out) out[key]! += 1;
   }
   return out;
 }
@@ -145,7 +135,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     drawnById = new Map();
     stats.breakdown = sightingBreakdown([]);
     stats.count = 0;
-    stats.marker = { kind: "billboard", categories: 0, dots: 0, images: markerImageCount() };
+    stats.marker = { kind: "billboard", dots: 0, images: markerImageCount() };
     ctx.requestRender();
   };
 
@@ -159,12 +149,11 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     const layers = ctx.layers();
     const filter = layers.species;
     const hours = sightingHoursOf(layers);
-    const taxa = ctx.taxa?.() ?? { byId: {}, version: 0 };
     const selected = ctx.selection?.() ?? null;
     const filterKey = Object.entries(filter)
       .map(([k, v]) => `${k}=${String(v)}`)
       .join(",");
-    const key = `${frame}|${hours}|${filterKey}|${selected}|${grid?.version() ?? -1}|${ctx.revision()}|${taxa.version}`;
+    const key = `${frame}|${hours}|${filterKey}|${selected}|${grid?.version() ?? -1}|${ctx.revision()}`;
     if (key === drawnKey) return;
     drawnKey = key;
 
@@ -176,28 +165,26 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
       windowIndex = sightingWindowIndex((f) => ctx.sightings(f), meta.frameCount, stepMsOf(meta));
     }
     const trail = distinctRecords(windowRecords(windowIndex!, frame, hours));
-    const visible = visibleRecords(trail, filter, taxa.byId);
+    const visible = visibleRecords(trail, filter);
     const trailLength = trailMs(hours);
+    const icon = activeApp().icon;
     icons.removeAll();
     rings.removeAll();
     // The selected marker goes in last, so it draws over its neighbours.
     const selectedIndex = selected ? visible.findIndex((r) => sightingEvidenceId(r.id) === selected) : -1;
     const ordered = selectedIndex < 0 ? visible : [...visible.slice(0, selectedIndex), ...visible.slice(selectedIndex + 1), visible[selectedIndex]!];
-    const categories = new Set<CategoryId>();
     for (const r of ordered) {
       const position = Cartesian3.fromDegrees(r.lon, r.lat);
       const alpha = trailAlpha(r.ageMs, trailLength) * (STRONG_QUALITY.has(r.quality) ? 1 : 0.8);
-      const s = speciesIndexOfTaxon(r.taxon);
-      const category = taxonCategory(taxa.byId, r.taxon) ?? "other";
-      categories.add(category);
       const conflict = (r.flags & SIGHTING_FLAG.conflict) !== 0;
       const id = sightingEvidenceId(r.id);
       const isSelected = id === selected;
-      const image = markerImage(category, colorOfTaxon(r.taxon, taxa.byId));
+      // visibleRecords keeps focus taxa only, so the colour is always there.
+      const image = markerImage(icon, colorOfTaxon(r.taxon)!);
       const marker = icons.add({
         id,
         position,
-        scale: isSelected ? SELECTED_SCALE : s >= 0 ? FOCUS_SCALE : OTHER_SCALE,
+        scale: isSelected ? SELECTED_SCALE : MARKER_SCALE,
         color: Color.WHITE.withAlpha(isSelected ? 1 : alpha),
         verticalOrigin: VerticalOrigin.CENTER,
         disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
@@ -208,7 +195,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
         const halo = rings.add({
           id,
           position,
-          scale: isSelected ? SELECTED_SCALE : OTHER_SCALE,
+          scale: isSelected ? SELECTED_SCALE : RING_SCALE,
           color: Color.WHITE.withAlpha(isSelected ? 1 : Math.max(alpha, 0.6)),
           verticalOrigin: VerticalOrigin.CENTER,
           disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
@@ -221,7 +208,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     stats.count = visible.length;
     stats.frame = frame;
     stats.updatedAt = ctx.now();
-    stats.marker = { kind: "billboard", categories: categories.size, dots: 0, images: markerImageCount() };
+    stats.marker = { kind: "billboard", dots: 0, images: markerImageCount() };
     ctx.requestRender();
   };
 

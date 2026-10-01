@@ -30,7 +30,7 @@ const textOf = (markup: string) =>
     .replace(/\s+/g, " ")
     .trim();
 /** Words of the other apps (python, carp) that must never show in Lionfish Watch. */
-const FORBIDDEN = /\b(python|pythons|burmese|tegu|tegus|iguana|iguanas|everglades|river|rivers|flood|flooding|nwps|carp|levee|gauge height)\b/i;
+const FORBIDDEN = /\b(python|pythons|burmese|everglades|river|rivers|flood|flooding|nwps|carp|levee|gauge height)\b/i;
 /** A single risk number in any form. */
 const RISK_PERCENT = /(risk|probability|chance)[^.\n]{0,40}%|%[^.\n]{0,40}(risk|probability|chance)/i;
 const noop = () => {};

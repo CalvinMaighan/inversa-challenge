@@ -14,7 +14,6 @@ import { createStationsLayer, latestPerStation, stationBreakdown, stationBucket 
 import { createLstLayer } from "client/globe/layers/env-raster";
 import type { GlobeLayer } from "client/globe/layers/types";
 import { MISSIONS } from "client/state/missions";
-import type { TaxonInfo } from "client/state/taxa";
 import { ENV_MISSING, SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
@@ -30,8 +29,6 @@ afterAll(() => restore());
 
 const STEP = 60 * 60_000;
 const T0 = Date.parse("2026-09-30T00:00:00Z");
-
-const taxon = (id: number, category: TaxonInfo["category"]): TaxonInfo => ({ id, scientificName: `Taxon ${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: null, category, summary: null, photoUrl: null, pageUrl: null });
 
 const rec = (over: Partial<SightingRecord> = {}): SightingRecord => ({ id: 1, lon: -80.9, lat: 25.6, taxon: 1, quality: 0, flags: 0, ...over });
 
@@ -77,9 +74,8 @@ describe("hotspot heatmap", () => {
     const ctx = fakeContext({ meta: fakeMeta(T0, 3) });
     const viewer = fakeViewer();
     const grid = smallGrid(3);
-    // Cell (col 20, row 30) of the 0.02° grid: python 40 in frame 1, iguana 200 in frame 1.
-    grid.hotspot(1, 0)[30 * 170 + 20] = 40;
-    grid.hotspot(1, 2)[30 * 170 + 20] = 200;
+    // Cell (col 20, row 30) of the 0.02° grid: python 200 in frame 1.
+    grid.hotspot(1, 0)[30 * 170 + 20] = 200;
     const layer = createHotspotLayer(ctx);
     layer.init(viewer);
     layer.enable();
@@ -97,12 +93,13 @@ describe("hotspot heatmap", () => {
     const lon = -83.2 + 20.5 * 0.02;
     const lat = 24.3 + 30.5 * 0.02;
     // The C14 cell is on the 0.01° grid; the id carries frame 1's start.
-    expect(layer.pickAt!(lon, lat)).toBe(`hotspot:iguana:${Math.floor(20.5 * 2)}:${Math.floor(30.5 * 2)}:${T0 + STEP}`);
-    // With iguana filtered out, python's 40 (above the display floor) is what is under the cursor.
-    ctx.state.layers = { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, iguana: false } };
-    layer.update(1, grid);
-    expect(layer.pickAt!(lon, lat)).toMatch(/^hotspot:python:/);
+    expect(layer.pickAt!(lon, lat)).toBe(`hotspot:python:${Math.floor(20.5 * 2)}:${Math.floor(30.5 * 2)}:${T0 + STEP}`);
     expect(layer.pickAt!(-90, 10)).toBeNull();
+    // With python filtered out, nothing is painted or picked.
+    ctx.state.layers = { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, python: false } };
+    layer.update(1, grid);
+    expect(layer.stats().count).toBe(0);
+    expect(layer.pickAt!(lon, lat)).toBeNull();
     layer.disable();
     expect(surface.show).toBe(false);
     expect(layer.pickAt!(lon, lat)).toBeNull();
@@ -111,14 +108,14 @@ describe("hotspot heatmap", () => {
   test("a sub-grid is placed and picked by the FrameMeta geometry", () => {
     const meta = { ...fakeMeta(T0, 1), geometry: { west: -80.5, south: 25.2, hsCellDeg: 0.02, envCellDeg: 0.05 } };
     const ctx = fakeContext({ meta });
-    const grid = allocFrameGrid({ frameCount: 1, hsCols: 10, hsRows: 5, speciesCount: 4, envCols: 4, envRows: 2, hotspotScale: 0.01 });
-    grid.hotspot(0, 3)[1 * 10 + 4] = 180;
+    const grid = allocFrameGrid({ frameCount: 1, hsCols: 10, hsRows: 5, speciesCount: 1, envCols: 4, envRows: 2, hotspotScale: 0.01 });
+    grid.hotspot(0, 0)[1 * 10 + 4] = 180;
     const layer = createHotspotLayer(ctx);
     layer.init(fakeViewer());
     layer.enable();
     layer.update(0, grid);
     expect(layer.stats().count).toBe(1);
-    expect(layer.pickAt!(-80.41, 25.23)).toBe(`hotspot:lionfish:279:93:${T0}`);
+    expect(layer.pickAt!(-80.41, 25.23)).toBe(`hotspot:python:279:93:${T0}`);
     expect(layer.pickAt!(-80.43, 25.23)).toBeNull();
   });
 
@@ -131,7 +128,7 @@ describe("hotspot heatmap", () => {
     layer.update(-1, null);
     expect(viewer.added.length).toBe(0);
     const grid = smallGrid(2);
-    grid.hotspot(0, 1)[0] = 255;
+    grid.hotspot(0, 0)[0] = 255;
     layer.update(0, grid);
     expect(layer.stats().count).toBe(1);
     layer.update(-1, grid);
@@ -175,7 +172,7 @@ describe("sightings", () => {
     expect(SIGHTING_WINDOW_HOURS).toBe(168);
     expect(SIGHTING_TRAIL_MS).toBe(168 * STEP);
     expect(trailMs(48)).toBe(48 * STEP);
-    const one = (f: number) => [rec({ id: f, taxon: (f % 4) + 1 })];
+    const one = (f: number) => [rec({ id: f })];
     const short = windowRecords(sightingWindowIndex(one, 10, STEP), 5, 48);
     expect(short.map((r) => r.id)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(short.map((r) => r.ageMs)).toEqual([5, 4, 3, 2, 1, 0].map((n) => n * STEP));
@@ -206,27 +203,21 @@ describe("sightings", () => {
     expect(trailAlpha(trailMs(48), trailMs(48))).toBeCloseTo(0.3);
   });
 
-  test("duplicates hidden, species filter applied, other taxa follow their category or their own override", () => {
-    const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ taxon: 3 }), rec({ taxon: 42 }), rec({ taxon: 43 })].map((r) => ({ ...r, ageMs: 0 }));
-    const taxa = { "42": taxon(42, "lizards"), "43": taxon(43, "plants") };
+  test("duplicates hidden, the species filter applied, records of any other taxon never drawn", () => {
+    const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ id: 2 }), rec({ taxon: 3 }), rec({ taxon: 42 })].map((r) => ({ ...r, ageMs: 0 }));
     const only = (keys: Record<string, unknown>) => ({ ...PYTHON_LAYERS.species, ...keys });
-    // Python on, lizards on (default): the anole draws, the plant does not.
-    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false }), taxa).map((r) => r.taxon)).toEqual([1, 42]);
-    // Lizards off: only the focus python.
-    expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false, lizards: false }), taxa).map((r) => r.taxon)).toEqual([1]);
-    // Plants on: the plant draws too; a taxon override hides the anole alone.
-    expect(visibleRecords(records, only({ python: false, tegu: false, lionfish: false, plants: true, t42: false }), taxa).map((r) => r.taxon)).toEqual([3, 43]);
-    // 'Only this one': every key off, one override on.
-    expect(visibleRecords(records, only({ python: false, tegu: false, iguana: false, lionfish: false, lizards: false, t43: true }), taxa).map((r) => r.taxon)).toEqual([43]);
-    // A taxon not loaded yet draws (with the generic icon).
-    expect(visibleRecords(records, only({}), {}).map((r) => r.taxon)).toEqual([1, 3, 42, 43]);
+    expect(visibleRecords(records, only({})).map((r) => [r.id, r.taxon])).toEqual([
+      [1, 1],
+      [2, 1],
+    ]);
+    expect(visibleRecords(records, undefined).length).toBe(2);
+    expect(visibleRecords(records, only({ python: false }))).toEqual([]);
   });
 
   test("draws the frame's records as icon billboards from one atlas (no point dots), each carrying sighting:<id>", () => {
     const ctx = fakeContext({
       meta: fakeMeta(T0, 4),
-      sightings: (f) => (f === 3 ? [rec({ id: 4_000_123 }), rec({ id: 77, taxon: 99 })] : f === 2 ? [rec({ id: 5, taxon: 4 })] : []),
-      taxa: { byId: { "99": taxon(99, "birds") }, version: 1 },
+      sightings: (f) => (f === 3 ? [rec({ id: 4_000_123 }), rec({ id: 77, taxon: 99 })] : f === 2 ? [rec({ id: 5 })] : []),
     });
     const viewer = fakeViewer();
     const layer = createSightingsLayer(ctx);
@@ -235,21 +226,19 @@ describe("sightings", () => {
     layer.update(3, smallGrid(4));
     const [rings, icons] = viewer.added as [BillboardCollection, BillboardCollection];
     expect(viewer.added.length).toBe(2);
-    expect(icons.length).toBe(3); // frame 2 (older, drawn first) then frame 3, both in the window
+    expect(icons.length).toBe(2); // frame 2 (older, drawn first) then frame 3; taxon 99 is not the app's
     expect(rings.length).toBe(0); // nothing selected, no conflict
-    expect([0, 1, 2].map((i) => icons.get(i).id)).toEqual(["sighting:5", "sighting:4000123", "sighting:77"]);
-    // One image per category and colour: fish (lionfish), snake (python), bird; never one per marker.
-    expect(new Set([0, 1, 2].map((i) => icons.get(i).image)).size).toBe(3);
-    expect(layer.stats()).toMatchObject({ count: 3, frame: 3, error: null, marker: { kind: "billboard", categories: 3, dots: 0 } });
-    expect(layer.stats().marker!.images).toBeGreaterThanOrEqual(3);
+    expect([0, 1].map((i) => icons.get(i).id)).toEqual(["sighting:5", "sighting:4000123"]);
+    // One image for the app's icon in the species colour, never one per marker.
+    expect(new Set([0, 1].map((i) => icons.get(i).image)).size).toBe(1);
+    expect(layer.stats()).toMatchObject({ count: 2, frame: 3, error: null, marker: { kind: "billboard", dots: 0 } });
+    expect(layer.stats().marker!.images).toBeGreaterThanOrEqual(1);
   });
 
-  test("the selected sighting draws last and larger with a ring; the breakdown counts every species while the filter hides some", () => {
+  test("the selected sighting draws last and larger with a ring; the breakdown counts the species while the filter hides it", () => {
     const base = fakeContext({
       meta: fakeMeta(T0, 4),
-      sightings: (f) => (f === 3 ? [rec({ id: 1, taxon: 3 }), rec({ id: 2, taxon: 1 }), rec({ id: 3, taxon: 77 })] : []),
-      layers: { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, python: false, birds: false } },
-      taxa: { byId: { "77": taxon(77, "birds") }, version: 1 },
+      sightings: (f) => (f === 3 ? [rec({ id: 1 }), rec({ id: 2 }), rec({ id: 3, taxon: 77 })] : []),
     });
     const ctx = { ...base, selection: () => "sighting:1" };
     const viewer = fakeViewer();
@@ -258,13 +247,18 @@ describe("sightings", () => {
     layer.enable();
     layer.update(3, smallGrid(4));
     const [rings, icons] = viewer.added as [BillboardCollection, BillboardCollection];
-    expect(icons.length).toBe(1);
-    expect(icons.get(0).id).toBe("sighting:1");
-    expect(icons.get(0).scale).toBeGreaterThan(1);
+    expect(icons.length).toBe(2);
+    expect(icons.get(1).id).toBe("sighting:1");
+    expect(icons.get(1).scale).toBeGreaterThan(icons.get(0).scale);
     expect(rings.length).toBe(1);
     expect(rings.get(0).id).toBe("sighting:1");
-    // The breakdown is per taxon id (the four focus ids always present), counted before the filter.
-    expect(layer.stats()).toMatchObject({ count: 1, breakdown: { "1": 1, "2": 0, "3": 1, "4": 0, "77": 1 }, marker: { categories: 1, dots: 0 } });
+    // The breakdown is per focus taxon id (always present), and leaves other taxa out.
+    expect(layer.stats()).toMatchObject({ count: 2, breakdown: { "1": 2 }, marker: { dots: 0 } });
+    expect(layer.stats().breakdown).not.toHaveProperty("77");
+    // Hidden by the filter: nothing drawn, the breakdown still counts what turning it back on would draw.
+    base.state.layers = { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, python: false } };
+    layer.update(3, smallGrid(4));
+    expect(layer.stats()).toMatchObject({ count: 0, breakdown: { "1": 2 } });
   });
 
   test("no frame (outside the grid) or no meta clears the dots; no network is used", () => {
@@ -472,7 +466,7 @@ describe("notes", () => {
   });
 
   test("one outlined pin per note carrying note:<id>; describe() gives the author and the text as written", () => {
-    const ctx = fakeContext({ notes: [pin("a"), pin("b", { color: "#f2c14e", text: "<img src=x onerror=alert(1)> two tegus" })] });
+    const ctx = fakeContext({ notes: [pin("a"), pin("b", { color: "#f2c14e", text: "<img src=x onerror=alert(1)> two pythons" })] });
     const viewer = fakeViewer();
     const layer: GlobeLayer = createNotesLayer(ctx);
     layer.init(viewer);
@@ -484,7 +478,7 @@ describe("notes", () => {
     // One icon per author colour, shared by every pin of that colour.
     expect(marks.get(0).image).not.toBe(marks.get(1).image);
     expect(layer.stats().count).toBe(2);
-    expect(layer.describe?.("note:b")).toEqual({ kind: "note", id: "b", callsign: "Ranger-b", text: "<img src=x onerror=alert(1)> two tegus", lon: -80.48, lat: 25.47 });
+    expect(layer.describe?.("note:b")).toEqual({ kind: "note", id: "b", callsign: "Ranger-b", text: "<img src=x onerror=alert(1)> two pythons", lon: -80.48, lat: 25.47 });
     expect(layer.describe?.("note:zzz")).toBeNull();
     expect(layer.describe?.("sighting:1")).toBeNull();
 

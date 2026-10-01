@@ -9,8 +9,6 @@
  */
 import { z } from "zod";
 
-import { CATEGORY_IDS } from "../species-categories";
-
 /** App ids (C-A1). Order is the selector's order; the default is carp. */
 export const APP_IDS = ["carp", "lionfish", "python"] as const;
 export type AppId = (typeof APP_IDS)[number];
@@ -48,7 +46,6 @@ export const FEED_SOURCES = {
   openmeteo: "poll",
   goes19: "push",
   nwws: "push",
-  web: "push",
   crw: "poll",
   nwps: "poll",
   "openmeteo-marine": "poll",
@@ -61,7 +58,7 @@ export type FeedSource = keyof typeof FEED_SOURCES;
 const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];
 
 /** Activity/access rule sets (`api/src/hotspot/rules.rs`). */
-export const RULE_SETS = ["python", "tegu", "iguana", "lionfish"] as const;
+export const RULE_SETS = ["python", "lionfish"] as const;
 
 /** IANA zones `copy.timezone` may name (`TIMEZONES` in config.rs; the schema's enum). */
 export const TIMEZONES = [
@@ -118,15 +115,12 @@ const taxon = z.strictObject({
   line: text.optional(),
   /** Other names people use for it ("burmese python", "pterois"), matched lower case. */
   aliases: z.array(text).optional(),
-  /** Category icon for the focus species (`shared/species-categories.ts`). */
-  category: z.enum(CATEGORY_IDS).optional(),
   scientificName: text,
   inatTaxonId: posInt.optional(),
   inatLineageIds: z.array(posInt).optional(),
   gbifKey: posInt.optional(),
   nasGenus: text.optional(),
   nasSpecies: z.string().nullable().optional(),
-  iconicGroup: text.optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "colour as #rrggbb"),
   halfLifeDays: positive,
   rules: z.enum(RULE_SETS),
@@ -212,7 +206,7 @@ export const appConfigSchema = z
     question: text,
     kind: z.enum(["species", "conditions"]),
     provisional: z.boolean().default(false),
-    taxa: z.array(taxon).max(255),
+    taxa: z.array(taxon).max(1),
     regions: z.array(region).min(1).max(255),
     locations: z.array(location),
     cameraPresets: z.array(cameraPreset).optional(),
@@ -244,8 +238,6 @@ export const appConfigSchema = z
     if (app.kind === "species" && app.taxa.length === 0) issue(["taxa"], "kind species needs at least one taxon");
     if (app.kind === "conditions" && app.taxa.length > 0) issue(["taxa"], "kind conditions must list no taxa");
     if (app.kind === "conditions" && app.locations.length === 0) issue(["locations"], "kind conditions needs at least one location");
-    if (dupes(app.taxa.map((t) => t.id)).length) issue(["taxa"], "taxon ids must be unique");
-    if (dupes(app.taxa.map((t) => t.scientificName.trim())).length) issue(["taxa"], "scientificName must be unique");
     if (dupes(app.regions.map((r) => r.id)).length) issue(["regions"], "region ids must be unique");
     app.regions.forEach((r, i) => {
       const problem = gridProblem(r.bbox, r.cellDeg);

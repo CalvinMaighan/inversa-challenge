@@ -73,7 +73,7 @@ function rng(seed: number): () => number {
 
 type Blob = { lon: number; lat: number; sigma: number; peak: number };
 
-/** The fixture is the python app's (South Florida, its four taxa); hotspot planes in its `taxa[]` order. */
+/** The fixture is the python app's (South Florida, its one taxon); hotspot planes in its `taxa[]` order. */
 const SPECIES = evfSpecies(getApp(V1_APP));
 
 /** Hotspot centres per species id. */
@@ -83,16 +83,6 @@ const BLOBS: Readonly<Record<string, readonly Blob[]>> = {
     { lon: -80.62, lat: 25.42, sigma: 0.1, peak: 0.8 },
     { lon: -81.2, lat: 25.95, sigma: 0.12, peak: 0.6 },
   ],
-  tegu: [
-    { lon: -80.46, lat: 25.5, sigma: 0.09, peak: 0.9 },
-    { lon: -80.35, lat: 25.62, sigma: 0.06, peak: 0.55 },
-  ],
-  iguana: [
-    { lon: -80.19, lat: 25.87, sigma: 0.07, peak: 0.9 },
-    { lon: -81.78, lat: 24.56, sigma: 0.06, peak: 0.8 },
-    { lon: -80.1, lat: 26.6, sigma: 0.08, peak: 0.7 },
-    { lon: -80.62, lat: 24.92, sigma: 0.05, peak: 0.6 },
-  ],
   lionfish: [
     { lon: -80.34, lat: 24.95, sigma: 0.1, peak: 0.85 },
     { lon: -81.45, lat: 24.48, sigma: 0.12, peak: 0.75 },
@@ -101,7 +91,7 @@ const BLOBS: Readonly<Record<string, readonly Blob[]>> = {
 };
 
 /** Hour of peak activity (local, UTC−5) per species; lionfish do not follow the sun. */
-const PEAK_HOUR: Readonly<Record<string, number>> = { python: 22, tegu: 13, iguana: 12, lionfish: -1 };
+const PEAK_HOUR: Readonly<Record<string, number>> = { python: 22, lionfish: -1 };
 /** Marine species (the one without a diurnal peak, lionfish): unaffected by the cold front. */
 const marine = (id: string) => (PEAK_HOUR[id] ?? 0) < 0;
 

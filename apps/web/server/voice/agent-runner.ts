@@ -1,16 +1,5 @@
 import type { AgentStreamEvent, AgentStreamRequest, BBox } from "shared/agent/events";
 import { getApp, speciesIds, type AppId } from "shared/apps";
-import { CATEGORY_DEFAULT_ON, CATEGORY_IDS } from "shared/species-categories";
-
-/** Species filter keys the HUD reports for an app (client/state/layers `speciesFilterIds`). */
-function speciesFilterKeys(app: AppId): readonly string[] {
-  return [...speciesIds(getApp(app)), ...CATEGORY_IDS];
-}
-
-/** Keys shown when nothing is filtered: the focus species and the animal categories. */
-function shownByDefault(keys: readonly string[]): string[] {
-  return keys.filter((k) => !(CATEGORY_IDS as readonly string[]).includes(k) || CATEGORY_DEFAULT_ON[k as (typeof CATEGORY_IDS)[number]]);
-}
 
 /**
  * What `spawn_thinking` runs. The session depends on this interface only, so tests inject a fake;
@@ -59,13 +48,13 @@ export function agentViewFromHud(hud: unknown, app: AppId): AgentView | undefine
   const at = typeof time === "string" ? time : (time as { at?: unknown } | null)?.at;
   if (!isBBox(bbox) || typeof at !== "string" || !Number.isFinite(Date.parse(at))) return undefined;
   // The species filter, like the typed chat sends it: only when it hides some species.
-  const keys = speciesFilterKeys(app);
+  const keys = speciesIds(getApp(app));
   const shown = Array.isArray(species) ? keys.filter((k) => species.includes(k)) : null;
   return {
     bbox: { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north },
     time: at,
     layers: Array.isArray(layers) ? layers.filter((l): l is string => typeof l === "string") : [],
-    ...(shown && shownByDefault(keys).some((k) => !shown.includes(k)) ? { species: shown } : {}),
+    ...(shown && keys.some((k) => !shown.includes(k)) ? { species: shown } : {}),
     selection: typeof selection === "string" ? selection : null,
   };
 }

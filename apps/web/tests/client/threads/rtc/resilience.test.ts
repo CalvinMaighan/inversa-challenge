@@ -239,16 +239,16 @@ describe("dm resilience", () => {
     };
     const a = startLiveStreams({ link: mesh.links.get("a")!, nodeId: "a", persistDm: () => ({ hlc: "hlc", done: Promise.resolve() }), now: () => mesh.now, schedule });
     const b = startLiveStreams({ link: mesh.links.get("b")!, nodeId: "b", persistDm: () => ({ hlc: "hlc", done: Promise.resolve() }), now: () => mesh.now, schedule });
-    const editor = a.note("n1", "two tegus");
-    expect(notes().live.n1?.text).toBe("two tegus"); // the seq-0 sync announces the edit
+    const editor = a.note("n1", "two pythons");
+    expect(notes().live.n1?.text).toBe("two pythons"); // the seq-0 sync announces the edit
     mesh.now += 20;
-    editor.update("two tegus by the gate");
+    editor.update("two pythons by the gate");
     run();
-    expect(notes().live.n1).toEqual({ from: "a", text: "two tegus by the gate", caret: "two tegus by the gate".length, at: mesh.now });
+    expect(notes().live.n1).toEqual({ from: "a", text: "two pythons by the gate", caret: "two pythons by the gate".length, at: mesh.now });
     mesh.cut();
     expect(notes().live.n1).toBeUndefined();
     mesh.join();
-    expect(notes().live.n1?.text).toBe("two tegus by the gate");
+    expect(notes().live.n1?.text).toBe("two pythons by the gate");
     editor.done();
     a.close();
     b.close();

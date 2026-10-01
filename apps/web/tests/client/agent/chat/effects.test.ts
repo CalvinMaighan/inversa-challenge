@@ -41,7 +41,7 @@ describe("agent side effects", () => {
   test("hotspot ids carry their cell centre (C14 0.01° grid from 24.3N 83.2W)", () => {
     // Cell 243:145 is the Shark Valley levee cell in the eval fixtures.
     expect(evidenceCoordinates("hotspot:python:243:145:1768446000000")).toEqual({ lon: -80.765, lat: 25.755 });
-    expect(evidenceCoordinates("hotspot:tegu:0:0:1")).toEqual({ lon: -83.195, lat: 24.305 });
+    expect(evidenceCoordinates("hotspot:python:0:0:1")).toEqual({ lon: -83.195, lat: 24.305 });
   });
 
   test("ids without coordinates, malformed or off-grid cells give null", () => {

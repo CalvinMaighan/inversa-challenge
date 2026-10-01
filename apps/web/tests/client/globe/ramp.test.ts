@@ -77,10 +77,10 @@ describe("paintHeat", () => {
     const cols = 3;
     const rows = 2;
     const python = new Uint8Array([0, 200, 0, 0, 0, 0]); // south row, middle cell
-    const iguana = new Uint8Array([0, 90, 0, 0, 0, 255]); // north row, east cell
+    const lionfish = new Uint8Array([0, 90, 0, 0, 0, 255]); // north row, east cell
     const lut = heatLut();
     const out = new Uint8ClampedArray(cols * rows * 4);
-    const { painted, peak } = paintHeat(out, cols, rows, [python, iguana], lut);
+    const { painted, peak } = paintHeat(out, cols, rows, [python, lionfish], lut);
     expect(peak).toBe(255);
     expect(painted).toBe(2);
     // Canvas row 0 is north: grid row 1.

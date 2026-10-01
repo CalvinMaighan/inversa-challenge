@@ -5,13 +5,13 @@
  */
 import { get, set } from "@calvinjs/active-state";
 
-import { hasLayer } from "shared/apps";
+import { hasLayer, speciesIds } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { onGlobeReady } from "client/globe/api";
 import { activeApp, activeAppId } from "client/state/app";
 import { applyCarpView, carpState, type CarpState } from "client/state/carp";
-import { LAYERS, shownSpecies, sightingHoursOf, speciesFilterIds, taxonKey, taxonOverrides, TAXON_KEY, type LayersState } from "client/state/layers";
+import { LAYERS, shownSpecies, type LayersState } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { retime, TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
@@ -32,8 +32,6 @@ export function readShareState(): ShareState {
     at: isLive(time, Date.now()) && !time.playing ? undefined : (time.at ?? time.to),
     layers: LAYER_IDS.filter((id) => layers.visible[id]),
     species: shownSpecies(layers.species),
-    taxa: taxonOverrides(layers.species),
-    hours: sightingHoursOf(layers),
     evidenceId: selection.evidenceId,
     ...(activeApp().kind === "conditions" ? carpShareFields(carpState()) : {}),
   };
@@ -64,21 +62,18 @@ export function applyShareState(state: ShareState): () => void {
     // A link to a time outside the window brings its window along (the db worker fetches those frames).
     set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...retime(prev, atMs, Date.now()), playing: false }));
   }
-  if (state.layers || state.species || state.taxa || state.hours) {
+  if (state.layers || state.species) {
     // Only layers the app has can be turned on, whatever the link says.
     const visibleIds = state.layers ? new Set(state.layers.filter((id) => hasLayer(app, id))) : null;
-    const speciesIds = state.species ? new Set(state.species) : null;
+    const shown = state.species ? new Set(state.species) : null;
     set<LayersState>(LAYERS, (prev = LAYERS.defaults) => {
-      // Layer pins travel along; a link's species list replaces the keys and the taxon overrides.
+      // A link's species list replaces the species keys.
       const species: LayersState["species"] = { ...prev.species };
-      if (speciesIds || state.taxa) for (const k of Object.keys(species)) if (TAXON_KEY.test(k)) delete species[k];
-      if (speciesIds) for (const id of speciesFilterIds(app)) species[id] = speciesIds.has(id);
-      for (const [id, shown] of state.taxa ?? []) species[taxonKey(id)] = shown;
+      if (shown) for (const id of speciesIds(app)) species[id] = shown.has(id);
       return {
         ...prev,
         visible: visibleIds ? (Object.fromEntries(LAYER_IDS.map((id) => [id, visibleIds.has(id)])) as LayersState["visible"]) : prev.visible,
         species,
-        sightingHours: state.hours ?? prev.sightingHours,
       };
     });
   }

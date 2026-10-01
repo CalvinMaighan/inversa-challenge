@@ -11,7 +11,7 @@
  *    counted; none are expected.
  * 2. A share link to 2026-02-01T17:00Z, months before the live 30-day window, opened in a fresh browser
  *    context: TIME must recentre the window on it, the db worker must fetch that window's frames, and the
- *    iguana hotspot at cell 292:142 (Coral Gables, docs/demo-script.md) must be hot, with sightings in the
+ *    python hotspot grid must be hot somewhere (the app's one species), with sightings in the
  *    frame and on the globe.
  */
 import { mkdirSync } from "node:fs";
@@ -23,8 +23,6 @@ import { buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 
 const SHOT = path.join(REPO_DIR, "docs/evidence/cold-snap.png");
 const COLD_AT = "2026-02-01T17:00:00.000Z";
-/** Cell 292:142 on the 0.01° grid: its centre (PLAN.md C14). */
-const CELL = { lon: -83.2 + 292.5 * 0.01, lat: 24.3 + 142.5 * 0.01 };
 const LINK = `#v=1&c=25.70000,-80.30000,45000,0,-90&t=2026-02-01T17:00Z&l=sightings,hotspots,stations,alerts`;
 const LOAD_TIMEOUT_MS = 120_000;
 
@@ -65,34 +63,33 @@ async function coldSnap(browser: Browser, origin: string, errors: Errors, shot: 
   // The window moves first, then the worker fetches it: wait for a grid whose axis holds the scene hour and
   // whose frame there is filled.
   await page.waitForFunction(
-    ([at, lon, lat]) => {
+    (at) => {
       const d = window.__inversa;
       const meta = d?.snapshot().meta;
       if (!d || !meta) return false;
-      const t = Date.parse(at as string);
+      const t = Date.parse(at);
       if (t < meta.frame0UnixMs || t >= meta.frame0UnixMs + meta.frameCount * meta.stepMinutes * 60_000) return false;
-      return (d.hotspotAt(at as string, "iguana", lon as number, lat as number) ?? 0) > 0;
+      return (d.maxHotspot(at, "python") ?? 0) > 0;
     },
-    [COLD_AT, CELL.lon, CELL.lat] as const,
+    COLD_AT,
     { timeout: LOAD_TIMEOUT_MS },
   );
   await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "hotspots")?.count ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
   await page.waitForTimeout(4_000); // imagery and the fly-in
   const result = await page.evaluate(
-    ([at, lon, lat]) => {
+    (at) => {
       const d = window.__inversa!;
       const time = d.state("TIME") as { at: string; from: string; to: string };
       return {
         time,
-        iguana: d.hotspotAt(at, "iguana", lon, lat),
-        max: d.maxHotspot(at, "iguana"),
+        max: d.maxHotspot(at, "python"),
         sightings: d.sightingIds(at).length,
         layers: d.globe()?.layers ?? [],
         live: document.querySelector("[data-testid=hud-live]")?.textContent ?? "",
         dateJump: document.querySelector<HTMLInputElement>("[data-hud-date-jump]")?.value ?? "",
       };
     },
-    [COLD_AT, CELL.lon, CELL.lat] as [string, number, number],
+    COLD_AT,
   );
   if (shot) {
     mkdirSync(path.dirname(SHOT), { recursive: true });
@@ -126,10 +123,10 @@ async function main() {
     const inWindow = Date.parse(cold.time.from) <= Date.parse(COLD_AT) && Date.parse(COLD_AT) <= Date.parse(cold.time.to);
     const layerCount = (id: string) => cold.layers.find((l) => l.id === id)?.count ?? 0;
     console.log(
-      `COLDSNAP at=${cold.time.at} window=${cold.time.from}..${cold.time.to} iguana=${cold.iguana?.toFixed(2)} max=${cold.max?.toFixed(2)} sightings=${cold.sightings} globe_sightings=${layerCount("sightings")} globe_hotspots=${layerCount("hotspots")} badge=${cold.live.trim()} date=${cold.dateJump} errors=${errors.length}`,
+      `COLDSNAP at=${cold.time.at} window=${cold.time.from}..${cold.time.to} python_max=${cold.max?.toFixed(2)} sightings=${cold.sightings} globe_sightings=${layerCount("sightings")} globe_hotspots=${layerCount("hotspots")} badge=${cold.live.trim()} date=${cold.dateJump} errors=${errors.length}`,
     );
     if (errors.length) log("errors:", errors);
-    if (cold.time.at !== COLD_AT || !inWindow || !((cold.iguana ?? 0) >= 1) || cold.sightings === 0 || layerCount("sightings") === 0 || layerCount("hotspots") === 0) failed = true;
+    if (cold.time.at !== COLD_AT || !inWindow || !((cold.max ?? 0) > 0) || cold.sightings === 0 || layerCount("sightings") === 0 || layerCount("hotspots") === 0) failed = true;
     if (!/REPLAY/.test(cold.live) || cold.dateJump !== "2026-02-01" || errors.length > 0) failed = true;
   } catch (err) {
     log(`failed: ${err instanceof Error ? err.message : String(err)}`);

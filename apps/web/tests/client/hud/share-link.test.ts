@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { PYTHON_FILTER_IDS, PYTHON_LAYERS, SPECIES_IDS, selectPython } from "@/tests/client/python-app";
+import { PYTHON_LAYERS, SPECIES_IDS, selectPython } from "@/tests/client/python-app";
 import { get, set } from "@calvinjs/active-state";
 
 import { LAYER_IDS } from "shared/voice/ui-tools";
@@ -15,21 +15,19 @@ import { SELECTION } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
 import { getApp } from "shared/apps";
-import { ANIMAL_CATEGORIES } from "shared/species-categories";
 
 selectPython();
 
 const [SIGHTINGS, HOTSPOTS, LST, , , ALERTS] = LAYER_IDS;
-const [PYTHON, , IGUANA] = SPECIES_IDS;
+const [PYTHON] = SPECIES_IDS;
 
 const sample: ShareState = {
   app: "python",
   camera: { lat: 25.7617, lon: -80.1918, altitudeM: 45000, heading: 12.5, pitch: -62 },
   at: "2026-09-30T20:30:00.000Z",
   layers: [SIGHTINGS, HOTSPOTS, LST, ALERTS],
-  species: [PYTHON, IGUANA, "snakes", "lizards", "plants"],
-  taxa: [[24382, false], [116461, true]],
-  hours: 48,
+  // The python hidden: a filter that travels.
+  species: [],
   evidenceId: "reading:ndbc_vakf1:water_c:1727700000000:measured",
 };
 
@@ -61,18 +59,15 @@ describe("share link encode/decode", () => {
     expect(decodeShareLink(encodeShareLink({})).layers).toBeUndefined();
   });
 
-  test("share link omits the species filter at its default (focus species and animal categories on; insects, spiders, plants and other off), and the window at 7 days", () => {
-    const hash = encodeShareLink({ app: "python", species: [...SPECIES_IDS, ...ANIMAL_CATEGORIES], hours: 168, taxa: [] });
+  test("share link omits the species filter at its default (the species shown); the old taxon and window fields are ignored", () => {
+    const hash = encodeShareLink({ app: "python", species: [...SPECIES_IDS] });
     expect(new URLSearchParams(hash).has("sp")).toBe(false);
-    expect(new URLSearchParams(hash).has("w")).toBe(false);
-    expect(new URLSearchParams(hash).has("st")).toBe(false);
-    // The four focus species without the animals is a filter: it travels. So is every key on.
-    expect(decodeShareLink(encodeShareLink({ species: [...SPECIES_IDS] })).species).toEqual([...SPECIES_IDS]);
-    expect(decodeShareLink(encodeShareLink({ species: [...PYTHON_FILTER_IDS] })).species).toEqual([...PYTHON_FILTER_IDS]);
     expect(decodeShareLink(hash).species).toBeUndefined();
-    // Taxon overrides and the window read back; a bad window is dropped.
-    expect(decodeShareLink("v=1&st=116461,-24382,-24382,x&w=720")).toEqual({ app: "python", taxa: [[24382, false], [116461, true]], hours: 720 });
-    expect(decodeShareLink("v=1&w=100")).toEqual({ app: "python" });
+    // The species hidden is a filter: it travels as an empty list.
+    expect(new URLSearchParams(encodeShareLink({ app: "python", species: [] })).get("sp")).toBe("");
+    expect(decodeShareLink(encodeShareLink({ app: "python", species: [] })).species).toEqual([]);
+    // Links made while the bar had taxon overrides and a window selector still open, without them.
+    expect(decodeShareLink("v=1&st=116461,-24382&w=720")).toEqual({ app: "python" });
   });
 
   test("share link decode drops invalid fields and keeps the valid ones", () => {
@@ -103,11 +98,12 @@ describe("share link app (v=2)", () => {
   test("share link app: v=2 carries the app and round-trips it for each app", () => {
     expect(SHARE_LINK_VERSION).toBe(2);
     for (const [app, species] of [
-      ["carp", ["snakes"]],
-      ["lionfish", ["lionfish", "fish"]],
-      ["python", ["tegu", "birds"]],
+      // Carp has no species, so no filter to carry; a species app carries its species hidden.
+      ["carp", null],
+      ["lionfish", []],
+      ["python", []],
     ] as const) {
-      const state: ShareState = { app, camera: { lat: 20, lon: -87, altitudeM: 9000, heading: 0, pitch: -90 }, layers: [ALERTS], species: [...species] };
+      const state: ShareState = { app, camera: { lat: 20, lon: -87, altitudeM: 9000, heading: 0, pitch: -90 }, layers: [ALERTS], ...(species ? { species: [...species] } : {}) };
       const hash = encodeShareLink(state);
       expect(new URLSearchParams(hash).get("v")).toBe("2");
       expect(new URLSearchParams(hash).get("app")).toBe(app);
@@ -117,25 +113,26 @@ describe("share link app (v=2)", () => {
   });
 
   test("share link app: v=1 links (made before apps) still decode, as python", () => {
-    const old = "v=1&c=25.7617,-80.1918,45000,12.5,-62&t=2026-09-30T20:30Z&l=sightings,hotspots&sp=python,iguana&e=sighting:123";
+    const old = "v=1&c=25.7617,-80.1918,45000,12.5,-62&t=2026-09-30T20:30Z&l=sightings,hotspots&sp=python&e=sighting:123";
     expect(decodeShareLink(old)).toEqual({
       app: "python",
       camera: { lat: 25.7617, lon: -80.1918, altitudeM: 45000, heading: 12.5, pitch: -62 },
       at: "2026-09-30T20:30:00.000Z",
       layers: [SIGHTINGS, HOTSPOTS],
-      species: [PYTHON, IGUANA],
+      species: [PYTHON],
       evidenceId: "sighting:123",
     });
   });
 
   test("share link app: species keys are checked against the link's app, defaults are that app's", () => {
-    // `tegu` is python's, not lionfish's: dropped from a lionfish link.
-    expect(decodeShareLink("v=2&app=lionfish&sp=lionfish,tegu,fish").species).toEqual(["lionfish", "fish"]);
-    expect(decodeShareLink("v=2&app=carp&sp=lionfish,birds").species).toEqual(["birds"]);
-    // Lionfish's default filter (its one species and the animals) is omitted; its default window is 30 days.
-    const lionfishDefault = encodeShareLink({ app: "lionfish", species: defaultSpecies(getApp("lionfish")), hours: 720 });
+    // `python` is python's, not lionfish's: dropped from a lionfish link; carp has no species at all.
+    expect(decodeShareLink("v=2&app=lionfish&sp=lionfish,python,fish").species).toEqual(["lionfish"]);
+    expect(decodeShareLink("v=2&app=carp&sp=lionfish,birds").species).toEqual([]);
+    // Lionfish's default filter (its one species shown) is omitted.
+    const lionfishDefault = encodeShareLink({ app: "lionfish", species: defaultSpecies(getApp("lionfish")) });
     expect(lionfishDefault).toBe("v=2&app=lionfish");
-    expect(defaultSpecies(getApp("carp"))).toEqual([...ANIMAL_CATEGORIES]);
+    expect(defaultSpecies(getApp("lionfish"))).toEqual(["lionfish"]);
+    expect(defaultSpecies(getApp("carp"))).toEqual([]);
     // An unknown app keeps the view fields but names no app.
     expect(decodeShareLink("v=2&app=everglades&c=25,-80,1000,0,-90").app).toBeUndefined();
   });
@@ -188,10 +185,8 @@ describe("share link store", () => {
     expect(get<TimeState>(TIME)!.playing).toBe(false);
     const layers = get<LayersState>(LAYERS)!;
     expect(LAYER_IDS.filter((id) => layers.visible[id])).toEqual(sample.layers!);
-    expect(PYTHON_FILTER_IDS.filter((id) => layers.species[id])).toEqual(sample.species!);
-    expect(layers.species.t24382).toBe(false);
-    expect(layers.species.t116461).toBe(true);
-    expect(layers.sightingHours).toBe(48);
+    expect(SPECIES_IDS.filter((id) => layers.species[id])).toEqual(sample.species!);
+    expect(layers.species[PYTHON]).toBe(false);
     const selection = get<HudSelection>(SELECTION)!;
     expect(selection.evidenceId).toBe(sample.evidenceId!);
     expect(selection.drawerOpen).toBe(true);

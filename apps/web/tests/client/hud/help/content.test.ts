@@ -34,7 +34,11 @@ describe("help sheet content", () => {
     expect(WELCOME.split(/(?<=[.;!?])\s+(?=[A-Z])/).filter(Boolean).length).toBeLessThanOrEqual(2);
     expect(WELCOME).toContain("last 7 days");
     expect(WINDOW_NOTE).toBe("Most people upload sightings a few days after they see them, so the last 7 days shows the most.");
-    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...speciesIds(PYTHON), "other"]);
+    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...speciesIds(PYTHON)]);
+    // The welcome speaks of the app's one species, never of other kinds or their icons.
+    expect(WELCOME).toContain("Each marker is a Burmese python someone reported");
+    expect(WELCOME).not.toMatch(/kind|invasive animal/);
+    for (const e of HELP_ENTRIES) expect(e.what).not.toMatch(/\b(snakes|lizards|plants|insects|Other)\b|kind's icon|Alt-click/);
     for (const s of SPECIES_GUIDE) expect(s.line.length).toBeGreaterThan(10);
     expect(SPECIES_GUIDE[0]).toMatchObject({ full: "Burmese python", line: "giant constrictor eating Everglades wildlife" });
     for (const id of APP_IDS) expect(aboutSentence(getApp(id)).split(". ").length).toBeLessThanOrEqual(2);
@@ -47,11 +51,11 @@ describe("help sheet content", () => {
     const carp = getApp("carp");
     expect(welcome(carp)).toContain("Louisiana demonstration locations");
     expect(welcome(carp)).not.toContain("invasive animal");
-    expect(speciesGuide(carp).map((s) => s.id)).toEqual(["other"]);
+    expect(speciesGuide(carp)).toEqual([]);
     expect(exampleQuestions(carp)).toEqual(carp.helperQuestions.slice(0, 3));
     expect(aboutSentence(carp)).toContain("cannot tell carp abundance");
     const lionfish = getApp("lionfish");
-    expect(speciesGuide(lionfish).map((s) => s.id)).toEqual(["lionfish", "other"]);
+    expect(speciesGuide(lionfish).map((s) => s.id)).toEqual(["lionfish"]);
     expect(welcome(lionfish)).toContain("last 30 days");
     for (const id of APP_IDS) expect(new Set(exampleQuestions(getApp(id))).size).toBe(Math.min(3, getApp(id).helperQuestions.length));
   });

@@ -8,7 +8,7 @@ import { registeredStateKeys } from "@/eslint-plugins/inversa/state-key-registra
  * PRD §12 "Theme and state" plus active-theme's two keys, the active app (PLAN.md C-A5), live messages (C-A7) and
  * the carp view (site, as-of, replay; leaf UC).
  */
-const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "MESSAGES", "TAXA", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
+const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "MESSAGES", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
 
 describe("state catalog", () => {
@@ -54,7 +54,6 @@ describe("transport key index (PLAN.md C6)", () => {
       "NOTES",
       "PEERS",
       "SELECTION",
-      "TAXA",
       "THEME",
       "TIME",
       "VIEW",

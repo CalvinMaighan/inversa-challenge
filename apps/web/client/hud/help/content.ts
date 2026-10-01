@@ -1,12 +1,12 @@
 /**
  * Every control on the ops page and what it does (T40, T41), plus the plain-language copy a newcomer reads first.
- * This is the one source for the "?" help sheet, the first-visit welcome, the About popover, the species bar's
+ * This is the one source for the "?" help sheet, the first-visit welcome, the About popover, the species chip's
  * descriptions and README's UI section: `tests/client/hud/help/content.test.ts` fails when README drifts from
  * this list. Plain data, no React, so docs tooling can import it too.
  */
 import { copyText, taxonKey, type AppConfig } from "shared/apps";
 import { SIGHTING_WINDOW_HOURS, windowLabel } from "shared/frames";
-/** The default window in words ("7 days"); the selector can set 2, 7 or 30 days. */
+/** The default window in words ("7 days"). */
 export const DEFAULT_WINDOW = windowLabel(SIGHTING_WINDOW_HOURS);
 
 export type HelpGroup = "Map" | "Timeline" | "Chat column";
@@ -30,29 +30,22 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "species",
     kind: "species",
     group: "Map",
-    control: "Species chips",
-    what: `Top left. The app's focus species first, then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles, frogs, birds, mammals, fish, snails, insects, spiders, plants, …) with a switch each and its most-seen species; insects, spiders and plants are off until you switch them on.`,
-  },
-  {
-    id: "window",
-    kind: "species",
-    group: "Map",
-    control: "Sightings window",
-    what: `Next to the chips: last 2, 7 or 30 days (${DEFAULT_WINDOW} to start). Most people upload sightings a few days after they see them, so 7 days shows the most.`,
+    control: "Species chip",
+    what: "Top left. The app's one species with its icon, its colour and how many sightings are in the window. Click to show or hide its markers.",
   },
   {
     id: "dots",
     kind: "species",
     group: "Map",
     control: "Sighting markers",
-    what: `Each marker is one animal someone reported in the window: its kind's icon (a snake, a lizard, a bird, …) in its colour, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
+    what: "Each marker is one animal someone reported in the window, drawn as the app's species icon in its colour, brightest when newest. Hover for how sure the ID is; click to open the record.",
   },
   {
     id: "drawer",
     kind: "species",
     group: "Map",
     control: "Evidence card",
-    what: "Opens on the right when you click a dot, a citation or a label: what was seen, where, when and how sure, the species' Latin name, a line about it and its iNaturalist page, with the photo when there is one. The raw record sits under Details for experts.",
+    what: "Opens on the right when you click a dot, a citation or a label: what was seen, where, when and how sure, the species' Latin name, a line about it and its iNaturalist page, with the sighting's photo when there is one. The raw record sits under Details for experts.",
   },
   {
     id: "about",
@@ -214,7 +207,7 @@ export function aboutSentence(app: AppConfig): string {
   return copyText(app, "about", app.question);
 }
 
-/** Why the window defaults to a week; shown in About and on the window selector. */
+/** Why the window defaults to a week; shown in About. */
 export const WINDOW_NOTE = `Most people upload sightings a few days after they see them, so the last ${DEFAULT_WINDOW} shows the most.`;
 
 /** First-visit welcome: two sentences at most. A species app talks about markers; a conditions app about gauges. */
@@ -223,28 +216,18 @@ export function welcome(app: AppConfig): string {
   if (app.kind === "conditions") {
     return `Each marker is one of the ${where}, its shape and colour saying whether it needs review; click one for its briefing, readings and forecast. Ask the agent below what changed, or scrub the timeline to see what was known at an earlier hour.`;
   }
+  const species = app.taxa[0]?.name ?? "invasive animal";
   return (
-    `Each marker is an invasive animal someone reported in ${where} in the last ${windowLabel(app.windows.defaultHours)}, drawn as its kind's icon; click one to see what it is. ` +
-    "Filter by species at the top of the map, or ask the agent below."
+    `Each marker is a ${species} someone reported in ${where} in the last ${windowLabel(app.windows.defaultHours)}; click one to see the record. ` +
+    "Switch its markers with the chip at the top of the map, or ask the agent below."
   );
 }
 
 export type SpeciesGuideEntry = { id: string; name: string; full: string; line: string };
 
-/** The "Other" chip's entry: every category (snakes, lizards, …, plants; `shared/species-categories.ts`). */
-export const OTHER_GUIDE: SpeciesGuideEntry = {
-  id: "other",
-  name: "Other",
-  full: "Every other introduced species",
-  line: "every other non-native species people reported, by kind: snakes, lizards, frogs, birds, fish, plants and more, the most-seen animals as chips",
-};
-
-/** The species chips: short name, full name and one plain line each. The app's focus species, then "Other". */
+/** The species chip: short name, full name and one plain line. The app's one species; none in a conditions app. */
 export function speciesGuide(app: AppConfig): SpeciesGuideEntry[] {
-  return [
-    ...app.taxa.map((t) => ({ id: taxonKey(t), name: t.short ?? t.name, full: t.name, line: t.line ?? t.scientificName })),
-    OTHER_GUIDE,
-  ];
+  return app.taxa.map((t) => ({ id: taxonKey(t), name: t.short ?? t.name, full: t.name, line: t.line ?? t.scientificName }));
 }
 
 const WELCOME_QUESTIONS = 3;

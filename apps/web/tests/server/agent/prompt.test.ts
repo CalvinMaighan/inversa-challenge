@@ -35,15 +35,20 @@ describe("agent system prompt", () => {
     expect(plain).toContain("Use it only for questions about what the globe shows");
     expect(viewContext({ ...view, windowHours: 48 }, new Date("2026-02-01T17:00:00Z"), PYTHON)).toContain("observed in the 48 hours (2 days) up to the timeline time");
     expect(plain).not.toContain("Species filter");
-    const filtered = viewContext({ ...view, species: ["iguana"] }, new Date("2026-02-01T17:00:00Z"), PYTHON);
-    expect(filtered).toContain("Species filter: the globe shows only iguana sightings");
+    const filtered = viewContext({ ...view, species: [] }, new Date("2026-02-01T17:00:00Z"), PYTHON);
+    expect(filtered).toContain("Species filter: the globe shows only none sightings.");
+    expect(filtered).not.toMatch(/snakes|lizards|plants/);
   });
 
   test("python keeps its hotspot, backtest and species rules; local time follows the app", () => {
     expect(PROMPT).toContain("## Hotspots");
     expect(PROMPT).toMatch(/density × activity × access/);
     expect(PROMPT).toMatch(/backtest to say how well the heuristic has actually done/);
-    expect(PROMPT).toContain("The 4 focus species (Burmese python, Argentine black and white tegu, Green iguana, Lionfish)");
+    expect(PROMPT).toContain("## Species");
+    expect(PROMPT).toContain("Sightings are reports, not abundance.");
+    expect(PROMPT).toContain("Burmese python is the only species answered for.");
+    // No other species is stored or answered for: no plants, insects or iNaturalist lookups.
+    expect(PROMPT).not.toMatch(/plants and insects|every introduced species|what iNaturalist calls it/);
     expect(appTimeZone(getApp("carp"))).toBe("America/Chicago");
     expect(viewContext(undefined, new Date("2026-01-15T00:00:00Z"), getApp("carp"))).toContain("Local time is America/Chicago.");
   });

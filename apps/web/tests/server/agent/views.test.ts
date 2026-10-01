@@ -52,17 +52,19 @@ const modelText = (out: CapabilityOutput) => JSON.stringify(out.data);
 
 describe("C17 views per tool", () => {
   test("C17 view: sightings → table with sighting ids, dup/conflict flags, highlight and bbox", async () => {
-    const { out, view } = await run("sightings", { bbox: HOMESTEAD, species: ["tegu"] });
+    const { out, view } = await run("sightings", { species: ["python"] });
     const table = view.result as TableView;
     expect(table.view).toBe("table");
     expect(table.columns.map((c) => c.key)).toEqual(["time", "species", "quality", "source", "lat", "lon", "dup", "conflict", "late"]);
     expect(table.columns.find((c) => c.key === "time")?.kind).toBe("time");
-    expect(table.rows.map((r) => r.evidenceId)).toEqual(["sighting:2001", "sighting:2002", "sighting:2003"]);
-    expect(table.rows.find((r) => r.evidenceId === "sighting:2002")?.conflict).toBe("conflict");
-    expect(table.rows[0]).toMatchObject({ species: "Argentine black and white tegu", quality: "research", source: "inat", lat: 25.501, lon: -80.452 });
-    expect(view.highlight).toEqual(["sighting:2001", "sighting:2002", "sighting:2003"]);
-    expect(view.bbox).toEqual(HOMESTEAD);
-    expect(table.title).toBe("Argentine black and white tegu sightings · last 7 days");
+    // Research grade first, then curated, then needs ID; newest first within a grade.
+    expect(table.rows.map((r) => r.evidenceId)).toEqual(["sighting:1001", "sighting:1002", "sighting:1003", "sighting:1006", "sighting:1004", "sighting:1005"]);
+    expect(table.rows.find((r) => r.evidenceId === "sighting:1005")?.conflict).toBe("conflict");
+    expect(table.rows.find((r) => r.evidenceId === "sighting:1001")?.conflict).toBeNull();
+    expect(table.rows[0]).toMatchObject({ species: "Burmese python", quality: "research", source: "inat", lat: 25.752, lon: -80.768 });
+    expect(view.highlight).toContain("sighting:1005");
+    expect(view.bbox).toEqual({ west: -83.2, south: 24.3, east: -79.8, north: 27.5 });
+    expect(table.title).toBe("Burmese python sightings · last 7 days");
     // The model reads the compact summary; the column schema and view stay out of its text.
     expect(modelText(out)).not.toContain('"columns"');
 
@@ -79,27 +81,27 @@ describe("C17 views per tool", () => {
   test("C17 view: sightings with no window widen to 30 days when the last 7 are empty, in one GraphQL call", async () => {
     const later: CapabilityContext = { app: PYTHON, now: new Date("2026-01-24T03:00:00Z"), emit: () => {} };
     stub.requests.length = 0;
-    const { out, view } = await run("sightings", { bbox: HOMESTEAD, species: ["iguana"] }, later);
+    const { out, view } = await run("sightings", { bbox: SHARK_VALLEY, species: ["python"] }, later);
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]!.variables).toMatchObject({ from: "2025-12-25T03:00:00.000Z", to: "2026-01-24T03:00:00.000Z" });
     expect(out.data.widened).toContain("widened");
-    expect((view.result as TableView).rows.map((r) => r.evidenceId)).toEqual(["sighting:3001", "sighting:3002"]);
+    expect((view.result as TableView).rows.map((r) => r.evidenceId)).toEqual(["sighting:1001", "sighting:1002", "sighting:1003", "sighting:1004"]);
     expect((view.result as TableView).title).toContain("last 30 days");
     // A window the model spelled out but that still ends now ("recent", as models tend to fill every field) widens too.
-    const spelled = await run("sightings", { bbox: HOMESTEAD, species: ["iguana"], from: "2026-01-17T03:00:00Z", to: "2026-01-24T03:00:00Z", hours: 168 }, later);
-    expect((spelled.view.result as TableView).rows).toHaveLength(2);
+    const spelled = await run("sightings", { bbox: SHARK_VALLEY, species: ["python"], from: "2026-01-17T03:00:00Z", to: "2026-01-24T03:00:00Z", hours: 168 }, later);
+    expect((spelled.view.result as TableView).rows).toHaveLength(4);
     expect(String(spelled.out.data.widened)).toContain("7 days asked for");
     // Empty strings for the optional times (a common model habit) mean "not given", not a failed call.
-    const blank = await run("sightings", { bbox: HOMESTEAD, species: ["iguana"], from: "", to: "", hours: 168 }, later);
-    expect((blank.view.result as TableView).rows).toHaveLength(2);
+    const blank = await run("sightings", { bbox: SHARK_VALLEY, species: ["python"], from: "", to: "", hours: 168 }, later);
+    expect((blank.view.result as TableView).rows).toHaveLength(4);
     // A historical window is never widened…
-    const past = await run("sightings", { bbox: HOMESTEAD, species: ["iguana"], from: "2026-01-18T00:00:00Z", to: "2026-01-20T00:00:00Z" }, later);
+    const past = await run("sightings", { bbox: SHARK_VALLEY, species: ["python"], from: "2026-01-18T00:00:00Z", to: "2026-01-20T00:00:00Z" }, later);
     expect((past.view.result as TableView).rows).toHaveLength(0);
     expect(past.out.data.widened).toBeUndefined();
     // …but the model hears that older records exist, so it can ask again.
-    expect(past.out.data.olderInLast30Days).toBe(2);
+    expect(past.out.data.olderInLast30Days).toBe(4);
     expect(String(past.out.data.hint)).toContain("hours: 720");
-    expect((past.view.result as TableView).title).toBe("Green iguana sightings · 01-18 to 01-20");
+    expect((past.view.result as TableView).title).toBe("Burmese python sightings · 01-18 to 01-20");
   });
 
   test("C17 view: conditions → a series per parameter with gaps as nulls, plus a latest-values table", async () => {

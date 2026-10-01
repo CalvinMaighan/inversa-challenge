@@ -6,7 +6,7 @@ const delta: StreamMessage = { type: "dm.delta", thread: "dm:a~b", msgId: "m1", 
 const commit: StreamMessage = { type: "dm.commit", thread: "dm:a~b", msgId: "m1", from: "a", to: "b", text: "hello", hlc: "1700000000000:0:a" };
 const typing: StreamMessage = { type: "dm.typing", thread: "dm:a~b", from: "a", on: true };
 const note: StreamMessage = { type: "note.delta", noteId: "n1", from: "a", seq: 3, del: { pos: 2, len: 1 }, ins: "" };
-const sync: StreamMessage = { type: "stream.sync", kind: "note", id: "n1", from: "a", seq: 0, text: "two tegus" };
+const sync: StreamMessage = { type: "stream.sync", kind: "note", id: "n1", from: "a", seq: 0, text: "two pythons" };
 const resync: StreamMessage = { type: "stream.resync", kind: "dm", id: "m1", from: "b" };
 
 describe("peer message dm", () => {

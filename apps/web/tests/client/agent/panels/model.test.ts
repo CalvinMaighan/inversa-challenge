@@ -32,7 +32,7 @@ const HOMESTEAD = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
 function sighting(id: number, observedAt: string, extra: Partial<SightingRow> = {}): SightingRow {
   return {
     evidenceId: `sighting:${id}`,
-    species: "Green iguana",
+    species: "Burmese python",
     source: "inat",
     quality: "research",
     observedAt,
@@ -61,7 +61,7 @@ function reading(station: string, t: number, value: number | null, extra: Partia
   };
 }
 
-const tableOf = (rows: SightingRow[]) => sightingsView(rows, HOMESTEAD, "Iguana sightings").result as TableView;
+const tableOf = (rows: SightingRow[]) => sightingsView(rows, HOMESTEAD, "Python sightings").result as TableView;
 
 describe("data panels", () => {
   test("panel: tool_end data becomes result-then-more panels; anything else none", () => {
@@ -85,7 +85,7 @@ describe("data panels", () => {
 
   test("panel table: sorting by time, text and number, nulls last, stable, header cycle", () => {
     const table = tableOf([
-      sighting(1, "2026-09-02T18:09:00Z", { species: "Green iguana", lat: 25.55 }),
+      sighting(1, "2026-09-02T18:09:00Z", { species: "Python bivittatus", lat: 25.55 }),
       sighting(2, "2026-09-09T04:27:00Z", { species: "Burmese python", lat: 25.42 }),
       sighting(3, "2026-09-08T16:35:00Z", { species: "burmese python", lat: 25.41, duplicateOf: "sighting:2" }),
     ]);

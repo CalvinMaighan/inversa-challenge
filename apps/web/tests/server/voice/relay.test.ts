@@ -310,7 +310,7 @@ describe("voice relay against a mocked xAI socket", () => {
       },
     };
     const { mock, events } = await startSession(runner);
-    modelCalls(mock, "resp_a", "call_a", "spawn_thinking", { objective: "Rank tegu hotspots in Homestead" });
+    modelCalls(mock, "resp_a", "call_a", "spawn_thinking", { objective: "Rank python hotspots in Homestead" });
     await until(() => toolOutputs(mock).length === 1);
     const taskId = String(toolOutputs(mock)[0]!.output.task_id);
 

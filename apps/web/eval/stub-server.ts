@@ -79,17 +79,15 @@ function taxa(v: Vars) {
     .sort((a, b) => Number(b.focus) - Number(a.focus) || Number(a.id) - Number(b.id));
 }
 
-/** `speciesCounts`: distinct sightings per taxon in the box and window, most first, by iconic group. */
+/** `speciesCounts`: distinct sightings of the focus taxa in the box and window, most first. */
 function speciesCounts(v: Vars) {
   const bbox = v.bbox as BBox;
-  const groups = list(v.groups);
   const top = typeof v.top === "number" ? v.top : 50;
   const byTaxon = new Map<string, { count: number; latest: { id: string; observedAt: string } }>();
   for (const row of fixture.sightings) {
     if (row.canonicalId || !inBox(bbox, row.lat, row.lon) || !inWindow(row.observedAt, v.from, v.to)) continue;
     const taxon = fixture.taxa[row.taxon as keyof typeof fixture.taxa] as FixtureTaxon;
-    const group = taxon.iconicGroup ?? null;
-    if (groups && !(groups.includes(group ?? "") || (group === null && groups.includes("other")))) continue;
+    if (!taxon.focus) continue;
     const cur = byTaxon.get(row.taxon) ?? { count: 0, latest: { id: row.id, observedAt: row.observedAt } };
     cur.count += 1;
     if (Date.parse(row.observedAt) > Date.parse(cur.latest.observedAt)) cur.latest = { id: row.id, observedAt: row.observedAt };

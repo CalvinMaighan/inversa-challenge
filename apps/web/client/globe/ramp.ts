@@ -22,7 +22,7 @@ export const HEAT_STOPS: readonly RampStop[] = [
   [1, 252, 255, 164, 0.9],
 ];
 
-/** Diverging cold-to-hot (RdYlBu reversed); the cold end matters most for the iguana cold-snap story. */
+/** Diverging cold-to-hot (RdYlBu reversed); the cold end matters most for the cold-snap story. */
 export const TEMP_STOPS: readonly RampStop[] = [
   [0, 49, 54, 149, 0.62],
   [0.2, 69, 117, 180, 0.62],

@@ -23,10 +23,10 @@ afterAll(() => restore());
 
 const note = (over: Partial<FieldNote> = {}): FieldNote => ({
   id: "n1",
-  text: "Two tegus by the canal",
+  text: "Two pythons by the canal",
   lat: 25.4687,
   lon: -80.4776,
-  species: "tegu",
+  species: "python",
   sightingId: null,
   createdBy: "a1b2c3d4-e5f6-7000-8000-00000000a0a0",
   callsign: "Ranger-A1B2",
@@ -84,7 +84,7 @@ describe("field note helpers", () => {
   test("pins carry the author's colour, derived from the node id", () => {
     const [p] = pinsOf([note()]);
     expect(p!.color).toBe(colorOfNode("a1b2c3d4-e5f6-7000-8000-00000000a0a0"));
-    expect(p).toMatchObject({ id: "n1", text: "Two tegus by the canal", callsign: "Ranger-A1B2" });
+    expect(p).toMatchObject({ id: "n1", text: "Two pythons by the canal", callsign: "Ranger-A1B2" });
   });
 
   test("the pin icon is a canvas per colour, drawn tip-down at a fixed size", () => {
@@ -94,8 +94,8 @@ describe("field note helpers", () => {
   });
 
   test("tooltip: callsign, then the first 80 characters of the text, anchored to the pin", () => {
-    const facts = { kind: "note" as const, id: "n1", callsign: "Ranger-A1B2", text: "Two tegus by the canal", lon: -80.4776, lat: 25.4687 };
-    expect(tooltipLine(tooltipText(facts, Date.now()))).toBe("Ranger-A1B2 · Two tegus by the canal");
+    const facts = { kind: "note" as const, id: "n1", callsign: "Ranger-A1B2", text: "Two pythons by the canal", lon: -80.4776, lat: 25.4687 };
+    expect(tooltipLine(tooltipText(facts, Date.now()))).toBe("Ranger-A1B2 · Two pythons by the canal");
     expect(anchorOf(facts)).toEqual({ lon: -80.4776, lat: 25.4687 });
     const long = tooltipText({ ...facts, text: "y".repeat(200) }, 0);
     expect(long.parts[0]!.length).toBe(81);

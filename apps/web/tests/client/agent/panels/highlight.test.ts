@@ -21,7 +21,7 @@ let flights: CameraTarget[] = [];
 
 const sighting = (id: number, lat: number, lon: number, observedAt = "2026-09-02T18:09:00Z"): SightingRow => ({
   evidenceId: `sighting:${id}`,
-  species: "Green iguana",
+  species: "Burmese python",
   source: "inat",
   quality: "research",
   observedAt,
@@ -49,13 +49,13 @@ function toolEnd(toolCallId: string, capabilityName: string, view: object): Agen
   return { type: "tool_end", toolCallId, capabilityName, ok: true, data: { count: 1, evidence: [], feeds: [], ...view } };
 }
 
-/** The e2e question's shape: iguana sightings near Homestead, and the nearest water-level gauges. */
+/** The e2e question's shape: python sightings near Homestead, and the nearest water-level gauges. */
 function recordHomesteadTurn(turnId: string) {
   const t = Date.parse("2026-09-30T20:00:00Z");
   const gauges = [gauge("7", 25.327, -80.525, t, 0.81), gauge("19", 25.731, -80.162, t, 0.61)];
   const history = gauges.flatMap((g) => [0, 1, 2].map((i) => ({ ...g, observedAt: new Date(t - i * H).toISOString() })));
   recordToolEnd(turnId, toolEnd("c1", "conditions", conditionsViews(history, gauges, AROUND, ["stage_m"], "nearest stations within 0.25°")));
-  recordToolEnd(turnId, toolEnd("s1", "sightings", sightingsView([sighting(7, 25.554, -80.347)], HOMESTEAD, "Iguana sightings")));
+  recordToolEnd(turnId, toolEnd("s1", "sightings", sightingsView([sighting(7, 25.554, -80.347)], HOMESTEAD, "Python sightings")));
 }
 
 beforeEach(() => {
@@ -87,7 +87,7 @@ describe("agent highlight", () => {
     expect(targets).toHaveLength(MAX_HIGHLIGHT);
     expect(targets[0]).toEqual({ id: "hotspot:python:243:145:1768446000000", label: "python 243:145 · 0.82", lon: -80.765, lat: 25.755 });
     expect(new Set(targets.map((t) => t.id)).size).toBe(MAX_HIGHLIGHT);
-    expect(targets[1]).toMatchObject({ id: "sighting:0", label: "Green iguana · research", lat: 25.4, lon: -80.4 });
+    expect(targets[1]).toMatchObject({ id: "sighting:0", label: "Burmese python · research", lat: 25.4, lon: -80.4 });
   });
 
   test("highlight: the camera box grows the result's area to take in every bracket", () => {
@@ -107,7 +107,7 @@ describe("agent highlight", () => {
     showTurn("turn-1", NOW);
     const hl = get<AgentHighlightState>(AGENT_HIGHLIGHT)!;
     expect(hl.turnId).toBe("turn-1");
-    // Sightings outrank conditions: the iguana first, then one bracket per gauge.
+    // Sightings outrank conditions: the python first, then one bracket per gauge.
     expect(hl.targets.map((t) => t.id)).toEqual([
       "sighting:7",
       "reading:7:stage_m:1790798400000:measured",
@@ -139,7 +139,7 @@ describe("agent highlight", () => {
     recordHomesteadTurn("turn-3");
     showTurn("turn-3", NOW);
     hoverEvidence("turn-3", "sighting:7");
-    expect(get<AgentHighlightState>(AGENT_HIGHLIGHT)!.hover).toEqual({ id: "sighting:7", label: "Green iguana · research", lon: -80.347, lat: 25.554 });
+    expect(get<AgentHighlightState>(AGENT_HIGHLIGHT)!.hover).toEqual({ id: "sighting:7", label: "Burmese python · research", lon: -80.347, lat: 25.554 });
     const before = get<AgentHighlightState>(AGENT_HIGHLIGHT);
     hoverEvidence("turn-3", "sighting:7");
     expect(get<AgentHighlightState>(AGENT_HIGHLIGHT)).toBe(before);

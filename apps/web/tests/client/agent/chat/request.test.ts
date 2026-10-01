@@ -45,18 +45,15 @@ describe("agent request view", () => {
     });
   });
 
-  test("the species filter travels only when it hides an animal", () => {
+  test("the species filter travels only when it hides the species", () => {
     const all = { ...PYTHON_LAYERS.species };
-    const animals = ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails"];
     expect(agentView({ layers: { visible: { sightings: true }, species: all } }, NOW).species).toBeUndefined();
-    // Switching plants on hides nothing: no filter travels.
-    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, plants: true } } }, NOW).species).toBeUndefined();
-    const none = Object.fromEntries(animals.map((id) => [id, false]));
-    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, ...none, python: false, tegu: false, lionfish: false } } }, NOW).species).toEqual(["iguana"]);
-    // A category off is a filter; so is one animal chip hidden on its own.
-    expect(agentView({ layers: { species: { ...all, birds: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", ...animals.filter((id) => id !== "birds")]);
-    expect(agentView({ layers: { species: { ...all, t116461: false } } }, NOW).species).toEqual(["python", "tegu", "iguana", "lionfish", ...animals]);
-    // A hotspot pin is not a species.
+    expect(agentView({ layers: { visible: { sightings: true }, species: {} } }, NOW).species).toBeUndefined();
+    // The python hidden is a filter: the globe shows no species.
+    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, python: false } } }, NOW).species).toEqual([]);
+    // Keys of removed filters (a category, a taxon override) from an old saved state hide nothing.
+    expect(agentView({ layers: { species: { ...all, birds: false, t116461: false } } }, NOW).species).toBeUndefined();
+    // A key that is not a species (an old saved hotspot pin) is ignored.
     expect(agentView({ layers: { species: { ...all, hotspots: "python" } } }, NOW).species).toBeUndefined();
   });
 

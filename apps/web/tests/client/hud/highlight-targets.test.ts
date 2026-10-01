@@ -3,14 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { labelledTargets, MAX_HIGHLIGHT, MAX_LABELS, placeTargets, targetPriority, wantedTargets } from "client/hud/overlay/targets";
 import type { AgentHighlightTarget } from "client/state/agent";
 
-const at = (i: number): AgentHighlightTarget => ({ id: `sighting:${i}`, label: `Green iguana · research`, lon: Number((-80.4 - i / 1000).toFixed(3)), lat: 25.5 });
+const at = (i: number): AgentHighlightTarget => ({ id: `sighting:${i}`, label: `Burmese python · research`, lon: Number((-80.4 - i / 1000).toFixed(3)), lat: 25.5 });
 
 describe("HUD brackets for the agent's highlight (PLAN.md C17)", () => {
   test("highlight: selection, citations and the answer's highlight merge without duplicates, strongest role kept", () => {
     const wanted = wantedTargets(
       "sighting:1",
       [
-        ["sighting:2", "Green iguana · research · inat"],
+        ["sighting:2", "Burmese python · research · inat"],
         ["fetch:90410", "ndbc stale"],
       ],
       { targets: [at(1), at(2), at(3), { id: "alert:5001", label: "Cold Weather Advisory" }, { id: "backtest:python:7", label: "" }], hover: null },
@@ -26,7 +26,7 @@ describe("HUD brackets for the agent's highlight (PLAN.md C17)", () => {
     expect(wanted[0]!.at).toEqual({ lon: -80.401, lat: 25.5 });
     expect(wanted[2]!.at).toEqual({ lon: -80.403, lat: 25.5 });
     expect(wanted[3]!.at).toBeUndefined();
-    expect(wanted[2]!.label).toBe("SIGHTING Green iguana · research");
+    expect(wanted[2]!.label).toBe("SIGHTING Burmese python · research");
   });
 
   test("fewer brackets: station readings in a highlight are left out unless cited, selected or hovered", () => {

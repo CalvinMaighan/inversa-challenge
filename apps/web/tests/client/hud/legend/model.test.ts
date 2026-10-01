@@ -4,9 +4,7 @@ import { PYTHON_LAYERS, SPECIES_COLORS, SPECIES_IDS, selectPython } from "@/test
 import type { LayerStats } from "client/globe/layers/types";
 import { HEAT_STOPS, TEMP_STOPS } from "client/globe/ramp";
 
-import { categoryCounts, formatCount, GAP_SWATCHES, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
-import { CATEGORY_ANCESTORS, CATEGORY_COLORS, CATEGORY_IDS, categoryFromAncestry } from "shared/species-categories";
-import type { TaxonInfo } from "client/state/taxa";
+import { formatCount, GAP_SWATCHES, HATCH_COLOR, legendRows, rampGradient } from "client/hud/legend/model";
 import { statsSignature } from "client/hud/legend/useGlobeStats";
 import { type LayersState } from "client/state/layers";
 import { LAYER_IDS } from "shared/voice/ui-tools";
@@ -34,34 +32,19 @@ describe("legend", () => {
     expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].sort());
   });
 
-  test("sightings: a row per focus species in the layer's own colours with its kind's icon, then every category with its icon, colour and live count", () => {
-    const taxon = (id: number, ancestor: number): TaxonInfo => ({ id, scientificName: `T${id}`, commonName: "", focus: false, iconicGroup: null, ancestorIds: [1, ancestor], category: categoryFromAncestry([ancestor]), summary: null, photoUrl: null, pageUrl: null });
-    const taxa = { "42": taxon(42, CATEGORY_ANCESTORS.lizards), "43": taxon(43, CATEGORY_ANCESTORS.plants), "44": taxon(44, CATEGORY_ANCESTORS.insects) };
-    const breakdown = { "1": 2, "2": 0, "3": 6, "4": 0, "42": 1, "43": 3, "44": 2, "45": 1 };
-    const stats = [stat(SIGHTINGS, 9, breakdown)];
-    const row = legendRows(layers(), stats, taxa).find((r) => r.layer === SIGHTINGS)!;
-    expect(row.count).toBe(9);
-    expect(row.swatches.slice(0, 5).map((s) => s.label)).toEqual(["Burmese python", "Argentine black and white tegu", "Green iguana", "Lionfish", "Snakes"]);
-    expect(row.swatches.map((s) => s.shape).every((s) => s === "icon")).toBe(true);
-    expect(row.swatches.slice(0, 4).map((s) => s.icon)).toEqual(["snakes", "lizards", "lizards", "fish"]);
-    expect(row.swatches.slice(4).map((s) => s.icon)).toEqual([...CATEGORY_IDS]);
-    // Focus colours, then each category's own colour (an off category keeps its colour, dimmed by the panel).
-    expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, ...CATEGORY_IDS.map((id) => CATEGORY_COLORS[id])]);
-    const by = Object.fromEntries(row.swatches.map((s) => [s.key, s]));
-    // 45 is not loaded yet: counted under Other.
-    expect([by.python, by.iguana, by.lizards, by.plants, by.insects, by.other].map((s) => s!.count)).toEqual([2, 6, 1, 3, 2, 1]);
-    expect(by.birds!.count).toBe(0);
-    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, ...CATEGORY_IDS]);
-    expect([by.python, by.lizards, by.plants, by.insects, by.other].map((s) => s!.on)).toEqual([true, true, false, false, false]);
-    expect(by.other!.label).toBe("Other kinds");
-    expect(categoryCounts(undefined, taxa)).toBeNull();
+  test("sightings: one row for the app's species in the layer's own colour with the app icon and its live count", () => {
+    const stats = [stat(SIGHTINGS, 2, { "1": 2 })];
+    const row = legendRows(layers(), stats).find((r) => r.layer === SIGHTINGS)!;
+    expect(row.count).toBe(2);
+    expect(row.swatches.map((s) => [s.key, s.label, s.shape, s.icon, s.color, s.count, s.species, s.on])).toEqual([["python", "Burmese python", "icon", "python", SPECIES_COLORS[0], 2, SPECIES_IDS[0], true]]);
     expect(row.note).toContain("last 7 days");
+    expect(row.note).not.toMatch(/kind/);
   });
 
   test("species toggles reflect the LAYERS filter", () => {
-    const species = { ...PYTHON_LAYERS.species, [SPECIES_IDS[1]]: false };
+    const species = { ...PYTHON_LAYERS.species, [SPECIES_IDS[0]]: false };
     const row = legendRows(layers({ species }), null).find((r) => r.layer === SIGHTINGS)!;
-    expect(row.swatches.slice(0, 4).map((s) => s.on)).toEqual([true, false, true, true]);
+    expect(row.swatches.map((s) => s.on)).toEqual([false]);
   });
 
   test("stations: the three networks in their marker colours (the blue, teal and violet squares)", () => {
@@ -73,12 +56,10 @@ describe("legend", () => {
     ]);
   });
 
-  test("hotspots: the heat ramp low to high, labelled heuristic score, with the species pin", () => {
-    const pinned = { ...PYTHON_LAYERS.species, [HOTSPOTS]: SPECIES_IDS[2] };
-    const row = legendRows(layers({ species: pinned }), null).find((r) => r.layer === HOTSPOTS)!;
+  test("hotspots: the heat ramp low to high, labelled heuristic score", () => {
+    const row = legendRows(layers(), null).find((r) => r.layer === HOTSPOTS)!;
     expect(row.ramp).toEqual({ css: rampGradient(HEAT_STOPS), min: "low", max: "high", caption: "heuristic score" });
-    expect(row.pin).toBe(SPECIES_IDS[2]);
-    expect(legendRows(layers(), null).find((r) => r.layer === HOTSPOTS)!.pin).toBeNull();
+    expect(row.swatches).toEqual([]);
   });
 
   test("LST and SST: the temperature ramp with their °C ranges, hidden by default", () => {

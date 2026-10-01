@@ -282,8 +282,8 @@ export function evfRegionFrame(bytes: Uint8Array, h: EvfHeader, f: EvfFrameRegio
 }
 
 /**
- * Sightings window: the globe draws, the species bar counts and the agent's view means every sighting in the
- * trailing window ending at the time cursor. The length is state (`LAYERS.sightingHours`, T44), one of
+ * Sightings window: the globe draws, the species chip counts and the agent's view means every sighting in the
+ * trailing window ending at the time cursor. The length is state (`LAYERS.sightingHours`, the app's default), one of
  * SIGHTING_WINDOW_OPTIONS; SIGHTING_WINDOW_HOURS is the default. Most people upload sightings a few days after
  * they see them, so 7 days shows the most.
  */

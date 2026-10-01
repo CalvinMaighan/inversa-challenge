@@ -38,7 +38,7 @@ const FIXTURE_NOW = fixtureNow(APP);
 const SCREENSHOT = resolve(WEB, `../../docs/evidence/${APP === "python" ? "t14-card-375" : `agent-${APP}-375`}.png`);
 /** Per app: the question, the tools any correct answer needs (set_view is checked by the fly count), and the citation kinds a chip may carry. */
 const FLOWS: Record<AppId, { question: string; tools: string[]; citationKinds: string[] }> = {
-  // Python answers for Burmese python only (AG2): a tegu question is refused by the scope guard, so the flow asks about pythons.
+  // Python answers for Burmese python only (AG2): a lionfish question is refused by the scope guard, so the flow asks about pythons.
   python: { question: "Show me recent python sightings around Shark Valley.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },
   carp: { question: "Which locations need operational review today?", tools: ["site_status"], citationKinds: ["forecast", "reading", "alert", "fetch"] },
   lionfish: { question: "Show lionfish reports in the Mexican Caribbean from the last 30 days.", tools: ["geocode", "sightings"], citationKinds: ["sighting"] },

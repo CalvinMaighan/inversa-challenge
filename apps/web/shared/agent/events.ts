@@ -59,8 +59,8 @@ export type AgentStreamRequest = {
   sessionId: string;
   question: string;
   /**
-   * `species`: the globe's species filter keys still shown, sent only when the filter hides an animal.
-   * `windowHours`: the trailing sightings window the globe draws (48, 168 or 720; T44).
+   * `species`: the globe's species filter keys still shown, sent only when the filter hides the species.
+   * `windowHours`: the trailing sightings window the globe draws (48, 168 or 720: the app's default).
    */
   view?: { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState & LionfishViewState;
 };

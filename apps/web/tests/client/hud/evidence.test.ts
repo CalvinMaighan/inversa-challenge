@@ -160,10 +160,10 @@ describe("targets and selection", () => {
     expect(parseBacktestId("backtest:python:14")).toEqual({ species: "python", days: 14 });
     expect(parseBacktestId("backtest:python:0")).toBeNull();
     expect(parseBacktestId("backtest:python")).toBeNull();
-    expect(parseEvidenceId("backtest:iguana:30")?.kind).toBe("backtest");
+    expect(parseEvidenceId("backtest:python:30")?.kind).toBe("backtest");
     expect(parseBacktestId("sighting:1")).toBeNull();
     expect(parseBacktestId("backtest:python:x")).toBeNull();
-    expect(decodeShareLink(encodeShareLink({ evidenceId: "backtest:iguana:30" })).evidenceId).toBe("backtest:iguana:30");
+    expect(decodeShareLink(encodeShareLink({ evidenceId: "backtest:python:30" })).evidenceId).toBe("backtest:python:30");
   });
 
   test("drawer opens on a selection unless drawerOpen is explicitly false", () => {

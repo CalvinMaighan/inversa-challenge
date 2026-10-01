@@ -17,7 +17,6 @@ import {
   taxonKey,
   TIMEZONES,
 } from "shared/apps";
-import { CATEGORY_IDS } from "shared/species-categories";
 
 /** The contract files (PLAN.md C-A3), shared with the Rust loader (api/src/app/config.rs). */
 const SPEC = path.resolve(import.meta.dir, "../../../../../spec/apps");
@@ -54,8 +53,8 @@ describe("app config conformance", () => {
       }
       expect(err).toBeInstanceOf(AppConfigError);
       const field = file.startsWith("unknown-field") ? "" : file.split(".")[0]!;
-      const paths = (err as AppConfigError).issues.map((i) => i.path.split(".")[0]);
-      expect(paths).toContain(field);
+      // The first issue is on the field the file names.
+      expect((err as AppConfigError).issues[0]!.path.split(".")[0]).toBe(field);
     });
   }
 
@@ -65,7 +64,10 @@ describe("app config conformance", () => {
     const p = (readJson(path.join(SPEC, "app-config.schema.json")) as { properties: Record<string, unknown> }).properties;
     expect((p.id as Enum).enum).toEqual([...APP_IDS]);
     expect((p.feeds as Items).items.properties.source!.enum).toEqual(Object.keys(FEED_SOURCES));
-    expect((p.taxa as Items).items.properties.category!.enum).toEqual([...CATEGORY_IDS]);
+    // One species per app; no category or iconic group on a taxon.
+    expect((p.taxa as { maxItems: number }).maxItems).toBe(1);
+    expect(Object.keys((p.taxa as Items).items.properties)).not.toContain("category");
+    expect(Object.keys((p.taxa as Items).items.properties)).not.toContain("iconicGroup");
     expect((p.taxa as Items).items.properties.rules!.enum).toEqual([...RULE_SETS]);
     expect((p.copy as { properties: Record<string, Enum> }).properties.timezone!.enum).toEqual([...TIMEZONES]);
     expect((p.helperQuestions as { maxItems: number }).maxItems).toBe(MAX_HELPER_QUESTIONS);
@@ -81,10 +83,15 @@ describe("app config conformance", () => {
     expect(getApp("lionfish").regions.map((r) => r.id)).toEqual(["fl-keys", "mx-caribbean", "belize", "co-caribbean"]);
   });
 
-  test("app config conformance: carp is the default and the only conditions app; python keeps the four focus species in frame order", () => {
+  test("app config conformance: carp is the default and the only conditions app; python and lionfish track one species each", () => {
     expect(DEFAULT_APP_ID).toBe("carp");
     expect(getApp("carp").kind).toBe("conditions");
-    expect(getApp("python").taxa.map(taxonKey)).toEqual(["python", "tegu", "iguana", "lionfish"]);
+    expect(getApp("python").taxa.map(taxonKey)).toEqual(["python"]);
+    expect(getApp("python").taxa[0]!.scientificName).toBe("Python bivittatus");
+    expect(getApp("lionfish").taxa.map(taxonKey)).toEqual(["lionfish"]);
+    expect(getApp("carp").taxa).toEqual([]);
+    expect(RULE_SETS).toEqual(["python", "lionfish"]);
+    expect(Object.keys(FEED_SOURCES)).not.toContain("web");
     expect(getApp("python").regions[0]!.bbox).toEqual({ west: -83.2, south: 24.3, east: -79.8, north: 27.5 });
     expect(getApp("python").regions[0]!.camera.heightM).toBeGreaterThan(0);
     expect(getApp("carp").copy.timezone).toBe("America/Chicago");
@@ -127,3 +134,23 @@ describe("app config errors", () => {
     expect(lionfish.layers.map((l) => l.id)).toContain("heat");
   });
 });
+
+describe("one species per app", () => {
+  test("a taxon carrying the removed category or iconicGroup fields is refused (strict objects)", () => {
+    for (const extra of [{ category: "snakes" }, { iconicGroup: "Reptilia" }]) {
+      const raw = spec("python");
+      raw.taxa = [{ ...(raw.taxa as Record<string, unknown>[])[0], ...extra }];
+      expect(parseAppConfigIssues(raw)[0]!.path).toMatch(/^taxa\.0/);
+    }
+  });
+});
+
+function parseAppConfigIssues(raw: unknown): readonly { path: string }[] {
+  try {
+    parseAppConfig(raw);
+  } catch (err) {
+    if (err instanceof AppConfigError) return err.issues;
+    throw err;
+  }
+  throw new Error("expected AppConfigError");
+}

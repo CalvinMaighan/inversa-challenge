@@ -60,7 +60,7 @@ export function isLand(lon: number, lat: number): boolean {
 
 type Blob = { lon: number; lat: number; sigma: number; peak: number };
 
-/** The fixture is the python app's (one South Florida region, its four taxa), hotspot planes in `taxa[]` order. */
+/** The fixture is the python app's (one South Florida region, its one taxon), hotspot planes in `taxa[]` order. */
 const SPECIES = evfSpecies(getApp(V1_APP));
 
 /** Hotspot centres per species id. */
@@ -68,11 +68,6 @@ const HOTSPOTS: Readonly<Record<string, Blob[]>> = {
   python: [
     { lon: -80.9, lat: 25.55, sigma: 0.22, peak: 1 },
     { lon: -81.25, lat: 25.95, sigma: 0.14, peak: 0.7 },
-  ],
-  tegu: [{ lon: -80.5, lat: 25.45, sigma: 0.12, peak: 0.85 }],
-  iguana: [
-    { lon: -80.25, lat: 25.8, sigma: 0.1, peak: 0.95 },
-    { lon: -80.15, lat: 26.3, sigma: 0.08, peak: 0.6 },
   ],
   lionfish: [{ lon: -81.05, lat: 24.68, sigma: 0.18, peak: 0.9 }],
 };

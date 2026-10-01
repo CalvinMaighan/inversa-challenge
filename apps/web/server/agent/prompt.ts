@@ -5,7 +5,7 @@ import { SIGHTING_WINDOW_HOURS } from "@/shared/frames";
 
 /** Tools named after the layer they fill. */
 const [SIGHTINGS, HOTSPOTS, , , , , , , NOTES] = LAYER_IDS;
-/** The python app: the only species app with one focus taxon and context taxa (pythonSections). */
+/** The python app (pythonSections). */
 const PYTHON_APP = APP_IDS[2];
 
 /** Rules every app shares. */
@@ -39,8 +39,6 @@ const SHARED_RULES = `## Audience and tone
 /** Hotspot and species rules, for a species app only; names come from its taxa. */
 function speciesSections(app: AppConfig): string {
   if (app.kind !== "species") return "";
-  const names = app.taxa.map((t) => t.name).join(", ");
-  const focus = app.taxa.length === 1 ? `The focus species (${names}) is` : `The ${app.taxa.length} focus species (${names}) are`;
   const lines: string[] = [];
   // A component app (lionfish) carries its own priority rules in componentSections.
   if (app.agent.tools.includes(HOTSPOTS) && !isComponentApp(app)) {
@@ -52,15 +50,15 @@ function speciesSections(app: AppConfig): string {
   }
   lines.push(
     "## Species",
-    `- ${focus} not the only ones in the data: every introduced species people report is stored, plus plants and insects. Sightings are reports, not abundance.`,
+    "- Sightings are reports, not abundance.",
   );
   if (app.agent.tools.includes("species_counts")) {
     lines.push(
-      '- "Which introduced species have been reported…", "what has been seen…", "which species…": call species_counts (geocode first for a place). Answer with the species by name and their counts, most seen first, each count followed by its cite marker from the row; say the counts are distinct sightings and that plants and insects are not included unless asked.',
+      '- "Which introduced species have been reported…", "what has been seen…", "which species…": call species_counts (geocode first for a place). Answer with the species by name and their counts, most seen first, each count followed by its cite marker from the row; say the counts are distinct sightings.',
     );
   }
   lines.push(
-    "- The sightings tool takes any species name (common or scientific), not only the focus species. When a result lists unresolvedSpecies, say plainly that there are no records of that species in the data (and what iNaturalist calls it, when given); never substitute another species.",
+    "- When a result lists unresolvedSpecies, say plainly that there are no records of that species in the data; never substitute another species.",
   );
   return lines.join("\n");
 }
@@ -191,13 +189,13 @@ function componentSections(app: AppConfig): string {
   ].join("\n");
 }
 
-/** Everglades Ops rules, for the python app only: one focus species, the others context. */
+/** Everglades Ops rules, for the python app only: Burmese python is its one species. */
 function pythonSections(app: AppConfig): string {
   if (app.id !== PYTHON_APP) return "";
   const tools = new Set(app.agent.tools);
   return [
     "## Everglades Ops rules (Burmese python)",
-    "- Burmese python is the only species answered for. A question about tegus, iguanas, lionfish, carp or any other species gets the refusal in your own words (naming the python focus, Lionfish Watch for lionfish and the Carp app for Louisiana rivers), without calling a tool: no sightings, no capture windows, no dive conditions for them. Asked which invasive animals were seen, call species_counts and answer with Burmese python first, then the other species labelled \"context only\": shown on the map, not ranked or planned for.",
+    "- Burmese python is the only species answered for. A question about lionfish, carp or any other species gets the refusal in your own words (naming the python focus, Lionfish Watch for lionfish and the Carp app for Louisiana rivers), without calling a tool: no sightings, no capture windows, no dive conditions for them.",
     "- The hotspot score (density × activity × access) is a heuristic: say the word \"heuristic\" whenever you use it; never give a percent, probability or chance of a python find (asked for one, say there is no probability here, only the heuristic, without calling a tool). The activity term is a temperature rule (cold nights lower it): describe it as a rule in the heuristic, never as what pythons will or will not do: never write \"pythons will\", \"pythons won't\" or \"pythons will not\"; write \"the activity term drops\" instead.",
     "- The region is South Florida and the Keys (the Everglades): a place outside it (Orlando, Tampa, Texas, Georgia, Louisiana) gets the refusal naming South Florida and the Everglades, without a tool. Reports are not abundance: asked how many pythons live somewhere, say the data cannot estimate the population (sightings are reports) without a tool. Asked whether pythons caused a decline (mammals, prey), say the data cannot say that: no causal claim, no tool.",
     "- Safety (walking or driving at night): alerts for the place and weather_forecast at its lat and lon, give the alert state and the forecast, then write \"cannot say whether it is safe\". Never write safe or unsafe as a verdict.",
@@ -296,7 +294,7 @@ export function viewContext(view: AgentView | undefined, now: Date, app: AppConf
     if (view.species) {
       const shown = view.species.length > 0 ? view.species.join(", ") : "none";
       lines.push(
-        `Species filter: the globe shows only ${shown} sightings (the focus species by name; the rest are kinds of introduced species outside the focus species: snakes, lizards, turtles, crocodilians, frogs, birds, mammals, fish, snails, insects, spiders, plants, other). Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
+        `Species filter: the globe shows only ${shown} sightings. Unless the user names other species, questions about the sightings in view (how many, where, latest) mean these species: pass the focus species among them as the sightings species filter, and say the answer follows the globe's filter.`,
       );
     }
   }

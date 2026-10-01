@@ -31,7 +31,7 @@ const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
 const LOAD_TIMEOUT_MS = 120_000;
 const SITES = ["SMML1", "KRZL1", "BLRL1", "MCGL1", "BTRL1", "AEXL1", "MLUL1", "BXAL1"];
 const STATUSES = ["review", "ok", "cannot_assess"];
-const FORBIDDEN = /\b(python|tegu|iguana|lionfish|everglades)\b/i;
+const FORBIDDEN = /\b(python|lionfish|everglades)\b/i;
 /** A past as-of inside the fixtures' archive: the forecast in force is the IEM copy of the 09-28 issuance. */
 const PAST_ASOF = "2026-09-28T18:00Z";
 

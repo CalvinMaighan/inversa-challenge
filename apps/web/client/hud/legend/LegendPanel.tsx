@@ -3,15 +3,13 @@
 import { useMemo } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState, type SpeciesId } from "client/state/layers";
-import { TAXA, type TaxaState } from "client/state/taxa";
-import { activeApp } from "client/state/app";
+import { LAYERS, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
 import styled from "client/styled";
-import { legendTitle, taxonKey } from "shared/apps";
+import { legendTitle } from "shared/apps";
 
 import { useActiveApp } from "../appselect/use-active-app";
 import { Mono } from "../primitives";
-import CategoryIcon from "../species/CategoryIcon";
+import AppIcon from "../appselect/AppIcon";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
 
@@ -133,33 +131,13 @@ const Ramp = styled.div`
   }
 `;
 
-const Pin = styled.label`
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  margin: 6px 0 0 26px;
-  color: var(--muted);
-  font: 400 12px / 1.3 var(--font-ui);
-
-  select {
-    flex: 1;
-    min-width: 0;
-    padding: 2px 4px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-s);
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-  }
-`;
-
 const ErrorNote = styled(Note)`
   color: var(--danger);
 `;
 
-/** A swatch: the category's icon in its colour (sightings, T44) or a coloured shape. An off species reads dimmer, never grey. */
+/** A swatch: the app icon in the species colour (sightings) or a coloured shape. An off species reads dimmer, never grey. */
 function SwatchMark({ swatch }: { swatch: LegendSwatch }) {
-  if (swatch.shape === "icon" && swatch.icon) return <CategoryIcon category={swatch.icon} color={swatch.color} size={16} />;
+  if (swatch.shape === "icon" && swatch.icon) return <AppIcon icon={swatch.icon} color={swatch.color} size={16} />;
   return <Swatch $color={swatch.color} $shape={swatch.shape} aria-hidden="true" />;
 }
 
@@ -217,23 +195,6 @@ function LegendRowView({ row }: { row: LegendRow }) {
           </div>
         </Ramp>
       ) : null}
-      {row.pin !== undefined ? (
-        <Pin>
-          Species
-          <select
-            value={row.pin ?? ""}
-            onChange={(e) => setLayerSpeciesPin(row.layer, (e.currentTarget.value || null) as SpeciesId | null)}
-            data-testid={`legend-pin-${row.layer}`}
-          >
-            <option value="">All shown species</option>
-            {activeApp().taxa.map((taxon) => (
-              <option key={taxonKey(taxon)} value={taxonKey(taxon)}>
-                {taxon.name} only
-              </option>
-            ))}
-          </select>
-        </Pin>
-      ) : null}
       {row.error && row.visible ? <ErrorNote role="status">Not loading: {row.error}</ErrorNote> : null}
     </Row>
   );
@@ -263,14 +224,13 @@ function GapsRow() {
 /**
  * Layers and legend (T40, T41): what every colour on the globe means, a switch per layer and per species, and
  * what each layer draws right now (GlobeApi `stats()`). Lives in the About popover under "More data (for
- * experts)"; the species bar is the everyday filter. Samples the globe only while `active` (the section open).
+ * experts)"; the species chip is the everyday filter. Samples the globe only while `active` (the section open).
  */
 export default function LegendBody({ active }: { active: boolean }) {
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
   const stats = useGlobeStats(active);
-  const taxa = useActiveState<TaxaState, TaxaState["byId"]>(TAXA, (t) => t.byId)[0] ?? TAXA.defaults.byId;
   const app = useActiveApp();
-  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, taxa, app), [app, layers, stats, taxa]);
+  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, app), [app, layers, stats]);
   const title = legendTitle(app);
   return (
     <section aria-label="Layers and legend" data-testid="layers-legend" data-app={app.id}>

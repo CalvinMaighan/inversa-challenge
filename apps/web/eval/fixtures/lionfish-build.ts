@@ -52,7 +52,7 @@ const feeds = [
 // ---------------------------------------------------------------- taxa and sightings
 
 const taxa = {
-  "1": { id: "1", scientificName: "Pterois volitans/miles", commonName: "Lionfish", focus: true, inatTaxonId: "47284", iconicGroup: "Actinopterygii", summary: "Lionfish (Pterois volitans and P. miles) are venomous Indo-Pacific reef fish introduced to the western Atlantic and Caribbean, where they eat young native reef fish.", photoUrl: null, pageUrl: "https://www.inaturalist.org/taxa/47284" },
+  "1": { id: "1", scientificName: "Pterois volitans/miles", commonName: "Lionfish", focus: true, inatTaxonId: "47284", pageUrl: "https://www.inaturalist.org/taxa/47284" },
 };
 
 type SightingSeed = [id: string, source: string, lat: number, lon: number, accuracyM: number | null, observedAt: string, ingestedAt: string, quality: string, canonicalId?: string];

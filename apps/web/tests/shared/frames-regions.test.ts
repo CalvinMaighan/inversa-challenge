@@ -101,7 +101,7 @@ describe("frames regions", () => {
   test("sample.evf still decodes as one region", () => {
     const bytes = load("sample.evf");
     const { header: h, frames } = decode(bytes);
-    expect([h.regionCount, h.speciesCount, h.frameCount]).toEqual([1, 4, 3]);
+    expect([h.regionCount, h.speciesCount, h.frameCount]).toEqual([1, 1, 3]);
     expect(evfHeaderLength(h)).toBe(EVF_HEADER_BYTES);
     expect(evfRegions(h)).toEqual([{ hsCols: 10, hsRows: 5, west: -80.5, south: 25.2, hsCellDeg: h.hsCellDeg, envCols: 4, envRows: 2, envCellDeg: 0.05 }]);
     expect(frames.map((f) => f.sightingCount)).toEqual([1, 1, 3]);

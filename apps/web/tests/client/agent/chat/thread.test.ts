@@ -16,8 +16,8 @@ import type { AgentStreamEvent } from "shared/agent/events";
 
 const T0 = Date.parse("2026-01-15T03:00:00Z");
 
-/** The tegu turn as T13's route streams it (mock harness, golden plan), deltas cut mid-marker. */
-const TEGU: AgentStreamEvent[] = [
+/** The python turn as T13's route streams it (mock harness, golden plan), deltas cut mid-marker. */
+const PYTHON_TURN: AgentStreamEvent[] = [
   { type: "context", windowTokens: 160000, segments: [{ label: "system", tokens: 686 }] },
   { type: "status", state: "thinking" },
   { type: "reasoning_delta", text: "Need the place, " },
@@ -26,7 +26,7 @@ const TEGU: AgentStreamEvent[] = [
   { type: "status", state: "reading" },
   { type: "tool_start", toolCallId: "c1", capabilityName: "geocode", args: { place: "Homestead" } },
   { type: "tool_end", toolCallId: "c1", capabilityName: "geocode", ok: true, data: { count: 1, evidence: [], feeds: [] } },
-  { type: "tool_start", toolCallId: "c2", capabilityName: "sightings", args: { species: ["tegu"] } },
+  { type: "tool_start", toolCallId: "c2", capabilityName: "sightings", args: { species: ["python"] } },
   {
     type: "tool_end",
     toolCallId: "c2",
@@ -35,9 +35,9 @@ const TEGU: AgentStreamEvent[] = [
     data: {
       count: 3,
       evidence: [
-        { id: "sighting:2001", kind: "sighting", label: "tegu · research" },
-        { id: "sighting:2002", kind: "sighting", label: "tegu · needs_id" },
-        { id: "sighting:2003", kind: "sighting", label: "tegu · casual" },
+        { id: "sighting:2001", kind: "sighting", label: "python · research" },
+        { id: "sighting:2002", kind: "sighting", label: "python · needs_id" },
+        { id: "sighting:2003", kind: "sighting", label: "python · casual" },
       ],
       feeds: [],
     },
@@ -46,15 +46,15 @@ const TEGU: AgentStreamEvent[] = [
   { type: "view", bbox: { west: -80.56, south: 25.38, east: -80.33, north: 25.56 }, time: "2026-01-15T03:00:00.000Z" },
   { type: "tool_end", toolCallId: "c3", capabilityName: "set_view", ok: true, data: { count: 1, evidence: [], feeds: [] } },
   { type: "status", state: "generating" },
-  { type: "content_delta", text: "3 tegu reports: research " },
-  { type: "citation", id: "sighting:2001", kind: "sighting", label: "tegu · research" },
+  { type: "content_delta", text: "3 python reports: research " },
+  { type: "citation", id: "sighting:2001", kind: "sighting", label: "python · research" },
   { type: "content_delta", text: "[e:sighting:2001]; needs_id " },
-  { type: "citation", id: "sighting:2002", kind: "sighting", label: "tegu · needs_id" },
-  { type: "citation", id: "sighting:2001", kind: "sighting", label: "tegu · research" },
+  { type: "citation", id: "sighting:2002", kind: "sighting", label: "python · needs_id" },
+  { type: "citation", id: "sighting:2001", kind: "sighting", label: "python · research" },
   { type: "content_delta", text: "[e:sighting:2002]." },
   { type: "debug", text: "unverified citation removed: sighting:9999" },
 ];
-const FINAL = "3 tegu reports: research [e:sighting:2001]; needs_id [e:sighting:2002].";
+const FINAL = "3 python reports: research [e:sighting:2001]; needs_id [e:sighting:2002].";
 
 function run(state: AgentThread, actions: ThreadAction[]): AgentThread {
   return actions.reduce(reduceThread, state);
@@ -63,23 +63,23 @@ function run(state: AgentThread, actions: ThreadAction[]): AgentThread {
 function ask(state: AgentThread = EMPTY_THREAD): AgentThread {
   return run(state, [
     { type: "session", sessionId: "s1" },
-    { type: "user", id: "u1", text: "Show me recent tegu sightings around Homestead.", nowMs: T0 },
+    { type: "user", id: "u1", text: "Show me recent python sightings around Homestead.", nowMs: T0 },
     { type: "assistant", id: "a1", nowMs: T0 },
   ]);
 }
 
 describe("thread reducer", () => {
-  test("folds a scripted tegu stream into one assistant turn", () => {
+  test("folds a scripted python stream into one assistant turn", () => {
     let state = ask();
     // Events land in rAF batches; split the script across three of them.
-    state = reduceThread(state, { type: "events", id: "a1", events: TEGU.slice(0, 4), nowMs: T0 + 400 });
+    state = reduceThread(state, { type: "events", id: "a1", events: PYTHON_TURN.slice(0, 4), nowMs: T0 + 400 });
     const thinking = state.messages[1]!;
     expect(thinking.phase).toBe("thinking");
     expect(thinking.reasoning).toBe("Need the place, then sightings.");
     expect(thinking.reasoningStartedAtMs).toBe(T0 + 400);
     expect(thinking.reasoningEndedAtMs).toBeUndefined();
 
-    state = reduceThread(state, { type: "events", id: "a1", events: TEGU.slice(4, 9), nowMs: T0 + 1200 });
+    state = reduceThread(state, { type: "events", id: "a1", events: PYTHON_TURN.slice(4, 9), nowMs: T0 + 1200 });
     const reading = state.messages[1]!;
     expect(reading.reasoningEndedAtMs).toBe(T0 + 1200);
     // Narration before a tool call is dropped (deedee).
@@ -90,7 +90,7 @@ describe("thread reducer", () => {
     ]);
     expect(isAsking(state)).toBe(true);
 
-    state = reduceThread(state, { type: "events", id: "a1", events: TEGU.slice(9), nowMs: T0 + 2600 });
+    state = reduceThread(state, { type: "events", id: "a1", events: PYTHON_TURN.slice(9), nowMs: T0 + 2600 });
     const streaming = state.messages[1]!;
     expect(streaming.status).toBe("streaming");
     expect(streaming.phase).toBe("generating");

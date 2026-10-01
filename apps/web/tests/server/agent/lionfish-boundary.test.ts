@@ -68,7 +68,7 @@ function expectMeetsRefusal(id: string, text: string): void {
 describe("lionfish boundary", () => {
   test("lionfish boundary: other apps' species are refused by the scope guard before any model call", async () => {
     process.env.OPENROUTER_API_KEY = "test-key-never-used";
-    for (const question of ["Where are invasive green iguanas on Cozumel?", "Any Burmese python reports in the Keys?", "Show tegu sightings near Belize City."]) {
+    for (const question of ["Where are Burmese pythons on Cozumel?", "Any Burmese python reports in the Keys?", "Show python sightings near Belize City."]) {
       const events: AgentStreamEvent[] = [];
       const result = await runTurn({ app: "lionfish", sessionId: `lf-boundary-${Date.now()}-${question.length}`, question, now: NOW, cache: false }, (e) => events.push(e));
       expect(result.model).toBe("scope-guard");
@@ -76,7 +76,7 @@ describe("lionfish boundary", () => {
       expect(ofType(events, "tool_start")).toHaveLength(0);
     }
     expect(stub.requests).toHaveLength(0);
-    expectMeetsRefusal("lionfish-boundary-iguana", scopeGuard(LIONFISH, "Where are invasive green iguanas on Cozumel?")!);
+    expectMeetsRefusal("lionfish-boundary-other-species", scopeGuard(LIONFISH, "Where are Burmese pythons on Cozumel?")!);
   });
 
   test("lionfish boundary: a risk percent, causal reef damage, heat stress as proof and a population count are refused by topic, in words that meet the documented criteria", () => {

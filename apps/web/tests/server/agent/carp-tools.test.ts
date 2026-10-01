@@ -430,7 +430,7 @@ describe("carp tool: weather, alerts, sources, evidence, board, view", () => {
     const all = await run("source_info", {});
     expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentFeeds"]);
     const rows = (all.data as any).rows as Record<string, any>[];
-    expect(rows.map((r) => r.feed)).toEqual(["usgs", "nwps", "nws-alerts", "nws-forecast", "iem", "nwws", "web"]);
+    expect(rows.map((r) => r.feed)).toEqual(["usgs", "nwps", "nws-alerts", "nws-forecast", "iem", "nwws"]);
     const iem = rows.find((r) => r.feed === "iem")!;
     expect(iem.publisher).toMatch(/Iowa State/);
     expect(iem.licence).toMatch(/attribution/);
@@ -443,7 +443,7 @@ describe("carp tool: weather, alerts, sources, evidence, board, view", () => {
     expect(usgs.limits.join(" ")).toMatch(/datum/);
     expect((all.data as any).boundary).toBe(CARP.copy.boundaryNote);
     expectEvidenceFormat(all, ["usgs", "iem"]);
-    expect(all.evidence.filter((e) => e.kind === "source")).toHaveLength(7);
+    expect(all.evidence.filter((e) => e.kind === "source")).toHaveLength(6);
     const nws = await run("source_info", { feed: "nws" });
     expect((nws.data as any).rows.map((r: any) => r.feed)).toEqual(["nws-alerts", "nws-forecast"]);
     await expect(run("source_info", { feed: "ndbc" })).rejects.toThrow(/not a feed of this app/);

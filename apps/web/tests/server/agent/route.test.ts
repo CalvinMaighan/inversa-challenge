@@ -63,7 +63,9 @@ describe("POST /api/agent/stream", () => {
     expect(foreign.status).toBe(400);
     expect(JSON.stringify(await foreign.json())).toContain("not a species of app lionfish");
     // A valid body gets past validation (to the missing-key 503 in this environment).
-    expect((await post({ app: "lionfish", sessionId: "ok", question: "hi", view: { ...view, species: ["lionfish", "fish"] } })).status).toBe(503);
+    expect((await post({ app: "lionfish", sessionId: "ok", question: "hi", view: { ...view, species: ["lionfish"] } })).status).toBe(503);
+    // The species categories are gone: a category key is not a species of any app.
+    expect((await post({ app: "lionfish", sessionId: "ok", question: "hi", view: { ...view, species: ["fish"] } })).status).toBe(400);
     expect((await post({ app: "carp", sessionId: "ok", question: "hi" })).status).toBe(503);
   });
 

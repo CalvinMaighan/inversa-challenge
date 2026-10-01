@@ -5,10 +5,10 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import styled from "client/styled";
 
 import { Dot, Surface } from "../primitives";
-import CategoryIcon from "../species/CategoryIcon";
+import AppIcon from "./AppIcon";
 import { PopoverBox, usePopover } from "../topbar/TopBar";
 import { fetchAppHealth, type AppHealth } from "./health";
-import { appIconCategory, appOptions, appTint, nextIndex } from "./model";
+import { appOptions, appTint, nextIndex } from "./model";
 import { switchApp } from "./switch";
 import { useActiveApp } from "./use-active-app";
 import type { AppId } from "shared/apps";
@@ -161,7 +161,7 @@ export default function AppSelect() {
         data-app={app.id}
         onClick={pop.toggle}
       >
-        <CategoryIcon category={appIconCategory(app.icon)} color={appTint(app)} size={18} />
+        <AppIcon icon={app.icon} color={appTint(app)} size={18} />
       </Trigger>
       {pop.open ? (
         <PopoverBox id={id} label="Choose an app" testId="app-select-popover" popRef={popRef} onClose={pop.close} align="left">
@@ -179,7 +179,7 @@ export default function AppSelect() {
                   data-health={o.health}
                   onClick={() => choose(o.id)}
                 >
-                  <CategoryIcon category={o.icon} color={o.tint} size={22} />
+                  <AppIcon icon={o.icon} color={o.tint} size={22} />
                   <span>
                     <b>{o.name}</b>
                     <small>{o.question}</small>

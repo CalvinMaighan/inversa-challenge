@@ -2,18 +2,16 @@
  * The evidence card's plain-language lead (T41), for someone new to the field: what, where in place words, when
  * in relative time, and how sure, e.g.
  *
- *   Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community
+ *   Burmese python spotted near Flamingo · 2 h ago · confirmed by the iNaturalist community
  *
  * Pure over the evidence record (C14 shapes from Axum) and the time cursor. Never shows raw coordinates or ids;
  * those stay under "Details for experts".
  */
+import { isFocusTaxon } from "client/globe/species";
 import { activeApp } from "client/state/app";
-import { categoryOfTaxon, isFocusTaxon, taxonName } from "client/state/taxa";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
-import { CATEGORY_NOUNS, type CategoryId } from "shared/species-categories";
 
-import { speciesGuide } from "../help/content";
 import { feedLabel } from "../topbar/feed-chips";
 import { ago, formatReading, NETWORK_LABELS } from "../tooltip/model";
 
@@ -24,52 +22,53 @@ export type PlainSummary = {
   title: string;
   /** The rest of the line, in order. */
   parts: string[];
-  /** Same-origin photo: the observation's (`/v1/media/<id>`), else the species' (`/v1/media/taxon/<id>`). */
+  /** Same-origin photo of the observation (`/v1/media/<id>`), when the observer took one. */
   photo: string | null;
-  /** The species card (T44), for sightings only. */
+  /** The species card, for sightings only. */
   species?: SpeciesCard;
 };
 
-/** What a sighting's card says about its species: every taxon gets one, not only the focus four. */
+/** What a sighting's card says about the app's species. */
 export type SpeciesCard = {
-  /** Common name in sentence case, or the scientific name when there is none. */
+  /** The app's name for its species ("Burmese python"); for a record of another taxon, its own name. */
   name: string;
   /** Latin name, shown in italics; null when it is the name already. */
   scientificName: string | null;
-  /** "introduced species", with the group in plain words when known ("introduced reptile"). */
   status: string;
-  /** One About line: Inversa's one-liner for a focus species, else the plain Wikipedia summary. */
+  /** Inversa's one-liner for the species (config `line`). */
   about: string | null;
-  /** Its kind (snakes, lizards, …): the icon and colour the globe draws it with. */
-  category: CategoryId;
+  /** App icon id and the colour the globe draws the species with. */
+  icon: string;
+  color: string;
   /** "More about <name> on iNaturalist" target, opened in a new tab. */
   moreUrl: string | null;
   moreLabel: string | null;
 };
 
-/** The species card of a sighting record's `taxon` (the API's Taxon JSON, T44), or a bare one for an old API. */
+/** Marker colour of a record that is not the app's species (not drawn on the globe; a stale citation at most). */
+const NEUTRAL_COLOR = "#b8c0cc";
+
+/** The species card of a sighting record's `taxon` (the API's Taxon JSON). */
 export function speciesCard(taxon: Record<string, unknown>): SpeciesCard {
   const id = Number(taxon.id);
-  const common = str(taxon.commonName);
-  const sci = str(taxon.scientificName);
-  const name = taxonName({ commonName: common ?? "", scientificName: sci ?? "" }, "Unnamed species");
-  const focusIndex = isFocusTaxon(id) ? id - 1 : -1;
   const app = activeApp();
-  const guide = focusIndex >= 0 ? speciesGuide(app)[focusIndex] : undefined;
-  const category = (focusIndex >= 0 ? app.taxa[focusIndex]!.category : undefined) ?? categoryOfTaxon(taxon as Parameters<typeof categoryOfTaxon>[0]);
-  const summary = str(taxon.summary);
+  const focus = isFocusTaxon(id) ? app.taxa[id - 1] : undefined;
+  const common = str(taxon.commonName);
+  const sci = str(taxon.scientificName) ?? focus?.scientificName ?? null;
+  // iNat capitalises every word ("Burmese Python"); the card reads better in sentence case.
+  const name = focus?.name ?? (common ? sentence(common.toLowerCase()) : (sci ?? "Unnamed species"));
   const pageUrl = str(taxon.pageUrl);
   return {
     name,
     scientificName: sci && sci !== name ? sci : null,
-    category,
-    status: `introduced ${CATEGORY_NOUNS[category]}`,
-    about: guide ? sentence(guide.line) + "." : summary,
+    status: "introduced species",
+    about: focus ? sentence(focus.line ?? focus.scientificName) + "." : null,
+    icon: app.icon,
+    color: focus?.color ?? NEUTRAL_COLOR,
     moreUrl: pageUrl && /^https:\/\/www\.inaturalist\.org\/taxa\/\d+$/.test(pageUrl) ? pageUrl : null,
     moreLabel: pageUrl ? `More about ${name} on iNaturalist` : null,
   };
 }
-
 
 /** Quality grade in plain words; research grade names the community that confirmed it when known. */
 export function qualityWords(quality: unknown, source: unknown): string | null {
@@ -129,8 +128,7 @@ export function plainSummary(kind: string, record: Record<string, unknown>, atMs
     case "sighting": {
       const taxon = (record.taxon ?? {}) as Record<string, unknown>;
       const species = speciesCard(taxon);
-      // The observation's own photo first; the species' photo stands in when the observer took none.
-      const photo = local(record.mediaUrl) ?? local(taxon.photoUrl);
+      const photo = local(record.mediaUrl);
       return build(`${species.name} spotted ${placeWords(record.lat, record.lon)}`, [when(record.observedAt, atMs), qualityWords(record.quality, record.source)], photo, species);
     }
     case "reading": {

@@ -28,8 +28,6 @@ import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenList, 
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
 import { localTime } from "@/server/agent/tools/shared";
 import {
-  GROUP_WORDS,
-  GROUPS_OF,
   resolveSpecies,
   SPECIES_COUNTS_QUERY,
   speciesCountRow,
@@ -179,7 +177,7 @@ const sightingsInput = z.object({
     .array(speciesNameSchema)
     .max(8)
     .optional()
-    .describe("Limit to these species, by any name (python, tegu, iguana, lionfish, brown anole, Cuban tree frog, Anolis sagrei…). Omit for every introduced species."),
+    .describe("Limit to the app's species, by key, common or scientific name. Omit for every sighting the app tracks (its one species)."),
   quality: z.array(z.enum(QUALITY)).optional().describe("Limit to these quality grades."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
@@ -204,17 +202,16 @@ const imprecise = (row: Pick<GqlSighting, "accuracyM">) => row.accuracyM === nul
 const sightings = {
   name: LAYER.sightings,
   description:
-    "Invasive species sightings (iNaturalist, USGS NAS, GBIF) in an area and time window, of any species (the four focus species or any other introduced animal or plant, by common or scientific name). Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags. Default window: the last 7 days. A window ending now that comes back empty is widened to the last 30 days (the result says so). The user sees every row in a table panel. For 'which species were seen' use species_counts.",
+    "Sightings of the app's one species (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags. Default window: the last 7 days. A window ending now that comes back empty is widened to the last 30 days (the result says so). The user sees every row in a table panel. For a count with the newest record to cite use species_counts.",
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     // An empty list is a placeholder the model sent for "no filter", never a filter that matches nothing.
     const speciesAsked = givenList(input.species);
     const qualityAsked = givenList(input.quality);
-    const wanted = speciesAsked ? await resolveSpecies(speciesAsked, ctx) : null;
+    const wanted = speciesAsked ? resolveSpecies(speciesAsked, ctx.app) : null;
     if (wanted && wanted.taxonIds.length === 0) {
-      const missing = wanted.unresolved.map((u) => (u.inat ? `${u.asked} (iNaturalist knows it as ${u.inat}, but no sighting of it is stored)` : `${u.asked} (no such species in the data or at iNaturalist)`));
-      return output({ bbox, total: 0, distinctAnimals: 0, duplicates: 0, conflicts: 0, rows: [], unresolvedSpecies: missing, note: `No records: ${missing.join("; ")}. Say so plainly.` }, [], [], 0);
+      return output({ bbox, total: 0, distinctAnimals: 0, duplicates: 0, conflicts: 0, rows: [], unresolvedSpecies: wanted.unresolved, note: `Not tracked here: ${wanted.unresolved.join(", ")}. ${ctx.app.agent.refusal}` }, [], [], 0);
     }
     const explicit = Boolean(input.from) || Boolean(input.to) || input.hours !== undefined;
     const defaultHours = Math.min(ctx.app.windows?.defaultHours ?? DEFAULT_SIGHTING_HOURS, MAX_LOOKBACK_HOURS);
@@ -287,7 +284,7 @@ const sightings = {
       late: lateBy(row),
       sourcePageUrl: sightingPageUrl(row.source, row.extId),
     }));
-    const species = wanted && wanted.names.length > 0 ? wanted.names.join(", ") : "invasive";
+    const species = wanted && wanted.names.length > 0 ? wanted.names.join(", ") : (ctx.app.taxa[0]?.name.toLowerCase() ?? "invasive");
     const days = Math.max(1, Math.round((Date.parse(window.to) - Date.parse(window.from)) / (24 * HOUR_MS)));
     const span = endsNow ? `last ${days} ${days === 1 ? "day" : "days"}` : `${window.from.slice(5, 10)} to ${window.to.slice(5, 10)}`;
     const title = `${species} sightings · ${span}`;
@@ -332,9 +329,7 @@ const sightings = {
         ...(duplicates.length
           ? { duplicateNote: `${duplicates.length} row${duplicates.length === 1 ? " is" : "s are"} a copy of another record (duplicateOf: GBIF or NAS re-publishing an iNaturalist report): never counted as a second animal or as corroboration; say "not counted" and cite both markers.` }
           : {}),
-        ...(wanted && wanted.unresolved.length > 0
-          ? { unresolvedSpecies: wanted.unresolved.map((u) => (u.inat ? `${u.asked}: iNaturalist knows it as ${u.inat}, but no sighting of it is stored` : `${u.asked}: no such species in the data or at iNaturalist`)) }
-          : {}),
+        ...(wanted && wanted.unresolved.length > 0 ? { unresolvedSpecies: wanted.unresolved.map((name) => `${name}: not tracked in this app`) } : {}),
         total: rows.length,
         distinctAnimals: rows.length - duplicates.length,
         duplicates: duplicates.length,
@@ -388,35 +383,24 @@ const sightings = {
 
 const speciesCountsInput = z.object({
   bbox: bboxSchema.optional(),
-  groups: z
-    .array(z.enum(GROUP_WORDS))
-    .optional()
-    .describe("Which kinds of species to count: animals (default), plants, others (insects and the rest), or all."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
   hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default 168 = 7 days)."),
-  top: z.number().int().min(1).max(100).optional().describe("How many species, most seen first (default 15)."),
 });
 
-/**
- * T44: which invasive species were seen, most first, with a count per species. Rows cite each species' newest
- * sighting, so an answer like "brown anole 111, curly-tailed lizard 51" carries a marker per species.
- */
+/** How many sightings of the app's species in an area and window, citing the newest one. */
 const speciesCounts = {
   name: "species_counts",
   description:
-    "Which invasive species were seen in an area and window, most seen first, with a count per species and each species' newest sighting to cite. Animals by default (reptiles, amphibians, birds, mammals, fish, molluscs); groups can add plants and insects. Default window: the last 7 days. Use it for 'what invasive animals…', 'which species…', 'what has been reported…' questions; use sightings for the records of one species.",
+    "How many sightings of the app's one species were reported in an area and window, with its newest sighting to cite. Default window: the last 7 days. Use it for 'how many…' and 'has any been reported…' questions; use sightings for the records themselves.",
   inputSchema: speciesCountsInput,
   async execute(input: z.infer<typeof speciesCountsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, DEFAULT_SIGHTING_HOURS);
-    const words = input.groups && input.groups.length > 0 ? input.groups : ["animals" as const];
-    const groups = words.includes("all") ? null : [...new Set(words.flatMap((w) => (w === "all" ? [] : GROUPS_OF[w])))];
-    const top = input.top ?? 15;
     const data = await gqlWithFeeds<{ speciesCounts: GqlSpeciesCount[]; feeds: GqlFeedState[] }>(
       "AgentSpeciesCounts",
       SPECIES_COUNTS_QUERY,
-      { bbox, ...window, groups, top },
+      { bbox, ...window, top: Math.max(1, ctx.app.taxa.length) },
       ctx,
     );
     const rows = data.speciesCounts.map(speciesCountRow);
@@ -425,29 +409,23 @@ const speciesCounts = {
       .map((row) => evidence("sighting", row.latestSighting!.slice("sighting:".length), `${row.species} · ${row.count} in the window · newest sighting`));
     const feeds = feedsFor(data.feeds, [], ["inat", "nas", "gbif"]);
     const days = Math.max(1, Math.round((Date.parse(window.to) - Date.parse(window.from)) / (24 * HOUR_MS)));
-    const kinds = words.includes("all") ? "species" : words.map((w) => (w === "others" ? "insects and others" : w)).join(", ");
-    const title = `Introduced ${kinds} seen · last ${days} ${days === 1 ? "day" : "days"}`;
+    const name = ctx.app.taxa[0]?.name ?? "Species";
+    const title = `${name} seen · last ${days} ${days === 1 ? "day" : "days"}`;
     const out = output(
       {
         bbox,
         window,
-        groups: words,
-        speciesCount: rows.length,
         sightingsTotal: rows.reduce((n, r) => n + r.count, 0),
         note:
           rows.length === 0
-            ? "No introduced species of these groups were reported in this area and window."
-            : "Counts are distinct sightings (duplicates stand behind their first report). Each row's cite marker is its newest sighting: name the species with its count and paste the marker right after.",
+            ? `No ${name.toLowerCase()} was reported in this area and window.`
+            : "Counts are distinct sightings (duplicates stand behind their first report). The cite marker is the newest sighting: give the count and paste the marker right after.",
         rows: rows.slice(0, MAX_MODEL_ROWS).map((row) => ({
           species: row.species,
           scientificName: row.scientificName,
-          group: row.group,
-          focusSpecies: row.focus,
           count: row.count,
           cite: row.latestSighting ? `[e:${row.latestSighting}]` : null,
-          ...(row.summary ? { about: row.summary } : {}),
         })),
-        truncated: rows.length > MAX_MODEL_ROWS,
       },
       evidenceRows,
       feeds,

@@ -7,7 +7,6 @@ import { isValidSessionId } from "@/server/agent/session";
 import { rateLimited } from "@/server/rate-limit";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
 import { APP_IDS, getApp, speciesIds } from "@/shared/apps";
-import { CATEGORY_IDS } from "@/shared/species-categories";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,8 +41,8 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z
       .optional(),
   })
   .superRefine((body, ctx) => {
-    // Species filter keys are the app's focus species and the categories; anything else is another app's.
-    const allowed = new Set<string>([...speciesIds(getApp(body.app)), ...CATEGORY_IDS]);
+    // Species filter keys are the app's species; anything else is another app's.
+    const allowed = new Set<string>(speciesIds(getApp(body.app)));
     body.view?.species?.forEach((key, i) => {
       if (!allowed.has(key)) ctx.addIssue({ code: "custom", path: ["view", "species", i], message: `not a species of app ${body.app}` });
     });

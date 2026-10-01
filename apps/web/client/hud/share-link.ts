@@ -10,11 +10,7 @@
  * - `c`: lat, lon (5 decimals, about 1 m), altitude in metres, heading and pitch in degrees (1 decimal).
  * - `t`: the TIME cursor, UTC to the minute (frames are 15-minute steps, so nothing finer exists).
  * - `l`: visible layers, explicit, so layers hidden by default come back on too. Empty means none visible.
- * - `sp`: species filter keys shown (the app's focus species and the categories `snakes` … `other`, T44),
- *   omitted when it is the app's default (every focus species and animal category on; insects, spiders, plants
- *   and other off).
- * - `st`: taxon overrides on top of the categories (T44): taxon ids shown, hidden ones with a leading `-`.
- * - `w`: the sightings window in hours (48, 168 or 720), omitted at the default.
+ * - `sp`: species filter keys shown (the app's species), omitted when it is the app's default (shown).
  * - `e`: selected evidence id (PLAN.md C14).
  * - `site`, `asof` (carp): the selected location's NWPS id and the "what we knew" time, UTC to the minute; no
  *   `asof` means live.
@@ -26,13 +22,12 @@
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { activeApp, V1_APP } from "client/state/app";
-import { isWindowHours, layersFor, speciesFilterIds, type SpeciesFilterId } from "client/state/layers";
+import { layersFor, type SpeciesId } from "client/state/layers";
 import { parseEvidenceId } from "client/state/selection";
-import { getApp, isAppId, type AppConfig, type AppId } from "shared/apps";
-import type { SightingWindowHours } from "shared/frames";
+import { getApp, isAppId, speciesIds, type AppConfig, type AppId } from "shared/apps";
 
 export type LayerId = (typeof LAYER_IDS)[number];
-export type SpeciesId = SpeciesFilterId;
+export type { SpeciesId };
 
 export type ShareCamera = { lat: number; lon: number; altitudeM: number; heading: number; pitch: number };
 
@@ -46,10 +41,6 @@ export type ShareState = {
   layers?: LayerId[];
   /** Species filter keys shown; absent means the default filter. */
   species?: SpeciesId[];
-  /** Taxon overrides: `[taxon id, shown]`, sorted by id. */
-  taxa?: [number, boolean][];
-  /** Sightings window, hours. */
-  hours?: SightingWindowHours;
   evidenceId?: string | null;
   /** Carp (conditions apps): the selected location's NWPS id and the "what we knew" time (absent: live). */
   site?: string;
@@ -59,7 +50,7 @@ export type ShareState = {
 /** An app's default species filter as a shown-key list. */
 export function defaultSpecies(app: AppConfig): SpeciesId[] {
   const { species } = layersFor(app);
-  return speciesFilterIds(app).filter((id) => species[id] === true);
+  return speciesIds(app).filter((id) => species[id] === true);
 }
 
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v) => b.includes(v));
@@ -107,12 +98,8 @@ export function encodeShareLink(state: ShareState): string {
   }
   if (state.layers) params.set("l", LAYER_IDS.filter((id) => state.layers!.includes(id)).join(","));
   if (state.species && !sameList(state.species, defaultSpecies(app))) {
-    params.set("sp", speciesFilterIds(app).filter((id) => state.species!.includes(id)).join(","));
+    params.set("sp", speciesIds(app).filter((id) => state.species!.includes(id)).join(","));
   }
-  if (state.taxa && state.taxa.length > 0) {
-    params.set("st", [...state.taxa].sort((a, b) => a[0] - b[0]).map(([id, shown]) => `${shown ? "" : "-"}${id}`).join(","));
-  }
-  if (state.hours !== undefined && state.hours !== layersFor(app).sightingHours) params.set("w", String(state.hours));
   if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
   if (state.site && SITE_ID.test(state.site)) params.set("site", state.site);
   if (state.asOf) {
@@ -164,19 +151,8 @@ export function decodeShareLink(hash: string): ShareState {
   if (t && Number.isFinite(Date.parse(t))) out.at = new Date(Date.parse(t)).toISOString();
   const layers = decodeList(params.get("l"), LAYER_IDS);
   if (layers) out.layers = layers;
-  const species = decodeList(params.get("sp"), speciesFilterIds(app));
+  const species = decodeList(params.get("sp"), speciesIds(app));
   if (species) out.species = species;
-  const st = params.get("st");
-  if (st !== null) {
-    const seen = new Map<number, boolean>();
-    for (const item of st.split(",")) {
-      const m = /^(-?)(\d{1,9})$/.exec(item.trim());
-      if (m && Number(m[2]) > 0 && !seen.has(Number(m[2]))) seen.set(Number(m[2]), m[1] === "");
-    }
-    if (seen.size > 0) out.taxa = [...seen].sort((a, b) => a[0] - b[0]);
-  }
-  const w = Number(params.get("w"));
-  if (isWindowHours(w)) out.hours = w;
   const e = params.get("e");
   if (e && parseEvidenceId(e)) out.evidenceId = e;
   const site = params.get("site");

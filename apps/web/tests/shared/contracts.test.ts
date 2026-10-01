@@ -76,11 +76,12 @@ describe("shared contracts", () => {
     expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: true }, carp)).toBeNull();
     expect(parseUiCommand("toggle_layer", { layer: "stations", visible: true }, carp)?.name).toBe("toggle_layer");
     expect(parseUiCommand("toggle_layer", { layer: "alerts", visible: true, species: "python" }, carp)).toBeNull();
-    // Lionfish has one species; python's four are python's.
+    // Lionfish and python have one species each, their own.
     expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "lionfish" }, lionfish)?.name).toBe("toggle_layer");
-    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "tegu" }, lionfish)).toBeNull();
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "python" }, lionfish)).toBeNull();
     expect(parseUiCommand("toggle_layer", { layer: "lst", visible: true }, lionfish)).toBeNull();
-    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "tegu" }, python)?.name).toBe("toggle_layer");
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "python" }, python)?.name).toBe("toggle_layer");
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "lionfish" }, python)).toBeNull();
     const schema = z.toJSONSchema(uiToolSchemasFor(lionfish).toggle_layer, { io: "input" }) as unknown as { properties: { layer: { enum: string[] }; species: { enum: string[] } } };
     expect(schema.properties.layer.enum).toEqual(appLayerIds(lionfish));
     expect(schema.properties.species.enum).toEqual(["lionfish"]);
