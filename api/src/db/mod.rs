@@ -17,6 +17,7 @@ const OBSERVATIONS: &[(&str, &str)] = &[
     ("0003_source_disabled", include_str!("../../migrations/observations/0003_source_disabled.sql")),
     ("0004_taxon_info", include_str!("../../migrations/observations/0004_taxon_info.sql")),
     ("0005_taxon_ancestry", include_str!("../../migrations/observations/0005_taxon_ancestry.sql")),
+    ("0006_forecasts", include_str!("../../migrations/observations/0006_forecasts.sql")),
 ];
 const TEAM: &[(&str, &str)] = &[
     ("0001_init", include_str!("../../migrations/team/0001_init.sql")),

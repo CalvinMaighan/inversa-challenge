@@ -739,3 +739,239 @@ async fn subscription_ops_receives_applied_ops_over_websocket() {
     assert_eq!(seqs, vec![(3, "w2".to_string()), (4, "w3".to_string())]);
     server.abort();
 }
+
+// ---------------------------------------------------------------------------------------------
+// C3 forecast store: `forecasts`, `forecastVerify`, `siteStatusAt` (conditions apps only).
+// ---------------------------------------------------------------------------------------------
+
+/// The carp app with one site's forecast history seeded through the store: an archive issuance,
+/// two live issuances (captured an hour after issue), hourly observations, thresholds, alerts.
+async fn carp_seeded() -> (AppState, i64, i64, i64) {
+    use crate::forecast::store::{insert_observations, insert_snapshot, record_alerts, upsert_thresholds, AlertSeen, NewSnapshot};
+    use crate::forecast::{Observation, Point, Source, Thresholds};
+    let state = crate::app::test_support::test_state_for("carp");
+    // A year back so "asOf = now" (the wall clock) is after every seeded ingestion.
+    let t0 = ms(2025, 9, 29, 0);
+    let archive = t0 + 15 * HOUR; // 09-29 15Z via IEM, ingested days later
+    let d0 = archive + DAY; // 09-30 15Z live
+    let d1 = d0 + DAY; // 10-01 15Z live
+    state
+        .obs
+        .write(move |tx| {
+            let th = Thresholds::from_feed(30.0, 35.0, 38.0, 40.0);
+            upsert_thresholds(tx, "BTRL1", t0, &th)?;
+            let pts = |start: i64, base: f64| -> Vec<Point> {
+                (0..58).map(|i| Point { valid_at: start + i as i64 * 6 * HOUR, stage_ft: Some(base + 0.15 * i as f64), flow_kcfs: Some(245.0) }).collect()
+            };
+            let snap = |issued: i64, ingested: i64, source: Source, hash: &str, base: f64| NewSnapshot {
+                site: "BTRL1".into(),
+                product: if source == Source::IemArchive { "hml".into() } else { "stageflow".into() },
+                issued_at: issued,
+                ingested_at: ingested,
+                source,
+                payload_hash: hash.into(),
+                points: pts(issued + 3 * HOUR, base),
+            };
+            insert_snapshot(tx, &snap(d0, d0 + HOUR, Source::NwpsLive, "d0", 8.0), &th)?;
+            insert_snapshot(tx, &snap(d1, d1 + HOUR, Source::NwpsLive, "d1", 8.5), &th)?;
+            // Revision of d1 with a higher crest, captured 3 h after issue.
+            let mut rev = snap(d1, d1 + 3 * HOUR, Source::NwpsLive, "d1b", 9.0);
+            rev.points[57].stage_ft = Some(31.0);
+            insert_snapshot(tx, &rev, &th)?;
+            insert_snapshot(tx, &snap(archive, d1 + 5 * DAY, Source::IemArchive, "arch", 7.5), &th)?;
+            // Hourly observations from 09-30 00Z for three days, each captured 55 min after.
+            for h in 0..72 {
+                let at = t0 + DAY + h * HOUR;
+                insert_observations(tx, "BTRL1", Source::NwpsLive, at + 55 * 60_000, &[Observation { observed_at: at, stage_ft: Some(8.15 + 0.03 * h as f64), flow_kcfs: Some(245.0) }])?;
+            }
+            record_alerts(
+                tx,
+                "BTRL1",
+                d1,
+                &[AlertSeen {
+                    ext_id: "urn:oid:2.49.0.1.840.0.1".into(),
+                    event: "Flood Watch".into(),
+                    severity: "Moderate".into(),
+                    headline: None,
+                    onset: Some(d1),
+                    expires: Some(d1 + DAY),
+                    source: Source::NwsGridpoint,
+                    payload_hash: "a".into(),
+                }],
+            )?;
+            record_alerts(tx, "BTRL1", d1 + 6 * HOUR, &[])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    (state, archive, d0, d1)
+}
+
+#[tokio::test]
+async fn forecast_graphql_forecasts_asof_and_coverage() {
+    let (state, archive, d0, d1) = carp_seeded().await;
+    const Q: &str = "query($site: ID!, $asOf: Time, $history: Int) { forecasts(site: $site, asOf: $asOf, history: $history) {
+        site asOf snapshotCount replayCoverageStart liveCoverageStart
+        snapshot { id site product issuedAt ingestedAt source payloadHash revision validFrom validTo horizonEnd peakStageFt peakAt peakCategory points { validAt stageFt flowKcfs category } }
+        history { issuedAt revision source } } }";
+    // Between d1's issue and its capture: d0 is what we knew.
+    let body = gql(&state, Q, json!({"site": "btrl1", "asOf": iso(d1 + 30 * 60_000), "history": 10})).await;
+    let f = &body["data"]["forecasts"];
+    assert_eq!(f["site"], "BTRL1", "{body}");
+    assert_eq!(f["snapshot"]["issuedAt"], iso(d0));
+    assert_eq!(f["snapshot"]["source"], "NWPS_LIVE");
+    assert_eq!(f["snapshot"]["product"], "stageflow");
+    assert_eq!(f["snapshot"]["revision"], 0);
+    assert_eq!(f["snapshot"]["points"].as_array().unwrap().len(), 58);
+    assert_eq!(f["snapshot"]["points"][0]["category"], "NONE");
+    assert_eq!(f["snapshot"]["validFrom"], iso(d0 + 3 * HOUR));
+    assert_eq!(f["snapshot"]["horizonEnd"], iso(d0 + 3 * HOUR + 57 * 6 * HOUR));
+    assert_eq!(f["snapshot"]["peakCategory"], "NONE");
+    assert_eq!(f["history"], json!([{"issuedAt": iso(d0), "revision": 0, "source": "NWPS_LIVE"}, {"issuedAt": iso(archive), "revision": 0, "source": "IEM_ARCHIVE"}]));
+    assert_eq!(f["snapshotCount"], 4);
+    assert_eq!(f["replayCoverageStart"], iso(archive));
+    assert_eq!(f["liveCoverageStart"], iso(d0 + HOUR));
+    // After the revision landed: revision 1 with the 31 ft crest (action stage 30).
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 3 * HOUR)})).await;
+    let f = &body["data"]["forecasts"];
+    assert_eq!((f["snapshot"]["issuedAt"].as_str(), f["snapshot"]["revision"].as_i64()), (Some(iso(d1).as_str()), Some(1)));
+    assert_eq!(f["snapshot"]["peakStageFt"], 31.0);
+    assert_eq!(f["snapshot"]["peakCategory"], "ACTION");
+    assert_eq!(f["history"].as_array().unwrap().len(), 1, "default history 1");
+    // Before the revision: revision 0 of d1.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 2 * HOUR)})).await;
+    assert_eq!(body["data"]["forecasts"]["snapshot"]["revision"], 0);
+    // Before anything: the archive issuance was public at its issue time; before that, null.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(archive)})).await;
+    assert_eq!(body["data"]["forecasts"]["snapshot"]["source"], "IEM_ARCHIVE");
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(archive - 1)})).await;
+    assert_eq!(body["data"]["forecasts"]["snapshot"], Value::Null);
+    assert_eq!(body["data"]["forecasts"]["history"], json!([]));
+    // Default asOf = now: the newest.
+    let body = gql(&state, Q, json!({"site": "BTRL1"})).await;
+    assert_eq!(body["data"]["forecasts"]["snapshot"]["revision"], 1);
+    // A configured site with nothing stored: empty view, no error.
+    let body = gql(&state, Q, json!({"site": "SMML1"})).await;
+    assert_eq!(body["data"]["forecasts"], json!({"site": "SMML1", "asOf": body["data"]["forecasts"]["asOf"], "snapshotCount": 0, "replayCoverageStart": null, "liveCoverageStart": null, "snapshot": null, "history": []}));
+    // Validation.
+    let body = gql(&state, Q, json!({"site": "XXXX1"})).await;
+    assert_eq!(error_code(&body), "UNKNOWN_SITE");
+    assert!(error_message(&body).contains("BTRL1, ALXL1, SMML1, MONL1"), "{body}");
+    let body = gql(&state, Q, json!({"site": "BTRL1", "history": 61})).await;
+    assert!(error_message(&body).contains("0..=60"), "{body}");
+}
+
+#[tokio::test]
+async fn forecast_graphql_verify() {
+    let (state, _, d0, d1) = carp_seeded().await;
+    const Q: &str = "query($site: ID!, $at: Time!) { forecastVerify(site: $site, issuedAt: $at) {
+        site issuedAt snapshot { id revision } paired missing biasFt meanAbsErrorFt maxAbsErrorFt
+        peakForecastFt peakForecastCategory peakObservedFt peakObservedCategory peakCategoryHit
+        points { validAt forecastFt observedAt observedFt errorFt missing forecastCategory observedCategory } } }";
+    let body = gql(&state, Q, json!({"site": "BTRL1", "at": iso(d0)})).await;
+    let v = &body["data"]["forecastVerify"];
+    assert_eq!(v["issuedAt"], iso(d0), "{body}");
+    assert_eq!(v["snapshot"]["revision"], 0);
+    // Observations cover 09-30 00Z .. 10-02 23Z: points valid 09-30 18Z .. 10-02 18Z pair (9), the rest miss.
+    assert_eq!((v["paired"].as_i64(), v["missing"].as_i64()), (Some(9), Some(49)));
+    let pts = v["points"].as_array().unwrap();
+    assert_eq!(pts.len(), 58);
+    assert_eq!(pts[0]["validAt"], iso(d0 + 3 * HOUR));
+    assert_eq!(pts[0]["observedAt"], iso(d0 + 3 * HOUR), "exact hour pairs");
+    assert_eq!(pts[0]["missing"], false);
+    assert!((pts[0]["errorFt"].as_f64().unwrap() - (8.0 - (8.15 + 0.03 * 18.0))).abs() < 1e-9);
+    assert_eq!(pts[0]["observedCategory"], "NONE");
+    assert_eq!(pts[57]["missing"], true);
+    assert_eq!(pts[57]["observedFt"], Value::Null);
+    assert_eq!(pts[57]["errorFt"], Value::Null, "missing stays missing");
+    assert!(v["biasFt"].as_f64().is_some() && v["meanAbsErrorFt"].as_f64().unwrap() > 0.0);
+    assert_eq!(v["peakForecastCategory"], "NONE");
+    assert_eq!(v["peakObservedCategory"], "NONE");
+    assert_eq!(v["peakCategoryHit"], true);
+    // The revised d1 (crest 31 ft, action) verifies against observations that never got there.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "at": iso(d1)})).await;
+    let v = &body["data"]["forecastVerify"];
+    assert_eq!(v["snapshot"]["revision"], 1);
+    assert_eq!((v["peakForecastFt"].as_f64(), v["peakForecastCategory"].as_str()), (Some(31.0), Some("ACTION")));
+    assert_eq!(v["peakCategoryHit"], false);
+    // Unknown issuance.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "at": iso(d0 + 1)})).await;
+    assert_eq!(error_code(&body), "NOT_FOUND");
+}
+
+#[tokio::test]
+async fn forecast_graphql_site_status_at() {
+    let (state, _, d0, d1) = carp_seeded().await;
+    const Q: &str = "query($site: ID!, $asOf: Time!, $c: Float) { siteStatusAt(site: $site, asOf: $asOf, conflictFt: $c) {
+        site asOf stageFt category observationFreshness forecastFreshness activeAlerts
+        observation { observedAt ingestedAt source stageFt flowKcfs }
+        thresholds { actionFt minorFt moderateFt majorFt }
+        forecast { issuedAt revision } forecastNow { validAt stageFt category }
+        conflicts { kind detail forecastFt observedFt differenceFt } } }";
+    // d1 + 4 h (19Z): revision 1 of d1 in force; newest observation 18Z (captured 18:55); no
+    // forecast point within 30 min of 19Z (points are 6-hourly from 18Z) -> forecastNow null.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 4 * HOUR)})).await;
+    let s = &body["data"]["siteStatusAt"];
+    assert_eq!(s["site"], "BTRL1", "{body}");
+    assert_eq!(s["forecast"], json!({"issuedAt": iso(d1), "revision": 1}));
+    assert_eq!(s["observation"]["observedAt"], iso(d1 + 3 * HOUR));
+    assert_eq!(s["observation"]["source"], "NWPS_LIVE");
+    assert_eq!(s["stageFt"], s["observation"]["stageFt"]);
+    assert_eq!(s["category"], "NONE");
+    assert_eq!(s["thresholds"], json!({"actionFt": 30.0, "minorFt": 35.0, "moderateFt": 38.0, "majorFt": 40.0}));
+    assert_eq!((s["observationFreshness"].as_str(), s["forecastFreshness"].as_str()), (Some("FRESH"), Some("FRESH")));
+    assert_eq!(s["forecastNow"], Value::Null);
+    assert_eq!(s["conflicts"], json!([]));
+    assert_eq!(s["activeAlerts"], 1, "watch seen at d1, ended at d1 + 6 h");
+    assert_eq!(gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 7 * HOUR)})).await["data"]["siteStatusAt"]["activeAlerts"], 0);
+    assert_eq!(gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 - 1)})).await["data"]["siteStatusAt"]["activeAlerts"], 0);
+    // d1 + 3 h exactly: forecast point valid d1 + 3 h (9.0 ft) vs the 17Z observation (the 18Z
+    // one lands at 18:55): 8.15 + 0.03*41 = 9.38, 0.38 ft off. No conflict at the 1 ft default,
+    // a conflict at 0.25 ft.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 3 * HOUR)})).await;
+    let s = &body["data"]["siteStatusAt"];
+    assert_eq!(s["forecastNow"]["validAt"], iso(d1 + 3 * HOUR));
+    assert_eq!(s["observation"]["observedAt"], iso(d1 + 2 * HOUR), "the 18Z value arrives at 18:55");
+    assert_eq!(s["conflicts"], json!([]));
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 3 * HOUR), "c": 0.25})).await;
+    let c = &body["data"]["siteStatusAt"]["conflicts"][0];
+    assert_eq!(c["kind"], "gauge_vs_forecast", "{body}");
+    assert_eq!(c["forecastFt"], 9.0);
+    assert!((c["differenceFt"].as_f64().unwrap() - (8.15 + 0.03 * 41.0 - 9.0)).abs() < 1e-9);
+    assert!(c["detail"].as_str().unwrap().contains("over the 0.25 ft threshold"));
+    // Four days on: forecast stale (> 36 h), observation stale (> 6 h), both named; category still from NWPS.
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1 + 4 * DAY)})).await;
+    let s = &body["data"]["siteStatusAt"];
+    assert_eq!((s["observationFreshness"].as_str(), s["forecastFreshness"].as_str()), (Some("STALE"), Some("STALE")));
+    assert_eq!(s["conflicts"].as_array().unwrap().iter().map(|c| c["kind"].as_str().unwrap()).collect::<Vec<_>>(), ["stale_forecast", "stale_observation"]);
+    // Before d0 was captured: the archive forecast (issued 24.5 h earlier: AGING).
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d0 + 30 * 60_000)})).await;
+    let s = &body["data"]["siteStatusAt"];
+    assert_eq!(s["forecast"]["issuedAt"], iso(d0 - DAY));
+    assert_eq!(s["forecastFreshness"], "AGING");
+    // Nothing known at a configured site: MISSING bands, nulls, no conflicts.
+    let body = gql(&state, Q, json!({"site": "MONL1", "asOf": iso(d1)})).await;
+    let s = &body["data"]["siteStatusAt"];
+    assert_eq!((s["observationFreshness"].as_str(), s["forecastFreshness"].as_str()), (Some("MISSING"), Some("MISSING")));
+    assert_eq!((s["stageFt"].clone(), s["category"].clone(), s["forecast"].clone(), s["conflicts"].clone()), (Value::Null, Value::Null, Value::Null, json!([])));
+    let body = gql(&state, Q, json!({"site": "BTRL1", "asOf": iso(d1), "c": -1.0})).await;
+    assert!(error_message(&body).contains("conflictFt"), "{body}");
+}
+
+/// Species apps answer every forecast query with a typed error and no data.
+#[tokio::test]
+async fn forecast_graphql_species_apps_get_typed_error() {
+    for app in ["python", "lionfish"] {
+        let state = crate::app::test_support::test_state_for(app);
+        for q in [
+            "{ forecasts(site: \"BTRL1\") { site } }",
+            "{ forecastVerify(site: \"BTRL1\", issuedAt: \"2026-09-30T15:00:00Z\") { site } }",
+            "{ siteStatusAt(site: \"BTRL1\", asOf: \"2026-09-30T15:00:00Z\") { site } }",
+        ] {
+            let body = gql(&state, q, json!({})).await;
+            assert_eq!(error_code(&body), "NOT_CONDITIONS_APP", "{app}: {body}");
+            assert!(error_message(&body).contains(&format!("app {app} has no forecast store (kind species)")), "{body}");
+            assert_eq!(body["data"], Value::Null, "{body}");
+        }
+    }
+}

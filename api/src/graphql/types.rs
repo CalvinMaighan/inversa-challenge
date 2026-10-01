@@ -8,6 +8,7 @@ use chrono::{DateTime, SecondsFormat};
 
 use crate::app::config::App;
 use crate::feed_state;
+use crate::forecast;
 
 /// RFC 3339 timestamp, carried as unix milliseconds (the storage format of every time column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -447,4 +448,293 @@ pub struct Board {
 pub struct FrameRange {
     pub from: Time,
     pub to: Time,
+}
+
+// ---------------------------------------------------------------------------------------------
+// Forecast store (C3): conditions apps only. Mirrors `crate::forecast`.
+// ---------------------------------------------------------------------------------------------
+
+/// NWPS flood category, from NWPS stage thresholds only ("at or above").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum FloodCategory {
+    None,
+    Action,
+    Minor,
+    Moderate,
+    Major,
+}
+
+impl From<forecast::Category> for FloodCategory {
+    fn from(c: forecast::Category) -> Self {
+        match c {
+            forecast::Category::None => FloodCategory::None,
+            forecast::Category::Action => FloodCategory::Action,
+            forecast::Category::Minor => FloodCategory::Minor,
+            forecast::Category::Moderate => FloodCategory::Moderate,
+            forecast::Category::Major => FloodCategory::Major,
+        }
+    }
+}
+
+/// Where a forecast row came from. `NWPS_LIVE` rows were captured by this process (as-of views
+/// gate them by ingestion time); `IEM_ARCHIVE` rows were backfilled from the Iowa Environmental
+/// Mesonet HML archive (gated by issuance time only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum ForecastSource {
+    NwpsLive,
+    IemArchive,
+    NwsGridpoint,
+}
+
+impl From<forecast::Source> for ForecastSource {
+    fn from(s: forecast::Source) -> Self {
+        match s {
+            forecast::Source::NwpsLive => ForecastSource::NwpsLive,
+            forecast::Source::IemArchive => ForecastSource::IemArchive,
+            forecast::Source::NwsGridpoint => ForecastSource::NwsGridpoint,
+        }
+    }
+}
+
+/// Age band at the as-of time. Observations: FRESH <= 2 h, AGING <= 6 h, else STALE.
+/// Forecasts: FRESH <= 24 h since issuance, AGING <= 36 h, else STALE. MISSING: nothing known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum Freshness {
+    Fresh,
+    Aging,
+    Stale,
+    Missing,
+}
+
+impl From<forecast::query::Freshness> for Freshness {
+    fn from(f: forecast::query::Freshness) -> Self {
+        match f {
+            forecast::query::Freshness::Fresh => Freshness::Fresh,
+            forecast::query::Freshness::Aging => Freshness::Aging,
+            forecast::query::Freshness::Stale => Freshness::Stale,
+            forecast::query::Freshness::Missing => Freshness::Missing,
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct FloodThresholds {
+    pub action_ft: Option<f64>,
+    pub minor_ft: Option<f64>,
+    pub moderate_ft: Option<f64>,
+    pub major_ft: Option<f64>,
+}
+
+impl From<forecast::Thresholds> for FloodThresholds {
+    fn from(t: forecast::Thresholds) -> Self {
+        FloodThresholds { action_ft: t.action_ft, minor_ft: t.minor_ft, moderate_ft: t.moderate_ft, major_ft: t.major_ft }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct ForecastPoint {
+    pub valid_at: Time,
+    /// NWPS stage, feet.
+    pub stage_ft: Option<f64>,
+    /// NWPS flow, kcfs (USGS discharge is cfs).
+    pub flow_kcfs: Option<f64>,
+    /// Null when the stage or the site's thresholds were unknown when stored.
+    pub category: Option<FloodCategory>,
+}
+
+impl From<forecast::StoredPoint> for ForecastPoint {
+    fn from(p: forecast::StoredPoint) -> Self {
+        ForecastPoint { valid_at: Time(p.valid_at), stage_ft: p.stage_ft, flow_kcfs: p.flow_kcfs, category: p.category.map(Into::into) }
+    }
+}
+
+/// One forecast issuance as stored. Cite as `forecast:<id>`.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct ForecastSnapshot {
+    pub id: ID,
+    /// NWPS lid (`locations[].nwps`).
+    pub site: ID,
+    /// `stageflow` (NWPS API), `hml` (IEM archive), ...
+    pub product: String,
+    pub issued_at: Time,
+    pub ingested_at: Time,
+    pub source: ForecastSource,
+    pub payload_hash: String,
+    /// 0 for the first payload seen for this issuance; a changed payload with the same
+    /// `issuedAt` is revision 1, 2, ... (all kept).
+    pub revision: i32,
+    pub valid_from: Option<Time>,
+    pub valid_to: Option<Time>,
+    pub horizon_end: Option<Time>,
+    pub peak_stage_ft: Option<f64>,
+    pub peak_at: Option<Time>,
+    pub peak_category: Option<FloodCategory>,
+    pub points: Vec<ForecastPoint>,
+}
+
+impl From<forecast::Snapshot> for ForecastSnapshot {
+    fn from(s: forecast::Snapshot) -> Self {
+        let peak = s.peak().copied();
+        ForecastSnapshot {
+            id: ID(s.id.to_string()),
+            site: ID(s.site),
+            product: s.product,
+            issued_at: Time(s.issued_at),
+            ingested_at: Time(s.ingested_at),
+            source: s.source.into(),
+            payload_hash: s.payload_hash,
+            revision: s.revision as i32,
+            valid_from: s.valid_from.map(Time),
+            valid_to: s.valid_to.map(Time),
+            horizon_end: s.horizon_end.map(Time),
+            peak_stage_ft: peak.and_then(|p| p.stage_ft),
+            peak_at: peak.map(|p| Time(p.valid_at)),
+            peak_category: peak.and_then(|p| p.category).map(Into::into),
+            points: s.points.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+/// What was known about a site's forecast at `asOf`.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct ForecastView {
+    pub site: ID,
+    pub as_of: Time,
+    /// The forecast in force at `asOf`: greatest issuance at or before `asOf` that had been
+    /// captured by then (live) or was public by then (archive). Null when none was known.
+    pub snapshot: Option<ForecastSnapshot>,
+    /// Issuances known at `asOf`, newest first, at most `history`.
+    pub history: Vec<ForecastSnapshot>,
+    /// The first `asOf` with a forecast: when the earliest stored snapshot became knowable
+    /// (archive rows at issuance, live rows when captured).
+    pub replay_coverage_start: Option<Time>,
+    /// First live capture by this process; before it every forecast is an archive copy.
+    pub live_coverage_start: Option<Time>,
+    pub snapshot_count: i32,
+}
+
+/// An observed NWPS value (stage on the NWPS datum, the one the flood categories use).
+#[derive(Debug, Clone, SimpleObject)]
+pub struct SiteObservation {
+    pub observed_at: Time,
+    pub ingested_at: Time,
+    pub source: ForecastSource,
+    pub stage_ft: Option<f64>,
+    pub flow_kcfs: Option<f64>,
+}
+
+impl From<forecast::StoredObservation> for SiteObservation {
+    fn from(o: forecast::StoredObservation) -> Self {
+        SiteObservation { observed_at: Time(o.observed_at), ingested_at: Time(o.ingested_at), source: o.source.into(), stage_ft: o.stage_ft, flow_kcfs: o.flow_kcfs }
+    }
+}
+
+/// A reason the site cannot be read at face value.
+#[derive(Debug, Clone, SimpleObject)]
+pub struct SiteConflict {
+    /// `gauge_vs_forecast`, `stale_forecast`, `stale_observation` or `no_thresholds`.
+    pub kind: String,
+    pub detail: String,
+    pub forecast_ft: Option<f64>,
+    pub observed_ft: Option<f64>,
+    /// observed - forecast, feet.
+    pub difference_ft: Option<f64>,
+}
+
+impl From<forecast::query::Conflict> for SiteConflict {
+    fn from(c: forecast::query::Conflict) -> Self {
+        SiteConflict { kind: c.kind.to_string(), detail: c.detail, forecast_ft: c.forecast_ft, observed_ft: c.observed_ft, difference_ft: c.difference_ft }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct SiteStatus {
+    pub site: ID,
+    pub as_of: Time,
+    /// Newest NWPS observation knowable at `asOf`.
+    pub observation: Option<SiteObservation>,
+    pub stage_ft: Option<f64>,
+    /// Category of the observed stage against the NWPS thresholds known at `asOf`.
+    pub category: Option<FloodCategory>,
+    pub thresholds: Option<FloodThresholds>,
+    pub observation_freshness: Freshness,
+    pub forecast_freshness: Freshness,
+    /// The forecast in force at `asOf` (see `ForecastView.snapshot`).
+    pub forecast: Option<ForecastSnapshot>,
+    /// The forecast point valid nearest `asOf` (within 30 min), the one the gauge is compared to.
+    pub forecast_now: Option<ForecastPoint>,
+    pub conflicts: Vec<SiteConflict>,
+    /// NWS alert versions first seen at or before `asOf` and not ended by then.
+    pub active_alerts: i32,
+}
+
+/// One forecast point against the observation nearest its valid time (within 30 min).
+#[derive(Debug, Clone, SimpleObject)]
+pub struct ForecastVerifyPoint {
+    pub valid_at: Time,
+    pub forecast_ft: Option<f64>,
+    pub forecast_category: Option<FloodCategory>,
+    pub observed_at: Option<Time>,
+    pub observed_ft: Option<f64>,
+    pub observed_category: Option<FloodCategory>,
+    /// forecast - observed, feet. Null when either side is missing; never interpolated.
+    pub error_ft: Option<f64>,
+    pub missing: bool,
+}
+
+impl From<forecast::query::VerifiedPoint> for ForecastVerifyPoint {
+    fn from(p: forecast::query::VerifiedPoint) -> Self {
+        ForecastVerifyPoint {
+            valid_at: Time(p.valid_at),
+            forecast_ft: p.forecast_ft,
+            forecast_category: p.forecast_category.map(Into::into),
+            observed_at: p.observed_at.map(Time),
+            observed_ft: p.observed_ft,
+            observed_category: p.observed_category.map(Into::into),
+            error_ft: p.error_ft,
+            missing: p.missing(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, SimpleObject)]
+pub struct ForecastVerification {
+    pub site: ID,
+    pub issued_at: Time,
+    pub snapshot: ForecastSnapshot,
+    pub points: Vec<ForecastVerifyPoint>,
+    pub paired: i32,
+    pub missing: i32,
+    /// Mean of forecast - observed over paired points; positive = forecast ran high.
+    pub bias_ft: Option<f64>,
+    pub mean_abs_error_ft: Option<f64>,
+    pub max_abs_error_ft: Option<f64>,
+    pub peak_forecast_ft: Option<f64>,
+    pub peak_forecast_category: Option<FloodCategory>,
+    /// Highest observed stage inside the forecast's valid window.
+    pub peak_observed_ft: Option<f64>,
+    pub peak_observed_category: Option<FloodCategory>,
+    /// The observed peak reached the same category as the forecast peak. Null when either side is unknown.
+    pub peak_category_hit: Option<bool>,
+}
+
+impl From<forecast::query::Verification> for ForecastVerification {
+    fn from(v: forecast::query::Verification) -> Self {
+        ForecastVerification {
+            site: ID(v.snapshot.site.clone()),
+            issued_at: Time(v.snapshot.issued_at),
+            snapshot: v.snapshot.into(),
+            points: v.points.into_iter().map(Into::into).collect(),
+            paired: v.paired as i32,
+            missing: v.missing as i32,
+            bias_ft: v.bias_ft,
+            mean_abs_error_ft: v.mean_abs_error_ft,
+            max_abs_error_ft: v.max_abs_error_ft,
+            peak_forecast_ft: v.peak_forecast_ft,
+            peak_forecast_category: v.peak_forecast_category.map(Into::into),
+            peak_observed_ft: v.peak_observed_ft,
+            peak_observed_category: v.peak_observed_category.map(Into::into),
+            peak_category_hit: v.peak_category_hit,
+        }
+    }
 }

@@ -13,15 +13,15 @@ use base64::Engine;
 use rusqlite::params;
 
 use super::types::{
-    Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, FrameChunk, HotspotCell, HotspotExplain,
-    HotspotGrid, HotspotTerm, Message, Mission, Op, Param, Quality, Reading, ReadingFlag, ReadingOrigin, Sighting,
-    SpeciesCount, Station, Taxon, Time,
+    Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, ForecastVerification, ForecastView, FrameChunk,
+    HotspotCell, HotspotExplain, HotspotGrid, HotspotTerm, Message, Mission, Op, Param, Quality, Reading, ReadingFlag,
+    ReadingOrigin, Sighting, SiteStatus, SpeciesCount, Station, Taxon, Time,
 };
 use super::{app_state, now_ms};
 use crate::app::config::{App, Taxon as AppTaxon};
 use crate::db::Db;
 use crate::hotspot;
-use crate::{crdt, feed_state, frames};
+use crate::{crdt, feed_state, forecast, frames};
 
 pub struct QueryRoot;
 
@@ -70,6 +70,34 @@ fn hotspot_app<'a>(ctx: &Context<'a>) -> Result<&'a App> {
         return Err(format!("app {} has no hotspot grid (kind conditions): no frames, hotspots, explainCell or backtest", app.id()).into());
     }
     Ok(app)
+}
+
+/// `forecasts` returns at most this many issuances of history.
+pub const MAX_FORECAST_HISTORY: i32 = 60;
+
+/// A conditions app's forecast store, and the site as one of its configured NWPS ids. A species
+/// app gets a typed error (`code: NOT_CONDITIONS_APP`); an unknown site `UNKNOWN_SITE`.
+fn forecast_site(ctx: &Context<'_>, site: &ID) -> Result<String> {
+    let app = &app_state(ctx).app;
+    if app.is_species() {
+        return Err(async_graphql::Error::new(format!(
+            "app {} has no forecast store (kind species): forecasts, forecastVerify and siteStatusAt serve kind conditions apps only",
+            app.id()
+        ))
+        .extend_with(|_, e| e.set("code", "NOT_CONDITIONS_APP")));
+    }
+    let wanted = site.trim().to_ascii_uppercase();
+    let known: Vec<&str> = app.cfg.locations.iter().filter_map(|l| l.nwps.as_deref()).collect();
+    if !known.contains(&wanted.as_str()) {
+        return Err(async_graphql::Error::new(format!(
+            "unknown site {:?} for app {}; expected an NWPS id of a configured location: {}",
+            site.as_str(),
+            app.id(),
+            known.join(", ")
+        ))
+        .extend_with(|_, e| e.set("code", "UNKNOWN_SITE")));
+    }
+    Ok(wanted)
 }
 
 /// `taxa.id`s from ids or focus species names (the app's taxa ids).
@@ -498,6 +526,82 @@ impl QueryRoot {
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn ops_since(&self, ctx: &Context<'_>, board_id: ID, seq: i64) -> Result<Vec<Op>> {
         Ok(ops_after(&app_state(ctx).team, board_id.0, seq).await?)
+    }
+
+    /// The river forecast known at `asOf` (default now) for a site (NWPS id of a configured
+    /// location), plus the last `history` issuances known then (default 1, at most 60) and
+    /// where replay coverage starts. Conditions apps only (C3).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn forecasts(&self, ctx: &Context<'_>, site: ID, as_of: Option<Time>, history: Option<i32>) -> Result<ForecastView> {
+        let site = forecast_site(ctx, &site)?;
+        let as_of = as_of.unwrap_or_else(|| Time(now_ms()));
+        let history = history.unwrap_or(1);
+        if !(0..=MAX_FORECAST_HISTORY).contains(&history) {
+            return Err(format!("`history` must be 0..={MAX_FORECAST_HISTORY}").into());
+        }
+        let site2 = site.clone();
+        let (snapshot, hist, cov) = app_state(ctx)
+            .obs
+            .read(move |c| {
+                Ok((
+                    forecast::query::asof(c, &site2, as_of.0)?,
+                    forecast::query::history(c, &site2, as_of.0, history as usize)?,
+                    forecast::query::coverage(c, &site2)?,
+                ))
+            })
+            .await?;
+        Ok(ForecastView {
+            site: ID(site),
+            as_of,
+            snapshot: snapshot.map(Into::into),
+            history: hist.into_iter().map(Into::into).collect(),
+            replay_coverage_start: cov.replay_coverage_start.map(Time),
+            live_coverage_start: cov.live_coverage_start.map(Time),
+            snapshot_count: cov.snapshots as i32,
+        })
+    }
+
+    /// The issuance at `issuedAt` (newest revision) against every NWPS observation stored since:
+    /// per-point error (nearest observation within 30 min; missing stays missing, never
+    /// interpolated), bias, and whether the observed peak reached the forecast peak's category.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn forecast_verify(&self, ctx: &Context<'_>, site: ID, issued_at: Time) -> Result<ForecastVerification> {
+        let site = forecast_site(ctx, &site)?;
+        let site2 = site.clone();
+        let v = app_state(ctx).obs.read(move |c| forecast::query::verify(c, &site2, issued_at.0)).await?;
+        v.map(Into::into).ok_or_else(|| {
+            async_graphql::Error::new(format!("no forecast for {site} issued at {}", forecast::query::iso(issued_at.0)))
+                .extend_with(|_, e| e.set("code", "NOT_FOUND"))
+        })
+    }
+
+    /// What was known about a site at `asOf`: newest NWPS observation and its flood category
+    /// (NWPS thresholds only), freshness bands, the forecast in force, active alert count, and
+    /// conflicts (gauge vs forecast differing by more than `conflictFt`, default 1 ft; stale
+    /// feeds; missing thresholds). Conditions apps only.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn site_status_at(&self, ctx: &Context<'_>, site: ID, as_of: Time, conflict_ft: Option<f64>) -> Result<SiteStatus> {
+        let site = forecast_site(ctx, &site)?;
+        let conflict_ft = conflict_ft.unwrap_or(forecast::query::DEFAULT_CONFLICT_FT);
+        if !(conflict_ft >= 0.0 && conflict_ft.is_finite()) {
+            return Err("`conflictFt` must be a non-negative number".into());
+        }
+        let site2 = site.clone();
+        let s = app_state(ctx).obs.read(move |c| forecast::query::status_at(c, &site2, as_of.0, conflict_ft)).await?;
+        Ok(SiteStatus {
+            site: ID(site),
+            as_of,
+            stage_ft: s.observation.and_then(|o| o.stage_ft),
+            observation: s.observation.map(Into::into),
+            category: s.category.map(Into::into),
+            thresholds: s.thresholds.map(Into::into),
+            observation_freshness: s.observation_freshness.into(),
+            forecast_freshness: s.forecast_freshness.into(),
+            forecast: s.forecast.map(Into::into),
+            forecast_now: s.forecast_now.map(Into::into),
+            conflicts: s.conflicts.into_iter().map(Into::into).collect(),
+            active_alerts: s.active_alerts as i32,
+        })
     }
 }
 
