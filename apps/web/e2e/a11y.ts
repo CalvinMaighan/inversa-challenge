@@ -478,6 +478,7 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.waitForFunction((sel) => !document.querySelector(sel), THEME_POPOVER, { timeout: 10_000 });
   if (!(await isFocused(page, THEME_BUTTON))) fail("Esc closed Theme but focus did not return to its button");
   log(`Theme after ${toTheme} Tab: opened, Esc back to the button`);
+  const searchOk = await searchByKeyboard(page, "1440", "Flamingo");
 
   // Help sheet (About → Help): focus moves into the sheet, Esc closes it back to the About button.
   await tabTo(page, STATUS_BUTTON);
@@ -510,7 +511,7 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   log(`${stops.length} focus stops, ${unique.length} without a visible ring`);
   for (const s of unique) log(`   no ring: ${s.desc} (${s.why})`);
   if (errors.length) log(`page errors: ${errors.join(" | ")}`);
-  const keyboard = unique.length === 0 && errors.length === 0;
+  const keyboard = unique.length === 0 && errors.length === 0 && searchOk;
 
   // Reduced motion: no camera flight for the answer's view, no endless animation.
   const flightFrames = await page.evaluate(() => (window as unknown as { __flightFrames: number }).__flightFrames);
@@ -629,6 +630,40 @@ async function aboutByKeyboard(page: Page, label: string): Promise<boolean> {
   return inside && inLegend && back;
 }
 
+/**
+ * GE6 Search (bottom bar) by keyboard: Tab to it, Enter opens the box with focus in it, typing lists places (local
+ * names; the remote services are aborted here, so nothing leaves the machine and no key is used), ArrowDown sets
+ * the active option, axe scans with it open, Esc closes it and focus returns to the button.
+ */
+async function searchByKeyboard(page: Page, label: string, query: string): Promise<boolean> {
+  await page.route(/places\.googleapis\.com|photon\.komoot\.io/, (r) => r.abort());
+  await tabTo(page, "[data-testid=search-button]");
+  await page.keyboard.press("Enter");
+  await page.locator("[data-testid=search-popover]").waitFor({ timeout: 10_000 });
+  const inBox = await isFocused(page, "[data-testid=search-input]");
+  await recordStop(page);
+  await page.keyboard.type(query, { delay: 30 });
+  const listed = await page
+    .locator("[data-testid=search-results] [role=option]")
+    .first()
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  let arrows = true;
+  if (listed) {
+    await page.keyboard.press("ArrowDown");
+    const first = await page.locator("[data-testid=search-results] [role=option]").first().getAttribute("id");
+    arrows = (await page.getAttribute("[data-testid=search-input]", "aria-activedescendant")) === first;
+  }
+  await axeScan(page, `${label} search`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector("[data-testid=search-popover]"), undefined, { timeout: 10_000 });
+  const back = await isFocused(page, "[data-testid=search-button]");
+  await page.unroute(/places\.googleapis\.com|photon\.komoot\.io/);
+  log(`Search: focus in box=${inBox} options=${listed} arrows=${arrows} Esc back=${back}`);
+  return inBox && arrows && back;
+}
+
 const CARP_ROW = "[data-carp-row]";
 const CARP_DRAWER = '[data-testid="carp-drawer"]';
 const CARP_DRAWER_PANEL = '[data-testid="carp-drawer-panel"]';
@@ -697,8 +732,9 @@ async function carpDesktop(browser: Browser, origin: string): Promise<boolean> {
     .catch(() => false);
   log(`scrubber after ${toScrub} Tab: as-of=${asof} (${asofMode}), End live=${live} (${await carpMode(page)})`);
 
+  const search = await searchByKeyboard(page, "carp 1440", "Mi");
   const about = await aboutByKeyboard(page, "carp 1440");
-  const keyboard = keyboardVerdict({ rowInDrawer, rowBack, markerOpens, asof, live, about }, errors);
+  const keyboard = keyboardVerdict({ rowInDrawer, rowBack, markerOpens, asof, live, search, about }, errors);
   await close();
 
   const light = await appPage(browser, { width: 1440, height: 900, light: true });
@@ -809,8 +845,9 @@ async function lionfishDesktop(browser: Browser, origin: string): Promise<boolea
   const rowBack = await page.evaluate((c) => document.activeElement?.getAttribute("data-cell-row") === c, cell);
   log(`place ${cell} after ${toRow} Tab: card focus=${inCard} guide focus=${inGuide} Esc→guide button=${guideBack} Esc→card closed=${cardClosed} row=${rowBack}`);
 
+  const search = await searchByKeyboard(page, "lionfish 1440", "Key");
   const about = await aboutByKeyboard(page, "lionfish 1440");
-  const keyboard = keyboardVerdict({ pressed, flew, unpressed, layerOff, layerOn, inCard, inGuide, guideBack, cardClosed, rowBack, about }, errors);
+  const keyboard = keyboardVerdict({ pressed, flew, unpressed, layerOff, layerOn, inCard, inGuide, guideBack, cardClosed, rowBack, search, about }, errors);
   await close();
 
   const light = await appPage(browser, { width: 1440, height: 900, light: true, clockMs: LIONFISH_LIVE_MS });

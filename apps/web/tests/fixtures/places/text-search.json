@@ -1,0 +1,34 @@
+{
+  "places": [
+    {
+      "id": "fixture-place-flamingo",
+      "displayName": { "text": "Flamingo", "languageCode": "en" },
+      "formattedAddress": "Flamingo, FL 33034, USA",
+      "location": { "latitude": 25.1418871, "longitude": -80.9252637 },
+      "viewport": {
+        "low": { "latitude": 25.1201, "longitude": -80.9603 },
+        "high": { "latitude": 25.1632, "longitude": -80.8901 }
+      }
+    },
+    {
+      "id": "fixture-place-flamingo-visitor-center",
+      "displayName": { "text": "Flamingo Visitor Center", "languageCode": "en" },
+      "formattedAddress": "1 Flamingo Lodge Hwy, Homestead, FL 33034, USA",
+      "location": { "latitude": 25.1413, "longitude": -80.9243 }
+    },
+    {
+      "id": "fixture-place-flamingo-gardens",
+      "displayName": { "text": "Flamingo Gardens", "languageCode": "en" },
+      "formattedAddress": "3750 S Flamingo Rd, Davie, FL 33330, USA",
+      "location": { "latitude": 26.0614, "longitude": -80.3015 },
+      "viewport": {
+        "low": { "latitude": 26.0601, "longitude": -80.3031 },
+        "high": { "latitude": 26.0628, "longitude": -80.2999 }
+      }
+    },
+    {
+      "id": "fixture-place-no-location",
+      "displayName": { "text": "Broken entry" }
+    }
+  ]
+}
