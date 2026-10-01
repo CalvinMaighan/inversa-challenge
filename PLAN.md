@@ -383,3 +383,4 @@ Wave 0: C1 (carp proof, running), F1 (ingest modes), Q1 (questions), A0 (this co
 - C4 merged 7/7 (driver re-ran on merged tree; fast-forward): api 305 pass, bun run check OK. Live CARP-LIVE sites=8 usgs=8 nwps=8 nws=8 snapshots=72 iem=56. Source ids: usgs, nwps, nws-alerts, nws-forecast, iem; migration 0009 discharge_cfs.
 - C5 merged 5/5 (driver re-ran on merged tree): api 329 pass; review engine siteReview/reviewHistory/reviewBoard. Gaps -> E1: flow conflict input (discharge_cfs now stored by C4), evidence kinds forecast/reading/alert/review/source/note/mission/message, empty-poll records, low-water flag.
 - L5 merged 7/7 (driver re-ran): lionfish components + rankScore, no risk percent; api 344 tests (after golden regen).
+- UC merged 8/8 (driver re-ran incl. e2e:carp): carp board/timeline/as-of/drawer, web 886 pass. View event contract: {site?, asOf?, replay?} handled by applyCarpViewEvent; AG1 emits.
