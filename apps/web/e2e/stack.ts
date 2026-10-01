@@ -13,8 +13,10 @@
  *
  * Apps (PLAN.md C-A1/C-A2): the API serves every app under `/v1/<app>/...` and `/health` lists them. A stack is
  * opened for one app (`StackOptions.app`, python by default: the fixtures are the Everglades data): `graphql` and
- * `hook` talk to that app's routes, and the page opens in it (the proxy sends a bare `/` to `/?app=<app>`, as
- * a link from that app would), so scripts written before the apps keep working.
+ * `hook` talk to that app's routes, its data dir gets the fixtures (`backfill --fixtures --app <app>`; `apps`
+ * fills several), and the page opens in it (the proxy sends a bare `/` to `/?app=<app>`, as a link from that app
+ * would; `pinApp: false` turns that off), so scripts written before the apps keep working. `apiPaths` records
+ * every path the proxy sent to Axum, so a script can prove each request carried its app prefix.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
@@ -52,6 +54,17 @@ export type StackOptions = {
   backfillDays?: number;
   /** The app the page opens in and `graphql`/`hook` talk to (C-A2 `/v1/<app>/...`). Default python. */
   app?: AppId;
+  /**
+   * Apps whose data dirs get the fixtures (`backfill --fixtures --app <id>`), and the network backfill when
+   * `backfillDays` is set. Axum always serves all three apps; an app left out here simply has an empty database.
+   * Default: the stack's app.
+   */
+  apps?: readonly AppId[];
+  /**
+   * Send a bare `/` to `/?app=<app>` (default true), as a link from that app would. Off for scripts that test
+   * the client's own app resolution (no `?app=`: localStorage, then the default).
+   */
+  pinApp?: boolean;
 };
 
 export type Stack = {
@@ -67,6 +80,8 @@ export type Stack = {
   hookRaw(body: string): Promise<{ status: number; text: string }>;
   /** POST a GraphQL query to Axum. */
   graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
+  /** Path of every request the proxy sent to Axum (`/v1/...`, `/health`), in order. */
+  apiPaths: string[];
   /** Tail of the Axum and Next logs, for failures. */
   logs(): string;
   stop(): Promise<void>;
@@ -143,7 +158,7 @@ type WsData = { upstream: WebSocket; queue: (string | ArrayBuffer)[] };
  * Caddy stand-in: `/v1/*` to Axum (HTTP and WebSocket), `/signal/*` to the signal Worker (prefix stripped),
  * the rest to Next.
  */
-function startProxy(port: number, up: { api: string; next: string; signal: string; app: AppId }) {
+function startProxy(port: number, up: { api: string; next: string; signal: string; app: AppId; pinApp: boolean; apiPaths: string[] }) {
   const apiWs = up.api.replace(/^http/, "ws");
   return Bun.serve<WsData>({
     port,
@@ -153,11 +168,12 @@ function startProxy(port: number, up: { api: string; next: string; signal: strin
     async fetch(req, server) {
       const url = new URL(req.url);
       // A bare page load opens in the stack's app (the hash, never sent, survives the redirect).
-      if (req.method === "GET" && url.pathname === "/" && !url.searchParams.has("app")) {
+      if (up.pinApp && req.method === "GET" && url.pathname === "/" && !url.searchParams.has("app")) {
         url.searchParams.set("app", up.app);
         return Response.redirect(url.toString(), 302);
       }
       const toApi = url.pathname.startsWith("/v1/") || url.pathname === "/health";
+      if (toApi) up.apiPaths.push(url.pathname);
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         if (!toApi) return new Response("no websocket here", { status: 404 });
         const protocols = (req.headers.get("sec-websocket-protocol") ?? "").split(",").map((p) => p.trim()).filter(Boolean);
@@ -231,10 +247,14 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   const axumEnv = { INVERSA_DATA_DIR: dataDir, INVERSA_BIND: `127.0.0.1:${apiPort}`, INVERSA_SOURCES: "off", INGEST_HOOK_SECRET: secret };
 
   if (!existsSync(API_BIN)) throw new Error(`no Axum binary at ${API_BIN}; call buildApi first`);
-  backfill(["--fixtures"], axumEnv, log);
-  if (opts.scene) backfill(["--scene", COLD_SNAP_SCENE], axumEnv, log);
-  if (opts.backfillDays) backfill(["--days", String(opts.backfillDays), "--baseline-years", "1"], axumEnv, log);
+  for (const id of opts.apps ?? [app]) {
+    backfill(["--fixtures", "--app", id], axumEnv, log);
+    if (opts.backfillDays) backfill(["--app", id, "--days", String(opts.backfillDays), "--baseline-years", "1"], axumEnv, log);
+  }
+  // The cold-snap scene is South Florida data: python's.
+  if (opts.scene) backfill(["--app", "python", "--scene", COLD_SNAP_SCENE], axumEnv, log);
 
+  const apiPaths: string[] = [];
   const axumLog: string[] = [];
   const nextLog: string[] = [];
   const signalLog: string[] = [];
@@ -302,7 +322,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     await waitFor("next start", async () => (await fetch(nextOrigin)).ok, next, 60_000, tail);
     await waitFor("wrangler dev", async () => (await fetch(`${signalOrigin}/turn`, { headers: { origin } })).ok, signal, 120_000, tail);
 
-    proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin, app });
+    proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin, app, pinApp: opts.pinApp ?? true, apiPaths });
     log(`axum ${api} (data ${dataDir}), next ${nextOrigin}, signal ${signalOrigin}, page origin ${origin}`);
 
     const hookRaw = async (body: string) => {
@@ -319,6 +339,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
       origin,
       app,
       api,
+      apiPaths,
       graphql,
       hookRaw,
       async hook(rows) {

@@ -11,11 +11,11 @@ import { APP_IDS, getApp, parseAppConfig, type AppConfig } from "@/shared/apps";
 
 /**
  * PLAN.md C-A5: persona, scope text, tool allowlist and refusal text come from the app config. The three configs
- * here are the test fixtures (tests/fixtures/apps); `stub` derives a config with a different allowlist.
+ * here are the contract files (spec/apps); `stub` derives a config with a different allowlist.
  */
 
-const FIXTURES = path.resolve(import.meta.dir, "../../fixtures/apps");
-const raw = (id: string) => JSON.parse(readFileSync(path.join(FIXTURES, `${id}.json`), "utf8")) as Record<string, unknown>;
+const SPEC = path.resolve(import.meta.dir, "../../../../../spec/apps");
+const raw = (id: string) => JSON.parse(readFileSync(path.join(SPEC, `${id}.json`), "utf8")) as Record<string, unknown>;
 const stub = (id: string, agent: Partial<AppConfig["agent"]>): AppConfig => {
   const base = raw(id);
   return parseAppConfig({ ...base, agent: { ...(base.agent as object), ...agent } }, id);
@@ -91,7 +91,7 @@ describe("agent per app", () => {
     const lionfish = getApp("lionfish");
     // Louisiana: carp's region, outside lionfish's four.
     const louisiana = { west: -92.5, south: 30.9, east: -92.3, north: 31.1 };
-    const out = await buildAgentRegistry(lionfish).execute("alerts", { bbox: louisiana }, ctxFor(lionfish));
+    const out = await buildAgentRegistry(lionfish).execute("sightings", { bbox: louisiana }, ctxFor(lionfish));
     expect(out).toMatchObject({ ok: false, error: expect.stringContaining(lionfish.agent.refusal) });
     const carp = getApp("carp");
     const inside = await buildAgentRegistry(carp).execute("alerts", { bbox: louisiana }, ctxFor(carp));

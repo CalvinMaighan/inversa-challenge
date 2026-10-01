@@ -8,7 +8,7 @@
  *   2. Backspace removes the last character on B too; the caret moved to the middle of the text and a key
  *      pressed there inserts on B at that spot, with B drawing A's caret right after it.
  *   3. Enter commits: both sides show exactly one message with the text, B's live draft and typing line are
- *      gone, Axum has the message (GraphQL `board`), and B after a reload still has it (persistence).
+ *      gone, Axum has the message with `to` and `thread` (GraphQL `board`), and B after a reload still has it (persistence).
  *   4. B closes its page: A's thread header shows B as away.
  *
  * Prints `DM chars_streamed=40/40 p50_ms=<n> p95_ms=<n> backspace=ok insert=ok persist=ok reload=ok typing=ok presence=ok`
@@ -105,7 +105,7 @@ const p95 = (xs: number[]) => {
   return s[Math.min(s.length - 1, Math.ceil(s.length * 0.95) - 1)]!;
 };
 
-type ServerMessages = { board: { messages: { id: string; body: string; nodeId: string }[] } };
+type ServerMessages = { board: { messages: { id: string; body: string; nodeId: string; to: string | null; thread: string | null }[] } };
 
 async function scenario(stack: DevStack): Promise<string[]> {
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
@@ -132,6 +132,7 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   const [idA, idB] = await Promise.all([nodeId(a), nodeId(b)]);
   if (!idA || !idB || idA === idB) fail(`identities: ${idA} ${idB}`);
   const boardId = await a.evaluate(() => window.__team!.boardId);
+  if (boardId !== stack.boardId) fail(`board ${boardId}, want ${stack.boardId}`);
   log(`A=${idA.slice(0, 8)} B=${idB.slice(0, 8)} board=${boardId}; waiting for the data channel`);
   await Promise.all([waitRtc(a, idB), waitRtc(b, idA)]);
 
@@ -205,11 +206,11 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   const deadline = Date.now() + CONVERGE_TIMEOUT_MS;
   let persisted = false;
   while (Date.now() < deadline && !persisted) {
-    const { board } = await stack.graphql<ServerMessages>(`query { board(id: ${JSON.stringify(boardId)}) { messages { id body nodeId } } }`);
-    persisted = board.messages.some((m) => m.body === TEXT && m.nodeId === idA);
+    const { board } = await stack.graphql<ServerMessages>(`query { board(id: ${JSON.stringify(boardId)}) { messages { id body nodeId to thread } } }`);
+    persisted = board.messages.some((m) => m.body === TEXT && m.nodeId === idA && m.to === idB && typeof m.thread === "string" && m.thread.length > 0);
     if (!persisted) await sleep(500);
   }
-  if (!persisted) fail("Axum's board has no message with the text");
+  if (!persisted) fail("Axum's board has no message with the text, to = B and a thread");
   log("persisted on Axum");
 
   await b.close();
@@ -249,7 +250,7 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
 async function main(): Promise<number> {
   let stack: DevStack | null = null;
   try {
-    stack = await startDevStack("dm");
+    stack = await startDevStack("dm", "carp");
     const lines = await scenario(stack);
     for (const l of lines) console.log(l);
     return 0;

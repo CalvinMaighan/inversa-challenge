@@ -559,6 +559,27 @@ async fn resolver_board() {
     assert_eq!(body["data"]["board"], json!({"lastSeq": 0, "missions": [], "notes": [], "messages": [], "removals": {}}));
 }
 
+/// G4: a direct message's `to` and `thread` (PLAN.md C-A7) reach GraphQL; a board-wide message has nulls.
+#[tokio::test]
+async fn message_thread_graphql() {
+    let state = test_state();
+    let ops = json!([
+        op("d1", "2000:0:n1", "message", "dm1", "body", json!({"body": "meet at gate", "to": "n2", "thread": "n1:n2"})),
+        op("d2", "2000:1:n1", "message", "all1", "body", json!("heading out")),
+    ]);
+    let body = gql(&state, APPLY, json!({"board": "b1", "ops": ops})).await;
+    assert_eq!(body["data"]["applyOps"]["applied"], json!(2), "{body}");
+    let body = gql(&state, "{ board(id: \"b1\") { messages { id body to thread } } }", json!({})).await;
+    assert_eq!(
+        body["data"]["board"]["messages"],
+        json!([
+            {"id": "dm1", "body": "meet at gate", "to": "n2", "thread": "n1:n2"},
+            {"id": "all1", "body": "heading out", "to": null, "thread": null},
+        ]),
+        "{body}"
+    );
+}
+
 #[tokio::test]
 async fn resolver_ops_since() {
     let state = test_state();

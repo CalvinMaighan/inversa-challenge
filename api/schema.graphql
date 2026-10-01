@@ -213,6 +213,8 @@ type Message {
   body: String!
   hlc: String!
   nodeId: String!
+  to: String
+  thread: String
 }
 
 type Board {

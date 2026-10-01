@@ -341,6 +341,10 @@ describe("request validation and routing", () => {
     expect(await expectError(await call("GET", "/rooms/carp:main:extra:x.y/peers"), 400)).toMatch(/room must match/);
   });
 
+  test("ids are matched as written: an encoded colon is not a room id (the web client sends carp:main as is)", async () => {
+    expect(await expectError(await call("GET", "/rooms/carp%3Amain/peers"), 400)).toMatch(/room must match/);
+  });
+
   test("body over 64 KB is 413, by content-length or by counted bytes", async () => {
     const big = { from: "alice", kind: "offer", payload: "x".repeat(MAX_BODY_BYTES) };
     expect(await expectError(await call("POST", "/rooms/demo/inbox/bob", { body: big }), 413)).toContain("65536");

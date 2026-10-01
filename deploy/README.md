@@ -7,13 +7,13 @@ One Hetzner VM runs everything behind Caddy at `inversa.calvinmaighan.dev`:
 | `caddy` | :80, :443 | TLS; `/v1/*` and `/health` go to 4041 (WebSockets included), everything else to 3050; COOP, COEP and CORP on every response |
 | `inversa-api` | 127.0.0.1:4041 | `/opt/inversa/api/inversa-api`; restores missing DBs from R2 first (`restore.sh` as `ExecStartPre`) |
 | `inversa-web` | 127.0.0.1:3050 | `bun /opt/inversa/web/apps/web/server.js`, a single process, because voice sessions live in memory |
-| `inversa-litestream` | - | replicates `/var/lib/inversa/{observations,team}.db` to R2 bucket `inversa-litestream` |
+| `inversa-litestream` | - | replicates `/var/lib/inversa/<app>/{observations,team}.db` (apps `carp`, `lionfish`, `python`) to R2 bucket `inversa-litestream` |
 
 Paths on the box:
 
 - `/opt/inversa/releases/<version>`: unpacked releases. The three newest are kept.
 - `/opt/inversa/current`: points at the live release. `/opt/inversa/{api,web,deploy}` link through it.
-- `/var/lib/inversa`: the databases and the web cache. It is the only writable path for the units.
+- `/var/lib/inversa`: the per-app databases (`<app>/`), the local archive (when R2 is not set) and the web cache. It is the only writable path for the units.
 - `/etc/inversa/env`: rendered from Doppler `inversa`/`prd` on every deploy (`root:inversa`, `0640`).
 
 ## Workflows
@@ -77,21 +77,34 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
 2. Run `deploy` with `release_run_id` blank.
 3. Check it:
    - `curl -sI https://inversa.calvinmaighan.dev/` shows `cross-origin-opener-policy: same-origin` and `cross-origin-embedder-policy: require-corp`.
-   - `curl https://inversa.calvinmaighan.dev/health` returns `ok`.
+   - `curl -fsS https://inversa.calvinmaighan.dev/health` returns JSON with `"status":"ok"` and one entry per app in `apps`. A `503` with `"status":"degraded"` means one app's database failed; its entry carries the error.
+
+## Multi-app migration
+
+The API keeps each app's data in `/var/lib/inversa/<app>/{observations,team}.db` (apps `carp`, `lionfish`, `python`). Before the pivot, python was the only app, and its databases sat directly in `/var/lib/inversa`.
+
+`deploy/migrate-app-dirs.sh [DATA_DIR]` moves that old layout into `python/`: both databases, their `-wal`/`-shm` sidecars, Litestream's `.<db>-litestream` metadata, and the local archive's `archive/{raw,media}` (into `archive/python/`). It must run with `inversa-api` and `inversa-litestream` stopped, before the first multi-app start. Otherwise the API creates an empty `python/` next to the real data. `remote-unpack.sh` does this on every deploy: it stops both units, runs the script as `inversa`, then restarts them. Once the data is migrated the script does nothing. If an old path and its new path both exist, it exits 1 without moving anything, which fails the deploy and leaves the units stopped. Resolve that by hand. `deploy/test-migrate-app-dirs.sh` tests the script locally.
+
+Litestream:
+
+- `litestream.yml` replicates six databases, each one to R2 path `<app>/<db>`. The pre-pivot replicas at `observations` and `team` stop getting writes. The first multi-app start writes a fresh snapshot to `python/observations` and `python/team`. Keep the old prefixes until a restore drill from `python/*` passes, then delete them by hand.
+- `restore.sh` restores `<app>/<db>.db` for all three apps. If `observations.db` or `team.db` is still at the data-dir root, it refuses to run (exit 1), so the API cannot start on a half-migrated tree.
+- The R2 raw archive (`R2_BUCKET_RAW`) is now keyed `<app>/raw/...` and `<app>/media/...`. The script does not move existing R2 objects. The API no longer reads pre-pivot keys at the bucket root. Copy them under `python/` with any S3 tool if they are still needed.
+- Rolling back to a pre-pivot release after migrating breaks it, because it looks for the databases at the root. Move `python/*` back by hand first.
 
 ## Restore drill
 
-Run this on the VM as root. It proves that R2 holds a restorable copy.
+Run this on the VM as root. It proves that R2 holds a restorable copy (python shown; the same applies to `carp` and `lionfish`).
 
 ```sh
 systemctl stop inversa-litestream inversa-api
 mkdir -p /root/drill
 # Move the db, its -wal/-shm sidecars and Litestream's local metadata, as on a fresh disk.
-mv /var/lib/inversa/observations.db* /var/lib/inversa/.observations.db-litestream /root/drill/
+mv /var/lib/inversa/python/observations.db* /var/lib/inversa/python/.observations.db-litestream /root/drill/
 systemctl start inversa-api          # ExecStartPre restores from R2
 journalctl -u inversa-api -n 20      # expect litestream restore output
 systemctl start inversa-litestream
-sqlite3 /var/lib/inversa/observations.db 'pragma integrity_check; select count(*) from sightings;'
+sqlite3 /var/lib/inversa/python/observations.db 'pragma integrity_check; select count(*) from sightings;'
 ```
 
-A rebuilt VM follows the same path: bootstrap first, then deploy. The API restores both databases before its first start.
+A rebuilt VM follows the same path: bootstrap first, then deploy. The API restores every app's databases before its first start.

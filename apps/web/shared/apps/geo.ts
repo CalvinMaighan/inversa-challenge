@@ -2,7 +2,7 @@
  * Region lookups over an app config (PLAN.md C-A3, C-A4): what used to be the `REGION_BBOX` and `SPECIES_IDS`
  * constants, now read from the active app. Pure.
  */
-import { taxonKey, type AppConfig, type AppRegion, type BBox, type LayerId } from "./schema";
+import { isLayerId, taxonKey, type AppConfig, type AppRegion, type BBox, type LayerId } from "./schema";
 
 /** The box around every region of the app (one region for carp and python, four for lionfish). */
 export function appBBox(app: AppConfig): BBox {
@@ -49,8 +49,18 @@ export function speciesIds(app: AppConfig): string[] {
   return app.taxa.map(taxonKey);
 }
 
+/** The app's layers the client can draw, in config order (a config may list layers the client does not draw yet). */
+export function appLayerIds(app: AppConfig): LayerId[] {
+  return app.layers.map((l) => l.id).filter(isLayerId);
+}
+
 export function hasLayer(app: AppConfig, layer: LayerId): boolean {
-  return app.layers.includes(layer);
+  return app.layers.some((l) => l.id === layer);
+}
+
+/** Is `layer` on when the app opens (`layers[].defaultOn`)? False for a layer the app does not list. */
+export function layerDefaultOn(app: AppConfig, layer: LayerId): boolean {
+  return app.layers.some((l) => l.id === layer && l.defaultOn);
 }
 
 /** Cell id `<col>:<row>` on `region`'s grid, anchored at its south-west corner. */
@@ -83,15 +93,12 @@ export function copyText(app: AppConfig, key: string, fallback: string): string 
   return typeof v === "string" && v.trim() ? v : fallback;
 }
 
-/** IANA zone of the app's local times (`copy.timezone`); Florida's when the config names none. */
+/** IANA zone of the app's local times (`copy.timezone`, required by the contract). */
 export function appTimeZone(app: AppConfig): string {
-  return copyText(app, "timezone", "America/New_York");
+  return app.copy.timezone;
 }
 
-/** One line for the legend header: the legend string, or its `title`. */
-export function legendTitle(app: AppConfig): string | null {
-  const l = app.legend;
-  if (typeof l === "string") return l;
-  if (!Array.isArray(l) && typeof (l as { title?: unknown }).title === "string") return (l as { title: string }).title;
-  return null;
+/** One line for the legend header: `copy.legendTitle`, else the app's name. */
+export function legendTitle(app: AppConfig): string {
+  return copyText(app, "legendTitle", app.name);
 }

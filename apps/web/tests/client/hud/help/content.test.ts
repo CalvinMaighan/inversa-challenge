@@ -40,8 +40,7 @@ describe("help sheet content", () => {
     for (const id of APP_IDS) expect(aboutSentence(getApp(id)).split(". ").length).toBeLessThanOrEqual(2);
     expect(EXAMPLE_QUESTIONS.length).toBeGreaterThanOrEqual(2);
     expect(EXAMPLE_QUESTIONS.length).toBeLessThanOrEqual(3);
-    expect(EXAMPLE_QUESTIONS).toContain("Iguana sightings near Homestead and water levels");
-    expect(EXAMPLE_QUESTIONS).toContain("Where should python crews go tonight?");
+    expect(EXAMPLE_QUESTIONS).toEqual(PYTHON.helperQuestions.slice(0, 3));
   });
 
   test("active app: welcome, species guide, helper questions and About line are the app's", () => {
@@ -49,12 +48,12 @@ describe("help sheet content", () => {
     expect(welcome(carp)).toContain("Louisiana demonstration locations");
     expect(welcome(carp)).not.toContain("invasive animal");
     expect(speciesGuide(carp).map((s) => s.id)).toEqual(["other"]);
-    expect(exampleQuestions(carp)).toEqual(carp.helperQuestions);
+    expect(exampleQuestions(carp)).toEqual(carp.helperQuestions.slice(0, 3));
     expect(aboutSentence(carp)).toContain("cannot tell carp abundance");
     const lionfish = getApp("lionfish");
     expect(speciesGuide(lionfish).map((s) => s.id)).toEqual(["lionfish", "other"]);
     expect(welcome(lionfish)).toContain("last 30 days");
-    for (const id of APP_IDS) expect(new Set(exampleQuestions(getApp(id))).size).toBe(getApp(id).helperQuestions.length);
+    for (const id of APP_IDS) expect(new Set(exampleQuestions(getApp(id))).size).toBe(Math.min(3, getApp(id).helperQuestions.length));
   });
 
   test("README's UI section names every control the help sheet does", () => {

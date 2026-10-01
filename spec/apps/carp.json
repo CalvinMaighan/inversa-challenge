@@ -41,14 +41,24 @@
   "layers": [
     { "id": "locations", "label": "Locations", "defaultOn": true },
     { "id": "alerts", "label": "NWS alerts", "defaultOn": true },
-    { "id": "readings", "label": "Gauge readings", "defaultOn": true }
+    { "id": "stations", "label": "Gauge readings", "defaultOn": true },
+    { "id": "missions", "label": "Team missions", "defaultOn": true },
+    { "id": "peers", "label": "Teammates", "defaultOn": true },
+    { "id": "notes", "label": "Field notes", "defaultOn": true }
   ],
   "legend": {
     "locations": "Demonstration locations until Inversa supplies operating areas.",
     "alerts": "NWS products in effect at the cursor time.",
-    "readings": "Observed stage and discharge (USGS) with forecast issuance times (NWPS)."
+    "stations": "Observed stage and discharge (USGS) with forecast issuance times (NWPS).",
+    "missions": "Areas the team has claimed or finished.",
+    "peers": "Teammates on the board right now.",
+    "notes": "Field notes pinned to the map."
   },
   "copy": {
+    "about": "River stage, flow forecasts and weather alerts at Louisiana demonstration locations, with what was known at each moment. It cannot tell carp abundance, catch, access or trip safety.",
+    "region": "Louisiana demonstration locations",
+    "timezone": "America/Chicago",
+    "legendTitle": "River gauges, forecasts and alerts",
     "title": "Carp Field Conditions",
     "shortTitle": "Carp",
     "scopeNote": "Louisiana river locations (demonstration set).",
@@ -64,7 +74,7 @@
   "agent": {
     "persona": "You are the field-conditions analyst for carp removal operations in Louisiana. You report observed and forecast river conditions per location, keep observation, issuance, valid and ingestion times apart, and never claim carp abundance or catch.",
     "scope": "River stage, discharge, forecasts and weather alerts at the demonstration locations in Louisiana.",
-    "tools": ["readings", "alerts", "evidence", "feeds", "view"],
+    "tools": ["geocode", "conditions", "alerts", "feed_state", "notes", "set_view"],
     "refusal": "Carp Field Conditions covers river and weather conditions at the Louisiana demonstration locations only. It cannot estimate carp abundance, expected catch, legal access or trip safety."
   },
   "eval": { "goldenSet": "carp" }

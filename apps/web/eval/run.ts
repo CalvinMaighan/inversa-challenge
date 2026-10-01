@@ -25,7 +25,7 @@ import { runTurn, type RunTurnResult } from "@/server/agent/run-turn";
 import { AGENT_MODEL_ID, MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import type { Evidence } from "@/server/agent/runtime/registry";
 import { isAgentStreamEvent, type AgentStreamEvent } from "@/shared/agent/events";
-import { APP_IDS, appBBox, getApp, isAppId, type AppId } from "@/shared/apps";
+import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppId } from "@/shared/apps";
 
 /** OpenRouter list price for GPT-6 Luna, USD per million tokens. */
 const PRICE_IN = 0.1;
@@ -95,7 +95,7 @@ async function main(): Promise<number> {
   process.env.INVERSA_API_ORIGIN = stub.origin;
   process.env.INVERSA_DATA_DIR = dataDir;
   const now = new Date(FIXTURE_NOW);
-  const view = { bbox: appBBox(app), time: FIXTURE_NOW, layers: app.layers.filter((l) => l === "sightings" || l === "hotspots"), selection: null };
+  const view = { bbox: appBBox(app), time: FIXTURE_NOW, layers: appLayerIds(app).filter((l) => l === "sightings" || l === "hotspots"), selection: null };
 
   console.log(`EVAL app=${app.id} set=${app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${FIXTURE_NOW}`);
   const outcomes: Outcome[] = [];

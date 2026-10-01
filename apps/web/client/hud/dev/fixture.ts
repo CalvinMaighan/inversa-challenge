@@ -8,17 +8,20 @@
  * - a two-hour GOES outage (every env cell missing) → `ENV_MISSING`
  * - small scattered clouds elsewhere, under the cloud threshold → not a gap
  */
+import { V1_APP } from "client/state/app";
+import { getApp } from "shared/apps";
 import {
   ENV_MISSING,
   EVF_HEADER_BYTES,
-  EVF_MAGIC,
-  EVF_SPECIES,
   evfFrameBytes,
   evfFrameLayout,
+  evfSpecies,
+  readEvfFrameSightings,
   readEvfHeader,
-  readSightingRecords,
   SIGHTING_FLAG,
   SIGHTING_RECORD_BYTES,
+  walkEvf,
+  writeEvfHeader,
   type EvfHeader,
   type SightingRecord,
 } from "shared/frames";
@@ -57,19 +60,23 @@ export function isLand(lon: number, lat: number): boolean {
 
 type Blob = { lon: number; lat: number; sigma: number; peak: number };
 
-/** Hotspot centres per species, in `EVF_SPECIES` order. */
-const HOTSPOTS: Blob[][] = [
-  [
+/** The fixture is the python app's (one South Florida region, its four taxa), hotspot planes in `taxa[]` order. */
+const SPECIES = evfSpecies(getApp(V1_APP));
+
+/** Hotspot centres per species id. */
+const HOTSPOTS: Readonly<Record<string, Blob[]>> = {
+  python: [
     { lon: -80.9, lat: 25.55, sigma: 0.22, peak: 1 },
     { lon: -81.25, lat: 25.95, sigma: 0.14, peak: 0.7 },
   ],
-  [{ lon: -80.5, lat: 25.45, sigma: 0.12, peak: 0.85 }],
-  [
+  tegu: [{ lon: -80.5, lat: 25.45, sigma: 0.12, peak: 0.85 }],
+  iguana: [
     { lon: -80.25, lat: 25.8, sigma: 0.1, peak: 0.95 },
     { lon: -80.15, lat: 26.3, sigma: 0.08, peak: 0.6 },
   ],
-  [{ lon: -81.05, lat: 24.68, sigma: 0.18, peak: 0.9 }],
-];
+  lionfish: [{ lon: -81.05, lat: 24.68, sigma: 0.18, peak: 0.9 }],
+};
+const blobsOf = (s: number): Blob[] => HOTSPOTS[SPECIES[s]!] ?? [];
 
 const inside = (f: number, [s, e]: readonly [number, number]) => f >= s && f < e;
 
@@ -90,7 +97,7 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
     hsCellDeg: 0.02,
     frame0UnixMs: frame0Ms,
     stepMinutes: FIXTURE_STEP_MINUTES,
-    speciesCount: EVF_SPECIES.length,
+    speciesCount: SPECIES.length,
     envCols: 68,
     envRows: 64,
     envCellDeg: 0.05,
@@ -109,20 +116,7 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
   const bytes = new Uint8Array(total);
   const view = new DataView(bytes.buffer);
 
-  for (let i = 0; i < 4; i++) view.setUint8(i, EVF_MAGIC.charCodeAt(i));
-  view.setUint32(4, header.frameCount, true);
-  view.setUint32(8, header.hsCols, true);
-  view.setUint32(12, header.hsRows, true);
-  view.setFloat64(16, header.west, true);
-  view.setFloat64(24, header.south, true);
-  view.setFloat64(32, header.hsCellDeg, true);
-  view.setBigInt64(40, BigInt(header.frame0UnixMs), true);
-  view.setUint32(48, header.stepMinutes, true);
-  view.setUint32(52, header.speciesCount, true);
-  view.setUint16(56, header.envCols, true);
-  view.setUint16(58, header.envRows, true);
-  view.setFloat32(60, header.envCellDeg, true);
-  view.setFloat32(64, header.hotspotScale, true);
+  writeEvfHeader(view, header);
 
   const envLand = new Uint8Array(header.envCols * header.envRows);
   for (let r = 0; r < header.envRows; r++) {
@@ -148,7 +142,7 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
         for (let c = 0; c < header.hsCols; c++) {
           const lon = header.west + (c + 0.5) * header.hsCellDeg;
           let v = 0;
-          for (const b of HOTSPOTS[s]!) {
+          for (const b of blobsOf(s)) {
             const d2 = ((lon - b.lon) ** 2 + (lat - b.lat) ** 2) / (2 * b.sigma * b.sigma);
             if (d2 < 9) v = Math.max(v, b.peak * Math.exp(-d2));
           }
@@ -186,7 +180,7 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
     view.setUint32(at, n, true);
     for (let k = 0; k < n; k++) {
       const s = Math.floor(rand() * header.speciesCount);
-      const b = HOTSPOTS[s]![0]!;
+      const b = blobsOf(s)[0] ?? { lon: (header.west + C4_BBOX.east) / 2, lat: (header.south + C4_BBOX.north) / 2, sigma: 0.1, peak: 1 };
       const record: FixtureSighting = {
         id: FIXTURE_FIRST_SIGHTING_ID + records.length,
         lon: Math.fround(b.lon + (rand() - 0.5) * b.sigma * 2),
@@ -218,32 +212,25 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
 export function evfFrames(bytes: Uint8Array): { header: EvfHeader; offsets: Uint32Array; counts: Uint32Array } {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const header = readEvfHeader(view);
-  const { sightingsOffset } = evfFrameLayout(header);
-  const offsets = new Uint32Array(header.frameCount);
-  const counts = new Uint32Array(header.frameCount);
-  let offset = EVF_HEADER_BYTES;
-  for (let f = 0; f < header.frameCount; f++) {
-    offsets[f] = offset;
-    const countAt = offset + sightingsOffset;
-    if (countAt + 4 > bytes.byteLength) throw new RangeError(`EVF: frame ${f} truncated at ${countAt}`);
-    const n = view.getUint32(countAt, true);
-    counts[f] = n;
-    offset = countAt + 4 + n * SIGHTING_RECORD_BYTES;
-    if (offset > bytes.byteLength) throw new RangeError(`EVF: frame ${f} sightings truncated`);
-  }
-  return { header, offsets, counts };
+  const frames = walkEvf(view, header);
+  return {
+    header,
+    offsets: Uint32Array.from(frames, (f) => f.offset),
+    counts: Uint32Array.from(frames, (f) => f.sightingCount),
+  };
 }
 
 /** The sighting sections of an EVF2 buffer as `FrameSightings` (PLAN.md C16), the way the db worker publishes them. */
 export function evfFrameSightings(bytes: Uint8Array): FrameSightings {
-  const { header, offsets, counts } = evfFrames(bytes);
-  const { sightingsOffset } = evfFrameLayout(header);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const header = readEvfHeader(view);
+  const frames = walkEvf(view, header);
+  const counts = Uint32Array.from(frames, (f) => f.sightingCount);
   return {
     counts,
     records(i) {
       if (!Number.isInteger(i) || i < 0 || i >= counts.length) throw new RangeError(`frame ${i} out of range`);
-      return readSightingRecords(view, offsets[i]! + sightingsOffset + 4, counts[i]!);
+      return readEvfFrameSightings(view, header, frames[i]!);
     },
   };
 }

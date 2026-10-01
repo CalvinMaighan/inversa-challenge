@@ -173,7 +173,7 @@ export function welcome(app: AppConfig): string {
     return `Each marker is a river gauge or a weather alert in ${where}; click one to see its readings and forecast. Ask the agent below what changed and what needs review.`;
   }
   return (
-    `Each marker is an invasive animal someone reported in ${where} in the last ${windowLabel(app.windows.default)}, drawn as its kind's icon; click one to see what it is. ` +
+    `Each marker is an invasive animal someone reported in ${where} in the last ${windowLabel(app.windows.defaultHours)}, drawn as its kind's icon; click one to see what it is. ` +
     "Filter by species at the top of the map, or ask the agent below."
   );
 }
@@ -191,12 +191,14 @@ export const OTHER_GUIDE: SpeciesGuideEntry = {
 /** The species chips: short name, full name and one plain line each. The app's focus species, then "Other". */
 export function speciesGuide(app: AppConfig): SpeciesGuideEntry[] {
   return [
-    ...app.taxa.map((t) => ({ id: taxonKey(t), name: t.short ?? t.name, full: t.name, line: t.line ?? t.scientific ?? t.name })),
+    ...app.taxa.map((t) => ({ id: taxonKey(t), name: t.short ?? t.name, full: t.name, line: t.line ?? t.scientificName })),
     OTHER_GUIDE,
   ];
 }
 
-/** Example questions for the welcome: the app's helper questions (C-A3). */
+const WELCOME_QUESTIONS = 3;
+
+/** Example questions for the welcome: the first three of the app's helper questions (C-A3); a newcomer reads three. */
 export function exampleQuestions(app: AppConfig): readonly string[] {
-  return app.helperQuestions;
+  return app.helperQuestions.slice(0, WELCOME_QUESTIONS);
 }

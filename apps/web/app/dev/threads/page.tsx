@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 
 import { getFrameGrid, getFrameMeta, getFrameSightings, gqlRequest, type FrameMeta } from "client/threads/api";
 import { bootThreads, type Threads } from "client/threads/boot";
-import { CHANNEL_NAME } from "client/threads/db/proxy";
+import { dbChannelName } from "client/threads/db/proxy";
 import type { DbStats } from "client/threads/db/rpc";
 
 type Info = {
@@ -44,7 +44,8 @@ declare global {
 function install(setLine: (s: string) => void): () => void {
   const threads = bootThreads();
   let proxied = 0;
-  const bc = new BroadcastChannel(CHANNEL_NAME);
+  // The leader's channel for this app: a follower's db requests arrive here.
+  const bc = new BroadcastChannel(dbChannelName(threads.app));
   bc.addEventListener("message", (ev) => {
     const d = ev.data as { t?: string } | null;
     if (d?.t === "db:req" && threads.isLeader()) proxied += 1;

@@ -43,7 +43,7 @@ describe("agent system prompt", () => {
     expect(PROMPT).toContain("## Hotspots");
     expect(PROMPT).toMatch(/density × activity × access/);
     expect(PROMPT).toMatch(/backtest to say how well the heuristic has actually done/);
-    expect(PROMPT).toContain("The 4 focus species (Burmese python, Argentine black and white tegu, Green iguana, Red lionfish)");
+    expect(PROMPT).toContain("The 4 focus species (Burmese python, Argentine black and white tegu, Green iguana, Lionfish)");
     expect(appTimeZone(getApp("carp"))).toBe("America/Chicago");
     expect(viewContext(undefined, new Date("2026-01-15T00:00:00Z"), getApp("carp"))).toContain("Local time is America/Chicago.");
   });

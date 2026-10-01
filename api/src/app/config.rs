@@ -128,24 +128,74 @@ impl BBox {
     }
 }
 
+/// Species category ids of `taxa[].category` (`apps/web/shared/species-categories.ts` `CATEGORY_IDS`,
+/// the schema's enum; the conformance tests hold all three equal).
+pub const CATEGORIES: [&str; 13] =
+    ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"];
+
+/// IANA zones `copy.timezone` may name (the schema's enum): the zones of the regions the apps can
+/// cover. A closed list, so Rust (no tz database) and the web (`Intl`) accept the same files.
+pub const TIMEZONES: [&str; 18] = [
+    "America/New_York",
+    "America/Chicago",
+    "America/Denver",
+    "America/Phoenix",
+    "America/Los_Angeles",
+    "America/Anchorage",
+    "Pacific/Honolulu",
+    "America/Puerto_Rico",
+    "America/Cancun",
+    "America/Merida",
+    "America/Belize",
+    "America/Bogota",
+    "America/Havana",
+    "America/Nassau",
+    "America/Jamaica",
+    "America/Panama",
+    "America/Costa_Rica",
+    "UTC",
+];
+
+/// Most `helperQuestions` an app may list (the welcome guide shows them all).
+pub const MAX_HELPER_QUESTIONS: usize = 8;
+
+/// An optional field that may be absent but never `null`: the schema types these as plain
+/// strings or numbers, and the web's zod rejects `null` for them, so serde must too.
+fn present<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Option<T>, D::Error> {
+    T::deserialize(d).map(Some)
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaxonCfg {
     pub id: String,
     /// Common name.
     pub name: String,
+    /// Chip label ("Python"); the name when absent.
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub short: Option<String>,
+    /// One plain line for the welcome guide.
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub line: Option<String>,
+    /// Other names people use for it, matched lower case.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+    /// Category icon id (one of [`CATEGORIES`]).
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     pub scientific_name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub inat_taxon_id: Option<i64>,
     #[serde(default)]
     pub inat_lineage_ids: Vec<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub gbif_key: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub nas_genus: Option<String>,
+    /// `null` (or absent) matches any species of the genus.
     #[serde(default)]
     pub nas_species: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub iconic_group: Option<String>,
     pub color: String,
     pub half_life_days: f64,
@@ -204,9 +254,9 @@ pub struct LocationCfg {
 pub struct FeedCfg {
     pub source: String,
     pub mode: Mode,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub homepage: Option<String>,
     #[serde(default)]
     pub params: serde_json::Map<String, serde_json::Value>,
@@ -218,7 +268,7 @@ pub struct ScoreComponent {
     pub id: String,
     pub label: String,
     pub weight: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }
 
@@ -242,8 +292,21 @@ pub struct LayerCfg {
     pub id: String,
     pub label: String,
     pub default_on: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+}
+
+/// `copy`: the three strings every app must have, plus free-form UI strings.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CopyCfg {
+    /// The About popover's first line.
+    pub about: String,
+    /// The app's area in words ("South Florida").
+    pub region: String,
+    /// IANA zone of the app's local times (one of [`TIMEZONES`]).
+    pub timezone: String,
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -281,7 +344,7 @@ pub struct AppConfig {
     pub windows: WindowsCfg,
     pub layers: Vec<LayerCfg>,
     pub legend: BTreeMap<String, String>,
-    pub copy: BTreeMap<String, String>,
+    pub copy: CopyCfg,
     pub helper_questions: Vec<String>,
     pub agent: AgentCfg,
     pub eval: EvalCfg,
@@ -334,17 +397,18 @@ impl AppConfig {
                 && s.bytes().next().is_some_and(|b| b.is_ascii_lowercase())
                 && s.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
         };
+        // Every text the UI or the agent shows must say something (the web's zod trims and needs one character).
+        let blank = |what: &str, v: &str| if v.trim().is_empty() { Err(format!("{what} is empty")) } else { Ok(()) };
         if !APP_IDS.contains(&self.id.as_str()) {
             return Err(format!("id {:?} is not one of {}", self.id, APP_IDS.join(", ")));
         }
-        for (what, v) in [("name", &self.name), ("icon", &self.icon), ("question", &self.question)] {
-            if v.trim().is_empty() {
-                return Err(format!("{what} is empty"));
-            }
+        for (what, v) in [("name", &self.name), ("icon", &self.icon), ("tagline", &self.tagline), ("question", &self.question)] {
+            blank(what, v)?;
         }
         match self.kind {
             AppKind::Species if self.taxa.is_empty() => return Err("kind species needs at least one taxon".into()),
             AppKind::Conditions if !self.taxa.is_empty() => return Err("kind conditions must list no taxa".into()),
+            AppKind::Conditions if self.locations.is_empty() => return Err("kind conditions needs at least one location".into()),
             _ => {}
         }
         if self.taxa.len() > u8::MAX as usize {
@@ -358,6 +422,23 @@ impl AppConfig {
             }
             if !seen.insert(t.id.as_str()) {
                 return Err(format!("duplicate taxon id {:?}", t.id));
+            }
+            blank(&format!("taxon {:?}: name", t.id), &t.name)?;
+            for (what, v) in [("short", &t.short), ("line", &t.line), ("nasGenus", &t.nas_genus), ("iconicGroup", &t.iconic_group)] {
+                if let Some(v) = v {
+                    blank(&format!("taxon {:?}: {what}", t.id), v)?;
+                }
+            }
+            if t.aliases.iter().any(|a| a.trim().is_empty()) {
+                return Err(format!("taxon {:?}: aliases has an empty name", t.id));
+            }
+            if let Some(c) = &t.category {
+                if !CATEGORIES.contains(&c.as_str()) {
+                    return Err(format!("taxon {:?}: category {c:?} is not one of {}", t.id, CATEGORIES.join(", ")));
+                }
+            }
+            if t.inat_taxon_id.is_some_and(|k| k < 1) || t.gbif_key.is_some_and(|k| k < 1) || t.inat_lineage_ids.iter().any(|&k| k < 1) {
+                return Err(format!("taxon {:?}: iNat and GBIF keys must be positive", t.id));
             }
             if t.scientific_name.trim().is_empty() || !names.insert(t.scientific_name.trim()) {
                 return Err(format!("taxon {:?}: empty or duplicate scientificName", t.id));
@@ -386,7 +467,12 @@ impl AppConfig {
             if !seen.insert(r.id.as_str()) {
                 return Err(format!("duplicate region id {:?}", r.id));
             }
+            blank(&format!("region {:?}: name", r.id), &r.name)?;
             grid_of(r).map_err(|e| format!("region {:?}: {e}", r.id))?;
+            let c = r.camera;
+            if !(-90.0..=90.0).contains(&c.lat) || !(-180.0..=180.0).contains(&c.lon) || c.height_m <= 0.0 || !c.height_m.is_finite() {
+                return Err(format!("region {:?}: camera needs lat/lon on the globe and a positive heightM", r.id));
+            }
             for other in &self.regions[..i] {
                 if r.bbox.overlaps(&other.bbox) {
                     return Err(format!("regions {:?} and {:?} overlap", other.id, r.id));
@@ -398,6 +484,7 @@ impl AppConfig {
             if !id_ok(&l.id) || !seen.insert(l.id.as_str()) {
                 return Err(format!("location id {:?} is invalid or duplicated", l.id));
             }
+            blank(&format!("location {:?}: name", l.id), &l.name)?;
             if !(-90.0..=90.0).contains(&l.lat) || !(-180.0..=180.0).contains(&l.lon) {
                 return Err(format!("location {:?}: lat/lon out of range", l.id));
             }
@@ -429,18 +516,43 @@ impl AppConfig {
                 return Err(format!("score component {:?}: weight must be a non-negative number", c.id));
             }
         }
+        if self.windows.options_hours.contains(&0) || self.windows.default_hours == 0 {
+            return Err("windows hours must be at least 1".into());
+        }
         if self.windows.options_hours.is_empty() || !self.windows.options_hours.contains(&self.windows.default_hours) {
             return Err("windows.defaultHours must be one of windows.optionsHours".into());
         }
         let mut seen = HashSet::new();
         for l in &self.layers {
+            if !id_ok(&l.id) {
+                return Err(format!("layer id {:?} is not lowercase kebab-case", l.id));
+            }
             if !seen.insert(l.id.as_str()) {
                 return Err(format!("layer {:?} listed twice", l.id));
             }
         }
-        if self.agent.persona.trim().is_empty() || self.agent.refusal.trim().is_empty() {
-            return Err("agent.persona and agent.refusal must not be empty".into());
+        if let Some(k) = self.legend.keys().find(|k| !seen.contains(k.as_str())) {
+            return Err(format!("legend {k:?} names no layer in layers[]"));
         }
+        blank("copy.about", &self.copy.about)?;
+        blank("copy.region", &self.copy.region)?;
+        if !TIMEZONES.contains(&self.copy.timezone.as_str()) {
+            return Err(format!("copy.timezone {:?} is not one of {}", self.copy.timezone, TIMEZONES.join(", ")));
+        }
+        if self.helper_questions.is_empty() || self.helper_questions.len() > MAX_HELPER_QUESTIONS {
+            return Err(format!("helperQuestions needs 1 to {MAX_HELPER_QUESTIONS} questions"));
+        }
+        if self.helper_questions.iter().any(|q| q.trim().is_empty()) {
+            return Err("helperQuestions has an empty question".into());
+        }
+        for (what, v) in [("agent.persona", &self.agent.persona), ("agent.scope", &self.agent.scope), ("agent.refusal", &self.agent.refusal)] {
+            blank(what, v)?;
+        }
+        let mut seen = HashSet::new();
+        if self.agent.tools.is_empty() || self.agent.tools.iter().any(|t| t.trim().is_empty() || !seen.insert(t.as_str())) {
+            return Err("agent.tools needs at least one tool, each named once".into());
+        }
+        blank("eval.goldenSet", &self.eval.golden_set)?;
         Ok(())
     }
 }
@@ -787,6 +899,50 @@ mod tests {
             assert!(e.to_string().contains(needle), "{needle}: {e}");
         }
         assert!(matches!(App::builtin("otter").unwrap_err(), ConfigError::UnknownApp(_)));
+    }
+
+    fn spec_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../spec/apps")
+    }
+
+    /// The shared invalid corpus (`spec/apps/invalid/*.json`, each named for the field it breaks):
+    /// every file must be refused here and by the web's zod (`app config conformance` in
+    /// apps/web/tests/shared/apps/schema.test.ts). `bun scripts/gen-invalid-app-configs.ts` writes it.
+    #[test]
+    fn app_config_conformance_rejects_the_shared_invalid_corpus() {
+        let mut files: Vec<_> = std::fs::read_dir(spec_dir().join("invalid"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .collect();
+        files.sort();
+        assert!(files.len() >= 20, "corpus has {} files", files.len());
+        for f in &files {
+            let json = std::fs::read_to_string(f).unwrap();
+            let name = f.file_name().unwrap().to_string_lossy().to_string();
+            assert!(AppConfig::parse(&name, &json).is_err(), "{name} parsed but must be refused");
+        }
+    }
+
+    /// The closed lists in this file equal the schema's enums.
+    #[test]
+    fn app_config_conformance_enums_match_the_schema() {
+        let schema: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(spec_dir().join("app-config.schema.json")).unwrap()).unwrap();
+        let p = &schema["properties"];
+        let list = |v: &serde_json::Value| v.as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect::<Vec<_>>();
+        assert_eq!(list(&p["id"]["enum"]), APP_IDS);
+        assert_eq!(list(&p["feeds"]["items"]["properties"]["source"]["enum"]), SOURCES.iter().map(|s| s.0).collect::<Vec<_>>());
+        assert_eq!(list(&p["taxa"]["items"]["properties"]["category"]["enum"]), CATEGORIES);
+        assert_eq!(list(&p["taxa"]["items"]["properties"]["rules"]["enum"]), rules::names());
+        assert_eq!(list(&p["copy"]["properties"]["timezone"]["enum"]), TIMEZONES);
+        assert_eq!(p["helperQuestions"]["maxItems"].as_u64(), Some(MAX_HELPER_QUESTIONS as u64));
+        let cfg = AppConfig::builtin("carp").unwrap();
+        assert_eq!((cfg.copy.timezone.as_str(), cfg.copy.extra.contains_key("about")), ("America/Chicago", false));
+        // Round trip: what Rust writes back parses again, unchanged.
+        for id in APP_IDS {
+            let cfg = AppConfig::builtin(id).unwrap();
+            assert_eq!(AppConfig::parse(id, &serde_json::to_string(&cfg).unwrap()).unwrap(), cfg);
+        }
     }
 
     #[test]

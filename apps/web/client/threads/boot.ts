@@ -29,7 +29,7 @@ import type { AppId } from "shared/apps";
 
 import { attachGrid } from "./db/frames";
 import { createElection, LOCK_NAME, locksAvailable, type Election, type LeaderState } from "./db/leader";
-import { CHANNEL_NAME, createRouter, type Router } from "./db/proxy";
+import { createRouter, dbChannelName, type Router } from "./db/proxy";
 import { DbWorkerClient, type DbMethod, type DbParams, type DbResult } from "./db/rpc";
 import { unpackSightings } from "./db/sightings";
 import { GqlRpcClient, type ToGql } from "./gql/protocol";
@@ -218,7 +218,7 @@ function createThreads(app: AppId): Threads {
   const isLeader = () => (election ? election.state === "leader" : true);
 
   const router: Router = createRouter({
-    channel: new BroadcastChannel(`${CHANNEL_NAME}:${app}`),
+    channel: new BroadcastChannel(dbChannelName(app)),
     tabId,
     isLeader,
     local: (method, params) => {

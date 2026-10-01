@@ -5,7 +5,7 @@ import { type FeedState, worstHealth } from "shared/feed-state";
 import { ENV_FLAGGED, ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, isEnvValue, readEvfHeader } from "shared/frames";
 import { isVoiceControlRequest, VOICE_INPUT_SAMPLE_RATE, VOICE_OUTPUT_SAMPLE_RATE } from "shared/voice/protocol";
 import { parseUiCommand, uiToolSchemasFor, UI_TOOL_NAMES } from "shared/voice/ui-tools";
-import { getApp } from "shared/apps";
+import { appLayerIds, getApp } from "shared/apps";
 import { z } from "zod";
 
 describe("shared contracts", () => {
@@ -82,7 +82,7 @@ describe("shared contracts", () => {
     expect(parseUiCommand("toggle_layer", { layer: "lst", visible: true }, lionfish)).toBeNull();
     expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "tegu" }, python)?.name).toBe("toggle_layer");
     const schema = z.toJSONSchema(uiToolSchemasFor(lionfish).toggle_layer, { io: "input" }) as unknown as { properties: { layer: { enum: string[] }; species: { enum: string[] } } };
-    expect(schema.properties.layer.enum).toEqual([...lionfish.layers]);
+    expect(schema.properties.layer.enum).toEqual(appLayerIds(lionfish));
     expect(schema.properties.species.enum).toEqual(["lionfish"]);
   });
 });

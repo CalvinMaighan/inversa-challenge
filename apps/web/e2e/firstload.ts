@@ -18,13 +18,19 @@
  * 5. Both popovers open from their buttons and Esc hands focus back. `POPOVERS about=ok theme=ok`.
  *
  * Screenshots: docs/evidence/simplify-after.png (load), simplify-welcome.png (welcome plus a species chip's
- * description), simplify-popover.png (About open).
+ * description), simplify-popover.png (About open); for another app than python the names end in `-<app>`.
+ *
+ * Apps (PLAN.md C-A1): `--app <id>` (default python, whose data the fixtures are) runs it in that app, its data dir
+ * filled by `backfill --fixtures --app <id>`, the region and the species from its config, and appends `app=<id>`
+ * to the FIRSTLOAD line. A conditions app (carp) has no sightings layer and no frames: step 2 checks that nothing
+ * but its gauges and alerts can draw (`FIRSTLOAD kind=conditions sightings=0 hotspots=0 app=carp`).
  */
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { appBBox, getApp, isAppId, type AppId } from "../shared/apps";
 import { apiDefaultCount } from "./species-count";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
@@ -32,9 +38,14 @@ const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
 /** The Axum fixtures were recorded 2026-09-30T20:40Z; the browser clock sits just after, at the live edge. */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
 const LOAD_TIMEOUT_MS = 120_000;
-const REGION = { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
-/** The default sightings window (T44: 7 days; the selector offers 2, 7 and 30). */
-const WINDOW_HOURS = 168;
+const APP_ARG = process.argv[process.argv.indexOf("--app") + 1];
+const APP: AppId = process.argv.includes("--app") ? (isAppId(APP_ARG) ? APP_ARG : fail(`--app ${APP_ARG}: not an app id`)) : "python";
+const CONFIG = getApp(APP);
+const SPECIES_APP = CONFIG.kind === "species";
+const REGION = appBBox(CONFIG);
+const shotName = (name: string) => (APP === "python" ? name : name.replace(/\.png$/, `-${APP}.png`));
+/** The app's default sightings window (`windows.defaultHours`: 7 days for python, 30 for lionfish; T44). */
+const WINDOW_HOURS = CONFIG.windows.defaultHours;
 
 const log = (...a: unknown[]) => console.error("[e2e:firstload]", ...a);
 
@@ -47,8 +58,15 @@ type LayerStat = { id: string; enabled: boolean; count: number; frame: number; b
 const layerStats = (page: Page) => page.evaluate(() => (window.__inversa?.globe()?.layers ?? []) as LayerStat[]);
 
 async function ready(page: Page, origin: string): Promise<void> {
-  await page.goto(`${origin}/`, { waitUntil: "load" });
+  await page.goto(`${origin}/?app=${APP}`, { waitUntil: "load" });
   await page.locator("[data-chat-column]").waitFor({ timeout: LOAD_TIMEOUT_MS });
+  if (!SPECIES_APP) {
+    // No frames in a conditions app: the feeds and the globe's layers are what loads.
+    await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+    await page.waitForFunction(() => (window.__inversa?.globe()?.layers.length ?? 0) > 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+    await page.waitForTimeout(4_000);
+    return;
+  }
   await page.waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0 && (window.__inversa?.globe()?.layers.length ?? 0) > 0, undefined, {
     timeout: LOAD_TIMEOUT_MS,
   });
@@ -141,8 +159,8 @@ async function popovers(page: Page): Promise<string> {
     if (!(await page.evaluate((sel) => document.activeElement?.closest(sel) !== null, `[data-testid="${pop}"]`))) fail(`${name}: opening did not move focus into the popover`);
     if (name === "about") {
       await page.waitForTimeout(300);
-      await page.screenshot({ path: path.join(SHOT_DIR, "simplify-popover.png") });
-      log("screenshot simplify-popover.png");
+      await page.screenshot({ path: path.join(SHOT_DIR, shotName("simplify-popover.png")) });
+      log(`screenshot ${shotName("simplify-popover.png")}`);
     }
     await page.keyboard.press("Escape");
     await page.locator(`[data-testid="${pop}"]`).waitFor({ state: "detached", timeout: 5_000 });
@@ -161,8 +179,9 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   await ready(page, stack.origin);
   const m = await measure(page);
   const lines = [`SIMPLIFY pane_controls=${m.paneControls} pane_labels=${m.paneLabels} page_controls=${m.pageControls} page_labels=${m.pageLabels}`];
-  await page.screenshot({ path: path.join(SHOT_DIR, before ? "simplify-before.png" : "simplify-after.png") });
-  log(`screenshot ${before ? "simplify-before.png" : "simplify-after.png"}`);
+  const loadShot = shotName(before ? "simplify-before.png" : "simplify-after.png");
+  await page.screenshot({ path: path.join(SHOT_DIR, loadShot) });
+  log(`screenshot ${loadShot}`);
   if (before) {
     await context.close();
     return lines;
@@ -174,14 +193,21 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
     const s = stats.find((l) => l.id === id);
     return s && s.enabled ? s.count : 0;
   };
-  const sightings = stats.find((l) => l.id === "sightings") ?? fail("no sightings layer");
-  const api = await apiWindowCount(page, stack, sightings.frame);
-  log(`sightings layer frame ${sightings.frame}: ${sightings.count} drawn ${JSON.stringify(sightings.breakdown)}; Axum ${api.count} distinct in ${api.from}..${api.to}`);
   log(`layers: ${stats.map((l) => `${l.id}=${l.enabled ? l.count : "off"}`).join(" ")}`);
-  if (!(sightings.enabled && sightings.count > 0)) fail("no sightings drawn at first load");
-  if (sightings.count !== api.count) fail(`globe draws ${sightings.count} sightings, Axum has ${api.count} distinct animal sightings in the same window`);
-  const [stations, alerts, hotspots] = [drawn("stations"), drawn("alerts"), drawn("hotspots")];
-  lines.push(`FIRSTLOAD sightings>0 stations=${stations} alerts=${alerts} hotspots=${hotspots} window=${sightings.count} api=${api.count}`);
+  if (SPECIES_APP) {
+    const sightings = stats.find((l) => l.id === "sightings") ?? fail("no sightings layer");
+    const api = await apiWindowCount(page, stack, sightings.frame);
+    log(`sightings layer frame ${sightings.frame}: ${sightings.count} drawn ${JSON.stringify(sightings.breakdown)}; Axum ${api.count} distinct in ${api.from}..${api.to}`);
+    if (!(sightings.enabled && sightings.count > 0)) fail("no sightings drawn at first load");
+    if (sightings.count !== api.count) fail(`globe draws ${sightings.count} sightings, Axum has ${api.count} distinct animal sightings in the same window`);
+    const [stations, alerts, hotspots] = [drawn("stations"), drawn("alerts"), drawn("hotspots")];
+    lines.push(`FIRSTLOAD sightings>0 stations=${stations} alerts=${alerts} hotspots=${hotspots} window=${sightings.count} api=${api.count} app=${APP}`);
+  } else {
+    // A conditions app lists no sightings or hotspot layer: neither may draw.
+    const [sightings, hotspots] = [drawn("sightings"), drawn("hotspots")];
+    if (sightings || hotspots) fail(`conditions app draws sightings=${sightings} hotspots=${hotspots}`);
+    lines.push(`FIRSTLOAD kind=conditions sightings=${sightings} hotspots=${hotspots} stations=${drawn("stations")} alerts=${drawn("alerts")} app=${APP}`);
+  }
 
   const c = await chrome(page);
   lines.push(`CHROME icons=${c.icons} visible_text_labels=${c.text}`);
@@ -204,11 +230,13 @@ async function firstLoad(browser: Browser, stack: Stack, before: boolean): Promi
   const welcomeText = (await welcome.locator("[data-welcome]").textContent()) ?? "";
   const species = await welcome.locator("[data-welcome-species]").count();
   log(`welcome: "${welcomeText}" with ${species} species lines`);
-  if (species !== 5) fail(`the welcome lists ${species} species, want 5`);
-  await page.locator('[data-species-chip="python"]').hover();
+  // A species app: one line per focus species plus "Other"; a conditions app has no species chips.
+  const wantSpecies = SPECIES_APP ? CONFIG.taxa.length + 1 : 0;
+  if (species !== wantSpecies) fail(`the welcome lists ${species} species, want ${wantSpecies}`);
+  if (SPECIES_APP) await page.locator(`[data-species-chip="${CONFIG.taxa[0]!.id}"]`).hover();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(SHOT_DIR, "simplify-welcome.png") });
-  log("screenshot simplify-welcome.png");
+  await page.screenshot({ path: path.join(SHOT_DIR, shotName("simplify-welcome.png")) });
+  log(`screenshot ${shotName("simplify-welcome.png")}`);
   await page.mouse.move(900, 500);
 
   lines.push(await popovers(page));
@@ -222,7 +250,7 @@ async function main() {
   buildApi(log);
   buildWeb(log);
   mkdirSync(SHOT_DIR, { recursive: true });
-  const stack = await startStack({ name: "firstload" });
+  const stack = await startStack({ name: "firstload", app: APP });
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     for (const line of await firstLoad(browser, stack, before)) console.log(line);

@@ -23,6 +23,7 @@
  */
 import { chromium, type BrowserContext, type Page } from "playwright";
 
+import { boardIdFor } from "../shared/apps";
 import { fail, openBoard, openCrewMissions, sleep, startDevStack, tail, watchFor } from "./dev-stack";
 import { buildApi, buildWeb, startStack } from "./stack";
 
@@ -30,6 +31,8 @@ import { buildApi, buildWeb, startStack } from "./stack";
 type TeamStack = {
   /** The ops page. */
   page: string;
+  /** The team board and RTC room, `<app>:main` (C-A6). */
+  boardId: string;
   graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
   /** Process log tails, for failures. */
   logs(): string;
@@ -38,13 +41,13 @@ type TeamStack = {
 
 async function startTeamStack(): Promise<TeamStack> {
   if (process.env.E2E_TEAM_STACK === "dev") {
-    const dev = await startDevStack("team");
-    return { page: dev.page, graphql: dev.graphql, logs: () => dev.procs.map((p) => `---- ${p.name} log ----\n${tail(p)}`).join("\n"), stop: dev.stop };
+    const dev = await startDevStack("team", "python");
+    return { page: dev.page, boardId: dev.boardId, graphql: dev.graphql, logs: () => dev.procs.map((p) => `---- ${p.name} log ----\n${tail(p)}`).join("\n"), stop: dev.stop };
   }
   buildApi(log);
   buildWeb(log);
-  const stack = await startStack({ name: "team" });
-  return { page: `${stack.origin}/`, graphql: stack.graphql, logs: stack.logs, stop: stack.stop };
+  const stack = await startStack({ name: "team", app: "python" });
+  return { page: `${stack.origin}/`, boardId: boardIdFor(stack.app), graphql: stack.graphql, logs: stack.logs, stop: stack.stop };
 }
 
 const EDITS = 20;
@@ -176,7 +179,7 @@ async function waitBoard(page: Page, pred: (b: Awaited<ReturnType<typeof board>>
 
 type ServerBoard = { board: { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> } };
 
-const serverBoard = (stack: TeamStack) => stack.graphql<ServerBoard>('query { board(id: "everglades") { missions { id fields } messages { body } removals } }').then((d) => d.board);
+const serverBoard = (stack: TeamStack) => stack.graphql<ServerBoard>(`query { board(id: ${JSON.stringify(stack.boardId)}) { missions { id fields } messages { body } removals } }`).then((d) => d.board);
 
 // ---- scenario ---------------------------------------------------------------------------------------
 

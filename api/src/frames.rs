@@ -951,6 +951,56 @@ mod tests {
         assert_eq!(chunk(&db, &app, t0, t0 + HOUR, 60).await.unwrap(), bytes, "stale body rebuilt");
     }
 
+    /// Lionfish Watch (4 regions, 1 taxon) frames as the API builds them after a `--fixtures`
+    /// backfill: every recorded fixture source is ingested into an in-memory lionfish state, then
+    /// `chunk` builds 2026-01-11 06:00 and 07:00 UTC. The fixtures hold lionfish only in Florida
+    /// (region 0: the iNat record and its GBIF copy at 06:50), so two synthetic iNat rows are
+    /// injected: one off Cozumel (region 1, 06:20) and one off Cartagena (region 3, 07:30).
+    /// `spec/frames/lionfish.evf` is the golden vector for the TS reader.
+    #[tokio::test]
+    async fn frames_regions_lionfish_golden() {
+        let state = crate::app::test_support::test_state_for("lionfish");
+        let root = crate::backfill::fixtures_root();
+        for src in crate::backfill::fixture_sources(&state) {
+            crate::backfill::ingest_fixtures(&state, src.as_ref(), &root).await.unwrap();
+        }
+        let app = &state.app;
+        let lionfish = app.taxa[0].taxon_id;
+        let t0 = ms(2026, 1, 11, 6);
+        let min = 60_000;
+        insert_sighting(&state.obs, "inat", lionfish, 20.42, -86.92, t0 + 20 * min, "research", None).await;
+        insert_sighting(&state.obs, "inat", lionfish, 10.40, -75.55, t0 + 90 * min, "research", None).await;
+        let bytes = chunk(&state.obs, app, t0, t0 + HOUR, 60).await.unwrap();
+        golden_check("lionfish.evf", &bytes);
+
+        let layouts = layouts(app);
+        let h = read_header(&bytes).unwrap();
+        assert_eq!((h.frame_count, h.species_count, h.region_count, h.step_min, h.frame0), (2, 1, 4, 60, t0));
+        assert_eq!(h.len(), HEADER_BYTES + 4 * REGION_DESC_BYTES);
+        assert_eq!(h.regions, layouts.iter().map(|l| (l.hs, l.env)).collect::<Vec<_>>());
+        let mut o = h.len();
+        let mut counts = Vec::new();
+        for _ in 0..2 {
+            let mut per_region = Vec::new();
+            for l in &layouts {
+                let body = &bytes[o..];
+                let n = u32_at(body, l.sightings_offset(1)) as usize;
+                for k in 0..n {
+                    let rec = &body[l.sightings_offset(1) + 4 + k * SIGHTING_BYTES..];
+                    let lon = f32::from_le_bytes(rec[4..8].try_into().unwrap()) as f64;
+                    let lat = f32::from_le_bytes(rec[8..12].try_into().unwrap()) as f64;
+                    assert!(l.grid.col_row(lon, lat).is_some(), "record ({lon}, {lat}) outside its region");
+                    assert_eq!(u16::from_le_bytes([rec[12], rec[13]]) as i64, lionfish);
+                }
+                per_region.push(n);
+                o += l.body_len(1, n);
+            }
+            counts.push(per_region);
+        }
+        assert_eq!(o, bytes.len(), "the file is exactly its frames");
+        assert_eq!(counts, vec![vec![2, 1, 0, 0], vec![0, 0, 0, 1]], "sightings per region per hourly window");
+    }
+
     #[test]
     fn frames_header_layout_matches_ts_reader() {
         let app = python_app();

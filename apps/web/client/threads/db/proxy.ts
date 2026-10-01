@@ -43,6 +43,11 @@ export type Router = {
 };
 
 export const CHANNEL_NAME = "inversa-db";
+
+/** The db RPC channel of one app's tabs (C-A5: threads are per app, so two apps never share a leader). */
+export function dbChannelName(app: string): string {
+  return `${CHANNEL_NAME}:${app}`;
+}
 export const PROXY_TIMEOUT_MS = 5_000;
 
 export class ProxyError extends Error {

@@ -42,7 +42,9 @@ export function createSignaling(baseUrl: string, fetchImpl: FetchLike = (i, init
     if (!res.ok) throw new Error(`signal ${method} ${path}: ${res.status}`);
     return res;
   };
-  const room = (id: string) => `/rooms/${encodeURIComponent(id)}`;
+  // Rooms are `<app>:main` (C-A6). `:` is legal in a path segment and the Worker matches ids as written (it
+  // refuses percent-escapes), so it goes unescaped; anything else unusual stays escaped and is refused there.
+  const room = (id: string) => `/rooms/${encodeURIComponent(id).replaceAll("%3A", ":")}`;
   return {
     async announce(r, peerId, name) {
       await call("POST", `${room(r)}/peers`, { peerId, name });

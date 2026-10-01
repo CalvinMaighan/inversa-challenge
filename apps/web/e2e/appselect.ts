@@ -1,8 +1,9 @@
 /**
- * A1b e2e: the app selector (PLAN.md C-A5, docs/APPS.md "App selector") on the production e2e build (`next
- * start`), behind a front proxy that is also a stub API: `/health` lists the three apps with a feed health each,
- * `/v1/<app>/graphql` answers every query with empty rows and records its path (anything under `/v1` without a
- * known app is a 404 and counted), and the rest goes to Next. No Axum, no Worker: this checks the web seam.
+ * A1b e2e: the app selector (PLAN.md C-A5, docs/APPS.md "App selector") on the real multi-app stack (e2e/stack.ts:
+ * one Axum serving carp, lionfish and python, each data dir filled by `backfill --fixtures --app <id>`, the
+ * production e2e build under `next start`, the signal Worker and the Caddy-like proxy). The proxy does not pin an
+ * app, so the client's own resolution (`?app=`, then localStorage, then carp) is what is tested, and it records
+ * every API path so a request without the app prefix is caught.
  *
  *   bun run e2e:appselect        build, run, print the APPSELECT lines
  *   E2E_SKIP_BUILD=1 …           reuse the last e2e build
@@ -10,7 +11,7 @@
  * Steps:
  *   1. a fresh visit with no `?app=` opens carp (the default) and the URL gains `?app=carp`;
  *   2. the HUD's species icon button opens a popover listing carp, lionfish and python with icon, name, question
- *      and a health dot that matches `/health` (apps=3);
+ *      and a health dot that matches Axum's `/health` (apps=3);
  *   3. picking lionfish switches in place: `?app=lionfish`, localStorage `inversa.app`, the map preset (VIEW),
  *      the layers, the helper questions and the legend all follow; `switch_ms` is click to all of those in the DOM
  *      and store, measured in the page (url, persist);
@@ -27,88 +28,23 @@
  *   APPSELECT-PREFIX requests=<n> unprefixed=0
  *   APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=<n>
  */
-import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
-import { APP_IDS, getApp, isAppId, type AppId } from "../shared/apps";
-import { APP_DIR, buildWeb, freePort, REPO_DIR } from "./stack";
+import { parseAppHealth, type AppHealth } from "../client/hud/appselect/health";
+import { APP_IDS, getApp, legendTitle, type AppId } from "../shared/apps";
+import { APP_DIR, buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 
-const SERVER = path.join(APP_DIR, ".next/standalone/apps/web/server.js");
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
 const LOAD_TIMEOUT_MS = 90_000;
-const HEALTH: Record<AppId, string> = { carp: "nominal", lionfish: "lagging", python: "down" };
+/** `/v1/<app>/...` (PLAN.md C-A2). */
+const PREFIXED = new RegExp(`^/v1/(${APP_IDS.join("|")})/`);
 
 const log = (...a: unknown[]) => console.error("[e2e:appselect]", ...a);
 function fail(message: string): never {
   throw new Error(message);
-}
-
-// ---- stub API + front proxy ----------------------------------------------------------------------
-
-type Seen = { prefixed: number; unprefixed: string[] };
-
-/** Every root a page query might select, empty: the HUD and globe render their "no data" states. */
-const EMPTY = { feeds: [], alerts: [], readings: [], stations: [], sightings: [], speciesCounts: [], taxa: [], board: { id: "x", missions: [], notes: [], messages: [], removals: [] } };
-
-function startFront(port: number, next: string, seen: Seen) {
-  return Bun.serve({
-    port,
-    hostname: "127.0.0.1",
-    idleTimeout: 120,
-    async fetch(req, server) {
-      const url = new URL(req.url);
-      if (url.pathname === "/health") {
-        return Response.json({ status: "ok", apps: APP_IDS.map((id) => ({ id, name: getApp(id).name, state: HEALTH[id] })) });
-      }
-      if (url.pathname.startsWith("/v1/")) {
-        const app = url.pathname.split("/")[2];
-        if (!isAppId(app)) {
-          seen.unprefixed.push(url.pathname);
-          return Response.json({ error: "unknown_app", apps: APP_IDS }, { status: 404 });
-        }
-        seen.prefixed += 1;
-        // The gql worker's socket: accept it so it stops retrying; it carries nothing here.
-        if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          return server.upgrade(req, { headers: { "sec-websocket-protocol": "graphql-transport-ws" } }) ? undefined : new Response("no", { status: 400 });
-        }
-        if (url.pathname.endsWith("/graphql")) return Response.json({ data: EMPTY });
-        return new Response("not here", { status: 404 });
-      }
-      if (url.pathname.startsWith("/signal/")) return new Response("[]", { headers: { "content-type": "application/json" } });
-      const headers = new Headers(req.headers);
-      headers.delete("host");
-      headers.delete("accept-encoding");
-      const res = await fetch(next + url.pathname + url.search, { method: req.method, headers, body: req.method === "GET" || req.method === "HEAD" ? undefined : req.body, redirect: "manual" });
-      const out = new Headers(res.headers);
-      out.delete("content-encoding");
-      out.delete("content-length");
-      return new Response(res.body, { status: res.status, headers: out });
-    },
-    websocket: {
-      message(ws, msg) {
-        // graphql-transport-ws handshake only.
-        if (typeof msg === "string" && msg.includes("connection_init")) ws.send(JSON.stringify({ type: "connection_ack" }));
-      },
-    },
-  });
-}
-
-async function startNext(port: number): Promise<ChildProcess> {
-  const child = spawn("bun", [SERVER], { cwd: path.dirname(SERVER), env: { ...process.env, HOSTNAME: "127.0.0.1", PORT: String(port), INVERSA_API_ORIGIN: "http://127.0.0.1:9", NEXT_TELEMETRY_DISABLED: "1" }, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    try {
-      if ((await fetch(`http://127.0.0.1:${port}/`)).ok) return child;
-    } catch {
-      // Not up yet.
-    }
-    if (child.exitCode !== null) fail(`next start exited (${child.exitCode})`);
-    if (Date.now() > deadline) fail("next start did not come up");
-    await Bun.sleep(250);
-  }
 }
 
 // ---- page helpers --------------------------------------------------------------------------------
@@ -121,11 +57,13 @@ async function ready(page: Page, app: AppId): Promise<void> {
   await page.waitForFunction(() => !document.documentElement.hasAttribute("data-app-pending"), undefined, { timeout: LOAD_TIMEOUT_MS });
 }
 
-async function openPopover(page: Page): Promise<void> {
+/** Open the popover and wait until its health dots show `expected` (Axum's `/health`, read by the script). */
+async function openPopover(page: Page, expected: Record<AppId, AppHealth>): Promise<void> {
   await page.click(BUTTON);
   await page.locator(POPOVER).waitFor();
-  // The health dots arrive from /health.
-  await page.waitForFunction(() => [...document.querySelectorAll("[data-app-option]")].every((el) => el.getAttribute("data-health") !== "unknown"), undefined, { timeout: 10_000 });
+  await page
+    .waitForFunction((want) => [...document.querySelectorAll("[data-app-option]")].every((el) => el.getAttribute("data-health") === (want as Record<string, string>)[el.getAttribute("data-app-option") ?? ""]), expected, { timeout: 15_000 })
+    .catch(async () => fail(`health dots ${JSON.stringify(await page.$$eval("[data-app-option]", (els) => els.map((el) => `${el.getAttribute("data-app-option")}=${el.getAttribute("data-health")}`)))}, /health says ${JSON.stringify(expected)}`));
 }
 
 const AXE_PATH = Bun.resolveSync("axe-core/axe.min.js", APP_DIR);
@@ -176,15 +114,14 @@ async function timedSwitch(page: Page, app: AppId, helper: string): Promise<numb
 }
 
 async function main(): Promise<string> {
+  buildApi(log);
   buildWeb(log);
-  const seen: Seen = { prefixed: 0, unprefixed: [] };
-  const nextPort = freePort();
-  const frontPort = freePort();
-  const next = await startNext(nextPort);
-  const front = startFront(frontPort, `http://127.0.0.1:${nextPort}`, seen);
-  const origin = `http://127.0.0.1:${frontPort}`;
+  const stack = await startStack({ name: "appselect", app: "carp", apps: APP_IDS, pinApp: false });
+  const origin = stack.origin;
   let browser: Browser | null = null;
   try {
+    const health = parseAppHealth(await (await fetch(`${origin}/health`)).json());
+    log(`/health: ${JSON.stringify(health)}`);
     browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
     const page = await context.newPage();
@@ -197,7 +134,7 @@ async function main(): Promise<string> {
     if (new URL(page.url()).searchParams.get("app") !== "carp") fail(`fresh visit URL ${page.url()}`);
 
     // 2. Popover lists the three apps with their health.
-    await openPopover(page);
+    await openPopover(page, health);
     const rows = await page.$$eval("[data-app-option]", (els) =>
       els.map((el) => ({ id: el.getAttribute("data-app-option"), health: el.getAttribute("data-health"), text: (el as HTMLElement).innerText, icon: el.querySelector("svg") !== null, current: el.getAttribute("aria-current") })),
     );
@@ -206,7 +143,7 @@ async function main(): Promise<string> {
       const row = rows.find((r) => r.id === id) ?? fail(`no ${id} option`);
       const app = getApp(id);
       if (!row.text.includes(app.name) || !row.text.includes(app.question.slice(0, 40)) || !row.icon) fail(`${id} option misses name, question or icon: ${row.text}`);
-      if (row.health !== HEALTH[id]) fail(`${id} health ${row.health}, /health says ${HEALTH[id]}`);
+      if (row.health !== health[id]) fail(`${id} health ${row.health}, /health says ${health[id]}`);
     }
     if (rows.find((r) => r.current === "true")?.id !== "carp") fail("carp is not marked current");
     const axeDark = await axePopover(page);
@@ -236,7 +173,7 @@ async function main(): Promise<string> {
     await page.click('[data-testid="status-button"]');
     await page.click('[data-testid="layers-button"]');
     const legend = await page.locator('[data-testid="legend-title"]').innerText();
-    if (legend !== (lionfish.legend as { title: string }).title) fail(`legend title ${legend}`);
+    if (legend !== legendTitle(lionfish)) fail(`legend title ${legend}, want ${legendTitle(lionfish)}`);
     await page.keyboard.press("Escape");
     // The share link follows with `app=lionfish` (written after the 400 ms debounce).
     await page.waitForFunction(() => new URLSearchParams(location.hash.slice(1)).get("app") === "lionfish", undefined, { timeout: 5_000 });
@@ -302,7 +239,7 @@ async function main(): Promise<string> {
     await lightPage.goto(`${origin}/?app=python`);
     await ready(lightPage, "python");
     if ((await lightPage.evaluate(() => document.documentElement.dataset.theme)) !== "light") fail("light theme not applied");
-    await openPopover(lightPage);
+    await openPopover(lightPage, health);
     const axeLight = await axePopover(lightPage);
     if (axeLight.length) fail(`axe (light): ${axeLight.join(", ")}`);
     await shot(lightPage, "appselect-light.png");
@@ -312,7 +249,7 @@ async function main(): Promise<string> {
     const phonePage = await phone.newPage();
     await phonePage.goto(`${origin}/?app=carp`);
     await ready(phonePage, "carp");
-    await openPopover(phonePage);
+    await openPopover(phonePage, health);
     const box = await phonePage.locator(POPOVER).boundingBox();
     if (!box || box.x < 0 || box.x + box.width > 375) fail(`phone popover off screen: ${JSON.stringify(box)}`);
     const axePhone = await axePopover(phonePage);
@@ -322,17 +259,17 @@ async function main(): Promise<string> {
     await phone.close();
 
     if (errors.length) log(`page errors: ${errors.slice(0, 5).join(" | ")}`);
-    console.log(`APPSELECT-PREFIX requests=${seen.prefixed} unprefixed=${seen.unprefixed.length}${seen.unprefixed.length ? ` (${[...new Set(seen.unprefixed)].join(", ")})` : ""}`);
-    if (seen.unprefixed.length) fail("unprefixed /v1 requests");
+    const v1 = stack.apiPaths.filter((p) => p.startsWith("/v1/"));
+    const unprefixed = v1.filter((p) => !PREFIXED.test(p));
+    console.log(`APPSELECT-PREFIX requests=${v1.length - unprefixed.length} unprefixed=${unprefixed.length}${unprefixed.length ? ` (${[...new Set(unprefixed)].join(", ")})` : ""}`);
+    if (unprefixed.length) fail("unprefixed /v1 requests");
     return `APPSELECT apps=${rows.length} url=${url} persist=${persist} keyboard=${keyboard} focus_return=${focusReturn} switch_ms=${switchMs}`;
+  } catch (err) {
+    log(stack.logs());
+    throw err;
   } finally {
     await browser?.close();
-    front.stop(true);
-    try {
-      process.kill(-next.pid!, "SIGTERM");
-    } catch {
-      // Gone.
-    }
+    await stack.stop();
   }
 }
 

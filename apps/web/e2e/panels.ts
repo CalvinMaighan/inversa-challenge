@@ -5,8 +5,8 @@
  *   E2E_SKIP_BUILD=1 …   reuse the last build when it points at the same API port
  *
  * Builds `next build` (standalone) with /v1 rewritten to a local Axum, backfills Axum's fixtures into a temp
- * INVERSA_DATA_DIR (`backfill --fixtures`), serves them with INVERSA_SOURCES=off, starts `next start`, and in
- * Chromium on the ops page (`/`, real globe and HUD) types a question to the agent. The browser clock sits just
+ * INVERSA_DATA_DIR (`backfill --fixtures --app python`), serves them with INVERSA_SOURCES=off, starts `next start`, and in
+ * Chromium on the ops page (`/?app=python`, real globe and HUD) types a question to the agent. The browser clock sits just
  * after the fixtures were recorded, so the default 30-day TIME window holds them.
  *
  * Assertions are on what the answer shows, never on the model's wording: a table panel with rows, a series
@@ -43,6 +43,8 @@ const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
  */
 const API_PORT = process.env.E2E_API_PORT ? Number(process.env.E2E_API_PORT) : portIfFree(4151);
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
+/** The fixtures are South Florida data: the python app (PLAN.md C-A1). */
+const APP = "python";
 const ANSWER_TIMEOUT_MS = 240_000;
 const MAX_BRACKETS = 50;
 /** The HUD labels and brackets the newest this many citations (client/hud/overlay/targets MAX_CITATIONS). */
@@ -74,8 +76,8 @@ function build(): void {
 }
 
 function backfill(dataDir: string): void {
-  log("backfill --fixtures …");
-  const res = spawnSync("cargo", ["run", "-q", "--release", "--manifest-path", path.join(REPO_DIR, "api/Cargo.toml"), "--", "backfill", "--fixtures"], {
+  log(`backfill --fixtures --app ${APP} …`);
+  const res = spawnSync("cargo", ["run", "-q", "--release", "--manifest-path", path.join(REPO_DIR, "api/Cargo.toml"), "--", "backfill", "--fixtures", "--app", APP], {
     cwd: REPO_DIR,
     env: { ...process.env, INVERSA_DATA_DIR: dataDir, RUST_LOG: "warn" },
     encoding: "utf8",
@@ -101,7 +103,7 @@ async function waitFor(what: string, ms: number, probe: () => Promise<boolean>, 
 }
 
 async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(`${API_ORIGIN}/v1/graphql`, {
+  const res = await fetch(`${API_ORIGIN}/v1/${APP}/graphql`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
@@ -212,7 +214,7 @@ async function flow(origin: string): Promise<string> {
       window.fetch = Object.assign(teed, { preconnect: window.fetch.preconnect });
     });
 
-    await page.goto(`${origin}/`, { waitUntil: "load" });
+    await page.goto(`${origin}/?app=${APP}`, { waitUntil: "load" });
     // The chat column is open from the start (T40).
     const column = page.locator("[data-chat-column]");
     await column.waitFor({ timeout: 60_000 });

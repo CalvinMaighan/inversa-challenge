@@ -1,6 +1,6 @@
 import { key, set } from "@calvinjs/active-state";
 
-import { DEFAULT_APP_ID, getApp, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
+import { DEFAULT_APP_ID, getApp, LAYER_IDS, layerDefaultOn, speciesIds, type AppConfig, type LayerId } from "shared/apps";
 import { SIGHTING_WINDOW_HOURS, SIGHTING_WINDOW_OPTIONS, type SightingWindowHours } from "shared/frames";
 import { CATEGORY_DEFAULT_ON, CATEGORY_IDS, type CategoryId } from "shared/species-categories";
 
@@ -43,26 +43,21 @@ export type LayersState = {
   sightingHours: SightingWindowHours;
 };
 
-/**
- * Sightings first (T41): of the data layers only sightings start visible in a species app. Stations, alerts,
- * hotspots and the temperature rasters start hidden, a tap away under "More data (for experts)"; alerts the
- * agent cites still show as brackets. A conditions app (carp) is about gauges and alerts, so everything it lists
- * starts on. Missions and team cursors draw only what the team put there.
- */
-// eslint-disable-next-line inversa/prefer-catalog-constants -- typed as LayerId, so tsc checks them against LAYER_IDS.
-const HIDDEN_BY_DEFAULT: ReadonlySet<LayerId> = new Set<LayerId>(["stations", "alerts", "hotspots", "lst", "sst"]);
-
 /** Default of one filter key: focus species on, categories per CATEGORY_DEFAULT_ON. */
 function keyDefault(id: string): boolean {
   return (CATEGORY_IDS as readonly string[]).includes(id) ? CATEGORY_DEFAULT_ON[id as CategoryId] : true;
 }
 
-/** LAYERS for a freshly selected app: its layers, its species, its default window. */
+/**
+ * LAYERS for a freshly selected app: its layers, its species, its default window. Which layers start on is the
+ * config's `layers[].defaultOn`: sightings first in a species app (T41; stations, alerts, hotspots and the
+ * temperature rasters start off, a tap away under "More data (for experts)"), everything listed in a conditions
+ * app (carp). A layer the app does not list stays off.
+ */
 export function layersFor(app: AppConfig): LayersState {
-  const listed = new Set<LayerId>(app.layers);
-  const window = app.windows.default;
+  const window = app.windows.defaultHours;
   return {
-    visible: Object.fromEntries(LAYER_IDS.map((id) => [id, listed.has(id) && (app.kind === "conditions" || !HIDDEN_BY_DEFAULT.has(id))])) as Record<LayerId, boolean>,
+    visible: Object.fromEntries(LAYER_IDS.map((id) => [id, layerDefaultOn(app, id)])) as Record<LayerId, boolean>,
     species: Object.fromEntries(speciesFilterIds(app).map((id) => [id, keyDefault(id)])),
     sightingHours: isWindowHours(window) ? window : SIGHTING_WINDOW_HOURS,
   };

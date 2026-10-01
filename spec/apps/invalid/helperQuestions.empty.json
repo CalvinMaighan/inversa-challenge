@@ -1,0 +1,332 @@
+{
+  "id": "lionfish",
+  "name": "Lionfish Watch",
+  "icon": "lionfish",
+  "tagline": "Survey priorities for lionfish across four Caribbean areas",
+  "question": "Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions?",
+  "kind": "species",
+  "taxa": [
+    {
+      "id": "lionfish",
+      "name": "Lionfish",
+      "short": "Lionfish",
+      "line": "venomous reef fish that eats young native fish",
+      "aliases": [
+        "red lionfish",
+        "common lionfish",
+        "devil firefish",
+        "pterois",
+        "pterois volitans",
+        "pterois miles"
+      ],
+      "category": "fish",
+      "scientificName": "Pterois volitans/miles",
+      "inatTaxonId": 47284,
+      "inatLineageIds": [
+        47280,
+        123459
+      ],
+      "gbifKey": 2334432,
+      "nasGenus": "Pterois",
+      "nasSpecies": null,
+      "iconicGroup": "Actinopterygii",
+      "color": "#a06cd5",
+      "halfLifeDays": 60,
+      "rules": "lionfish"
+    }
+  ],
+  "regions": [
+    {
+      "id": "fl-keys",
+      "name": "Florida Keys / South Florida",
+      "bbox": [
+        -83.2,
+        24.3,
+        -79.8,
+        27.5
+      ],
+      "cellDeg": 0.01,
+      "camera": {
+        "lat": 25.4,
+        "lon": -81.3,
+        "heightM": 480000
+      }
+    },
+    {
+      "id": "mx-caribbean",
+      "name": "Mexican Caribbean",
+      "bbox": [
+        -87.9,
+        18.3,
+        -86.6,
+        21.7
+      ],
+      "cellDeg": 0.01,
+      "camera": {
+        "lat": 20,
+        "lon": -87.2,
+        "heightM": 420000
+      }
+    },
+    {
+      "id": "belize",
+      "name": "Belize",
+      "bbox": [
+        -88.5,
+        16,
+        -87.3,
+        18.2
+      ],
+      "cellDeg": 0.01,
+      "camera": {
+        "lat": 17.1,
+        "lon": -87.9,
+        "heightM": 320000
+      },
+      "thin": true
+    },
+    {
+      "id": "co-caribbean",
+      "name": "Colombian Caribbean",
+      "bbox": [
+        -81.8,
+        9.7,
+        -74,
+        13.5
+      ],
+      "cellDeg": 0.01,
+      "camera": {
+        "lat": 11.6,
+        "lon": -77.9,
+        "heightM": 900000
+      },
+      "thin": true
+    }
+  ],
+  "locations": [],
+  "feeds": [
+    {
+      "source": "inat",
+      "mode": "poll",
+      "params": {
+        "queries": [
+          "focus"
+        ]
+      }
+    },
+    {
+      "source": "gbif",
+      "mode": "poll",
+      "params": {
+        "dedupeAgainst": "inat"
+      }
+    },
+    {
+      "source": "nas",
+      "mode": "poll",
+      "params": {
+        "state": null
+      }
+    },
+    {
+      "source": "crw",
+      "mode": "poll",
+      "name": "NOAA Coral Reef Watch",
+      "homepage": "https://coralreefwatch.noaa.gov",
+      "params": {
+        "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json",
+        "variables": [
+          "CRW_SST",
+          "CRW_SSTANOMALY",
+          "CRW_DHW",
+          "CRW_BAA"
+        ],
+        "points": {
+          "fl-keys": [
+            24.525,
+            -81.375
+          ],
+          "mx-caribbean": [
+            18.575,
+            -87.325
+          ],
+          "belize": [
+            16.775,
+            -87.825
+          ],
+          "co-caribbean": [
+            12.525,
+            -81.625
+          ]
+        }
+      }
+    },
+    {
+      "source": "openmeteo",
+      "mode": "poll",
+      "params": {
+        "stepDeg": 0.25,
+        "marine": [
+          "wave_height",
+          "wave_period",
+          "ocean_current_velocity",
+          "ocean_current_direction"
+        ]
+      }
+    },
+    {
+      "source": "ndbc",
+      "mode": "poll",
+      "params": {
+        "note": "Florida only; no sea-temperature buoys in the other areas"
+      }
+    },
+    {
+      "source": "coops",
+      "mode": "poll",
+      "params": {
+        "note": "Florida only"
+      }
+    },
+    {
+      "source": "goes19",
+      "mode": "push",
+      "params": {
+        "products": [
+          "ABI-L2-SSTF"
+        ]
+      }
+    },
+    {
+      "source": "web",
+      "mode": "push",
+      "params": {}
+    }
+  ],
+  "score": {
+    "label": "Survey priority (four components shown separately; no single risk percent)",
+    "components": [
+      {
+        "id": "recentReports",
+        "label": "Recent reports",
+        "weight": 1,
+        "description": "iNaturalist records by observed date in the window; sightings are not abundance."
+      },
+      {
+        "id": "idQuality",
+        "label": "Identification quality",
+        "weight": 1,
+        "description": "Research grade share and duplicate handling (GBIF copies of iNat are not corroboration)."
+      },
+      {
+        "id": "heatStress",
+        "label": "Reef heat stress",
+        "weight": 1,
+        "description": "NOAA CRW DHW (accumulated) and bleaching alert level (current). Context, not proof of lionfish damage."
+      },
+      {
+        "id": "completeness",
+        "label": "Data completeness",
+        "weight": 1,
+        "description": "Feed freshness and coverage gaps (NAS stale outside Florida, no buoys outside Florida)."
+      }
+    ]
+  },
+  "windows": {
+    "defaultHours": 720,
+    "optionsHours": [
+      48,
+      168,
+      720
+    ]
+  },
+  "layers": [
+    {
+      "id": "sightings",
+      "label": "Lionfish reports",
+      "defaultOn": true
+    },
+    {
+      "id": "hotspots",
+      "label": "Survey priority",
+      "defaultOn": false
+    },
+    {
+      "id": "sst",
+      "label": "Sea surface temperature (GOES-19)",
+      "defaultOn": false
+    },
+    {
+      "id": "heat",
+      "label": "Reef heat stress (CRW)",
+      "defaultOn": true
+    },
+    {
+      "id": "marine",
+      "label": "Waves and currents (Open-Meteo)",
+      "defaultOn": false
+    },
+    {
+      "id": "stations",
+      "label": "Buoys and tide stations (Florida)",
+      "defaultOn": false
+    },
+    {
+      "id": "missions",
+      "label": "Team missions",
+      "defaultOn": true
+    },
+    {
+      "id": "peers",
+      "label": "Teammates",
+      "defaultOn": true
+    },
+    {
+      "id": "notes",
+      "label": "Field notes",
+      "defaultOn": true
+    }
+  ],
+  "legend": {
+    "sightings": "One dot per report, by observed date. Submitted date can lag years.",
+    "hotspots": "Priority components shown separately; weights are configurable and labelled.",
+    "sst": "GOES-19 full-disk SST; satellite and buoy can disagree.",
+    "heat": "Degree heating weeks (accumulated) and bleaching alert level (current) from NOAA Coral Reef Watch.",
+    "marine": "Field conditions only; kept apart from ecological priority.",
+    "stations": "NDBC buoys and CO-OPS tide stations; Florida only.",
+    "missions": "Areas the team has claimed or finished.",
+    "peers": "Teammates on the board right now.",
+    "notes": "Field notes pinned to the map."
+  },
+  "copy": {
+    "about": "Lionfish reports, reef heat stress and ocean conditions for four Caribbean areas, with an agent you can ask which reefs to survey first.",
+    "region": "the Florida Keys, the Mexican Caribbean, Belize and the Colombian Caribbean",
+    "timezone": "America/New_York",
+    "legendTitle": "Lionfish reports and reef conditions",
+    "title": "Lionfish Watch",
+    "shortTitle": "Lionfish",
+    "sightingsNote": "Sightings are not abundance: more reports can mean more observers; no reports can mean no sampling.",
+    "scopeNote": "Lionfish in four areas: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean.",
+    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown."
+  },
+  "helperQuestions": [],
+  "agent": {
+    "persona": "You are the Lionfish Watch analyst. You prioritise survey areas from recent lionfish reports, identification quality, reef heat stress and data completeness, always shown as separate components, and you say when data is thin, stale or conflicting.",
+    "scope": "Lionfish (Pterois volitans/miles) in the Florida Keys, the Mexican Caribbean, Belize and the Colombian Caribbean.",
+    "tools": [
+      "geocode",
+      "sightings",
+      "species_counts",
+      "conditions",
+      "hotspots",
+      "explain_cell",
+      "feed_state",
+      "notes",
+      "set_view"
+    ],
+    "refusal": "Lionfish Watch covers lionfish in four areas: Florida Keys, Mexican Caribbean, Belize and the Colombian Caribbean. It does not estimate population growth or an invasion-risk percentage."
+  },
+  "eval": {
+    "goldenSet": "lionfish"
+  }
+}

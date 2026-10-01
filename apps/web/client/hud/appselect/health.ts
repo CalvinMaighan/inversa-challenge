@@ -1,47 +1,63 @@
 /**
- * Per-app feed health for the selector's dots, from the global `GET /health` (PLAN.md C-A2: "lists apps with
- * per-app feed health"). The contract does not fix the shape, so this reads the plausible ones and calls the rest
- * unknown: `{apps: [{id, state}]}`, `{apps: {carp: {state}}}`, and either with `feeds: [{state}]` instead of a
- * state (worst feed wins). States are the C3 words in any case; `ok`/`healthy` read as nominal.
+ * Per-app feed health for the selector's dots, from the global `GET /health` (PLAN.md C-A2). The body is exactly
+ * what `api/src/app/mod.rs` `health` writes, 200 when every app's feed state could be computed, 503 (same body,
+ * `status: "degraded"`) when one could not:
+ *
+ *   {status: "ok" | "degraded", defaultApp, apps: [{id, name, kind, provisional, regions, taxa, feeds}]}
+ *
+ * `feeds` is the app's C3 feed-state list (`api/src/feed_state.rs` `FeedState`, times as Unix ms), or
+ * `{error}` when it could not be computed. A body of any other shape reads as unknown for every app.
  */
-import { APP_IDS, isAppId, type AppId } from "shared/apps";
+import { z } from "zod";
+
+import { APP_IDS, type AppId } from "shared/apps";
 import type { FeedHealth } from "shared/feed-state";
 
 export type AppHealth = FeedHealth | "unknown";
 
 const RANK: Record<FeedHealth, number> = { nominal: 0, lagging: 1, stale: 2, down: 3 };
-const ALIASES: Record<string, FeedHealth> = { ok: "nominal", healthy: "nominal", up: "nominal", degraded: "lagging" };
 
-function healthWord(v: unknown): FeedHealth | null {
-  if (typeof v !== "string") return null;
-  const w = v.trim().toLowerCase();
-  return w in RANK ? (w as FeedHealth) : (ALIASES[w] ?? null);
+const ms = z.number().int().nullable();
+const feedState = z.strictObject({
+  source: z.string(),
+  mode: z.enum(["push", "poll"]),
+  state: z.enum(["nominal", "lagging", "stale", "down"]),
+  newestObservedAt: ms,
+  lastFetchAt: ms,
+  lastFetchRunId: z.string().nullable(),
+  lagSeconds: z.number().nullable(),
+  note: z.string().nullable(),
+});
+
+const appHealth = z.strictObject({
+  id: z.enum(APP_IDS),
+  name: z.string(),
+  kind: z.enum(["species", "conditions"]),
+  provisional: z.boolean(),
+  regions: z.array(z.string()),
+  taxa: z.array(z.string()),
+  feeds: z.union([z.array(feedState), z.strictObject({ error: z.string() })]),
+});
+
+export const healthBodySchema = z.strictObject({
+  status: z.enum(["ok", "degraded"]),
+  defaultApp: z.enum(APP_IDS),
+  apps: z.array(appHealth),
+});
+export type HealthBody = z.output<typeof healthBodySchema>;
+
+function entryHealth(feeds: HealthBody["apps"][number]["feeds"]): AppHealth {
+  // The API could not compute this app's feed state: its data is not reachable.
+  if (!Array.isArray(feeds)) return "down";
+  if (feeds.length === 0) return "unknown";
+  return feeds.reduce<FeedHealth>((worst, f) => (RANK[f.state] > RANK[worst] ? f.state : worst), "nominal");
 }
 
-function entryHealth(entry: unknown): AppHealth {
-  if (!entry || typeof entry !== "object") return healthWord(entry) ?? "unknown";
-  const e = entry as Record<string, unknown>;
-  const direct = healthWord(e.state) ?? healthWord(e.health) ?? healthWord(e.status);
-  if (direct) return direct;
-  if (Array.isArray(e.feeds)) {
-    const states = e.feeds.map((f) => healthWord((f as { state?: unknown } | null)?.state)).filter((s): s is FeedHealth => s !== null);
-    if (states.length > 0) return states.reduce((worst, s) => (RANK[s] > RANK[worst] ? s : worst), "nominal" as FeedHealth);
-  }
-  return "unknown";
-}
-
-/** Health per app; every app is present, `unknown` when the body does not say. */
+/** Health per app; every app is present, `unknown` when the body does not list it or is not a `/health` body. */
 export function parseAppHealth(body: unknown): Record<AppId, AppHealth> {
   const out = Object.fromEntries(APP_IDS.map((id) => [id, "unknown"])) as Record<AppId, AppHealth>;
-  const apps = body && typeof body === "object" ? (body as { apps?: unknown }).apps : undefined;
-  if (Array.isArray(apps)) {
-    for (const a of apps) {
-      const id = (a as { id?: unknown } | null)?.id;
-      if (isAppId(id)) out[id] = entryHealth(a);
-    }
-  } else if (apps && typeof apps === "object") {
-    for (const [id, a] of Object.entries(apps)) if (isAppId(id)) out[id] = entryHealth(a);
-  }
+  const parsed = healthBodySchema.safeParse(body);
+  if (parsed.success) for (const app of parsed.data.apps) out[app.id] = entryHealth(app.feeds);
   return out;
 }
 
@@ -50,11 +66,11 @@ export function healthLabel(h: AppHealth): string {
   return h === "unknown" ? "feed health unknown" : h === "nominal" ? "feeds running normally" : `feeds ${h}`;
 }
 
-/** `GET /health`, parsed; every app `unknown` when it fails or is not JSON (an API that predates C-A2 answers "ok"). */
+/** `GET /health`, parsed (a 503 carries the same body); every app `unknown` when it fails or is not that body. */
 export async function fetchAppHealth(fetchImpl: typeof fetch = fetch, signal?: AbortSignal): Promise<Record<AppId, AppHealth>> {
   try {
     const res = await fetchImpl("/health", { headers: { accept: "application/json" }, signal });
-    return parseAppHealth(res.ok ? await res.json() : null);
+    return parseAppHealth(res.ok || res.status === 503 ? await res.json() : null);
   } catch {
     return parseAppHealth(null);
   }

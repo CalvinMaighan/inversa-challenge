@@ -515,7 +515,7 @@ impl QueryRoot {
             messages: view
                 .messages
                 .into_iter()
-                .map(|m| Message { id: ID(m.id), body: m.body, hlc: m.hlc, node_id: m.node_id })
+                .map(|m| Message { id: ID(m.id), body: m.body, hlc: m.hlc, node_id: m.node_id, to: m.to, thread: m.thread })
                 .collect(),
             removals: serde_json::to_value(view.removals)?,
         })

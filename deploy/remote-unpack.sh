@@ -26,7 +26,7 @@ mkdir -p "$DEST.new"
 tar --zstd -xf "$STAGING/inversa.tar.zst" -C "$DEST.new"
 chown -R root:root "$DEST.new"
 chmod -R go-w "$DEST.new"
-chmod 755 "$DEST.new/api/inversa-api" "$DEST.new/deploy/restore.sh"
+chmod 755 "$DEST.new/api/inversa-api" "$DEST.new/deploy/restore.sh" "$DEST.new/deploy/migrate-app-dirs.sh"
 
 # Next writes its cache under .next/cache; the release tree is read-only, so point it
 # at the writable web cache (inversa-web.service allows only that path).
@@ -55,12 +55,18 @@ done
 
 systemctl daemon-reload
 systemctl enable --quiet inversa-api inversa-litestream inversa-web caddy
+# Per-app data layout (PLAN.md C-A1): move pre-pivot files into python/ while nothing holds
+# the databases open. A no-op once migrated; exits non-zero (deploy fails, units stay
+# stopped) if old and new files both exist.
+systemctl stop inversa-litestream inversa-api
+runuser -u inversa -- bash "$ROOT/deploy/migrate-app-dirs.sh" /var/lib/inversa
 systemctl restart inversa-api inversa-litestream inversa-web
 systemctl reload caddy || systemctl restart caddy
 
 healthy=""
 for _ in $(seq 1 60); do
-  if curl -fsS -o /dev/null http://127.0.0.1:4041/health && curl -fsS -o /dev/null http://127.0.0.1:3050/; then
+  # /health is JSON; 503 (curl -f fails) or "status":"degraded" means an app is unhealthy.
+  if curl -fsS http://127.0.0.1:4041/health 2>/dev/null | grep -q '"status":"ok"' && curl -fsS -o /dev/null http://127.0.0.1:3050/; then
     healthy=yes
     break
   fi

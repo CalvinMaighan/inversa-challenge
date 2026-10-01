@@ -13,7 +13,7 @@ describe("VIEW", () => {
     expect(v.lon).toBeCloseTo(-81.5, 10);
     expect(v.heading).toBe(0);
     expect(v.pitch).toBe(-90);
-    expect(v.altitudeM).toBe(altitudeToFit(SOUTH_FLORIDA));
+    expect(v.altitudeM).toBe(getApp("python").regions[0]!.camera.heightM);
     // Fly-command fields (voice fly_to): no named target yet, nothing flown.
     expect(v.place).toBeNull();
     expect(v.seq).toBe(0);
@@ -22,8 +22,8 @@ describe("VIEW", () => {
 
   test("defaults are the default app's (carp) preset", () => {
     expect(VIEW.defaults).toEqual(viewFor(getApp("carp")));
-    expect(VIEW.defaults.lat).toBe(31);
-    expect(VIEW.defaults.lon).toBe(-91.5);
+    expect(VIEW.defaults.lat).toBe(getApp("carp").regions[0]!.camera.lat);
+    expect(VIEW.defaults.lon).toBe(getApp("carp").regions[0]!.camera.lon);
   });
 
   test("an app with several regions frames all of them from their centre", () => {

@@ -1,7 +1,8 @@
 # EVF2 golden vectors
 
 Written by `api/src/frames.rs` (`cargo test -- evf_golden frames_regions`, regenerate with
-`EVF_UPDATE_GOLDEN=1`); read by `apps/web/shared/frames.ts` and its tests. The authoritative byte
+`EVF_UPDATE_GOLDEN=1`); read by `apps/web/shared/frames.ts` and its tests
+(`apps/web/tests/shared/frames-regions.test.ts`, `bun test ... tests -t "frames regions"`). The authoritative byte
 layout is the doc comment in `apps/web/shared/frames.ts`, extended by PLAN.md C-A4 as follows.
 
 ## Header (72 bytes, little-endian)
@@ -40,6 +41,7 @@ and 16-byte records for the sightings inside that region observed in the frame's
 |---|---|---|
 | `sample.evf` | one region (20 × 10 scoring cells), 4 taxa, 3 hourly frames | the pre-pivot vector; the only byte that changed in the pivot is offset 68 (`regionCount` = 1) |
 | `two-regions.evf` | two regions (20 × 10 and 30 × 20 scoring cells), 1 taxon, 3 hourly frames | header 72 + 2 × 40 bytes; frame bodies are region "west" then region "east"; sighting counts per region per frame are `[0,0] [1,0] [0,1]` |
+| `lionfish.evf` | the builtin Lionfish Watch app (`spec/apps/lionfish.json`): 4 regions, 1 taxon, 2 hourly frames (≈390 KB) | built by `chunk` as the API serves it, after ingesting every `api/fixtures` source (`--fixtures` backfill) into an in-memory lionfish state; see below |
 
 `two-regions.evf` expectations (see `frames_regions_round_trip` in `api/src/frames.rs`):
 
@@ -49,3 +51,19 @@ and 16-byte records for the sightings inside that region observed in the frame's
 - region 0 cell (2,2) scores 100 in every frame; region 1 cell (10,10) scores 10 (rough sea);
   region 1 env cell (0,0) SST is 2400 centi-°C; region 0 has no SST.
 - frame 2's east record: sighting id 4, quality 2, flags 2 (conflict).
+
+`lionfish.evf` expectations (see `frames_regions_lionfish_golden` in `api/src/frames.rs`):
+
+- frame0 2026-01-11T06:00:00Z, step 60, 2 frames, speciesCount 1 (lionfish `taxa[]`), regionCount 4;
+  header 72 + 4 × 40 bytes.
+- region `i`'s descriptor is what `regions[i]` implies: `west`/`south` from the bbox, `hsCellDeg`
+  = 2 × `cellDeg`, `envCellDeg` = 5 × `cellDeg`, hotspot cols/rows = bbox span / `cellDeg` / 2,
+  env cols/rows = span / `cellDeg` / 5 (fl-keys 170 × 160 and 68 × 64, mx-caribbean 65 × 170 and
+  26 × 68, belize 60 × 110 and 24 × 44, co-caribbean 390 × 190 and 156 × 76).
+- sighting counts per region per frame `[2,1,0,0] [0,0,0,1]`, every record inside its region's
+  bbox. The fixtures only hold lionfish in Florida (frame 0, fl-keys: the iNat record at 06:50 and
+  its GBIF copy); the generator injects two synthetic iNat rows so other regions carry records: one
+  off Cozumel (20.42 N, 86.92 W, 06:20, mx-caribbean) and one off Cartagena (10.40 N, 75.55 W,
+  07:30, co-caribbean).
+- The golden changes whenever the lionfish regions, its taxa or the fixtures change; regenerate
+  with `EVF_UPDATE_GOLDEN=1 cargo test --manifest-path api/Cargo.toml frames_regions_lionfish_golden`.

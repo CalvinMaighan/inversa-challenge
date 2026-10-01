@@ -16,7 +16,19 @@ import {
 } from "@calvinjs/active-state/threads";
 
 import type { FrameMeta } from "client/threads/api";
-import { EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, readEvfHeader, readSightingRecords, type EvfHeader, type SightingRecord } from "shared/frames";
+import {
+  EVF_HEADER_BYTES,
+  evfFrameSightingBytes,
+  evfHeaderLength,
+  readEvfFrameSightings,
+  readEvfHeader,
+  walkEvf,
+  walkEvfFrame,
+  writeEvfHeader,
+  type EvfFrameRegions,
+  type EvfHeader,
+  type SightingRecord,
+} from "shared/frames";
 
 export const STEP_MINUTES = 60;
 const STEP_MS = STEP_MINUTES * 60_000;
@@ -118,7 +130,11 @@ export function chunkUrl(base: string, c: ChunkRequest): string {
 
 // ---- EVF2 ----------------------------------------------------------------------------------
 
-export type EvfFrame = { atMs: number; offset: number; sightingCount: number; byteLength: number };
+/**
+ * One frame of a parsed chunk. `offset`/`byteLength` span every region body (region 0 first, so the grid's
+ * region starts at `offset`); `sightingCount` is every region's; `regions` are the bodies (C-A4).
+ */
+export type EvfFrame = EvfFrameRegions & { atMs: number };
 
 export type ParsedEvf = { header: EvfHeader; frames: EvfFrame[] };
 
@@ -127,19 +143,8 @@ export function parseEvf(bytes: Uint8Array): ParsedEvf {
   if (bytes.byteLength < EVF_HEADER_BYTES) throw new Error(`EVF: ${bytes.byteLength} bytes is shorter than the header`);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const header = readEvfHeader(view);
-  const layout = evfFrameLayout(header);
-  const frames: EvfFrame[] = [];
-  let offset = EVF_HEADER_BYTES;
   const stepMs = header.stepMinutes * 60_000;
-  for (let i = 0; i < header.frameCount; i++) {
-    const countAt = offset + layout.sightingsOffset;
-    if (countAt + 4 > bytes.byteLength) throw new Error(`EVF: frame ${i} truncated at ${offset}`);
-    const sightingCount = view.getUint32(countAt, true);
-    const byteLength = evfFrameBytes(header, sightingCount);
-    if (offset + byteLength > bytes.byteLength) throw new Error(`EVF: frame ${i} needs ${byteLength} bytes at ${offset}, have ${bytes.byteLength - offset}`);
-    frames.push({ atMs: header.frame0UnixMs + i * stepMs, offset, sightingCount, byteLength });
-    offset += byteLength;
-  }
+  const frames = walkEvf(view, header).map((f, i): EvfFrame => ({ ...f, atMs: header.frame0UnixMs + i * stepMs }));
   return { header, frames };
 }
 
@@ -230,39 +235,23 @@ export function frameBody(bytes: Uint8Array, f: EvfFrame): Uint8Array {
   return bytes.subarray(f.offset, f.offset + f.byteLength);
 }
 
-/** The raw sighting records of a frame (after its u32 count), for `sightings.ts`. */
+const walkBody = (h: EvfHeader, body: Uint8Array) => walkEvfFrame(new DataView(body.buffer, body.byteOffset, body.byteLength), h, 0);
+
+/** The raw sighting records of a frame body (every region's, after each u32 count), for `sightings.ts`. */
 export function sightingBytes(h: EvfHeader, body: Uint8Array): Uint8Array {
-  const start = evfFrameLayout(h).sightingsOffset + 4;
-  return body.subarray(start);
+  return evfFrameSightingBytes(body, h, walkBody(h, body));
 }
 
-/** Decoded sightings of one frame body (C4 record layout via shared/frames.ts). */
+/** Decoded sightings of one frame body, every region's (C4 record layout via shared/frames.ts). */
 export function readSightings(h: EvfHeader, body: Uint8Array): SightingRecord[] {
-  const layout = evfFrameLayout(h);
-  const view = new DataView(body.buffer, body.byteOffset, body.byteLength);
-  const count = view.getUint32(layout.sightingsOffset, true);
-  return readSightingRecords(view, layout.sightingsOffset + 4, count);
+  return readEvfFrameSightings(new DataView(body.buffer, body.byteOffset, body.byteLength), h, walkBody(h, body));
 }
 
-/** Header for a single-frame EVF2 body, so a cached frame round-trips through `parseEvf`. */
+/** Header (with the region table) for a single-frame EVF2 body, so a cached frame round-trips through `parseEvf`. */
 export function singleFrameEvf(h: EvfHeader, atMs: number, body: Uint8Array): Uint8Array {
-  const out = new Uint8Array(EVF_HEADER_BYTES + body.byteLength);
-  const view = new DataView(out.buffer);
-  out.set([0x45, 0x56, 0x46, 0x32], 0); // "EVF2"
-  view.setUint32(4, 1, true);
-  view.setUint32(8, h.hsCols, true);
-  view.setUint32(12, h.hsRows, true);
-  view.setFloat64(16, h.west, true);
-  view.setFloat64(24, h.south, true);
-  view.setFloat64(32, h.hsCellDeg, true);
-  view.setBigInt64(40, BigInt(atMs), true);
-  view.setUint32(48, h.stepMinutes, true);
-  view.setUint32(52, h.speciesCount, true);
-  view.setUint16(56, h.envCols, true);
-  view.setUint16(58, h.envRows, true);
-  view.setFloat32(60, h.envCellDeg, true);
-  view.setFloat32(64, h.hotspotScale, true);
-  view.setUint32(68, 0, true);
-  out.set(body, EVF_HEADER_BYTES);
+  const headerBytes = evfHeaderLength(h);
+  const out = new Uint8Array(headerBytes + body.byteLength);
+  writeEvfHeader(new DataView(out.buffer), { ...h, frameCount: 1, frame0UnixMs: atMs });
+  out.set(body, headerBytes);
   return out;
 }

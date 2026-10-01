@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { fetchAppHealth, healthLabel, parseAppHealth } from "client/hud/appselect/health";
+import { fetchAppHealth, healthLabel, parseAppHealth, type AppHealth } from "client/hud/appselect/health";
 import { appIconCategory, appOptions, appTint, nextIndex } from "client/hud/appselect/model";
-import { getApp } from "shared/apps";
+import { getApp, type AppId } from "shared/apps";
 import { CATEGORY_COLORS } from "shared/species-categories";
 
 describe("app selector model", () => {
@@ -32,20 +32,54 @@ describe("app selector model", () => {
   });
 });
 
+/** A feed-state envelope as `/health` writes it (api/src/feed_state.rs `FeedState`, times as Unix ms). */
+const feed = (source: string, state: string) => ({
+  source,
+  mode: "poll",
+  state,
+  newestObservedAt: 1_759_300_000_000,
+  lastFetchAt: 1_759_300_100_000,
+  lastFetchRunId: "12",
+  lagSeconds: 30,
+  note: null,
+});
+/** The `/health` body of api/src/app/mod.rs `health`. */
+const body = (status: string, feeds: Record<string, unknown>) => ({
+  status,
+  defaultApp: "carp",
+  apps: [
+    { id: "carp", name: "Carp Field Conditions", kind: "conditions", provisional: true, regions: ["louisiana"], taxa: [], feeds: feeds.carp },
+    { id: "lionfish", name: "Lionfish Watch", kind: "species", provisional: false, regions: ["fl-keys"], taxa: ["lionfish"], feeds: feeds.lionfish },
+    { id: "python", name: "Everglades Ops", kind: "species", provisional: false, regions: ["everglades"], taxa: ["python"], feeds: feeds.python },
+  ],
+});
+
 describe("app health from /health", () => {
-  test("reads an apps array, an apps map, per-feed states (worst wins) and aliases; the rest is unknown", () => {
-    expect(parseAppHealth({ apps: [{ id: "carp", state: "LAGGING" }, { id: "python", status: "ok" }, { id: "bogus", state: "down" }] })).toEqual({ carp: "lagging", lionfish: "unknown", python: "nominal" });
-    expect(parseAppHealth({ apps: { lionfish: { feeds: [{ state: "nominal" }, { state: "stale" }, { state: "lagging" }] }, carp: "down" } })).toEqual({ carp: "down", lionfish: "stale", python: "unknown" });
-    expect(parseAppHealth("ok")).toEqual({ carp: "unknown", lionfish: "unknown", python: "unknown" });
-    expect(parseAppHealth(null)).toEqual({ carp: "unknown", lionfish: "unknown", python: "unknown" });
+  test("reads the /health body: worst feed state per app; no feeds is unknown; a feed-state error is down", () => {
+    const ok = body("ok", { carp: [feed("usgs", "nominal")], lionfish: [feed("inat", "nominal"), feed("crw", "stale"), feed("gbif", "lagging")], python: [] });
+    expect(parseAppHealth(ok)).toEqual({ carp: "nominal", lionfish: "stale", python: "unknown" });
+    const degraded = body("degraded", { carp: { error: "database is locked" }, lionfish: [], python: [feed("nws", "down")] });
+    expect(parseAppHealth(degraded)).toEqual({ carp: "down", lionfish: "unknown", python: "down" });
     expect(healthLabel("down")).toBe("feeds down");
   });
 
-  test("an API that answers text, an error status or nothing reads as unknown, never throws", async () => {
-    const answer = (body: BodyInit, status = 200) => (async () => new Response(body, { status })) as unknown as typeof fetch;
+  test("strict: the pre-contract guesses and any other shape read as unknown for every app", () => {
+    const unknown: Record<AppId, AppHealth> = { carp: "unknown", lionfish: "unknown", python: "unknown" };
+    expect(parseAppHealth({ apps: [{ id: "carp", state: "lagging" }] })).toEqual(unknown);
+    expect(parseAppHealth({ apps: { lionfish: { feeds: [{ state: "stale" }] } } })).toEqual(unknown);
+    const extra = body("ok", { carp: [feed("usgs", "nominal")], lionfish: [], python: [] });
+    expect(parseAppHealth({ ...extra, uptime: 3 })).toEqual(unknown);
+    expect(parseAppHealth(body("ok", { carp: [{ ...feed("usgs", "nominal"), state: "ok" }], lionfish: [], python: [] }))).toEqual(unknown);
+    expect(parseAppHealth("ok")).toEqual(unknown);
+    expect(parseAppHealth(null)).toEqual(unknown);
+  });
+
+  test("a 503 carries the degraded body; text, other errors or no answer read as unknown, never throw", async () => {
+    const answer = (b: BodyInit, status = 200) => (async () => new Response(b, { status })) as unknown as typeof fetch;
+    const degraded = JSON.stringify(body("degraded", { carp: { error: "boom" }, lionfish: [], python: [feed("nws", "nominal")] }));
+    expect(await fetchAppHealth(answer(degraded, 503))).toEqual({ carp: "down", lionfish: "unknown", python: "nominal" });
     expect((await fetchAppHealth(answer("ok"))).carp).toBe("unknown");
     expect((await fetchAppHealth(answer("{}", 500))).carp).toBe("unknown");
     expect((await fetchAppHealth((async () => Promise.reject(new Error("offline"))) as unknown as typeof fetch)).python).toBe("unknown");
-    expect((await fetchAppHealth(answer(JSON.stringify({ apps: [{ id: "python", state: "down" }] })))).python).toBe("down");
   });
 });
