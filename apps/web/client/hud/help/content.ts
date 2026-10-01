@@ -84,7 +84,7 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "look",
     group: "Map",
     control: "Look",
-    what: "Bottom of the map. Changes how the globe looks: Normal, CRT, NVG (night vision), FLIR (thermal), Noir, Anime or Snow. The scope switch shows the map in a round window and Soft edge blurs its rim. A look changes no data.",
+    what: "Top right, the eye. Changes how the globe looks: Normal, CRT, NVG (night vision), FLIR (thermal), Noir, Anime or Snow. The map window switch shows the map through a window: pick its shape (circle, oval, rounded or the whole frame), its size, and how soft its edge is. A look changes no data.",
   },
   {
     id: "developer",

@@ -8,7 +8,7 @@
  *
  * Desktop 1440×900:
  *   1. the stage layout (docs/GODS_EYE.md GC1): the chat card is visible at load, floating at the left with
- *      16 px gutters, full height less them; the globe fills the page behind it; the top bar, timeline and
+ *      12 px gutters (GE9: the --gap-m unit), full height less them; the globe fills the page behind it; the top bar, timeline and
  *      legend sit right of the card on the page (bounding boxes); the card's edge resizes it and the width
  *      survives to the next visit; the first-visit hint offers example questions and stays dismissed;
  *   2. Layers (About → More data, T41): the legend opens, its counts come from the globe's own layer stats, and
@@ -140,12 +140,12 @@ async function appReady(page: Page, origin: string, phone = false): Promise<void
   await page.waitForTimeout(800);
 }
 
-/** Stage frame at 1440×900 (GODS_EYE GC1): the chat card at 16,16, 420 wide, full height less the gutters; the globe filling the page. */
+/** Stage frame at 1440×900 (GODS_EYE GC1): the chat card at 12,12, 420 wide, full height less the gutters; the globe filling the page. */
 async function stageFrame(page: Page): Promise<{ column: Box; globe: Box }> {
   const column = await box(page, "[data-chat-column]");
   const globe = await box(page, "[data-globe]");
   log(`column ${JSON.stringify(column)} globe ${JSON.stringify(globe)}`);
-  if (column.x !== 16 || column.y !== 16 || Math.abs(column.height - 868) > 1 || Math.abs(column.width - 420) > 1) fail(`chat card ${JSON.stringify(column)}, want 16,16 420×868`);
+  if (column.x !== 12 || column.y !== 12 || Math.abs(column.height - 876) > 1 || Math.abs(column.width - 420) > 1) fail(`chat card ${JSON.stringify(column)}, want 12,12 420×876`);
   if (globe.x !== 0 || globe.y !== 0 || Math.abs(globe.width - 1440) > 1 || Math.abs(globe.height - 900) > 1) fail(`globe ${JSON.stringify(globe)} does not fill the page`);
   return { column, globe };
 }
@@ -302,8 +302,8 @@ async function desktop(browser: Browser, stack: Stack, errors: string[], result:
   ] as const) {
     if (!rightOfCard(b, column)) fail(`${name} ${JSON.stringify(b)} is not on the page right of the chat card`);
   }
-  // First of the three top-right icon buttons (About, Theme, Developer: 3 × 36 px, two 6 px gaps, the gutter).
-  if (layersButton.x + layersButton.width < globe.x + globe.width - 130) fail(`Layers button ${JSON.stringify(layersButton)} is not top right`);
+  // First of the four top-right icon buttons (About, Theme, Look, Developer: 4 × 36 px, three 12 px gaps, the gutter).
+  if (layersButton.x + layersButton.width < globe.x + globe.width - 200) fail(`Layers button ${JSON.stringify(layersButton)} is not top right`);
   if (!(await page.locator('[data-chat-column] [aria-label="Start voice"]').isVisible())) fail("no mic button in the composer");
   result.chat = "left";
   result.globe = "right";

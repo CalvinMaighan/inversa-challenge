@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "client/hud/primitives";
+import { useHudBottom } from "client/hud/shell/use-hud-bottom";
 import styled from "client/styled";
 
 import { conflictText } from "./briefing";
@@ -17,7 +18,7 @@ const Root = styled(Surface)`
   position: absolute;
   left: max(var(--gap-m), env(safe-area-inset-left));
   right: max(var(--gap-m), env(safe-area-inset-right));
-  bottom: max(var(--gap-s), env(safe-area-inset-bottom));
+  bottom: max(var(--gap-m), env(safe-area-inset-bottom));
   padding: 6px var(--gap-m) 8px;
   border-radius: var(--radius-m);
   z-index: 4;
@@ -31,8 +32,6 @@ const Root = styled(Surface)`
     --carp-forecast: #6e35b5;
   }
   ${MOBILE} {
-    left: var(--gap-s);
-    right: var(--gap-s);
     padding: 6px var(--gap-s);
   }
 `;
@@ -180,7 +179,7 @@ const Legend = styled.div`
     white-space: nowrap;
   }
   ${MOBILE} {
-    gap: 2px 8px;
+    gap: 2px var(--gap-s);
     font-size: 11px;
   }
 `;
@@ -284,31 +283,8 @@ export default function CarpTimeline({ chart, siteName, forecast, conflicts, rep
   }, []);
   const [width, setWidth] = useState(0);
 
-  // Panels and tabs stop above the timeline, however tall it wrapped (`--hud-bottom` on the HUD root), and the
-  // globe's data attribution, which sits under the HUD, is lifted above it so the timeline never takes its clicks
-  // (`--globe-credits-bottom` on the pane, as the shared timeline does).
-  useLayoutEffect(() => {
-    const root = rootRef.current;
-    const hud = root?.closest<HTMLElement>("[data-hud]");
-    const pane = root?.closest<HTMLElement>('[data-slot="globe-pane"]');
-    if (!root || !hud || typeof ResizeObserver !== "function") return;
-    const apply = () => {
-      const top = root.getBoundingClientRect().top;
-      const gap = hud.getBoundingClientRect().bottom - top;
-      if (gap > 0) hud.style.setProperty("--hud-bottom", `${Math.ceil(gap + 8)}px`);
-      if (pane) pane.style.setProperty("--globe-credits-bottom", `${Math.ceil(pane.getBoundingClientRect().bottom - top + 4)}px`);
-    };
-    const ro = new ResizeObserver(apply);
-    ro.observe(root);
-    ro.observe(hud);
-    if (pane) ro.observe(pane);
-    apply();
-    return () => {
-      ro.disconnect();
-      hud.style.removeProperty("--hud-bottom");
-      pane?.style.removeProperty("--globe-credits-bottom");
-    };
-  }, []);
+  // Panels, tabs and the bottom bar stop one gutter above the timeline, however tall it wrapped.
+  useHudBottom(rootRef);
   const [height, setHeight] = useState(CHART_HEIGHT);
   const chartRef = useRef(chart);
 

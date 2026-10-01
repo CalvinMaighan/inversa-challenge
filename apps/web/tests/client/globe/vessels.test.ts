@@ -30,8 +30,11 @@ import { fakeContext, fakeViewer, flush, installDom } from "./fakes";
 
 const MIN = 60_000;
 const NOW = Date.now();
-/** A past time on the minute, inside the 30-day "what we knew" range. */
-const T = Math.floor((NOW - 6 * 3_600_000) / MIN) * MIN;
+/**
+ * A past time on the minute, inside the 30-day "what we knew" range, and in the middle of a data bucket so the
+ * tests that move the cursor by minutes never cross a bucket boundary (which depended on the time of day).
+ */
+const T = vesselBucket(NOW - 6 * 3_600_000) + 3 * 3_600_000;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 /** A tug heading east along 29.5 N, one fix every 10 min from T - 60 min to T + 60 min, 10 kn. */

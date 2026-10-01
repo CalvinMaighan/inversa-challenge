@@ -137,6 +137,12 @@ export function accentVars(id: AccentId): Record<"--hue" | "--hue-accent" | "--c
   };
 }
 
+/**
+ * The one spacing unit of the stage chrome (GE9): every outer margin and gap between the cards, bars and buttons. CSS
+ * reads it as `--gap-m`; layout maths imports the number, so the two cannot drift.
+ */
+export const GAP_M_PX = 12;
+
 /** Mode-independent tokens (scale, radius, fonts). Fonts point at the next/font/local variables from app/layout.tsx. */
 export const SHARED_TOKENS: Record<string, string> = {
   "--font-sans": "var(--font-inter, ui-sans-serif), ui-sans-serif, system-ui, sans-serif",
@@ -151,7 +157,7 @@ export const SHARED_TOKENS: Record<string, string> = {
   "--font-h1": "44px",
   "--gap-xs": "4px",
   "--gap-s": "8px",
-  "--gap-m": "12px",
+  "--gap-m": `${GAP_M_PX}px`,
   "--gap-l": "20px",
   "--gap-xl": "32px",
   "--radius-s": "8px",

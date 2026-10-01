@@ -59,11 +59,11 @@ const Column = styled(Surface)`
 
   ${MOBILE} {
     width: auto;
-    right: var(--zoom-right, var(--gap-s));
+    right: var(--zoom-right, var(--gap-m));
     padding: 4px;
 
     [data-drawer-open] & {
-      right: var(--zoom-right, var(--gap-s));
+      right: var(--zoom-right, var(--gap-m));
     }
     [data-zoom-extra] {
       display: none;
@@ -176,7 +176,7 @@ const Readout = styled.div`
 
 const Hint = styled(Surface)`
   position: absolute;
-  right: calc(100% + 8px);
+  right: calc(100% + var(--gap-m));
   top: 0;
   display: flex;
   align-items: flex-start;

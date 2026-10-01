@@ -5,7 +5,9 @@ import { useActiveState } from "@calvinjs/active-state/react";
 
 import type { FeedState } from "shared/feed-state";
 
+import { SHEET_MEDIA } from "client/agent/layout/geometry";
 import { FEEDS } from "client/state/feeds";
+import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
@@ -15,17 +17,45 @@ import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
 import { aboutSentence, WINDOW_NOTE } from "../help/content";
 import DeveloperPanel from "../developer/DeveloperPanel";
+import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeOn, setScopeShape, setScopeSize } from "../look/LookBar";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
 
-/** The three icon buttons, pinned to the top right of the HUD's top row (which keeps room for them). */
+/** An icon button's size. */
+export const ROUND_PX = 36;
+/** The cluster's buttons, left to right: About, Theme, Look, Developer. */
+export const TOPBAR_BUTTONS = 4;
+/** The cluster's width (the top row keeps this much room, plus a gutter, at its right). */
+export const TOPBAR_WIDTH_CSS = `calc(${TOPBAR_BUTTONS * ROUND_PX}px + ${TOPBAR_BUTTONS - 1} * var(--gap-m))`;
+
+/** The four icon buttons, pinned to the top right of the HUD's top row (which keeps room for them), one gutter apart. */
 const Bar = styled.header`
   position: absolute;
   top: 0;
   right: 0;
   display: flex;
-  gap: 6px;
+  gap: var(--gap-m);
+`;
+
+/**
+ * A button and its popover: the popover opens one gutter below the button with its right edge on the button's right
+ * edge. Its width leaves a gutter at the pane's left: this button sits one button and one gutter left of the
+ * cluster's right end (Look, before Developer).
+ */
+const Anchor = styled.div`
+  position: relative;
+  display: flex;
+
+  > [role="dialog"] {
+    width: min(320px, calc(100cqw - 3 * var(--gap-m) - ${ROUND_PX}px));
+    max-height: calc(100cqh - ${ROUND_PX}px - 3 * var(--gap-m));
+  }
+  ${SHEET_MEDIA} {
+    > [role="dialog"] {
+      max-height: max(160px, calc(100dvh - var(--chat-sheet-h, 0px) - var(--hud-top) - var(--gap-m)));
+    }
+  }
 `;
 
 const Round = styled(Surface.withComponent("button"))`
@@ -33,8 +63,8 @@ const Round = styled(Surface.withComponent("button"))`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: ${ROUND_PX}px;
+  height: ${ROUND_PX}px;
   padding: 0;
   border-radius: 50%;
   color: var(--text);
@@ -62,7 +92,7 @@ const Popover = styled.div`
   position: absolute;
   /* The HUD row lets the pointer through to the globe; the popover takes it back. */
   pointer-events: auto;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--gap-m));
   right: 0;
   z-index: 9;
   width: min(340px, calc(100cqw - 2 * var(--gap-m)));
@@ -99,7 +129,13 @@ const Popover = styled.div`
   }
 
   ${MOBILE} {
-    width: calc(100cqw - 2 * var(--gap-s));
+    width: calc(100cqw - 2 * var(--gap-m));
+  }
+
+  /* Phones: the chat dock covers the bottom of the page (half or full height): the popover stops a gutter above it
+     and scrolls, so nothing in it sits under the dock (the agent column writes --chat-sheet-h). */
+  ${SHEET_MEDIA} {
+    max-height: max(160px, calc(100dvh - var(--chat-sheet-h, 0px) - var(--hud-top) - var(--gap-m)));
   }
 `;
 
@@ -396,6 +432,50 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
   );
 }
 
+/**
+ * Look (GE9): the visual presets and the map window (shape, size, soft edge), as an icon button in the cluster. Its
+ * popover opens below it, right edges aligned.
+ */
+function Look({ look, scopeOn, shape, size, feather }: LookState) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const pop = usePopover(triggerRef, popRef);
+  const id = useId();
+  return (
+    <Anchor>
+      <Round
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={pop.open ? id : undefined}
+        aria-label="Look: filters and map window"
+        title="Look: filters and map window"
+        data-testid="look-button"
+        onClick={pop.toggle}
+      >
+        <LookIcon />
+      </Round>
+      {pop.open ? (
+        <PopoverBox id={id} label="Look" testId="look-popover" popRef={popRef} onClose={pop.close} align="right">
+          <LookChoices
+            look={look}
+            scopeOn={scopeOn}
+            shape={shape}
+            size={size}
+            feather={feather}
+            onLook={setLook}
+            onScope={setScopeOn}
+            onShape={setScopeShape}
+            onSize={setScopeSize}
+            onFeather={setScopeFeather}
+          />
+        </PopoverBox>
+      ) : null}
+    </Anchor>
+  );
+}
+
 /** Code brackets: the Developer button's icon, drawn like the HUD's own icons. */
 function DeveloperIcon() {
   return (
@@ -433,25 +513,43 @@ function Developer() {
 }
 
 /**
- * The globe pane's chrome (T41, GODS_EYE GC1): three icon buttons, top right, and no text until one opens. About
- * (ⓘ, with a dot in the colour of the worst feed when a source is delayed) holds what this is, how fresh the
- * data is in plain words, Focus, Help, the technical feed list under "Data sources" and the expert layers under
- * "More data (for experts)". Theme holds light, dark and tactical. Developer opens the provider keys panel.
+ * The globe pane's chrome (T41, GODS_EYE GC1, GE9): four icon buttons, top right, one gutter apart, and no text
+ * until one opens. About (ⓘ, with a dot in the colour of the worst feed when a source is delayed) holds what this
+ * is, how fresh the data is in plain words, Focus, Help, the technical feed list under "Data sources" and the expert
+ * layers under "More data (for experts)". Theme holds light, dark and tactical. Look holds the visual presets and
+ * the map window. Developer opens the provider keys panel.
  */
 export default function TopBar(props: ChromeProps) {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
   const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
-  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} />;
+  const look: LookState = {
+    look: lookOf(useActiveState<LookId>(LOOK)[0]),
+    scopeOn: scopeOnOf(useActiveState<boolean>(SCOPE_ON)[0]),
+    shape: shapeOf(useActiveState<ScopeShape>(SCOPE_SHAPE)[0]),
+    size: sizeOf(useActiveState<number>(SCOPE_SIZE)[0]),
+    feather: featherOf(useActiveState<number>(SCOPE_FEATHER)[0]),
+  };
+  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} />;
 }
 
 type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
+/** The Look keys the Look popover shows. */
+type LookState = { look: LookId; scopeOn: boolean; shape: ScopeShape; size: number; feather: number };
+const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), scopeOn: scopeOnOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined) };
 
 /** The chrome over plain props (the stores are read by TopBar), so it renders anywhere, tests included. */
-export function TopBarView({ feeds, mode, onTheme, ...props }: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void }) {
+export function TopBarView({
+  feeds,
+  mode,
+  onTheme,
+  look = DEFAULT_LOOK_STATE,
+  ...props
+}: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState }) {
   return (
     <Bar data-testid="hud-topbar">
       <About list={feeds} {...props} />
       <Theme mode={mode} onPick={onTheme} />
+      <Look {...look} />
       <Developer />
     </Bar>
   );

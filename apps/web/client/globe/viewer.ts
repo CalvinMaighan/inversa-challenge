@@ -68,8 +68,11 @@ export type GlobeHandle = {
 
 const sameArray = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((v, i) => v === b[i]);
 
-/** Mount on `container`, with attributions in `credits`. Cesium must be loaded (`loadCesium`). */
-export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeHandle {
+/**
+ * Mount on `container`, with attributions in `credits` and their "Data attribution" lightbox in `lightbox` (default:
+ * over the globe). Cesium must be loaded (`loadCesium`).
+ */
+export function mountGlobe(container: HTMLElement, credits: HTMLElement, lightbox?: HTMLElement): GlobeHandle {
   const {
     BoundingSphere,
     Cartesian2,
@@ -94,6 +97,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     requestRenderMode: true,
     maximumRenderTimeChange: Infinity,
     creditContainer: credits,
+    ...(lightbox ? { creditViewport: lightbox } : {}),
     blurActiveElementOnCanvasFocus: false,
     showRenderLoopErrors: false,
     contextOptions: { webgl: { alpha: false } },

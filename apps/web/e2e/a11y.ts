@@ -485,10 +485,10 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.waitForFunction((sel) => !document.querySelector(sel), THEME_POPOVER, { timeout: 10_000 });
   if (!(await isFocused(page, THEME_BUTTON))) fail("Esc closed Theme but focus did not return to its button");
   log(`Theme after ${toTheme} Tab: opened, Esc back to the button`);
-  const searchOk = await searchByKeyboard(page, "1440", "Flamingo");
 
-  // Look (GE2): Enter opens it with focus inside, Tab reaches the pressed preset, ArrowRight moves to the next
-  // one, Enter picks it (LOOK changes), ArrowLeft and Enter go back to normal, Esc returns to the button.
+  // Look (GE2; GE9: an icon in the top-right cluster, after Theme): Enter opens it with focus inside, Tab reaches the
+  // pressed preset, ArrowRight moves to the next one, Enter picks it (LOOK changes), ArrowLeft and Enter go back to
+  // normal; Tab reaches the window's shape (arrows pick), its size and its soft edge; Esc returns to the button.
   const toLook = await tabTo(page, LOOK_BUTTON);
   await page.keyboard.press("Enter");
   await page.locator(LOOK_POPOVER).waitFor({ timeout: 10_000 });
@@ -505,10 +505,20 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => window.__inversa!.state("LOOK") === "normal", undefined, { timeout: 10_000 });
+  await tabTo(page, '[data-testid=scope-shape] [role="radio"][aria-checked="true"]');
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => window.__inversa!.state("SCOPE_SHAPE") === "oval", undefined, { timeout: 10_000 });
+  await recordStop(page);
+  await axeScan(page, "1440 look window");
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction(() => window.__inversa!.state("SCOPE_SHAPE") === "circle", undefined, { timeout: 10_000 });
+  await tabTo(page, "[data-testid=scope-size]");
+  await tabTo(page, "[data-testid=scope-feather]");
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), LOOK_POPOVER, { timeout: 10_000 });
   if (!(await isFocused(page, LOOK_BUTTON))) fail("Esc closed Look but focus did not return to its button");
-  log(`Look after ${toLook} Tab: opened, ArrowRight to crt, Enter picked it, back to normal, Esc back to the button`);
+  log(`Look after ${toLook} Tab: opened, ArrowRight to crt, Enter picked it, back to normal, shape oval and back, size, soft edge, Esc back to the button`);
+  const searchOk = await searchByKeyboard(page, "1440", "Flamingo");
 
   // Layers (GE7): Enter opens it with focus inside, Tab reaches a named switch, Space flips it and back, Esc returns.
   const toLayers = await tabTo(page, LAYERS_BAR_BUTTON);

@@ -10,8 +10,8 @@ import { registeredStateKeys } from "@/eslint-plugins/inversa/state-key-registra
  */
 const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "MESSAGES", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
-/** The look of the globe (docs/GODS_EYE.md GC2): preset, scope mask and its feather. */
-const LOOK_KEYS = ["LOOK", "SCOPE_ON", "SCOPE_FEATHER"];
+/** The look of the globe (docs/GODS_EYE.md GC2, GE9): preset, and the map window: on or off, soft edge, shape, size. */
+const LOOK_KEYS = ["LOOK", "SCOPE_ON", "SCOPE_FEATHER", "SCOPE_SHAPE", "SCOPE_SIZE"];
 
 describe("state catalog", () => {
   test("holds exactly the PLAN keys plus the theme and look keys", () => {
@@ -58,6 +58,8 @@ describe("transport key index (PLAN.md C6)", () => {
       "PEERS",
       "SCOPE_FEATHER",
       "SCOPE_ON",
+      "SCOPE_SHAPE",
+      "SCOPE_SIZE",
       "SELECTION",
       "THEME",
       "TIME",

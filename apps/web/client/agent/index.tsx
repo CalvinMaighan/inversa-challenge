@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Ke
 import { get, set, subscribe } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import { creditSlotRef } from "client/globe/credit-slot";
 import { teamCell } from "client/hud/missions/team";
 import { cell, useCell } from "client/hud/store";
 import type { BoardModel } from "client/hud/missions/board";
@@ -17,7 +18,7 @@ import ChatPane, { type ChatVoice } from "./ChatPane";
 import { openEvidence } from "./chat/effects";
 import { isWorking } from "./chat/thread";
 import { useAgentChat } from "./chat/useAgentChat";
-import { Column, MissionsScroll, ResizeHandle, SheetHandle, Tab, TabPanel, Tabs, UnreadDot } from "./column.styled";
+import { Column, CreditSlot, Header, MissionsScroll, ResizeHandle, SheetHandle, Tab, TabPanel, Tabs, UnreadDot } from "./column.styled";
 import {
   clampColumnWidth,
   COLUMN_DEFAULT_PX,
@@ -273,6 +274,19 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
 
   const compact = sheetLayout && ui.sheet === "collapsed" && dragHeight === null;
   const agentShown = ui.tab === "agent" || compact;
+  // The dock's height for the HUD's popovers, which stop above it (client/hud/topbar).
+  const sheetPx = sheetLayout ? (dragHeight ?? snapHeight) : null;
+  useEffect(() => {
+    const root = document.documentElement.style;
+    if (sheetPx === null) root.removeProperty("--chat-sheet-h");
+    else root.setProperty("--chat-sheet-h", `${sheetPx}px`);
+  }, [sheetPx]);
+  useEffect(
+    () => () => {
+      document.documentElement.style.removeProperty("--chat-sheet-h");
+    },
+    [],
+  );
   const sheetStyle = sheetLayout
     ? { height: dragHeight ?? snapHeight, transition: dragHeight === null ? transitionFor("height", motionMs(SHEET_MS, reduced)) : "none" }
     : undefined;
@@ -301,33 +315,37 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
           onKeyDown={onSheetKey}
         />
       ) : null}
+      {sheetLayout ? <CreditSlot ref={creditSlotRef} role="group" aria-label="Map data attribution" data-credit-slot="" /> : null}
       {compact ? null : (
-        <Tabs role="tablist" aria-label="Chat column" data-tabs="">
-          {TABS.map((tab) => (
-            <Tab
-              key={tab}
-              type="button"
-              role="tab"
-              id={`chat-tab-${tab}`}
-              aria-controls={`chat-panel-${tab}`}
-              aria-selected={ui.tab === tab}
-              tabIndex={ui.tab === tab ? 0 : -1}
-              data-tab={tab}
-              data-unread={ui.unread[tab] ? "" : undefined}
-              onClick={() => selectTab(tab)}
-              onKeyDown={(event) => {
-                if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                event.preventDefault();
-                const next = TABS[(TABS.indexOf(tab) + 1) % TABS.length]!;
-                selectTab(next);
-                document.getElementById(`chat-tab-${next}`)?.focus();
-              }}
-            >
-              {TAB_LABEL[tab]}
-              {ui.unread[tab] ? <UnreadDot aria-label="new activity" role="img" /> : null}
-            </Tab>
-          ))}
-        </Tabs>
+        <Header data-chat-header="">
+          <Tabs role="tablist" aria-label="Chat column" data-tabs="">
+            {TABS.map((tab) => (
+              <Tab
+                key={tab}
+                type="button"
+                role="tab"
+                id={`chat-tab-${tab}`}
+                aria-controls={`chat-panel-${tab}`}
+                aria-selected={ui.tab === tab}
+                tabIndex={ui.tab === tab ? 0 : -1}
+                data-tab={tab}
+                data-unread={ui.unread[tab] ? "" : undefined}
+                onClick={() => selectTab(tab)}
+                onKeyDown={(event) => {
+                  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                  event.preventDefault();
+                  const next = TABS[(TABS.indexOf(tab) + 1) % TABS.length]!;
+                  selectTab(next);
+                  document.getElementById(`chat-tab-${next}`)?.focus();
+                }}
+              >
+                {TAB_LABEL[tab]}
+                {ui.unread[tab] ? <UnreadDot aria-label="new activity" role="img" /> : null}
+              </Tab>
+            ))}
+          </Tabs>
+          {sheetLayout ? null : <CreditSlot ref={creditSlotRef} role="group" aria-label="Map data attribution" data-credit-slot="" />}
+        </Header>
       )}
       <TabPanel role="tabpanel" id="chat-panel-agent" aria-labelledby="chat-tab-agent" hidden={!agentShown} data-tabpanel="agent">
         <ChatPane

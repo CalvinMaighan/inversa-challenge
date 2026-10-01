@@ -65,6 +65,13 @@ What the five leaves built differs from the contracts above in these places; the
 - **Imagery ladder.** `ImageryPlan.google3d` is an ordered route list (`["direct", "ion"]`, whichever have keys): a failed route falls to the next, then to keyless imagery (`client/globe/ladder.ts`).
 - **Agent.** The text agent has `toggle_layer` and `set_look` (the voice's UI tools, `shared/voice/ui-tools.ts`), sent to the browser as the stream's `ui` event, and, in carp and lionfish, `vessels`; `server/agent/prompt.ts` "## The map: layers, ships and looks" lists per app what it may switch.
 
+### Contract amendments (GE9, 2026-10-01)
+
+- **GC1 spacing.** One unit on the stage chrome: `--gap-m` (12 px; `GAP_M_PX` in `client/themes/palette.ts`, `GUTTER_PX` in `client/hud/shell/geometry.ts`) between the viewport edges, the cards, the bars and the buttons. `--chat-inset` is the chat card's right edge; each HUD control keeps one gutter from it. `--hud-top` and `--hud-bottom` are measured (the top row's bottom, the timeline's top) plus one gutter. `e2e/spacing.ts` measures the pairs.
+- **GC1 top right, amended.** Four icon buttons: About, Theme, Look, Developer. Look ("Look: filters and map window") left the bottom bar, which now holds place search and Layers; its popover opens under it, right edges aligned (`PopoverBox`).
+- **GC2 map window, amended.** The scope has three independent controls: `SCOPE_SHAPE` (`circle|oval|rounded|frame`, default `circle`), `SCOPE_SIZE` (30..100 percent of the room the shape may take, default 100) and `SCOPE_FEATHER` (soft edge, a share of half the window's shorter side), with `SCOPE_ON`. Share link `shape`, `size`, `feather`. Maths in `client/hud/shell/scope.ts`; the mask is an SVG shape blurred over the feather, set as `--scope-mask` by the stage shell.
+- **Attribution.** The globe's credit container lives in the chat card's header row, right of the AGENT and NOTES tabs (the phone dock's top right), one line (`client/globe/credit-slot.ts`); the "Data attribution" lightbox opens over the whole page. Cross-origin provider logos (Google's) load in CORS mode so the page's COEP does not block them.
+
 ## Leaves, ownership, gates
 
 | Leaf | Scope | Owns (only these) | Gates |

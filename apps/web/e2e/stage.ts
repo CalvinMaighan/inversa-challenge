@@ -35,8 +35,22 @@
  *     in carp and lionfish only, Water and weather everywhere, only sightings and notes on at first load, and the
  *     keyboard walk (Enter opens with focus inside, Tab reaches a switch, Esc closes back onto the button).
  *     `LAYERSBAR items=<python's switches> ships=carp,lionfish water=all defaults=ok`.
+ *
+ * GE9 (gates/leaf-GE9.md), on the same pages:
+ *   SPACING: every pair of neighbouring chrome surfaces is one `--gap-m` (12 px, within 0.5 px), measured by
+ *     e2e/spacing.ts: python at 1440×900 and 1024×768 (with and without the sighting card) prints
+ *     `SPACING pairs=<n> off=<k>`; carp and lionfish with their panels at 1440×900, 1024×768 and 768×1024 plus python
+ *     at 768×1024, and all three on the phone docks at 375×812, print `SPACING apps=python,carp,lionfish off=<k>
+ *     mobile_off=<m>`. Every pair is logged.
+ *   LOOKBTN: Look is the third of the four top-right icon buttons, its popover opens under it with right edges
+ *     aligned and stays inside the viewport at 1440×900 and 375×812, and the bottom bar has no Look.
+ *   CREDIT: the globe's attribution sits in the chat card's header row, on the tabs' line, right-aligned, one row
+ *     at the 420 px card (and at the narrowest, 360 px), the "Data attribution" lightbox opens and closes by keyboard
+ *     over the whole page, its links open a new tab; in the phone dock it stays visible. `CREDIT-3D`: once with Google
+ *     3D active (the build's browser key from Doppler; never read here), Google's credit shows in the header.
+ *   Screenshots: docs/evidence/ge9-*.png.
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
@@ -44,6 +58,8 @@ import { chromium, type Browser, type Page } from "playwright";
 import { sitesOf } from "../client/carp/model";
 import { getApp, type AppId } from "../shared/apps";
 import { ask, tapAgentStreams, type Tapped } from "./agent-ui";
+import { offPairs } from "./spacing";
+import { creditsInDock, creditsInHeader, creditsNarrow, creditsWithGoogle3d, lookButton, measureSpacing, spacing, type CreditCheck, type LookButtonCheck } from "./stage-ge9";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
@@ -150,6 +166,9 @@ const AGENT_TIMEOUT_MS = 150_000;
 /** A question whose answer flies the map (geocode, set_view) and nothing else to read. */
 const AGENT_FLY_QUESTION = "Fly the map to Flamingo in Everglades National Park.";
 type LatLon = { lat: number; lon: number };
+/** GE9 results gathered across the pages. */
+const ge9 = { look: [] as LookButtonCheck[], credit: null as CreditCheck | null, narrow: false, dock: false };
+
 /** Framed targets so far, over both viewports. */
 const framing = { inside: 0, outside: 0 };
 /** The Layers popover per app, at 1440. */
@@ -323,6 +342,7 @@ async function appChecks(browser: Browser, stack: Stack, app: "carp" | "lionfish
   const right = panel.x > centreX(stage);
   log(`panel ${app} ${viewport.width}: ${JSON.stringify(panel)}; stage centre ${Math.round(centreX(stage))}; right of centre ${right}; centre shows the map ${clear}`);
   await page.screenshot({ path: path.join(SHOT_DIR, `stage-${app}-${viewport.width}.png`) });
+  await measureSpacing(page, `${app} ${viewport.width}`, "apps");
   let aligned = true;
   if (app === "carp") {
     await settle(page);
@@ -351,6 +371,33 @@ async function appChecks(browser: Browser, stack: Stack, app: "carp" | "lionfish
   const layers = viewport.width >= 1440 ? await layersBar(page, app) : null;
   await page.context().close();
   return { panel: right && clear && aligned, layers };
+}
+
+/** The last Google 3D credit verification (gitignored `.cache`), when under 12 h old. */
+const GOOGLE3D_CACHE = path.join(REPO_DIR, "apps/web/.cache/ge9-google3d.json");
+type Google3dResult = { visible: boolean; state: string; shot: string | null; at: string };
+function readGoogle3d(): Google3dResult | null {
+  try {
+    const r = JSON.parse(readFileSync(GOOGLE3D_CACHE, "utf8")) as Google3dResult;
+    return r.visible && Date.now() - Date.parse(r.at) < 12 * 3_600_000 ? r : null;
+  } catch {
+    return null;
+  }
+}
+function writeGoogle3d(r: Omit<Google3dResult, "at">): void {
+  mkdirSync(path.dirname(GOOGLE3D_CACHE), { recursive: true });
+  writeFileSync(GOOGLE3D_CACHE, JSON.stringify({ ...r, at: new Date().toISOString() }));
+}
+
+/** GE9: one app at one viewport, its panel open where it has one, measured for spacing only. */
+async function spacingOnly(browser: Browser, stack: Stack, app: AppId, viewport: { width: number; height: number }, group: "apps" | "mobile", errors: string[]): Promise<void> {
+  const page = await openApp(browser, stack.origin, app, viewport, errors);
+  const panel = app === "carp" ? '[data-testid="carp-board-panel"]' : app === "lionfish" ? '[data-testid="lionfish-panel"]' : null;
+  if (panel && viewport.width >= 768) await page.locator(panel).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(800);
+  await measureSpacing(page, `${app} ${viewport.width}x${viewport.height}`, group);
+  await page.screenshot({ path: path.join(SHOT_DIR, `ge9-${app}-${viewport.width}.png`) });
+  await page.context().close();
 }
 
 /**
@@ -427,6 +474,20 @@ async function desktop(browser: Browser, stack: Stack, list: Python[], errors: s
   const black = pageBg === "rgb(0, 0, 0)" && margins.total >= 40 && margins.black === margins.total;
   await page.screenshot({ path: path.join(SHOT_DIR, "stage-1440.png") });
 
+  // ---- GE9: spacing, the Look button, the attribution in the chat header --------------------------------------------
+  await measureSpacing(page, "python 1440", "python");
+  ge9.look.push(await lookButton(page, "1440", path.join(SHOT_DIR, "ge9-look-1440.png")));
+  ge9.credit = await creditsInHeader(page, path.join(SHOT_DIR, "ge9-credit-header.png"));
+  // The narrowest card (360 px): Home on the resize handle; a double click puts the default back.
+  const handle = page.locator("[data-column-resize]");
+  await handle.focus();
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(400);
+  ge9.narrow = await creditsNarrow(page);
+  await page.screenshot({ path: path.join(SHOT_DIR, "ge9-credit-header-360.png"), clip: { x: 0, y: 0, width: 400, height: 80 } });
+  await handle.dblclick();
+  await page.waitForTimeout(400);
+
   // ---- TOPRIGHT ---------------------------------------------------------------------------------------------
   const buttons = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>('[data-testid="hud-topbar"] button')].map((b) => {
@@ -435,9 +496,9 @@ async function desktop(browser: Browser, stack: Stack, list: Python[], errors: s
     }),
   );
   log(`top right: ${JSON.stringify(buttons.map((b) => `${b.id} "${b.name}" r=${Math.round(b.right)} t=${Math.round(b.top)}`))}`);
-  const wants = [/about/i, /theme/i, /developer/i];
+  const wants = [/about/i, /theme/i, /look/i, /developer/i];
   const namesOk =
-    buttons.length === 3 &&
+    buttons.length === 4 &&
     buttons.every((b) => b.name.length > 0 && b.text === "" && b.top <= 24) &&
     Math.max(...buttons.map((b) => b.right)) >= vw - 24 &&
     wants.every((re, i) => re.test(buttons[i]!.name));
@@ -469,6 +530,7 @@ async function desktop(browser: Browser, stack: Stack, list: Python[], errors: s
   const chatLeft = right(chatOpen) < centreX(stageOpen) && centreX(chatOpen) < stageOpen.x;
   const detailsRight = details.x > centreX(stageOpen) && centreX(details) > right(stageOpen);
   await page.screenshot({ path: path.join(SHOT_DIR, "stage-1440-selected.png") });
+  await measureSpacing(page, "python 1440 sighting open", "python", path.join(SHOT_DIR, "ge9-spacing-1440.png"));
   const open1 = drawers === 1 && detailsRight ? 1 : 0;
 
   await page.locator(`${DRAWER} button[aria-label="Close panel"]`).click();
@@ -493,6 +555,8 @@ async function desktop(browser: Browser, stack: Stack, list: Python[], errors: s
   layersByApp.python = await layersBar(page, "python");
   await offsetClick(page, list, 0.45, "1440");
   try {
+    // Iterating on layout only (never in a gate run): E2E_STAGE_NO_AGENT=1 skips the paid agent turn.
+    if (process.env.E2E_STAGE_NO_AGENT === "1") throw new Error("skipped: E2E_STAGE_NO_AGENT=1");
     await agentFraming(page);
   } catch (err) {
     // A failed turn (no credit, a network error) is a framing that did not happen, not a reason to lose the other lines.
@@ -544,6 +608,9 @@ async function phone(browser: Browser, stack: Stack, errors: string[]): Promise<
   const stageShown = await page.locator("[data-stage]").isVisible();
   const o = await page.evaluate(sideways);
   await page.screenshot({ path: path.join(SHOT_DIR, "stage-375.png") });
+  await measureSpacing(page, "python 375", "mobile", path.join(SHOT_DIR, "ge9-spacing-375.png"));
+  ge9.dock = await creditsInDock(page);
+  ge9.look.push(await lookButton(page, "375", path.join(SHOT_DIR, "ge9-look-375.png")));
   log(`phone: shell ${layout}, chat ${sheet} ${JSON.stringify(chat)}, globe ${JSON.stringify(globe)}, stage shown ${stageShown}, overflow ${o.overflow.length} hscroll ${o.hscroll.length} pagescroll ${o.pageScroll}`);
   for (const line of [...o.overflow, ...o.hscroll].slice(0, 10)) log(`   ${line}`);
   await page.context().close();
@@ -561,6 +628,7 @@ async function tablet(browser: Browser, stack: Stack, list: Python[], errors: st
   const clear = await centreIsGlobe(page, stage);
   const o = await page.evaluate(sideways);
   await page.screenshot({ path: path.join(SHOT_DIR, "stage-1024.png") });
+  await measureSpacing(page, "python 1024 sighting open", "python");
   // GE7: a marker the sighting card will cover once it opens; the camera keeps it in sight.
   await offsetClick(page, list, 0.4, "1024");
   await page.context().close();
@@ -600,6 +668,41 @@ async function main() {
     const water = checks.length === 3 && checks.every(([, c]) => c.water) ? "all" : checks.filter(([, c]) => c.water).map(([a]) => a).sort().join(",") || "none";
     const defaults = checks.length === 3 && checks.every(([, c]) => c.defaults && c.keyboard);
     lines.push(`LAYERSBAR items=${layersByApp.python?.items ?? 0} ships=${ships.join(",") || "none"} water=${water} defaults=${defaults ? "ok" : "no"}`);
+
+    // GE9: the portrait tablet for every app, the phone docks of carp and lionfish, then the lines.
+    for (const app of ["python", "carp", "lionfish"] as const) await spacingOnly(browser, stack, app, { width: 768, height: 1024 }, "apps", errors);
+    for (const app of ["carp", "lionfish"] as const) await spacingOnly(browser, stack, app, { width: 375, height: 812 }, "mobile", errors);
+    const pythonOff = offPairs(spacing.python);
+    const appsOff = offPairs(spacing.apps);
+    const mobileOff = offPairs(spacing.mobile);
+    for (const p of [...pythonOff, ...appsOff, ...mobileOff]) log(`spacing OFF: ${p.name} = ${p.px} px`);
+    lines.push(`SPACING pairs=${spacing.python.length} off=${pythonOff.length}`);
+    const measured = ["python", "carp", "lionfish"].filter((a) => spacing.apps.some((p) => p.name.startsWith(`${a} `)) && spacing.mobile.some((p) => p.name.startsWith(`${a} `)));
+    lines.push(`SPACING apps=${measured.join(",")} off=${appsOff.length} mobile_off=${mobileOff.length}`);
+    const lb = ge9.look;
+    lines.push(
+      `LOOKBTN topright=${lb.length > 0 && lb.every((c) => c.topright) ? 1 : 0} aligned_right=${lb.length === 2 && lb.every((c) => c.aligned) ? 1 : 0} inside_viewport=${lb.length === 2 && lb.every((c) => c.inside) ? 1 : 0} bottombar_has_look=${lb.some((c) => c.bottomBarHasLook) ? 1 : 0}`,
+    );
+    const c = ge9.credit;
+    if (c) {
+      log(`credit: narrow card one row ${ge9.narrow}, phone dock visible ${ge9.dock}`);
+      lines.push(
+        `CREDIT inheader=${c.inheader && ge9.dock ? 1 : 0} sameRow=${c.sameRow ? 1 : 0} rightAligned=${c.rightAligned ? 1 : 0} wraps=${c.wraps || !ge9.narrow ? 1 : 0} lightbox=${c.lightbox ? "ok" : "no"} newtab=${c.newtab ? "ok" : "no"} route=${c.route}`,
+      );
+    }
+    // Google 3D is billed per session: verified once, the result is kept for 12 h (E2E_GOOGLE3D_FRESH=1 re-verifies;
+    // E2E_SKIP_GOOGLE3D=1 skips it while iterating).
+    if (process.env.E2E_SKIP_GOOGLE3D !== "1") {
+      const cached = readGoogle3d();
+      if (cached && process.env.E2E_GOOGLE3D_FRESH !== "1") {
+        log(`google 3d: reusing the verification of ${cached.at} (screenshot ${path.relative(REPO_DIR, cached.shot ?? "")}); E2E_GOOGLE3D_FRESH=1 re-verifies`);
+        lines.push(`CREDIT-3D google_credit_visible=${cached.visible ? 1 : 0} state=${cached.state} verified=${cached.at}`);
+      } else {
+        const g3d = await creditsWithGoogle3d(browser, stack.origin, FIXTURE_CLOCK, errors);
+        writeGoogle3d(g3d);
+        lines.push(`CREDIT-3D google_credit_visible=${g3d.visible ? 1 : 0} state=${g3d.state}`);
+      }
+    }
     if (errors.length) fail(`page errors: ${errors.join(" | ")}`);
     for (const line of lines) console.log(line);
   } catch (err) {
