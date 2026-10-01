@@ -243,6 +243,27 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - New sightings and alerts appear within one pipeline tick plus the 5 s frame debounce.
 - A dev-only `INGEST_HOOK_SECRET` default lets the `web` hook source inject rows, so live updates can be verified end to end.
 
+### C19: source page links and simplified UI (added at user review)
+
+- `Evidence.sourcePageUrl: String` is the human web page for the record at its publisher, opened in a new tab. It is not the API URL (`sourceUrl` stays the fetched API URL). It is null when no page exists (modelled grid points, GOES cells, hotspots, fetch runs).
+- Patterns:
+
+| Source | `sourcePageUrl` |
+|---|---|
+| iNat | `https://www.inaturalist.org/observations/<ext_id>` |
+| GBIF | `https://www.gbif.org/occurrence/<gbifKey>` |
+| NAS | the NAS specimen viewer for the record's key |
+| USGS | `https://waterdata.usgs.gov/monitoring-location/<site>/` |
+| NDBC | `https://www.ndbc.noaa.gov/station_page.php?station=<id>` |
+| CO-OPS | `https://tidesandcurrents.noaa.gov/stationhome.html?id=<id>` |
+| NWS alert | the alert's own web page, or the CAP id URL when no page exists |
+| backtest | none |
+
+- UI default is "sightings first":
+  - Sightings and alerts are on by default. Stations, hotspots and LST/SST are off by default but stay one tap away in Layers.
+  - A species filter bar on the globe toggles python/tegu/iguana/lionfish/other with counts.
+  - The top bar collapses to the title, the LIVE/REPLAY badge, and one status icon button whose popover holds feeds, theme, focus and help.
+
 ## Tree
 
 - 1 Everglades Ops (`GATES.md`)
