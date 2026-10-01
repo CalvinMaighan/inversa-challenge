@@ -221,6 +221,7 @@ export const reefHeat = {
             ? {
                 series: {
                   days,
+                  spanWords: `${days} days`,
                   from: first?.date ?? null,
                   to: last?.date ?? null,
                   points: dayRows.length,
@@ -712,7 +713,7 @@ export const lionfishHotspots = (species: z.ZodType<string>) => ({
           note: PRIORITY_NOTE,
           ...(area ? { area: area.id, areaName: area.name } : { scope: "all four areas; recent reports are normalised per area, so cells are comparable within an area, and the rank across areas is a heuristic order only" }),
           ...(cells[0]
-            ? { topCell: { cell: cells[0].cell, area: cells[0].area, rankScore: cells[0].rankScore, cite: cells[0].cite, evidenceId: cells[0].evidenceId, next: `For the records and rationale behind it (how the score is built, which reports counted), call explain_cell with cell "${cells[0].cell}"; for its stored record, call evidence with id "${cells[0].evidenceId}".` } }
+            ? { topCell: { cell: cells[0].cell, area: cells[0].area, rankScore: cells[0].rankScore, cite: cells[0].cite, evidenceId: cells[0].evidenceId, next: `For the records and rationale behind it (how the score is built, which reports counted), call explain_cell with cell "${cells[0].cell}"; for its stored record, call evidence with id "${cells[0].evidenceId}"; for how fresh each feed behind these cells is, call feed_state.` } }
             : {}),
           byArea,
           cells,

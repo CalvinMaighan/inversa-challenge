@@ -300,6 +300,7 @@ const sightings = {
       {
         bbox,
         window,
+        windowWords: endsNow ? `last ${days} days` : `${window.from.slice(0, 10)} to ${window.to.slice(0, 10)}`,
         dateField: bySubmitted ? "submitted (the window counts by the date each record reached the feed; observed dates can be much older)" : "observed (the window counts by the date the animal was seen; submittedAt says when the record reached the feed)",
         ...(knownAt ? { knownAt, knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are left out` } : {}),
         ...(ctx.app.copy.sightingsNote ? { sightingsNote: ctx.app.copy.sightingsNote } : {}),
@@ -508,10 +509,13 @@ const conditions = {
     const area = resolveBbox(input.bbox, ctx);
     const window = resolveWindow(input, ctx, 24);
     const around = padBbox(ctx.app, area, NEARBY_DEG);
+    // A parameter comes with its comparison partner (satellite sst_c with measured water_c), so a buoy check is always possible.
+    const asked = givenList(input.params) as Param[] | undefined;
+    const params = asked ? [...new Set(asked.flatMap((p) => [p, ...(Object.entries(COMPARE_AS).filter(([a, b]) => a === p || b === p).flatMap(([a, b]) => [a, b]) as Param[])]))] : null;
     const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>(
       "AgentReadings",
       READINGS_QUERY,
-      { bbox: around, ...window, params: input.params?.map((param) => param.toUpperCase()) ?? null },
+      { bbox: around, ...window, params: params?.map((param) => param.toUpperCase()) ?? null },
       ctx,
     );
     const inside = data.readings.filter((row) => inBox(area, row.station.lat, row.station.lon));

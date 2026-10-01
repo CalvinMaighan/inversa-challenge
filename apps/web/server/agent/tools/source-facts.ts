@@ -188,7 +188,7 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
     rateLimit: "fair use",
     coverage: "aggregated occurrence records from many datasets (iNaturalist research grade, REEF surveys, museums, NAS mirrors)",
     limits: ["duplicates: its copies of iNaturalist research-grade records are matched by catalogue number and never counted as corroboration (deduplicated against iNaturalist)", "late: datasets publish in weekly batches, days to weeks after the observation", "history rather than news"],
-    tells: "the long record of where lionfish were found, and a second source only where a record is not an iNaturalist copy",
+    tells: "the long record (history) of where lionfish were found, and a second source only where a record is not a duplicate of an iNaturalist report",
   },
   ndbc: {
     feed: "ndbc",
@@ -257,9 +257,9 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
     cadence: "every 10 minutes (push)",
     latency: "minutes",
     rateLimit: "none (object storage)",
-    coverage: "satellite land surface temperature and fire radiative power",
-    limits: ["cloud gaps", "satellite skin temperature, not air temperature"],
-    tells: "satellite temperature where clouds allow",
+    coverage: "satellite land surface temperature and fire radiative power on a 2 km grid over the whole region, every 10 minutes: values between and beyond the weather stations, not only at them",
+    limits: ["cloud gaps: a cloud-masked pixel has no value", "satellite skin temperature, not air temperature"],
+    tells: "satellite temperature for every grid cell where clouds allow, so the activity rule has a value away from the stations",
   },
   "goes19-sst": {
     feed: "goes19-sst",
