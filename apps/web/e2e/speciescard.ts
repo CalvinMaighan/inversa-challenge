@@ -248,6 +248,12 @@ async function speciesCard(browser: Browser, stack: Stack): Promise<string[]> {
   const api2 = await apiAnimalCount(stack, apiWindow(meta, stat2.frame, SHORT_HOURS));
   log(`2 days: globe draws ${stat2.count}, Axum ${api2}`);
   if (stat2.count !== api2) fail(`2-day window: globe ${stat2.count}, Axum ${api2}`);
+  // The chips follow the globe's stats (sampled at most every 250 ms): wait for the top chip to drop too.
+  await page.waitForFunction(
+    ([key, before]) => Number(document.querySelector(`[data-species-chip="${key}"] [data-species-count]`)?.textContent?.replace(/,/g, "") ?? NaN) < before,
+    [topChip[0], topChip[1]] as const,
+    { timeout: 10_000 },
+  );
   const chips2 = await chipCounts(page);
   const tipAfter = (await page.textContent(`[data-species-chip="${topChip[0]}"] + [role="tooltip"]`))?.trim() ?? "";
   if (!tipAfter.includes("last 2 days")) fail(`chip tooltip did not follow the window: "${tipAfter}"`);

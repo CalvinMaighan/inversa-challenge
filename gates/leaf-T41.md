@@ -18,7 +18,7 @@ Scope:
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 1 pass | 0 fail
 
-- [x] G3: the species bar toggles filter the globe; e2e prints `SPECIES iguana_only=<n> all=<m> counts=ok drawer=1` with n < m, and clicking an iguana sighting opens the evidence card
+- [x] G3: the species bar toggles filter the globe (since T44 the bar holds the four focus chips, the most-seen other animals and the Plants and Insects & others groups; counts are per taxon); e2e prints `SPECIES iguana_only=<n> all=<m> counts=ok drawer=1` with n < m, and clicking an iguana sighting opens the evidence card
   CHECK: cd apps/web && bun run e2e:species 2>&1 | grep SPECIES
   EXPECT: /SPECIES iguana_only=\d+ all=\d+ counts=ok drawer=1/
   EVIDENCE: SPECIES iguana_only=6 all=8 counts=ok drawer=1
@@ -70,7 +70,7 @@ Scope:
   - Dismissed and remembered: `e2e:layout` dismisses it and checks it stays gone on the next visit ("hint stays dismissed").
   - Live eval after the tone change (`bun run eval`, doppler inversa/dev, gpt-6-luna): `EVAL quality passed 4/5`, `EVAL passed 14/15` (leaf-T39 threshold 13/15 and 4/5). A plain answer with its citation, from that run: "It is marked **needs ID** (identification is uncertain) and has an **ID conflict**, so verify the identification before dispatching a crew. [e:sighting:2002]". The miss was quality-id-conflict-tegu (did not name the casual record), the same question in both runs after the change.
 
-- [x] G12: the sightings layer shows every sighting in a trailing 48 h window ending at TIME.at (fading with age), not only the current frame. The window length is one constant, shown in the legend or welcome as "last 48 hours". Unit test named "48h sighting window": frames across 48 h are merged and the boundary is exclusive at 48 h; e2e:firstload's sighting count equals the API count of sightings in that window
+- [x] G12: the sightings layer shows every sighting in a trailing window ending at TIME.at (fading with age), not only the current frame. Since T44 the window length is state (`LAYERS.sightingHours`: 2, 7 or 30 days, default 7 days, `SIGHTING_WINDOW_HOURS`), shown in the legend, the chips and the welcome as "last 7 days" and switchable next to the chips. Unit test named "48h sighting window": frames across 48 h are merged and the boundary is exclusive at 48 h (the same slicing serves 7 and 30 days); e2e:firstload's sighting count equals the API count of distinct animal sightings in the default window
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "48h sighting window" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: 2 pass | 0 fail
