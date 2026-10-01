@@ -2,21 +2,27 @@
 
 import styled from "client/styled";
 
+import { CARD_MAX_WIDTH_CSS } from "client/hud/shell/geometry";
+
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "./layout/geometry";
 
 /**
- * The chat column (T40): a full-height column left of the globe on desktop, a bottom sheet over the globe on
- * phones. Width comes from `--column-w`; the sheet's height and transition are inline styles.
+ * The chat card (T40, GODS_EYE GC1): a full-height card floating at the left of the black page on desktop, never
+ * reaching the stage centre; a bottom sheet over the globe on phones. Width comes from `--column-w`; the sheet's
+ * height and transition are inline styles.
  */
 export const Column = styled.aside`
   position: relative;
   display: flex;
   flex-direction: column;
   width: var(--column-w, 420px);
+  max-width: ${CARD_MAX_WIDTH_CSS};
   height: 100%;
   min-height: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow);
   color: var(--text);
   font-family: var(--font-ui);
 
@@ -26,6 +32,8 @@ export const Column = styled.aside`
     right: 0;
     bottom: 0;
     width: auto;
+    max-width: none;
+    border: 0;
     /* First paint (server HTML, before the snap height is set inline): the collapsed bar, composer showing. */
     height: ${SHEET_PEEK_PX}px;
     justify-content: flex-end;

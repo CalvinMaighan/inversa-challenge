@@ -7,9 +7,10 @@
  *   E2E_SKIP_BUILD=1 …            reuse the last e2e build
  *
  * Desktop 1440×900:
- *   1. the chat column is visible at load, left, full height; the globe fills the pane to its right; the top
- *      bar, timeline and legend sit inside the globe pane (bounding boxes); the column's edge resizes it and the
- *      width survives to the next visit; the first-visit hint offers example questions and stays dismissed;
+ *   1. the stage layout (docs/GODS_EYE.md GC1): the chat card is visible at load, floating at the left with
+ *      16 px gutters, full height less them; the globe fills the page behind it; the top bar, timeline and
+ *      legend sit right of the card on the page (bounding boxes); the card's edge resizes it and the width
+ *      survives to the next visit; the first-visit hint offers example questions and stays dismissed;
  *   2. Layers (About → More data, T41): the legend opens, its counts come from the globe's own layer stats, and
  *      its switches change LAYERS and the globe layer (stations start off → on, drawn; off → disabled; on again;
  *      a species switch, which the species chip follows);
@@ -139,16 +140,27 @@ async function appReady(page: Page, origin: string, phone = false): Promise<void
   await page.waitForTimeout(800);
 }
 
-/** Desktop frame: the chat column left and full height, the globe filling the pane to its right, `inside` within the globe pane. */
-async function panes(page: Page, inside: string[]): Promise<Box> {
+/** Stage frame at 1440×900 (GODS_EYE GC1): the chat card at 16,16, 420 wide, full height less the gutters; the globe filling the page. */
+async function stageFrame(page: Page): Promise<{ column: Box; globe: Box }> {
   const column = await box(page, "[data-chat-column]");
   const globe = await box(page, "[data-globe]");
   log(`column ${JSON.stringify(column)} globe ${JSON.stringify(globe)}`);
-  if (column.x !== 0 || column.y !== 0 || Math.abs(column.height - 900) > 1 || Math.abs(column.width - 420) > 1) fail(`chat column ${JSON.stringify(column)}, want 0,0 420×900`);
-  if (Math.abs(globe.x - (column.x + column.width)) > 1 || Math.abs(globe.x + globe.width - 1440) > 1 || Math.abs(globe.height - 900) > 1) fail(`globe ${JSON.stringify(globe)} does not fill the pane right of the column`);
+  if (column.x !== 16 || column.y !== 16 || Math.abs(column.height - 868) > 1 || Math.abs(column.width - 420) > 1) fail(`chat card ${JSON.stringify(column)}, want 16,16 420×868`);
+  if (globe.x !== 0 || globe.y !== 0 || Math.abs(globe.width - 1440) > 1 || Math.abs(globe.height - 900) > 1) fail(`globe ${JSON.stringify(globe)} does not fill the page`);
+  return { column, globe };
+}
+
+/** `b` sits on the page right of the chat card (the HUD chrome never hides under it). */
+function rightOfCard(b: Box, column: Box): boolean {
+  return b.x >= column.x + column.width && b.x + b.width <= 1441 && b.y >= 0 && b.y + b.height <= 901;
+}
+
+/** Desktop frame: the chat card floating at the left, the globe filling the page, `inside` right of the card. */
+async function panes(page: Page, inside: string[]): Promise<Box> {
+  const { column, globe } = await stageFrame(page);
   for (const sel of inside) {
     const b = await box(page, sel);
-    if (b.x < globe.x || b.x + b.width > globe.x + globe.width + 1 || b.y < 0 || b.y + b.height > 901) fail(`${sel} ${JSON.stringify(b)} is not inside the globe pane`);
+    if (!rightOfCard(b, column)) fail(`${sel} ${JSON.stringify(b)} is not on the page right of the chat card`);
   }
   if (!(await page.locator('[data-chat-column] [aria-label="Question"]').isVisible())) fail("no composer in the chat column");
   return globe;
@@ -277,24 +289,21 @@ async function desktop(browser: Browser, stack: Stack, errors: string[], result:
   let page = opened.page;
   await ready(page, stack.origin);
 
-  // 1. Two panes.
-  const column = await box(page, "[data-chat-column]");
-  const globe = await box(page, "[data-globe]");
+  // 1. The stage frame: chat card left, globe behind, the chrome right of the card.
+  const { column, globe } = await stageFrame(page);
   const topbar = await box(page, '[data-testid="hud-topbar"]');
   const timeline = await box(page, '[data-testid="hud-timeline"]');
   // T41: the Layers legend lives in the About popover; its button sits top right with the theme button.
   const layersButton = await box(page, '[data-testid="status-button"]');
-  log(`column ${JSON.stringify(column)} globe ${JSON.stringify(globe)}`);
-  if (column.x !== 0 || column.y !== 0 || Math.abs(column.height - 900) > 1 || Math.abs(column.width - 420) > 1) fail(`chat column ${JSON.stringify(column)}, want 0,0 420×900`);
-  if (Math.abs(globe.x - (column.x + column.width)) > 1 || Math.abs(globe.x + globe.width - 1440) > 1 || Math.abs(globe.height - 900) > 1) fail(`globe ${JSON.stringify(globe)} does not fill the pane right of the column`);
   for (const [name, b] of [
     ["top bar", topbar],
     ["timeline", timeline],
     ["Layers button", layersButton],
   ] as const) {
-    if (b.x < globe.x || b.x + b.width > globe.x + globe.width + 1) fail(`${name} ${JSON.stringify(b)} is not inside the globe pane`);
+    if (!rightOfCard(b, column)) fail(`${name} ${JSON.stringify(b)} is not on the page right of the chat card`);
   }
-  if (layersButton.x + layersButton.width < globe.x + globe.width - 80) fail(`Layers button ${JSON.stringify(layersButton)} is not top right`);
+  // First of the three top-right icon buttons (About, Theme, Developer: 3 × 36 px, two 6 px gaps, the gutter).
+  if (layersButton.x + layersButton.width < globe.x + globe.width - 130) fail(`Layers button ${JSON.stringify(layersButton)} is not top right`);
   if (!(await page.locator('[data-chat-column] [aria-label="Start voice"]').isVisible())) fail("no mic button in the composer");
   result.chat = "left";
   result.globe = "right";
@@ -342,7 +351,8 @@ async function desktop(browser: Browser, stack: Stack, errors: string[], result:
   const legend = page.locator('[data-testid="layers-legend"]');
   await openLegend(page);
   const legendBox = await box(page, '[data-testid="layers-legend"]');
-  if (legendBox.x < globe.x || legendBox.x + legendBox.width > 1440) fail(`legend ${JSON.stringify(legendBox)} is not inside the globe pane`);
+  // Horizontally only: the legend scrolls inside the About popover, so its box runs below the fold.
+  if (legendBox.x < column.x + column.width || legendBox.x + legendBox.width > 1440) fail(`legend ${JSON.stringify(legendBox)} is not on the page right of the chat card`);
   if ((await page.textContent('[data-testid="legend-count-stations"]'))?.trim() !== "off") fail("stations are not off at load");
   await page.click('[data-testid="legend-toggle-stations"]');
   await page.waitForFunction((id) => {
@@ -435,7 +445,7 @@ async function desktop(browser: Browser, stack: Stack, errors: string[], result:
   const tipText = (await tip.textContent()) ?? "";
   if (!tipId.startsWith(`reading:${station.id}:`) || !tipText.includes("USGS gauge") || !tipText.includes(station.name)) fail(`tooltip ${tipId}: ${tipText}`);
   const tipBox = await box(page, '[data-testid="globe-tooltip"]');
-  if (tipBox.x < globe.x || tipBox.y < 0) fail(`tooltip ${JSON.stringify(tipBox)} outside the globe pane`);
+  if (tipBox.x < column.x + column.width || tipBox.y < 0) fail(`tooltip ${JSON.stringify(tipBox)} under the chat card or off the page`);
   await page.screenshot({ path: path.join(SHOT_DIR, "layout-tooltip.png") });
   log(`tooltip "${tipText}"; screenshot layout-tooltip.png`);
   // A click still opens the evidence drawer on the same record.

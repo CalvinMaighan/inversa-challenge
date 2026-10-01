@@ -11,6 +11,7 @@ import { SELECTION } from "client/state/selection";
 import styled from "client/styled";
 
 import AppSelect from "./appselect/AppSelect";
+import BottomBar from "./shell/BottomBar";
 import { useActiveApp } from "./appselect/use-active-app";
 import EvidenceDrawer from "./drawer/EvidenceDrawer";
 import HelpSheet from "./help/HelpSheet";
@@ -54,9 +55,20 @@ const Root = styled.div`
 `;
 
 /**
- * Top row: the app selector and the species chip on the left, the two icon buttons (About, Theme) pinned top right with room kept for
- * them (78 px plus a gap); on a narrow pane the row wraps. The row lets the pointer through; its surfaces take
- * it back.
+ * The HUD's controls, clear of the chat card: on the stage layout the shell sets `--chat-inset` to the card's
+ * right edge plus a gutter (0 on phones). Brackets and tooltips stay on the root, which matches the globe
+ * canvas pixel for pixel. A size container, so panels size against the room they really have.
+ */
+const Chrome = styled.div`
+  position: absolute;
+  inset: 0 0 0 var(--chat-inset, 0px);
+  container: globe / size;
+`;
+
+/**
+ * Top row: the app selector and the species chip on the left, the three icon buttons (About, Theme, Developer)
+ * pinned top right with room kept for them (120 px plus a gap); on a narrow pane the row wraps. The row lets the
+ * pointer through; its surfaces take it back.
  */
 const TopRow = styled.div`
   position: absolute;
@@ -68,7 +80,7 @@ const TopRow = styled.div`
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
-  padding-right: 84px;
+  padding-right: 126px;
 
   ${MOBILE} {
     left: var(--gap-s);
@@ -87,11 +99,12 @@ export type HudProps = {
 const noSubscribe = () => () => {};
 
 /**
- * HUD over the globe pane, sightings first (PRD §12, T40, T41): the title, LIVE/REPLAY and one status button
- * (feeds, theme, focus, help in its popover) on top, with the species chip beside it; the Layers legend
- * top right; hover tooltips over markers; the timeline along the bottom; detection brackets and the scope mask
- * over the globe; the evidence drawer on the right (a bottom sheet on phones). Missions live in the chat
- * column's Missions tab. URL-hash share links keep the view shareable.
+ * HUD over the globe pane, sightings first (PRD §12, T40, T41, GODS_EYE GC1): the app selector and species
+ * chip on top, three icon buttons top right (About with feeds, focus, help and the expert layers; Theme;
+ * Developer); hover tooltips over markers; the timeline along the bottom with the bottom bar (Look, Layers)
+ * centred above it; detection brackets and the focus mask over the globe; the evidence card on the right (a
+ * bottom sheet on phones). Missions live in the chat card's Notes tab. URL-hash share links keep the view
+ * shareable.
  *
  * Renders after hydration only: TIME defaults and the clocks are taken at module load, so server HTML for
  * them would never match the browser's.
@@ -138,17 +151,20 @@ function HudBody({ sync = true }: HudProps) {
       <ShareLinkSync />
       <DetectionOverlay focus={focus} layout={`${drawerOpen}:${helpOpen}`} />
       <GlobeTooltip />
-      <TopRow ref={barRef}>
-        <AppSelect />
-        {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
-        <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
-      </TopRow>
-      {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
-      {conditions ? <CarpHud key={app.id} app={app} /> : null}
-      {survey ? <LionfishHud key={app.id} app={app} /> : null}
-      {cardOwnsSelection ? null : <EvidenceDrawer />}
-      {conditions ? null : <Timeline />}
-      {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
+      <Chrome data-hud-chrome="">
+        <TopRow ref={barRef}>
+          <AppSelect />
+          {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
+          <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
+        </TopRow>
+        {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
+        {conditions ? <CarpHud key={app.id} app={app} /> : null}
+        {survey ? <LionfishHud key={app.id} app={app} /> : null}
+        {cardOwnsSelection ? null : <EvidenceDrawer />}
+        {conditions ? null : <Timeline />}
+        {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
+      </Chrome>
+      <BottomBar />
     </Root>
   );
 }

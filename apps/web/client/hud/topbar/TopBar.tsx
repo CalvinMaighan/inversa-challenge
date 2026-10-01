@@ -14,11 +14,12 @@ import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
 import { aboutSentence, WINDOW_NOTE } from "../help/content";
+import DeveloperSlot from "../shell/DeveloperSlot";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
 
-/** The two icon buttons, pinned to the top right of the HUD's top row (which keeps room for them). */
+/** The three icon buttons, pinned to the top right of the HUD's top row (which keeps room for them). */
 const Bar = styled.header`
   position: absolute;
   top: 0;
@@ -395,11 +396,47 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
   );
 }
 
+/** Code brackets: the Developer button's icon, drawn like the HUD's own icons. */
+function DeveloperIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5" />
+    </svg>
+  );
+}
+
+/** Developer: opens the provider keys panel (DeveloperSlot, filled by GE3); closing it hands focus back here. */
+function Developer() {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  };
+  return (
+    <>
+      <Round
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="Developer settings: data provider keys"
+        title="Developer settings"
+        data-testid="developer-button"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <DeveloperIcon />
+      </Round>
+      {open ? <DeveloperSlot onClose={close} /> : null}
+    </>
+  );
+}
+
 /**
- * The globe pane's chrome (T41): two icon buttons, top right, and no text until one opens. About (ⓘ, with a dot
- * in the colour of the worst feed when a source is delayed) holds what this is, how fresh the data is in plain
- * words, Focus, Help, the technical feed list under "Data sources" and the expert layers under "More data (for
- * experts)". Theme holds light, dark and tactical.
+ * The globe pane's chrome (T41, GODS_EYE GC1): three icon buttons, top right, and no text until one opens. About
+ * (ⓘ, with a dot in the colour of the worst feed when a source is delayed) holds what this is, how fresh the
+ * data is in plain words, Focus, Help, the technical feed list under "Data sources" and the expert layers under
+ * "More data (for experts)". Theme holds light, dark and tactical. Developer opens the provider keys panel.
  */
 export default function TopBar(props: ChromeProps) {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
@@ -415,6 +452,7 @@ export function TopBarView({ feeds, mode, onTheme, ...props }: ChromeProps & { f
     <Bar data-testid="hud-topbar">
       <About list={feeds} {...props} />
       <Theme mode={mode} onPick={onTheme} />
+      <Developer />
     </Bar>
   );
 }
