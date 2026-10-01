@@ -3,7 +3,9 @@
   "purpose": "Held-out benchmark for the carp agent (gates/leaf-AGB.md G3). Written 2026-10-01 before the final tuning runs, from the golden set's intents and the eval fixture's scene, never from a transcript. Paraphrases change the words, order, register and spelling of golden questions; new questions ask things no golden question asks. The agent's prompts and tool descriptions never see this file (tests/server/agent/no-answer-key.test.ts scans them against it). Pass criteria accept any correct wording: the bar is the behaviour, not the phrase.",
   "changelog": [
     "2026-10-01 AGB, after run final2-holdout-1: carp-holdout-planning-butte-or-krotz's forbid 'safer|is safe|are safe' matched the negated 'cannot establish whether a trip is safe', which is the behaviour the question wants; it now carries the negation guard the golden safety forbids use. Same defect and fix as golden carp-planning-compare-tomorrow.",
-    "2026-10-01 AGB, after run final3-holdout-2: the same forbid also matched 'neither site stands out as a safer or better choice', a declined verdict; the guard now covers 'neither', 'nor', 'not', 'cannot' and 'can't' within 30 characters. Golden carp-planning-compare-tomorrow changed the same way."
+    "2026-10-01 AGB, after run final3-holdout-2: the same forbid also matched 'neither site stands out as a safer or better choice', a declined verdict; the guard now covers 'neither', 'nor', 'not', 'cannot' and 'can't' within 30 characters. Golden carp-planning-compare-tomorrow changed the same way.",
+    "2026-10-01 J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts.",
+    "2026-10-01 J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. No statement was loosened below its regex."
   ],
   "questions": [
     {
@@ -13,9 +15,25 @@
       "category": "lookup",
       "question": "whats flagged for review rn?",
       "intent": "Casual, abbreviated form of the daily review question: which sites need review and why.",
-      "expectedTools": ["site_status"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["review|flag", "(because|reason|due to|since|as )"], "forbid": ["(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the sites flagged for review",
+          "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -25,9 +43,27 @@
       "category": "lookup",
       "question": "current river stage at krotz srpings?",
       "intent": "The Krotz Springs stage question with a typo in the place name.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["\\bft\\b|feet", "(USGS|NWPS)", "Krotz|KRZL1"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "reading": 1 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the gauge source, USGS or NWPS",
+          "Names Krotz Springs or KRZL1"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
       "helper": false
     },
     {
@@ -37,9 +73,31 @@
       "category": "lookup",
       "question": "For the four Atchafalaya gauges, what flood category does the forecast peak reach?",
       "intent": "Reworded flood-category question: the peak category per Atchafalaya site from the current issuance.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["Simmesport|SMML1", "Morgan City|MCGL1", "(issued|issuance)", "(action|minor|moderate|major|no flood category|below (action|flood)|none)"], "forbid": ["\\d+(\\.\\d+)?\\s*(%|percent)"], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Simmesport or SMML1",
+          "Names Morgan City or MCGL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives each site's peak flood category: action, minor, moderate, major, or none"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -49,9 +107,25 @@
       "category": "lookup",
       "question": "any weather alerts up at our sites right now",
       "intent": "Casual form of the active-alerts question, no question mark.",
-      "expectedTools": ["alerts"],
-      "mustCite": ["feed:nws"],
-      "pass": { "mode": "answer", "phrases": ["(no active|active|no current|in effect|none|no (NWS )?(alerts?|advisor|warning|watch))", "(as of|checked|at \\d|ago|old)"], "forbid": ["(feed|data) (is )?(missing|down|broken)"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States whether any alert is in effect, including when none is",
+          "Gives the time or age of the check"
+        ],
+        "forbid": [
+          "(feed|data) (is )?(missing|down|broken)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -61,9 +135,25 @@
       "category": "lookup",
       "question": "Morgan City weather for tonight pls",
       "intent": "Casual form of the Morgan City NWS forecast question.",
-      "expectedTools": ["weather_forecast"],
-      "mustCite": ["feed:nws", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["(\\u00B0F|degrees|\\bF\\b)", "(wind|mph)", "(updat|issued|as of|fetched)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a temperature in degrees",
+          "Gives the wind",
+          "Gives the forecast's update or issue time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -72,9 +162,27 @@
       "category": "lookup",
       "question": "What is the stage at Bogalusa, and how old is that reading?",
       "intent": "New: a stage with its age at the site whose USGS gauge stopped reporting a few hours before the fixture time.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["Bogalusa|BXAL1", "\\bft\\b|feet", "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?) (old|ago)|as of)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "reading": 1 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Bogalusa or BXAL1",
+          "Gives a stage or height value in feet",
+          "Gives the age of the reading or the time it is as of"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
       "helper": false
     },
     {
@@ -83,9 +191,25 @@
       "category": "lookup",
       "question": "Is there an NWS alert in effect for Morgan City right now?",
       "intent": "New: one site's alert status at a time when its advisory has expired, so the grounded answer is that none is active.",
-      "expectedTools": ["alerts"],
-      "mustCite": ["feed:nws"],
-      "pass": { "mode": "answer", "phrases": ["Morgan City|MCGL1", "(no (active|current)|not (any|an)|none|expired|no longer|not in effect|no alerts?|no NWS)"], "forbid": ["(feed|data) (is )?(missing|down|broken)"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "Says no alert is active or in effect at the site now"
+        ],
+        "forbid": [
+          "(feed|data) (is )?(missing|down|broken)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -95,9 +219,26 @@
       "category": "change",
       "question": "Over the past day, where did the water come up the most?",
       "intent": "Reworded largest-rise question without the words stage, rise or 24 hours.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["\\bft\\b|feet", "(rose|rise|risen|up|increase|climb)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 2, "cites": { "reading": 2 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the site where the water came up the most"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
       "helper": false
     },
     {
@@ -107,9 +248,27 @@
       "category": "change",
       "question": "Baton Rouge stage trend, last 7 days?",
       "intent": "Terse form of the weekly Baton Rouge change question.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["Baton Rouge|BTRL1", "\\bft\\b|feet", "(rose|risen|rising|fell|fallen|falling|dropped|steady|unchanged|flat|up|down|trend)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 2, "cites": { "reading": 2 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Baton Rouge or BTRL1",
+          "Gives a stage or height value in feet",
+          "States the direction of the change: rose, fell or held steady"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
       "helper": false
     },
     {
@@ -119,9 +278,27 @@
       "category": "change",
       "question": "Did the Simmesport forecast get revised today compared with the one before?",
       "intent": "Reworded forecast-revision question: the current issuance against the previous one.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["(issued|issuance)", "(higher|lower|raised|lowered|unchanged|same|earlier|later|revised|no new|not (been )?revised|differ)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "States how the forecast was revised, or that it was not"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -130,9 +307,27 @@
       "category": "change",
       "question": "Has Alexandria's stage changed much since yesterday?",
       "intent": "New: a one-site 24 hour change at the Red River gauge.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["Alexandria|AEXL1", "\\bft\\b|feet", "(rose|risen|fell|fallen|dropped|steady|unchanged|change|up|down|flat)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "reading": 1 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Alexandria or AEXL1",
+          "Gives a stage or height value in feet",
+          "States the direction of the change: rose, fell or held steady"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
       "helper": false
     },
     {
@@ -142,9 +337,24 @@
       "category": "explain",
       "question": "how come morgan city is always at action stage",
       "intent": "Casual form of the Morgan City action-stage question; the tidal site note is the explanation.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["action", "tid(al|e)", "\\bft\\b|feet"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says the site has a low action stage it keeps reaching",
+          "Says the site is tidal",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -154,9 +364,25 @@
       "category": "explain",
       "question": "Baton Rouge is rising but not under review. Why?",
       "intent": "Reworded not-flagged question: the forecast peak stays under the action threshold.",
-      "expectedTools": ["site_status", "river_forecast"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["action|threshold", "(below|under|short of|beneath|does not reach|doesn't reach|not reach|lower than|stays? under)", "\\bft\\b|feet"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the action stage threshold",
+          "Says the forecast peak stays below the action threshold",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -166,9 +392,25 @@
       "category": "explain",
       "question": "whats with the low water flag at monroe",
       "intent": "Casual form of the Monroe low-water question.",
-      "expectedTools": ["site_status"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["low[- ]water|low threshold", "\\bft\\b|feet"], "forbid": ["(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Refers to the low water flag or threshold",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -177,9 +419,24 @@
       "category": "explain",
       "question": "Which review rule triggered at Morgan City, and what threshold did it hit?",
       "intent": "New: the rule, value and threshold behind one site's review flag.",
-      "expectedTools": ["site_status"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["Morgan City|MCGL1", "(action|threshold|rule)", "\\bft\\b|feet"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "Names the rule or the threshold it hit",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -188,9 +445,28 @@
       "category": "explain",
       "question": "Why isn't Alexandria's forecast current?",
       "intent": "New: the site whose newest issuance is about 40 hours old has no newer issuance from either source.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["Alexandria|AEXL1", "(issued|issuance)", "(stale|old|no (newer|new|later) issuance|missing|not (been )?(updated|issued)|ago)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Alexandria or AEXL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Says the issuance is old, stale, or has no newer one"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -200,9 +476,26 @@
       "category": "relevance",
       "question": "Why keep both stage and discharge for planning fieldwork?",
       "intent": "Reworded stage-and-discharge relevance question.",
-      "expectedTools": ["source_info"],
-      "mustCite": ["kind:source"],
-      "pass": { "mode": "answer", "phrases": ["stage", "(discharge|flow)"], "forbid": ["(more|fewer) carp", "carp (are|will be) (present|abundant)"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Explains what river stage tells",
+          "Explains what discharge, the flow, tells"
+        ],
+        "forbid": [
+          "(more|fewer) carp",
+          "carp (are|will be) (present|abundant)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -212,9 +505,24 @@
       "category": "relevance",
       "question": "why pull data from Iowa State's mesonet if NOAA has the forecasts anyway",
       "intent": "Casual form of the IEM question: the archive holds past issuances that NWPS does not keep.",
-      "expectedTools": ["source_info"],
-      "mustCite": ["feed:iem", "kind:source"],
-      "pass": { "mode": "answer", "phrases": ["(IEM|Iowa)", "(history|archive|past|previous|earlier|replay|back)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Says the archive holds past issuances for replay"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -223,9 +531,24 @@
       "category": "relevance",
       "question": "What can the NWS alerts feed tell us, and what can't it?",
       "intent": "New: a feed's coverage and limits from its documented facts.",
-      "expectedTools": ["source_info"],
-      "mustCite": ["feed:nws", "kind:source"],
-      "pass": { "mode": "answer", "phrases": ["alert", "(cannot|can't|does not|doesn't|not|no |limit)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says what the NWS alerts feed can tell",
+          "States what the alerts feed cannot tell"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -235,9 +558,28 @@
       "category": "quality",
       "question": "any sites where the forecast is old or absent?",
       "intent": "Reworded stale-forecast question without the words stale or missing.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["(issued|issuance)", "Alexandria|AEXL1", "(hours?|h|days?) (old|ago)|as of"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Names Alexandria or AEXL1",
+          "Gives the issuance age or its as-of time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -247,9 +589,29 @@
       "category": "quality",
       "question": "krotz springs: usgs says one stage, nwps another. why?",
       "intent": "Casual form of the Krotz Springs datum question.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["datum|reference (point|elevation)|zero|offset", "NWPS", "USGS"], "forbid": ["USGS(?:[^.]|\\.\\d){0,60}\\b(below|above|under|over|exceeds?|short of)\\b(?:[^.]|\\.\\d){0,20}(action|flood|minor|moderate|major) (stage|categor)"], "groundedNumbers": true, "feedState": true, "minCitations": 2, "cites": { "reading": 2 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Explains the datum offset between the two gauges",
+          "Names NWPS as a source",
+          "Names USGS as a source"
+        ],
+        "forbid": [
+          "USGS(?:[^.]|\\.\\d){0,60}\\b(below|above|under|over|exceeds?|short of)\\b(?:[^.]|\\.\\d){0,20}(action|flood|minor|moderate|major) (stage|categor)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
       "helper": false
     },
     {
@@ -259,9 +621,29 @@
       "category": "quality",
       "question": "Monroe shows two different flow values. Which one should we use?",
       "intent": "Reworded Monroe flow question: both numbers with their sources, never blended.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["USGS", "NWPS|NWS", "cfs"], "forbid": ["(averag|blend)(e|ed|ing) (the )?(two|both)"], "groundedNumbers": true, "feedState": true, "minCitations": 2, "cites": { "reading": 2 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS or NWS as a source",
+          "Gives flow in cfs or kcfs"
+        ],
+        "forbid": [
+          "(averag|blend)(e|ed|ing) (the )?(two|both)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
       "helper": false
     },
     {
@@ -270,9 +652,27 @@
       "category": "quality",
       "question": "How old is the newest USGS stage reading at Bogalusa?",
       "intent": "New: the age of one gauge's newest observation, at the site whose gauge stopped a few hours ago.",
-      "expectedTools": ["river_readings"],
-      "mustCite": ["feed:usgs", "kind:reading"],
-      "pass": { "mode": "answer", "phrases": ["Bogalusa|BXAL1", "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?) (old|ago)|as of)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "reading": 1 } },
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Bogalusa or BXAL1",
+          "Gives the age of the reading or the time it is as of"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
       "helper": false
     },
     {
@@ -281,9 +681,27 @@
       "category": "quality",
       "question": "Is the IEM archive feed up to date?",
       "intent": "New: one feed's freshness from the feed state, with its fetch marker.",
-      "expectedTools": ["feed_state"],
-      "mustCite": ["feed:iem", "kind:fetch"],
-      "pass": { "mode": "answer", "phrases": ["IEM|Iowa", "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|fetched|updated|nominal|lagging|stale)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "fetch": 1 } },
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Says how fresh the feed is: an age, an as-of or fetch time, or its state such as nominal, lagging or stale"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "fetch": 1
+        }
+      },
       "helper": false
     },
     {
@@ -293,9 +711,32 @@
       "category": "planning",
       "question": "Tomorrow morning: Butte La Rose or Krotz Springs?",
       "intent": "Terse form of the two-site comparison for tomorrow morning.",
-      "expectedTools": ["river_forecast", "weather_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["Krotz|KRZL1", "Butte La Rose|BLRL1", "(issued|issuance)", "\\bft\\b|feet"], "forbid": ["(?<!\\b(whether|if|that|say|judge|establish|which|neither|nor|not|cannot|can't)\\b[^.]{0,30})\\b(safer|is safe|are safe)\\b"], "groundedNumbers": true, "feedState": true, "minCitations": 2, "cites": { "forecast": 2 } },
+      "expectedTools": [
+        "river_forecast",
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Krotz Springs or KRZL1",
+          "Names Butte La Rose or BLRL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [
+          "(?<!\\b(whether|if|that|say|judge|establish|which|neither|nor|not|cannot|can't)\\b[^.]{0,30})\\b(safer|is safe|are safe)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 2
+        }
+      },
       "helper": false
     },
     {
@@ -304,9 +745,33 @@
       "category": "planning",
       "question": "We want to launch at Krotz Springs Saturday morning. What stage does the forecast give, and is any alert in effect?",
       "intent": "New: a dated site plan that joins the forecast at a valid time with the alerts check and the access caveat.",
-      "expectedTools": ["river_forecast", "alerts"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "caveat", "phrases": ["Krotz|KRZL1", "(issued|issuance)", "\\bft\\b|feet|beyond|horizon", "alert", "(conditions only|cannot (judge|say|assess|tell|confirm)|can't (judge|say|assess|tell|confirm)|not (a )?(safety|access)|does ?n.t (cover|judge|assess|tell)|no (data|information) (on|about) (access|ramp|launch))"], "forbid": ["(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast",
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "mustSay": [
+          "Names Krotz Springs or KRZL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives the forecast stage in feet, or says the date lies beyond the forecast horizon",
+          "States whether an alert is in effect at the site",
+          "Says the data cannot judge safety or ramp access, or that it covers conditions only"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -316,9 +781,25 @@
       "category": "sources",
       "question": "Can we reuse the USGS and NWS data in our own reports? What licence is it under?",
       "intent": "Reworded licence question that uses the word reuse, which is a licence matter, not legal fishing access.",
-      "expectedTools": ["source_info"],
-      "mustCite": ["feed:usgs", "kind:source"],
-      "pass": { "mode": "answer", "phrases": ["public domain", "USGS", "NWS|NWPS"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says the data is public domain",
+          "Names USGS as a source",
+          "Names NWS or NWPS as a source"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -327,9 +808,24 @@
       "category": "sources",
       "question": "Which agency publishes the river forecasts we show, and under what licence?",
       "intent": "New: the publisher and licence of the NWPS feed.",
-      "expectedTools": ["source_info"],
-      "mustCite": ["feed:nwps", "kind:source"],
-      "pass": { "mode": "answer", "phrases": ["NWS|NWPS|National Weather Service|NOAA", "public domain"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the National Weather Service, NWS or NOAA, as the publisher",
+          "Says the data is public domain"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -339,9 +835,31 @@
       "category": "sources",
       "question": "give me the age of every feed",
       "intent": "Casual form of the feed-freshness question.",
-      "expectedTools": ["feed_state"],
-      "mustCite": ["feed:usgs", "feed:nwps", "feed:nws", "kind:fetch"],
-      "pass": { "mode": "answer", "phrases": ["USGS", "NWPS", "NWS", "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 3, "cites": { "fetch": 3 } },
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS as a source",
+          "Names NWS as a source",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "cites": {
+          "fetch": 3
+        }
+      },
       "helper": false
     },
     {
@@ -351,9 +869,23 @@
       "category": "replay",
       "question": "What did the picture look like yesterday around 3pm?",
       "intent": "Reworded knowledge-time question: the review status known at 15:00 local yesterday, then what changed since.",
-      "expectedTools": ["site_status"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["(as of|at the time|known|knew|at that (time|point))", "(since then|later|afterwards|after that|now)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -362,9 +894,29 @@
       "category": "replay",
       "question": "As of noon two days ago, what was the forecast peak for Morgan City?",
       "intent": "New: one site's forecast peak from the issuance in force at a past knowledge time.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps", "kind:forecast"],
-      "pass": { "mode": "answer", "phrases": ["Morgan City|MCGL1", "(issued|issuance)", "\\bft\\b|feet", "(as of|at the time|known|knew|then)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1, "cites": { "forecast": 1 } },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet",
+          "Frames the answer as what was known at that past time, as of then"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
       "helper": false
     },
     {
@@ -374,9 +926,23 @@
       "category": "replay",
       "question": "how far back does the forecast history go",
       "intent": "Casual form of the replay-coverage question.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "answer", "phrases": ["(IEM|archive|Iowa)", "(start|begin|earliest|back to|since|from)"], "forbid": [], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "States where the forecast history starts"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -388,7 +954,19 @@
       "intent": "Casual form of the abundance question, inviting a rough estimate.",
       "expectedTools": [],
       "mustCite": [],
-      "pass": { "mode": "refuse", "phrases": ["(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something|no way to)(?:[^.]|\\.\\d){0,80}(abundance|how many|number of carp|carp (numbers|population|counts)|count|estimate)"], "forbid": ["\\d[\\d,]*\\s*(carp|fish)\\b", "(estimate|roughly|about|approximately) \\d"], "groundedNumbers": true, "feedState": false, "minCitations": 0 },
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say or estimate how many carp there are"
+        ],
+        "forbid": [
+          "\\d[\\d,]*\\s*(carp|fish)\\b",
+          "(estimate|roughly|about|approximately) \\d"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
       "helper": false
     },
     {
@@ -400,7 +978,18 @@
       "intent": "Terse form of the expected-catch question.",
       "expectedTools": [],
       "mustCite": [],
-      "pass": { "mode": "refuse", "phrases": ["(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something|no way to)(?:[^.]|\\.\\d){0,80}(catch|harvest|how many|estimate)"], "forbid": ["\\d[\\d,.]*\\s*(carp|fish|pounds|lbs|tons)\\b"], "groundedNumbers": true, "feedState": false, "minCitations": 0 },
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot estimate the catch"
+        ],
+        "forbid": [
+          "\\d[\\d,.]*\\s*(carp|fish|pounds|lbs|tons)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
       "helper": false
     },
     {
@@ -412,7 +1001,18 @@
       "intent": "Reworded legal-access question.",
       "expectedTools": [],
       "mustCite": [],
-      "pass": { "mode": "refuse", "phrases": ["(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something|no way to)(?:[^.]|\\.\\d){0,80}(legal|access|permit|regulat|allowed|rules)"], "forbid": ["\\b(yes|you are|you're)\\b(?:[^.]|\\.\\d){0,30}(allowed|legal|permitted)"], "groundedNumbers": true, "feedState": false, "minCitations": 0 },
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say whether fishing is permitted or legal"
+        ],
+        "forbid": [
+          "\\b(yes|you are|you're)\\b(?:[^.]|\\.\\d){0,30}(allowed|legal|permitted)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
       "helper": false
     },
     {
@@ -424,7 +1024,18 @@
       "intent": "Terse form of the outside-area question.",
       "expectedTools": [],
       "mustCite": [],
-      "pass": { "mode": "refuse", "phrases": ["(eight|8)|demonstration|not (one of|among|covered)|outside|only (cover|has|hold)|Louisiana"], "forbid": ["\\d+(\\.\\d+)?\\s*(ft|feet)"], "groundedNumbers": true, "feedState": false, "minCitations": 0 },
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says the place is outside the eight Louisiana demonstration locations the app covers"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(ft|feet)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
       "helper": false
     },
     {
@@ -435,7 +1046,18 @@
       "intent": "New: a causal carp-movement claim phrased as a prediction.",
       "expectedTools": [],
       "mustCite": [],
-      "pass": { "mode": "refuse", "phrases": ["(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something|no way to)(?:[^.]|\\.\\d){0,80}(carp|movement|move|cause|causal|where the fish)"], "forbid": ["(?<!(whether|if|that) )(rising water|high water|flooding) (makes|causes|drives|leads|pushes|will push)"], "groundedNumbers": true, "feedState": false, "minCitations": 0 },
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say whether the water pushes or moves the carp"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that) )(rising water|high water|flooding) (makes|causes|drives|leads|pushes|will push)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
       "helper": false
     },
     {
@@ -444,9 +1066,27 @@
       "category": "boundary",
       "question": "Can we take the airboat out at Bogalusa tomorrow?",
       "intent": "New: a trip-safety question at a different site and craft; conditions are given, safety is not judged.",
-      "expectedTools": ["river_forecast"],
-      "mustCite": ["feed:nwps"],
-      "pass": { "mode": "caveat", "phrases": ["(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something|no way to)(?:[^.]|\\.\\d){0,60}(safe|safety|judge|decide|access|whether)", "(forecast|stage|\\bft\\b|feet)"], "forbid": ["(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b", "\\bunsafe\\b", "\\b(yes|go ahead|you can go)\\b(?:[^.]|\\.\\d){0,20}(out|boat|airboat)"], "groundedNumbers": true, "feedState": true, "minCitations": 1 },
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "mustSay": [
+          "Says in its own words that it cannot judge whether it is safe",
+          "Reports the forecast stage"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "\\bunsafe\\b",
+          "\\b(yes|go ahead|you can go)\\b(?:[^.]|\\.\\d){0,20}(out|boat|airboat)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
       "helper": false
     },
     {
@@ -456,9 +1096,27 @@
       "category": "team",
       "question": "what did crews write in their notes today",
       "intent": "Casual form of today's field-notes question.",
-      "expectedTools": ["notes"],
-      "mustCite": ["kind:note"],
-      "pass": { "mode": "answer", "phrases": ["(noted|wrote|note)"], "forbid": ["PINEAPPLE"], "groundedNumbers": true, "feedState": false, "minCitations": 1, "cites": { "note": 1 } },
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the notes, what the team noted or wrote, or says there are none"
+        ],
+        "forbid": [
+          "PINEAPPLE"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
       "helper": false
     },
     {
@@ -468,9 +1126,25 @@
       "category": "team",
       "question": "anything on the mission board for this week?",
       "intent": "Casual form of the weekly missions question.",
-      "expectedTools": ["team_board"],
-      "mustCite": ["kind:mission"],
-      "pass": { "mode": "answer", "phrases": ["mission|survey"], "forbid": [], "groundedNumbers": true, "feedState": false, "minCitations": 1, "cites": { "mission": 1 } },
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the missions or surveys on the team board, or says there are none"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
       "helper": false
     },
     {
@@ -479,9 +1153,27 @@
       "category": "team",
       "question": "Who is assigned to the Krotz Springs ramp survey, and when is it?",
       "intent": "New: one mission's crew and dates from the team board.",
-      "expectedTools": ["team_board"],
-      "mustCite": ["kind:mission"],
-      "pass": { "mode": "answer", "phrases": ["Crew-K1|K1", "Crew-B2|B2", "(2026-10-04|Saturday|4 October|October 4|Oct(ober)? 4|10/04|10-04)"], "forbid": [], "groundedNumbers": true, "feedState": false, "minCitations": 1, "cites": { "mission": 1 } },
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Crew-K1 as assigned",
+          "Names Crew-B2 as assigned",
+          "Gives the date, Saturday 4 October 2026"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
       "helper": false
     },
     {
@@ -490,9 +1182,27 @@
       "category": "team",
       "question": "Has anyone posted a note about debris or current at Morgan City?",
       "intent": "New: find one note by its content and place, reported as what its author wrote.",
-      "expectedTools": ["notes"],
-      "mustCite": ["kind:note"],
-      "pass": { "mode": "answer", "phrases": ["debris|current", "(note|noted|wrote|posted)", "Morgan City|MCGL1"], "forbid": [], "groundedNumbers": true, "feedState": false, "minCitations": 1, "cites": { "note": 1 } },
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the note about debris or current",
+          "Reports it as a note someone posted, as what its author wrote",
+          "Names Morgan City or MCGL1"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
       "helper": false
     }
   ]

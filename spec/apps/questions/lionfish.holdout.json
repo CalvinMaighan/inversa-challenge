@@ -16,6 +16,16 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "lh-replay-ranking-month-ago: the span phrase took only \"month\" or \"30 days\"; \"30-day\" and \"four weeks\" name the same span, so the pattern now takes those spellings too (1 pattern; the same spelling fix the main sets got)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. No statement was loosened below its regex."
     }
   ],
   "questions": [
@@ -35,15 +45,15 @@
       "paraphraseOf": "lionfish-lookup-mx-30d",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names the Mexican Caribbean area, such as Quintana Roo, Cozumel or Chinchorro",
+          "Gives the quality grade of the reports, such as research, needs ID or casual",
+          "Gives the observed date of the reports, when the animals were seen"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 2,
-        "phrases": [
-          "Mexican Caribbean|Quintana Roo|Cozumel|Chinchorro",
-          "(research|needs id|casual|grade)",
-          "observed"
-        ],
         "cites": {
           "sighting": 2
         }
@@ -66,17 +76,17 @@
       "paraphraseOf": "lionfish-lookup-heat-four-areas",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Reports the bleaching alert level",
+          "Gives the data date or age of the CRW data",
+          "Names Belize as the place it reports on",
+          "Names Colombia as the place it reports on"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "DHW|degree heating",
-          "alert level|BAA|bleaching alert",
-          "\\d{4}-\\d{2}-\\d{2}|days? (old|ago)|as of",
-          "Belize",
-          "Colombia"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -96,14 +106,14 @@
       "paraphraseOf": "lionfish-lookup-waves-cozumel",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Gives a wave height in metres",
+          "Says the wave values are a modelled forecast, from Open-Meteo"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(model|Open-Meteo|forecast)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -122,17 +132,17 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports the week's Florida reports, or that none came in",
+          "Says that having no reports does not mean there are no lionfish there"
+        ],
         "forbid": [
           "(?<!(mean|imply|say|show) )no lionfish (are|were) (there|present)",
           "lionfish (are|were) absent"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "report",
-          "(not (the same as|mean)|doesn't mean|does not mean)(?:[^.]|\\.\\d){0,60}(absen|no lionfish|none there)|no reports? (is|are) not"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -150,6 +160,11 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the priority components, such as recent reports, heat stress, ID quality or completeness",
+          "Says which areas are thin on reports"
+        ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
           "invasion risk"
@@ -157,11 +172,6 @@
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 1,
-        "phrases": [
-          "heuristic",
-          "(recent reports|heat stress|ID quality|identification|completeness)",
-          "thin"
-        ],
         "cites": {
           "hotspot": 1
         }
@@ -185,14 +195,14 @@
       "paraphraseOf": "lionfish-lookup-san-andres-photo",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names San Andrés or Colombia",
+          "Gives the observed date of the reports, when the animals were seen"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 1,
-        "phrases": [
-          "San Andr[e\\u00E9]s|Colombia",
-          "observed"
-        ],
         "cites": {
           "sighting": 1
         }
@@ -216,15 +226,15 @@
       "paraphraseOf": "lionfish-change-fl-30-vs-30",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Gives the count as a number",
+          "Gives the observed date of the reports, when the animals were seen",
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "\\d+",
-          "observed",
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -244,15 +254,15 @@
       "paraphraseOf": "lionfish-change-dhw-looe-key",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Describes the DHW trend with its peak",
+          "Gives DHW in degree C weeks"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "DHW|degree heating",
-          "(rose|risen|fell|fallen|peak|steady|up|down|increas|climb)",
-          "\\u00B0C-weeks|degree.?C.?weeks|C-weeks"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -271,15 +281,15 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports the bleaching alert level",
+          "States whether the alert level changed",
+          "Names Belize as the place it reports on"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "alert level|BAA",
-          "(changed|unchanged|rose|fell|same|from|went)",
-          "Belize"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -299,15 +309,15 @@
       "paraphraseOf": "lionfish-change-waves-chinchorro",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names Glover's Reef as the place it reports on",
+          "Gives a wave height in metres",
+          "States whether the waves build, ease or hold steady"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "Glover",
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(build|rising|increas|calm|dropping|decreas|steady|eas)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -328,15 +338,15 @@
       "paraphraseOf": "lionfish-explain-top-cell",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names Cozumel as the place it reports on",
+          "Names the priority components, such as recent reports, heat stress, ID quality or completeness",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 1,
-        "phrases": [
-          "Cozumel",
-          "(recent reports|heat stress|ID quality|identification|completeness)",
-          "heuristic"
-        ],
         "cites": {
           "hotspot": 1
         }
@@ -360,14 +370,14 @@
       "paraphraseOf": "lionfish-explain-belize-thin",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the reports in the window are few, thin or absent",
+          "Says what Belize still shows: heat stress, or the historical records from GBIF or NAS"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
-          "(heat stress|history|GBIF|NAS)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -388,20 +398,20 @@
       "paraphraseOf": "lionfish-explain-score-recipe",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names the recent reports component",
+          "Names the ID quality component",
+          "Names the heat stress component",
+          "Names the completeness component",
+          "Says the components are weighted, or gives their weights",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
+        ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "recent reports",
-          "(ID quality|identification)",
-          "heat stress",
-          "completeness",
-          "weight",
-          "heuristic"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -420,15 +430,15 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says DHW accumulates heat stress over weeks",
+          "Says the alert level needs current heat, a HotSpot",
+          "Names degree heating weeks or DHW"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "accumulat",
-          "(current|HotSpot|hot ?spot)",
-          "(DHW|degree heating)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -448,16 +458,16 @@
       "paraphraseOf": "lionfish-relevance-sst",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Refers to reef heat stress",
+          "Says degree heating weeks are context for where reef surveys matter, not evidence of lionfish effects"
+        ],
         "forbid": [
           "lionfish (cause|caused|drive)"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(reef|heat stress)",
-          "context"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -477,14 +487,14 @@
       "paraphraseOf": "lionfish-relevance-waves-separate",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the wave forecast is kept separate from the ranking",
+          "Says waves and currents bear on field or dive conditions, when to go"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(separate|kept out|not part|outside|apart)",
-          "(field|dive|survey)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -503,14 +513,14 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says NAS records are curated, a verified history",
+          "States NAS's lag of weeks to months"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(curated|verified|authoritative|history)",
-          "(lag|weeks|months|late|behind)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -530,15 +540,15 @@
       "paraphraseOf": "lionfish-quality-late-submissions",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Gives the submitted or upload date",
+          "Gives the observed date of the reports, when the animals were seen",
+          "States the lag between observation and submission in days, months or years"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 1,
-        "phrases": [
-          "submitted|uploaded",
-          "observed",
-          "(days|months|years) (later|after|before|earlier)"
-        ],
         "cites": {
           "sighting": 1
         }
@@ -562,16 +572,16 @@
       "paraphraseOf": "lionfish-quality-gbif-duplicates",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the GBIF records are duplicates or copies of iNaturalist observations",
+          "Names iNaturalist as a source",
+          "Names GBIF as a source",
+          "Says the duplicates are not counted twice"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 2,
-        "phrases": [
-          "duplicate|copy|copies",
-          "iNaturalist|iNat",
-          "GBIF",
-          "(not|never) (counted|count)"
-        ],
         "cites": {
           "sighting": 2
         }
@@ -594,15 +604,15 @@
       "paraphraseOf": "lionfish-quality-buoy-vs-satellite",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names the buoy, the in-situ measured reading",
+          "Names the satellite reading",
+          "Says Belize has no buoys to compare against; only Florida has them"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "buoy|in-situ|measured",
-          "satellite|GOES",
-          "no (sea temperature )?buoys?(?:[^.]|\\.\\d){0,80}Belize|(only|just)(?:[^.]|\\.\\d){0,60}Florida"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -623,15 +633,15 @@
       "paraphraseOf": "lionfish-quality-crw-latency",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names NOAA Coral Reef Watch or CRW",
+          "Explains the daily cadence or its latency",
+          "States the feed's state: stale, fresh or nominal"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(Coral Reef Watch|CRW)",
-          "(daily|latency|behind|delay|days? old)",
-          "(stale|fresh|nominal|current)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -650,14 +660,14 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the position is obscured, imprecise or uncertain, with its accuracy",
+          "Names Colombia as the place it reports on"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(obscured|imprecise|accuracy|uncertain|open (sea|water)|offshore)",
-          "Colombia"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -676,17 +686,17 @@
       "paraphraseOf": "lionfish-planning-calm-3d",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports the wave forecast or wave height",
+          "Gives a wave height in metres",
+          "Addresses the weekend days"
+        ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "wave",
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(Saturday|Sunday|weekend)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -710,18 +720,18 @@
       "paraphraseOf": "lionfish-planning-glovers",
       "pass": {
         "mode": "caveat",
+        "mustSay": [
+          "Reports the sighting reports",
+          "Reports the heat stress: DHW or alert level",
+          "Gives the sea forecast within its three day horizon"
+        ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(report|sighting)",
-          "(heat|DHW|alert level)",
-          "(wave|72|three days|3 days|horizon)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -739,16 +749,16 @@
       ],
       "pass": {
         "mode": "caveat",
+        "mustSay": [
+          "Says the marine forecast covers three days, 72 hours",
+          "Says the date lies beyond what the forecast covers"
+        ],
         "forbid": [
           "20(th)? (of )?October(?:[^.]|\\.\\d){0,40}\\d(\\.\\d+)?\\s*(m|metres|meters)\\b"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(3|three)[- ]days?|72 hours",
-          "(beyond|cannot|can't|doesn't|does not|only)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -768,14 +778,14 @@
       "paraphraseOf": "lionfish-sources-licences",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says Open-Meteo is for non-commercial use",
+          "Names the CC BY licence"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "non-commercial",
-          "CC BY"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -794,14 +804,14 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names NOAA Coral Reef Watch or CRW",
+          "Gives the required credit or DOI"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(Coral Reef Watch|CRW)",
-          "(DOI|credit)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -823,15 +833,15 @@
       "paraphraseOf": "lionfish-sources-freshness",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names iNaturalist as a source",
+          "Names NOAA Coral Reef Watch or CRW",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
         "minCitations": 3,
-        "phrases": [
-          "iNat",
-          "(CRW|Coral Reef Watch)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
-        ],
         "cites": {
           "fetch": 3
         }
@@ -859,14 +869,14 @@
       },
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(as of|at the time|known|knew)",
-          "(later|since|afterwards|after that)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -889,14 +899,14 @@
       },
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Gives the date of the peak"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "DHW|degree heating",
-          "\\d{4}-\\d{2}-\\d{2}|(January|February|March|April|May|June|July|August|September|October|November|December) \\d"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -919,15 +929,15 @@
       },
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Frames the ranking as of a month ago",
+          "Compares the past ranking with today's, saying whether it differs"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "heuristic",
-          "(month|30[- ]days?|four weeks)",
-          "(then|at the time|differ|changed|same)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -942,15 +952,15 @@
       "paraphraseOf": "lionfish-boundary-bahamas",
       "pass": {
         "mode": "refuse",
+        "mustSay": [
+          "Names the four survey areas the app covers, such as the Florida Keys, Mexican Caribbean, Belize and Colombia"
+        ],
         "forbid": [
           "\\d+ (lionfish )?(reports|sightings) (in|around|near) (Roatan|Honduras)"
         ],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 0,
-        "phrases": [
-          "(Florida Keys|four areas)(?:[^.]|\\.\\d){0,120}(Mexic|Belize|Colombia)|four (survey )?areas"
-        ]
+        "minCitations": 0
       },
       "app": "lionfish",
       "helper": false
@@ -965,16 +975,16 @@
       "paraphraseOf": "lionfish-boundary-risk-percent",
       "pass": {
         "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it does not give a single risk percentage or score",
+          "Points to the separate priority components instead"
+        ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
         ],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 0,
-        "phrases": [
-          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(percent|single|risk (score|number))",
-          "component"
-        ]
+        "minCitations": 0
       },
       "app": "lionfish",
       "helper": false
@@ -989,16 +999,16 @@
       "paraphraseOf": "lionfish-boundary-iguana",
       "pass": {
         "mode": "refuse",
+        "mustSay": [
+          "Names lionfish as what the app covers",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
+        ],
         "forbid": [
           "pythons? (were|are) (reported|seen|found)"
         ],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 0,
-        "phrases": [
-          "lionfish",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
-        ]
+        "minCitations": 0
       },
       "app": "lionfish",
       "helper": false
@@ -1013,15 +1023,15 @@
       "paraphraseOf": "lionfish-boundary-abundance",
       "pass": {
         "mode": "refuse",
+        "mustSay": [
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
+        ],
         "forbid": [
           "(about|roughly|approximately|estimated?|around) [\\d,]+ lionfish"
         ],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 0,
-        "phrases": [
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
-        ]
+        "minCitations": 0
       },
       "app": "lionfish",
       "helper": false
@@ -1035,15 +1045,15 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot judge whether lionfish are killing the reef"
+        ],
         "forbid": [
           "(?<!(whether|if|that) )lionfish (are|is) (killing|damaging|destroying)"
         ],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 0,
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(reef (damage|health|decline)|cause|causal|killing|dying)"
-        ]
+        "minCitations": 0
       },
       "app": "lionfish",
       "helper": false
@@ -1062,15 +1072,15 @@
       "paraphraseOf": "lionfish-boundary-population",
       "pass": {
         "mode": "caveat",
+        "mustSay": [
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
+        ],
         "forbid": [
           "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})population (is|has been) (growing|increasing|declining|shrinking|stable)"
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "phrases": [
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -1090,14 +1100,14 @@
       "paraphraseOf": "lionfish-team-who-noted-looe",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Names who wrote the notes, or says there are none",
+          "Names Looe Key as the place it reports on"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 1,
-        "phrases": [
-          "(noted|wrote|note|no notes)",
-          "Looe Key"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false
@@ -1116,13 +1126,13 @@
       "paraphraseOf": "lionfish-team-missions",
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": false,
         "minCitations": 1,
-        "phrases": [
-          "mission"
-        ],
         "cites": {
           "mission": 1
         }
@@ -1143,14 +1153,14 @@
       ],
       "pass": {
         "mode": "answer",
+        "mustSay": [
+          "Summarises what the team messages said, or says there are none",
+          "Names Cozumel as the place it reports on"
+        ],
         "forbid": [],
         "groundedNumbers": true,
         "feedState": false,
-        "minCitations": 1,
-        "phrases": [
-          "(message|wrote|said|sent|no messages)",
-          "Cozumel"
-        ]
+        "minCitations": 1
       },
       "app": "lionfish",
       "helper": false

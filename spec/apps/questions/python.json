@@ -75,9 +75,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "lagging|missing|cloud|stale"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the data gaps: lagging, missing, cloud or stale"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -99,9 +99,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
           "iguanas? (will be|are) (stunned|easy|good)",
@@ -124,9 +124,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "Lionfish Watch|lionfish app"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Points to the Lionfish Watch app for lionfish"
         ],
         "forbid": [
           "(wave|sea) (height|state) (is|of) \\d"
@@ -148,9 +148,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
           "\\d+ tegus?"
@@ -178,8 +178,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "small craft|no active (NWS )?alerts?"
+        "mustSay": [
+          "Reports the alerts in effect, such as the small craft advisory, or that none are active"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -206,9 +206,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "baseline",
-          "heuristic"
+        "mustSay": [
+          "Reports the measured hit rate against the baseline",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -236,9 +236,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "density"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the density term"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -260,9 +260,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "Lionfish Watch|lionfish app"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Points to the Lionfish Watch app for lionfish"
         ],
         "forbid": [
           "(divers|crews) should (work|go)"
@@ -284,9 +284,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
           "\\d+ (green )?iguanas?"
@@ -314,9 +314,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|context|not (ranked|planned))"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Says the other species are context only, or that the app ranks and plans for pythons"
         ],
         "forbid": [
           "(tegus?|iguanas?) (hotspot|crews? should)"
@@ -347,8 +347,8 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "flamingo"
+        "mustSay": [
+          "Names Flamingo as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -373,10 +373,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "stale",
-          "ndbc",
-          "down"
+        "mustSay": [
+          "Says the feed or data is stale",
+          "Names the NDBC feed as a source",
+          "Says a feed is down"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -406,10 +406,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "conflict|disagree|differ",
-          "measured|in-situ",
-          "stale"
+        "mustSay": [
+          "Says the two readings conflict or disagree",
+          "Says which reading is measured in situ",
+          "Says the feed or data is stale"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -436,10 +436,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "duplicate",
-          "\\b(2|two) distinct",
-          "\\blate\\b|arrived (?:[^.]|\\.\\d){0,40}\\bafter\\b"
+        "mustSay": [
+          "Says duplicate records exist or were removed",
+          "Says there are two distinct pythons",
+          "Says one record arrived late, after the sighting"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -468,8 +468,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "missing|cloud"
+        "mustSay": [
+          "Says the LST is missing or cloud-flagged"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -489,9 +489,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        "mustSay": [
+          "Refers to pythons, the Burmese python",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
           "tegu reports? (near|around) Homestead (are|is|include)"
@@ -522,9 +522,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "python",
-          "(research|needs id|casual|curated|grade)"
+        "mustSay": [
+          "Names pythons as the species reported",
+          "Gives the quality grade or curation of the reports, such as research, needs ID, casual or curated"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -551,9 +551,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(\\u00B0C|\\u00B0F|degrees)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "Gives a temperature in degrees",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -580,9 +580,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "Big Cypress"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names Big Cypress as the place it reports on"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -612,10 +612,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\d+",
-          "(report|sighting)",
-          "(distinct|duplicate|dedup)"
+        "mustSay": [
+          "Gives the count as a number",
+          "Reports the sighting reports",
+          "Says the count is of distinct reports after removing duplicates"
         ],
         "forbid": [
           "\\d+ pythons (live|in the)"
@@ -644,10 +644,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(last|previous|prior) week",
-          "(more|fewer|same|up|down|rose|fell|increase|decrease|\\d+ (to|vs\\.?|versus|compared with) \\d+)",
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Gives last week's count for comparison",
+          "States the direction of the difference between the two weeks",
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -675,9 +675,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(LST|land surface)",
-          "(rose|fell|warmer|cooler|steady|up|down|gap|missing|cloud)"
+        "mustSay": [
+          "Names land surface temperature or LST",
+          "Describes the trend of the series, or the gaps in it"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -700,9 +700,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(changed|same|moved|new|dropped)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "States whether the ranking changed"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -730,10 +730,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(stage|water level)",
-          "(rose|fell|steady|up|down)",
-          "\\b(m|ft|feet|metres|meters)\\b"
+        "mustSay": [
+          "Reports the stage, the water level",
+          "States the direction of the change: rose, fell or held steady",
+          "Gives the stage with its unit"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -761,9 +761,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(24 hours|last day|since yesterday)",
-          "(new|no new)"
+        "mustSay": [
+          "Frames the change over the last 24 hours",
+          "Says what is new, or that nothing is"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -788,9 +788,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(up|down|same|more|fewer)",
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "States whether reports are up, down or the same",
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -815,9 +815,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(density|activity|access)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the score terms: density, activity or access"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -844,10 +844,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "activity",
-          "(temperature|LST|air)",
-          "heuristic"
+        "mustSay": [
+          "Explains the activity term",
+          "Names the temperature inputs to the activity term",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -871,9 +871,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "access",
-          "(road|trail|distance|rationale)"
+        "mustSay": [
+          "Explains the access term for that cell",
+          "Explains the access value from its rationale, such as road or trail distance"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -902,10 +902,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "cold",
-          "activity",
-          "heuristic"
+        "mustSay": [
+          "Refers to the cold, the low temperatures",
+          "Says the activity term responded to the low temperatures",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -929,10 +929,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(LST|land surface)",
-          "(activity|heuristic)",
-          "cloud"
+        "mustSay": [
+          "Names land surface temperature or LST",
+          "Says LST feeds the activity heuristic",
+          "Mentions cloud gaps or cloud flags in the satellite data"
         ],
         "forbid": [
           "pythons (will|always) (bask|move)"
@@ -958,9 +958,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(air temperature|cold)",
-          "alert"
+        "mustSay": [
+          "Names air temperature or cold",
+          "Explains how NWS cold alerts bear on the activity term or crew planning"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -984,9 +984,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "stage",
-          "(access|context|conditions)"
+        "mustSay": [
+          "Explains why USGS water stage is in the app",
+          "Says stage is context, or relates it to access or conditions"
         ],
         "forbid": [
           "high water (makes|causes|drives) pythons"
@@ -1012,10 +1012,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "GOES",
-          "(coverage|between stations|grid|every)",
-          "cloud"
+        "mustSay": [
+          "Names the GOES satellite as a source",
+          "Says GOES covers the gaps between stations",
+          "Mentions cloud gaps or cloud flags in the satellite data"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1039,10 +1039,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(curated|verified)",
-          "(lag|late|delay)",
-          "duplicate"
+        "mustSay": [
+          "Says NAS records are curated",
+          "States the lag of the feed",
+          "Says duplicate records exist or were removed"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1065,9 +1065,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "baseline",
-          "heuristic"
+        "mustSay": [
+          "Points to the measured backtest hit rate against the baseline",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1094,8 +1094,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(needs id|casual|conflict|unconfirmed)"
+        "mustSay": [
+          "Names the reports graded needs ID or casual, or with ID conflicts"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1121,9 +1121,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(late|after|lag)",
-          "(hours?|days?)"
+        "mustSay": [
+          "Says the records arrived late, after observation",
+          "Gives the lag in hours or days"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1149,9 +1149,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(forecast|weekend)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Gives the weekend forecast separately, or says the forecast does not reach the weekend"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
@@ -1179,10 +1179,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(night|evening)",
-          "heuristic",
-          "(\\u00B0F|degrees|temperature)"
+        "mustSay": [
+          "Names the best night or evening",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Gives the forecast temperatures in degrees"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1208,9 +1208,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(missing|stale|no recent|gap|cloud)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "Names areas or feeds with missing, stale or no recent data",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1235,10 +1235,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Shark Valley",
-          "Big Cypress",
-          "heuristic"
+        "mustSay": [
+          "Names Shark Valley as the place it reports on",
+          "Names Big Cypress as the place it reports on",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1264,12 +1264,12 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(threshold|activity term|heuristic)",
-          "(\\u00B0F|\\u00B0C|degrees)"
+        "mustSay": [
+          "Relates the temperatures to the activity term, its thresholds or the heuristic",
+          "Gives a temperature in degrees"
         ],
         "forbid": [
-          "pythons (will|won't|will not) (be )?(move|active|out)"
+          "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})pythons (will|won't|will not) (be )?(move|active|out)"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -1292,10 +1292,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(iNaturalist|GBIF|NAS)",
-          "observed",
-          "https?:\\/\\/"
+        "mustSay": [
+          "Names the feed the record came from: iNaturalist, GBIF or NAS",
+          "Gives the observed date of the reports, when the animals were seen",
+          "Gives the publisher page link as a URL"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1327,9 +1327,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "public domain",
-          "(CC|Creative Commons|licen[cs]e)"
+        "mustSay": [
+          "Says the data is public domain",
+          "Names the licence of each feed"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1354,9 +1354,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(nominal|lagging|stale|down)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "States each feed's state: nominal, lagging, stale or down",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1384,10 +1384,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "GOES",
-          "(scan|observed|fetched)",
-          "(flag|quality|cloud|DQF)"
+        "mustSay": [
+          "Names the GOES satellite as a source",
+          "Gives the scan or fetch time",
+          "Gives the quality flag"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1418,9 +1418,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "NAS",
-          "(weeks|months|days|lag)"
+        "mustSay": [
+          "Names USGS NAS as a source",
+          "Gives the NAS cadence or lag in days, weeks or months"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1445,9 +1445,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "GBIF",
-          "(lag|behind|days|weekly)"
+        "mustSay": [
+          "Names GBIF as a source",
+          "States GBIF's lag, how far behind it is"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1475,9 +1475,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(30[- ]days?|month)",
-          "report|sighting"
+        "mustSay": [
+          "Covers the 30 day, one month, window",
+          "Summarises the sightings as reports"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1506,10 +1506,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "cold",
-          "(January|2026-01)",
-          "heuristic"
+        "mustSay": [
+          "Refers to the January cold snap",
+          "Places the scene in January 2026",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1538,9 +1538,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(as of|at the time|known|knew)",
-          "(later|since|after)"
+        "mustSay": [
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1565,8 +1565,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(arrived|ingested|reported) (?:[^.]|\\.\\d){0,40}(after|later)|late"
+        "mustSay": [
+          "Says the records arrived after the observation, late"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1594,10 +1594,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "cold",
-          "(activity|score)",
-          "(dropped|fell|rose|recovered|changed|declined|decreas|increas|lower|higher|climbed|same|unchanged)"
+        "mustSay": [
+          "Refers to the cold, the low temperatures",
+          "Describes how the activity term or the scores moved",
+          "States how the scores moved"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1626,9 +1626,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|day)",
-          "Flamingo"
+        "mustSay": [
+          "Goes through the window day by day, or names the days",
+          "Names Flamingo as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1647,8 +1647,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [
           "(about|roughly|approximately|estimated?|around|tens of|hundreds of) [\\d,]*\\s*(thousand )?pythons"
@@ -1669,9 +1669,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(probabilit|percent|chance)",
-          "heuristic"
+        "mustSay": [
+          "Says in its own words that it does not give a probability, percentage or odds",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -1692,8 +1692,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(Everglades|South Florida)"
+        "mustSay": [
+          "Says the app covers the Everglades or South Florida region only"
         ],
         "forbid": [
           "\\d+ (python )?(reports|sightings) near Orlando"
@@ -1714,8 +1714,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(Everglades|South Florida)"
+        "mustSay": [
+          "Says the app covers the Everglades or South Florida region only"
         ],
         "forbid": [
           "\\d+ (python )?(reports|sightings) in Texas"
@@ -1736,8 +1736,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(mammal|cause|causal|decline)"
+        "mustSay": [
+          "Says in its own words that it cannot judge whether pythons caused the mammal decline"
         ],
         "forbid": [
           "pythons (caused|are causing|drove)"
@@ -1758,9 +1758,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(Carp app|carp)",
-          "(Everglades|South Florida)"
+        "mustSay": [
+          "Points to the Carp app for carp",
+          "Says the app covers the Everglades or South Florida region only"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(ft|feet|cfs)"
@@ -1786,9 +1786,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
-          "(alert|forecast)"
+        "mustSay": [
+          "Says in its own words that it cannot judge whether it is safe",
+          "Reports the alerts or the forecast"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
@@ -1814,8 +1814,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(noted|wrote|note)"
+        "mustSay": [
+          "Reports the notes, what the team noted or wrote, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1842,9 +1842,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(note|noted|no notes)",
-          "Flamingo"
+        "mustSay": [
+          "Reports the notes near the place, or says there are none",
+          "Names Flamingo as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1867,9 +1867,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(message|wrote|said|sent|no messages)",
-          "Shark Valley"
+        "mustSay": [
+          "Summarises what the team messages said, or says there are none",
+          "Names Shark Valley as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1892,8 +1892,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1921,9 +1921,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission",
-          "heuristic"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1952,9 +1952,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "note",
-          "(research|needs id|casual|curated|grade)"
+        "mustSay": [
+          "Lists the notes linked to sightings",
+          "Gives the quality grade or curation of the reports, such as research, needs ID, casual or curated"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1987,6 +1987,21 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "python-replay-30d: the span phrase accepted only \"30 days\"; \"30-day replay\" names the same span, so the pattern now takes either spelling (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. No statement was loosened below its regex."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "cold-night caveat questions: the forbid 'pythons (will|won't|will not) (be )?(move|active|out)' matched the required limit 'the data cannot say whether pythons will be active'; it now ignores a negation word earlier in the sentence (whether/if/that/say/tell/know/show), as the carp safety forbids do. 1 pattern(s)."
     }
   ]
 }

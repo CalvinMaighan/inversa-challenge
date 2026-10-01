@@ -12,7 +12,7 @@ The criteria, weights and checks are in `docs/grading/rubric.json`, explained in
 
 | Command | What it does |
 |---|---|
-| `bun run grade` | Every check: static, unit, cargo, e2e, live eval. Takes a long time and calls the real model; three eval runs per app |
+| `bun run grade` | Every check: static, unit, cargo, e2e, live eval. Takes a long time and calls the real model and the judge model; three pooled golden runs plus two pooled held-out runs per app |
 | `bun run grade -- --fast` | Static and unit checks only (under a second today). Build, e2e and live checks show PENDING and earn 0 |
 | `bun run grade -- --app carp` | Only carp's checks, plus the checks that cover the whole system; scores and totals are carp's |
 | `bun run grade -- --only scrub-speed,data-quality` | Only these criteria |

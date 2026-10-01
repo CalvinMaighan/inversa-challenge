@@ -19,7 +19,18 @@ export type SupportedQuestion = {
   mustCite: string[];
   view?: { map?: string; timeline?: string };
   context?: Record<string, string>;
-  pass: { mode: "answer" | "caveat" | "refuse"; phrases: string[]; forbid: string[]; groundedNumbers: boolean; feedState: boolean; minCitations: number; cites?: Record<string, number> };
+  pass: {
+    mode: "answer" | "caveat" | "refuse";
+    /** Plain-language statements the answer must make (judged semantically, eval/judge.ts). */
+    mustSay?: string[];
+    /** Legacy regex phrases, present only in a file `scripts/migrate-phrases-to-mustsay.ts` has not converted yet. */
+    phrases?: string[];
+    forbid: string[];
+    groundedNumbers: boolean;
+    feedState: boolean;
+    minCitations: number;
+    cites?: Record<string, number>;
+  };
 };
 
 export type QuestionFile = { app: string; questions: SupportedQuestion[] };
