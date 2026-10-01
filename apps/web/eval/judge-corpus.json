@@ -1428,7 +1428,7 @@
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
         "Names USGS NAS as a source",
-        "Calls the NAS data stale, or gives its newest record date"
+        "Says the NAS data is stale, old or not current"
       ],
       "toolOutputs": [
         "{\"rows\":[{\"feed\":\"nas\",\"newestObservedAt\":\"2026-09-09T00:00:00Z\",\"ageDays\":22,\"state\":\"stale\"}],\"area\":\"co-caribbean\"}"
@@ -2069,7 +2069,7 @@
       "question": "Is the NAS data for Colombia current?",
       "mustSay": [
         "Names USGS NAS as a source",
-        "Calls the NAS data stale, or gives its newest record date"
+        "Says the NAS data is stale, old or not current"
       ],
       "toolOutputs": [
         "{\"rows\":[{\"feed\":\"nas\",\"newestObservedAt\":\"2026-09-09T00:00:00Z\",\"ageDays\":22,\"state\":\"stale\"}],\"area\":\"co-caribbean\"}"

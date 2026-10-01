@@ -559,7 +559,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-quality-nas-colombia**: Is the NAS data for Colombia current?
   - Intent: Report the newest NAS record date in the co-caribbean box and call it stale.
   - Tools: `sightings`, `feed_state`. Cites: `feed:nas`, `kind:sighting`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Calls the NAS data stale, or gives its newest record date.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names USGS NAS as a source; Says the NAS data is stale, old or not current.
 - **lionfish-quality-crw-latency**: Why is the reef heat data almost two days old?
   - Intent: Explain CRW daily cadence and about 1.7 days latency, and state when the feed counts as stale.
   - Tools: `reef_heat`, `feed_state`, `source_info`. Cites: `feed:crw`, `kind:fetch`.
