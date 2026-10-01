@@ -30,9 +30,17 @@ pub use subscription::SubscriptionRoot;
 
 pub type AppSchema = Schema<QueryRoot, MutationRoot, SubscriptionRoot>;
 
+/// Deepest selection accepted. The deepest client document (evidence with feed and links) is 3; the
+/// standard introspection query needs about 13.
+pub const MAX_DEPTH: usize = 16;
+/// Largest total complexity of one document: one point per field, plus
+/// [`query::HEAVY_FIELD`] per expensive root field. The HUD's alert-band document (about 240 aliased
+/// `alerts` samples of 7 points) is the largest legitimate one, at about 1,700.
+pub const MAX_COMPLEXITY: usize = 3000;
+
 /// The schema, without state. `AppState` is attached per request (HTTP) or per connection (WS).
 pub fn schema() -> AppSchema {
-    Schema::build(QueryRoot, MutationRoot, SubscriptionRoot).finish()
+    Schema::build(QueryRoot, MutationRoot, SubscriptionRoot).limit_depth(MAX_DEPTH).limit_complexity(MAX_COMPLEXITY).finish()
 }
 
 /// The `AppState` attached to every operation by the handlers below.

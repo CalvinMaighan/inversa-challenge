@@ -91,6 +91,8 @@ export type SightingRow = {
   idConflict: boolean;
   /** Ingest lag in words ("2.2 d") when the record arrived more than a day after it was observed, else null. */
   late?: string | null;
+  /** Publisher page (PLAN.md C19). A hidden column: the panel draws it as a ↗ link; the model never sees it. */
+  sourcePageUrl?: string | null;
 };
 
 export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: string): ToolViewData {
@@ -120,6 +122,7 @@ export function sightingsView(rows: readonly SightingRow[], bbox: BBox, title: s
       dup: row.duplicateOf,
       conflict: row.idConflict ? "conflict" : null,
       late: row.late ? `${row.late} after` : null,
+      sourcePageUrl: row.sourcePageUrl ?? null,
     })),
     ...(rows.length > shown.length ? { total: rows.length } : {}),
   };

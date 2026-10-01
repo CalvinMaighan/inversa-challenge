@@ -1,7 +1,10 @@
 /**
  * Globe API contract (PLAN.md C16). T17 implements the Cesium side and calls `registerGlobe`;
- * the HUD (T18), missions (T21) and agent card (T14) consume it without importing Cesium.
+ * the HUD (T18), missions (T21), the agent column (T14/T40) and the legend and tooltips (T40) consume it
+ * without importing Cesium.
  */
+import type { HoverFacts } from "./hover";
+import type { LayerStats } from "./layers/types";
 
 export type CameraTarget = {
   lon: number;
@@ -30,6 +33,13 @@ export type GlobeApi = {
    * cursors. Optional so stand-in globes (dev fixtures, tests) need not implement it; the Cesium globe does.
    */
   onCursor?(cb: (at: GeoPoint | null) => void): () => void;
+  /**
+   * Per-layer draw stats (enabled, count, per-species or per-network breakdown) for the Layers legend (T40).
+   * Optional for stand-in globes; the Cesium globe implements it.
+   */
+  stats?(): LayerStats[];
+  /** What an evidence id from `pick` stands for, from what its layer drew (hover tooltips); null if unknown. */
+  describe?(id: string): HoverFacts | null;
 };
 
 let current: GlobeApi | null = null;

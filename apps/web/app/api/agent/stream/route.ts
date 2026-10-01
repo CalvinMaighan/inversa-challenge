@@ -3,7 +3,9 @@ import { z } from "zod";
 import { runTurn } from "@/server/agent/run-turn";
 import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import { isValidSessionId } from "@/server/agent/session";
+import { rateLimited } from "@/server/rate-limit";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
+import { SPECIES_IDS } from "@/shared/voice/ui-tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +26,7 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z.object({
       bbox,
       time: z.string().refine((value) => Number.isFinite(Date.parse(value)), "time must be ISO 8601"),
       layers: z.array(z.string().max(64)).max(64),
+      species: z.array(z.enum([...SPECIES_IDS, "other"])).max(8).optional(),
       selection: z.string().max(256).nullable(),
     })
     .optional(),
@@ -35,6 +38,9 @@ function jsonError(status: number, error: string, issues?: unknown): Response {
 
 /** POST /api/agent/stream: AgentStreamRequest in, C7 NDJSON out (one event per line, ending in `done`). */
 export async function POST(request: Request): Promise<Response> {
+  // Before anything else: a flood of bad requests is still a flood.
+  const limited = rateLimited(request, "agent");
+  if (limited) return limited;
   let body: unknown;
   try {
     body = await request.json();

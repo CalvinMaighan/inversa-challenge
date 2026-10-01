@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Timeline, TimelineLabel, TimelineRow, TimelineRows } from "../card.styled";
+import { Timeline, TimelineLabel, TimelineRow, TimelineRows } from "../chat.styled";
 import { formatWorkDuration, groupDetail, groupLabel, groupState, groupTools, toolLabel, turnWorkMs } from "./tools";
 import type { AgentTurn } from "./thread";
 

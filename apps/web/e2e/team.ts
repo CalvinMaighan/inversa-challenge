@@ -1,26 +1,51 @@
 /**
- * Team realtime browser gates (gates/leaf-T21.md G2, G3; docs/perf.md) on the shared real stack (e2e/stack.ts):
- * Axum over a temp data dir with INVERSA_SOURCES=off, so `applyOps`, `opsSince` and the `ops` subscription are
- * the production code; the production Next build; the signal Worker under `wrangler dev --local`; and the front
- * proxy, all on free ports (a running `bun run dev` on 3050/4041/8799 is left alone).
+ * Team realtime browser gates (gates/leaf-T21.md G2, G3; docs/perf.md) against a real stack on free ports, so
+ * `applyOps`, `opsSince` and the `ops` subscription are the production code:
  *
- *   bun run e2e:team             build, run, print the TEAM lines
- *   E2E_SKIP_BUILD=1 …           reuse the last e2e build
+ *   bun run e2e:team                 the shared stack (e2e/stack.ts): the production e2e build under `next start`,
+ *                                    which needs no `next dev` lock, so it runs beside a developer's `bun run dev`
+ *   E2E_TEAM_STACK=dev bun run e2e:team   e2e/dev-stack.ts: `next dev` (fails while another `next dev` holds
+ *                                    apps/web's dev lock)
+ *   E2E_SKIP_BUILD=1 …               reuse the last e2e build (shared stack)
  *
- * Two Playwright contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops
- * page. A edits through the panel, B is watched by a MutationObserver; both timestamps come from the same
- * machine clock. First, A's own chat log is watched: an optimistic local edit must be in the DOM before the
- * next animation frame after the submit (PRD §13 "same frame"). Then 20 chat lines over RTC, then 20 more with
- * peer traffic blocked (`window.__team.blockRtc`) so they ride applyOps → Axum → the WebSocket. Then concurrent
- * removal logging from both contexts must sum, and an edit made while B is offline must converge after it
- * reconnects.
+ * Both stacks run `wrangler dev --local` for the signal Worker and a real Axum (INVERSA_SOURCES=off).
  *
- * Prints `TEAM local_same_frame=<n>/<n> local_p50=<ms> rtc_p50=<ms> ws_p50=<ms> converged=1` and
- * `COUNTERS-OK OFFLINE-OK` on success.
+ * Two Playwright contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops page
+ * and switch the chat column to its Notes tab, where the crew missions sit behind a disclosure (T43). A edits
+ * through the panel, B is watched by a MutationObserver; both timestamps come from the same machine clock. First,
+ * A's own chat log: an optimistic local edit must be in the DOM before the next animation frame after the submit
+ * (PRD §13 "same frame"). Then 20 chat lines over RTC, then 20 more with peer traffic blocked (`window.__team.blockRtc`) so they ride
+ * applyOps → Axum → the WebSocket. Then concurrent removal logging from both contexts must sum, and an edit made
+ * while B is offline must converge after it reconnects.
+ *
+ * Prints `TEAM local_same_frame=<n>/<n> local_p50=<ms> rtc_p50=<ms> rtc_p95=<ms> ws_p50=<ms> ws_p95=<ms> converged=1`
+ * and `COUNTERS-OK OFFLINE-OK` on success.
  */
 import { chromium, type BrowserContext, type Page } from "playwright";
 
-import { buildApi, buildWeb, startStack, type Stack } from "./stack";
+import { fail, openBoard, openCrewMissions, sleep, startDevStack, tail, watchFor } from "./dev-stack";
+import { buildApi, buildWeb, startStack } from "./stack";
+
+/** What the scenario needs from either stack. */
+type TeamStack = {
+  /** The ops page. */
+  page: string;
+  graphql<T>(query: string, variables?: Record<string, unknown>): Promise<T>;
+  /** Process log tails, for failures. */
+  logs(): string;
+  stop(): Promise<void>;
+};
+
+async function startTeamStack(): Promise<TeamStack> {
+  if (process.env.E2E_TEAM_STACK === "dev") {
+    const dev = await startDevStack("team");
+    return { page: dev.page, graphql: dev.graphql, logs: () => dev.procs.map((p) => `---- ${p.name} log ----\n${tail(p)}`).join("\n"), stop: dev.stop };
+  }
+  buildApi(log);
+  buildWeb(log);
+  const stack = await startStack({ name: "team" });
+  return { page: `${stack.origin}/`, graphql: stack.graphql, logs: stack.logs, stop: stack.stop };
+}
 
 const EDITS = 20;
 const REMOVALS_EACH = 5;
@@ -28,12 +53,6 @@ const RTC_TIMEOUT_MS = 90_000;
 const CONVERGE_TIMEOUT_MS = 60_000;
 
 const log = (...args: unknown[]) => console.error("[e2e:team]", ...args);
-
-function fail(msg: string): never {
-  throw new Error(msg);
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---- page helpers -----------------------------------------------------------------------------------
 
@@ -53,13 +72,10 @@ async function open(ctx: BrowserContext, name: string, url: string): Promise<Pag
   const page = await ctx.newPage();
   const errs: string[] = [];
   pageErrors.set(name, errs);
-  page.on("pageerror", (err) => errs.push(err.message));
-  page.on("console", (m) => {
-    if (m.type() === "error") errs.push(m.text());
-    if (/relaying through main/.test(m.text())) relayed.add(name);
+  await openBoard(page, url, errs, (text) => {
+    if (/relaying through main/.test(text)) relayed.add(name);
   });
-  await page.goto(url, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(window.__team) && document.querySelector('[data-testid="team-panel"][data-ready="1"]') !== null, null, { timeout: 120_000 });
+  await openCrewMissions(page);
   return page;
 }
 
@@ -67,37 +83,6 @@ const nodeId = (page: Page) => page.evaluate(() => window.__team!.nodeId);
 
 async function waitRtc(page: Page, peer: string): Promise<void> {
   await page.waitForFunction((id) => window.__team!.peers().some((p) => p.peerId === id && p.link === "open"), peer, { timeout: RTC_TIMEOUT_MS, polling: 250 });
-}
-
-/** Resolve with the observer's Date.now() once `text` appears inside `selector`. Started before the edit. */
-function watchFor(page: Page, selector: string, text: string, timeoutMs = 30_000): Promise<number> {
-  return page.evaluate(
-    ({ selector, text, timeoutMs }) =>
-      new Promise<number>((resolve, reject) => {
-        const root = document.querySelector(selector);
-        if (!root) {
-          reject(new Error(`no ${selector}`));
-          return;
-        }
-        const hit = () => (root.textContent ?? "").includes(text);
-        if (hit()) {
-          resolve(Date.now());
-          return;
-        }
-        const timer = setTimeout(() => {
-          mo.disconnect();
-          reject(new Error(`timed out waiting for ${JSON.stringify(text)}`));
-        }, timeoutMs);
-        const mo = new MutationObserver(() => {
-          if (!hit()) return;
-          clearTimeout(timer);
-          mo.disconnect();
-          resolve(Date.now());
-        });
-        mo.observe(root, { subtree: true, childList: true, characterData: true });
-      }),
-    { selector, text, timeoutMs },
-  );
 }
 
 /** Type into the chat box and press Enter; `__t0` is stamped by a capture-phase submit listener in the page. */
@@ -189,23 +174,19 @@ async function waitBoard(page: Page, pred: (b: Awaited<ReturnType<typeof board>>
   fail(`${what}: ${JSON.stringify(last).slice(0, 600)}`);
 }
 
-type ServerBoard = { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> };
+type ServerBoard = { board: { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> } };
 
-async function serverBoard(stack: Stack): Promise<ServerBoard> {
-  const data = await stack.graphql<{ board: ServerBoard }>('query { board(id: "everglades") { missions { id fields } messages { body } removals } }');
-  return data.board;
-}
+const serverBoard = (stack: TeamStack) => stack.graphql<ServerBoard>('query { board(id: "everglades") { missions { id fields } messages { body } removals } }').then((d) => d.board);
 
 // ---- scenario ---------------------------------------------------------------------------------------
 
-async function scenario(stack: Stack): Promise<string[]> {
-  const url = `${stack.origin}/`;
+async function scenario(stack: TeamStack): Promise<string[]> {
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     const ctxA = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const ctxB = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-    const a = await open(ctxA, "A", url);
-    const b = await open(ctxB, "B", url);
+    const a = await open(ctxA, "A", stack.page);
+    const b = await open(ctxB, "B", stack.page);
     const [idA, idB] = await Promise.all([nodeId(a), nodeId(b)]);
     if (!idA || !idB || idA === idB) fail(`identities: ${idA} ${idB}`);
     log(`A=${idA.slice(0, 8)} B=${idB.slice(0, 8)}; waiting for the data channel`);
@@ -235,12 +216,14 @@ async function scenario(stack: Stack): Promise<string[]> {
 
     // Latency over RTC: A types in the chat, B's chat log changes.
     const rtc = await measure(a, b, "rtc");
-    log(`rtc samples ms: ${rtc.join(" ")} p50=${p50(rtc)} p95=${p95(rtc)}`);
+    const rtcP50 = p50(rtc);
+    log(`rtc samples ms: ${rtc.join(" ")} p50=${rtcP50} p95=${p95(rtc)}`);
 
     // Latency over the WebSocket: peer traffic blocked on both sides.
     await Promise.all([a, b].map((p) => p.evaluate(() => window.__team!.blockRtc(true))));
     const ws = await measure(a, b, "ws");
-    log(`ws samples ms: ${ws.join(" ")} p50=${p50(ws)} p95=${p95(ws)}`);
+    const wsP50 = p50(ws);
+    log(`ws samples ms: ${ws.join(" ")} p50=${wsP50} p95=${p95(ws)}`);
 
     // Concurrent removals, still over the WebSocket: a grow-only counter per node must sum on both sides.
     for (const p of [a, b]) {
@@ -291,7 +274,7 @@ async function scenario(stack: Stack): Promise<string[]> {
     if (fatal.length) fail(`page errors:\n${fatal.join("\n")}`);
 
     return [
-      `TEAM local_same_frame=${sameFrame}/${EDITS} local_p50=${p50(localMs)} rtc_p50=${p50(rtc)} rtc_p95=${p95(rtc)} ws_p50=${p50(ws)} ws_p95=${p95(ws)} converged=1`,
+      `TEAM local_same_frame=${sameFrame}/${EDITS} local_p50=${p50(localMs)} rtc_p50=${rtcP50} rtc_p95=${p95(rtc)} ws_p50=${wsP50} ws_p95=${p95(ws)} converged=1`,
       "COUNTERS-OK OFFLINE-OK",
     ];
   } finally {
@@ -300,20 +283,19 @@ async function scenario(stack: Stack): Promise<string[]> {
 }
 
 async function main(): Promise<number> {
-  buildApi(log);
-  buildWeb(log);
-  const stack = await startStack({ name: "team" });
+  let stack: TeamStack | null = null;
   try {
+    stack = await startTeamStack();
     const lines = await scenario(stack);
     for (const l of lines) console.log(l);
     return 0;
   } catch (err) {
-    console.log(stack.logs());
+    if (stack) console.log(stack.logs());
     for (const [name, errs] of pageErrors) if (errs.length) console.log(`---- page ${name} errors ----\n${errs.slice(-20).join("\n")}`);
     console.log(`TEAM-FAIL: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   } finally {
-    await stack.stop();
+    await stack?.stop();
   }
 }
 

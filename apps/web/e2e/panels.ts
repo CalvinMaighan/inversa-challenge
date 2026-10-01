@@ -10,8 +10,8 @@
  * after the fixtures were recorded, so the default 30-day TIME window holds them.
  *
  * Assertions are on what the answer shows, never on the model's wording: a table panel with rows, a series
- * panel with lines, one bracket per highlighted entity (capped at 50), a camera move, and a row click that
- * opens the evidence drawer on the real Axum record. Last line:
+ * panel with lines, one bracket per highlighted entity (capped at 50; station readings only when cited, T41), a
+ * camera move, and a row click that opens the evidence drawer on the real Axum record. Last line:
  *
  *   PANELS table=<rows> series=<lines> brackets=<n> drawer=1
  *
@@ -32,15 +32,33 @@ const SERVER = path.join(APP_DIR, ".next/standalone/apps/web/server.js");
 const ROUTES = path.join(APP_DIR, ".next/standalone/apps/web/.next/routes-manifest.json");
 const API_BIN = path.join(REPO_DIR, "api/target/release/inversa-api");
 const SHOT = path.join(REPO_DIR, "docs/evidence/agent-panels.png");
+/** The answer with its panels in the chat column, before Expand (T40 layout evidence). */
+const LAYOUT_SHOT = path.join(REPO_DIR, "docs/evidence/layout-desktop.png");
 const QUESTION = "Show recent iguana sightings near Homestead and the water levels";
 /** The Axum fixtures were recorded 2026-09-30T20:40Z. */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
-const API_PORT = Number(process.env.E2E_API_PORT ?? 4151);
+/**
+ * Axum's port is baked into the build's /v1 rewrite, so it stays fixed between runs (E2E_SKIP_BUILD reuses the
+ * build). When another run (a parallel worktree) holds it, a free one is taken and the build redone.
+ */
+const API_PORT = process.env.E2E_API_PORT ? Number(process.env.E2E_API_PORT) : portIfFree(4151);
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const ANSWER_TIMEOUT_MS = 240_000;
 const MAX_BRACKETS = 50;
+/** The HUD labels and brackets the newest this many citations (client/hud/overlay/targets MAX_CITATIONS). */
+const MAX_CITATIONS = 8;
 
 const log = (...args: unknown[]) => console.error("[e2e:panels]", ...args);
+
+/** `port` when nothing listens on it, else a free one. */
+function portIfFree(port: number): number {
+  try {
+    Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response() }).stop(true);
+    return port;
+  } catch {
+    return freePort();
+  }
+}
 
 function fail(message: string): never {
   throw new Error(message);
@@ -133,15 +151,21 @@ function freePort(): number {
 
 const cameraOf = (url: string) => new URL(url).hash.match(/[#&]c=([^&]+)/)?.[1] ?? null;
 
-/** Distinct highlight ids the answer's data tools returned that can sit on the globe, capped like the HUD. */
+/**
+ * Distinct highlight ids the answer's data tools returned that the HUD brackets, capped like the HUD: ones that
+ * can sit on the globe, and (T41) station readings only when the answer cites them among its newest 8 citations.
+ */
 function highlightOf(events: AgentStreamEvent[]): string[] {
+  const cited = new Set<string>();
+  const citations = events.flatMap((e) => (e.type === "citation" ? [e.id] : []));
+  for (let i = citations.length - 1; i >= 0 && cited.size < MAX_CITATIONS; i--) cited.add(citations[i]!);
   const ids = new Set<string>();
   for (const e of events) {
     if (e.type !== "tool_end" || !e.ok) continue;
     const hl = (e.data as { highlight?: unknown } | undefined)?.highlight;
     if (Array.isArray(hl)) for (const id of hl) if (typeof id === "string" && !/^(fetch|backtest):/.test(id)) ids.add(id);
   }
-  return [...ids].slice(0, MAX_BRACKETS);
+  return [...ids].slice(0, MAX_BRACKETS).filter((id) => !id.startsWith("reading:") || cited.has(id));
 }
 
 async function overlay(page: Page): Promise<{ drawn: number; highlight: number; targets: number }> {
@@ -189,24 +213,21 @@ async function flow(origin: string): Promise<string> {
     });
 
     await page.goto(`${origin}/`, { waitUntil: "load" });
-    const orb = page.getByRole("button", { name: /open agent chat/i });
-    await orb.waitFor({ timeout: 60_000 });
+    // The chat column is open from the start (T40).
+    const column = page.locator("[data-chat-column]");
+    await column.waitFor({ timeout: 60_000 });
     await page.locator('[data-testid="hud-overlay"]').waitFor({ state: "attached", timeout: 60_000 });
     // Let the globe settle and write its camera into the share-link hash.
     await page.waitForTimeout(4_000);
     const cameraBefore = cameraOf(page.url());
     log(`page up; camera ${cameraBefore ?? "(default)"}`);
 
-    await orb.click();
-    const card = page.getByRole("dialog", { name: "Agent chat" });
-    await card.waitFor();
-    await page.waitForFunction(() => document.querySelector("[data-agent-card]")?.getAttribute("data-stage") === "open");
-    const input = card.getByRole("textbox", { name: "Question" });
+    const input = column.getByRole("textbox", { name: "Question" });
     await input.fill(QUESTION);
     await input.press("Enter");
     log(`asked: ${QUESTION}`);
 
-    const turn = card.locator('[data-source="text"][data-status="done"], [data-source="text"][data-status="error"]').last();
+    const turn = column.locator('[data-source="text"][data-status="done"], [data-source="text"][data-status="error"]').last();
     await turn.waitFor({ timeout: ANSWER_TIMEOUT_MS });
     if ((await turn.getAttribute("data-status")) === "error") fail(`the answer failed: ${(await turn.textContent())?.slice(0, 400)}`);
     const streamed = await page
@@ -226,7 +247,7 @@ async function flow(origin: string): Promise<string> {
     for (const e of events) if (e.type === "tool_start") log(`  ${e.capabilityName} ${JSON.stringify(e.args).slice(0, 240)}`);
     if (expected.length === 0) fail("the answer's tools returned nothing to highlight");
 
-    // The card shows the turn's panels under the answer.
+    // The column shows the turn's panels under the answer.
     await turn.locator("[data-panels]").waitFor({ timeout: 10_000 });
 
     // Globe: the camera framed the answer, and every highlighted entity is bracketed.
@@ -246,16 +267,26 @@ async function flow(origin: string): Promise<string> {
     const brackets = await overlay(page);
     log(`brackets drawn=${brackets.drawn} highlight=${brackets.highlight} targets=${brackets.targets}`);
 
-    // Expand: every panel of the answer, docked left of the card.
+    // The answer and its panels in the column, the globe framed and bracketed beside it (T40 layout evidence).
+    await page.waitForTimeout(1_500);
+    mkdirSync(path.dirname(LAYOUT_SHOT), { recursive: true });
+    await page.screenshot({ path: LAYOUT_SHOT });
+    log(`screenshot ${path.relative(REPO_DIR, LAYOUT_SHOT)}`);
+
+    // Expand: every panel of the answer, over the globe pane next to the column.
     await turn.locator("[data-expand-panels]").click();
     const expanded = page.locator("[data-expanded-panels]");
     await expanded.waitFor();
     // Let the pop-out finish its entrance and the globe finish drawing before measuring and the screenshot.
     await page.waitForTimeout(800);
     const box = (await expanded.boundingBox())!;
-    const cardBox = (await card.boundingBox())!;
-    if (box.x + box.width > cardBox.x) fail(`expanded panel ${JSON.stringify(box)} overlaps the card ${JSON.stringify(cardBox)}`);
-    if (box.x <= 720 && box.x + box.width >= 720 && box.y <= 450 && box.y + box.height >= 450) fail("expanded panel covers the globe centre");
+    const columnBox = (await column.boundingBox())!;
+    const globeBox = (await page.locator("[data-globe]").boundingBox())!;
+    if (box.x < columnBox.x + columnBox.width) fail(`expanded panel ${JSON.stringify(box)} overlaps the chat column ${JSON.stringify(columnBox)}`);
+    if (box.x > globeBox.x + globeBox.width / 2) fail(`expanded panel ${JSON.stringify(box)} is not over the left part of the globe pane ${JSON.stringify(globeBox)}`);
+    const cx = globeBox.x + globeBox.width / 2;
+    const cy = globeBox.y + globeBox.height / 2;
+    if (box.x <= cx && box.x + box.width >= cx && box.y <= cy && box.y + box.height >= cy) fail("expanded panel covers the globe centre");
 
     const tables = await expanded.locator("[data-panel='table']").evaluateAll((els) =>
       els.map((el) => ({ tool: el.getAttribute("data-panel-tool"), rows: Number(el.querySelector("table")?.getAttribute("data-table-rows") ?? 0) })),
@@ -284,7 +315,7 @@ async function flow(origin: string): Promise<string> {
       { timeout: 15_000 },
     ).catch(() => fail(`drawer for ${id} never showed the record's observedAt ${observedAt}`));
     if (await page.locator('[data-testid="hud-drawer"] [role="alert"]').count()) fail("the drawer shows a load error");
-    if (!(await card.isVisible())) fail("the card closed when the row was clicked");
+    if (!(await column.isVisible())) fail("the chat column hid when the row was clicked");
     log(`row ${id} → drawer with the Axum record (observedAt ${observedAt})`);
 
     if (errors.length) fail(`page errors: ${errors.join(" | ")}`);

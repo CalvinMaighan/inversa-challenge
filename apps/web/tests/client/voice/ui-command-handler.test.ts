@@ -133,9 +133,9 @@ describe("ui command handler", () => {
     expect(layers().visible.lst).toBe(true);
 
     // Hiding a species filters it without hiding the layer.
-    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "hotspots", visible: false, species: "tegu" } }, NOW)).toBe(true);
+    expect(applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false, species: "tegu" } }, NOW)).toBe(true);
     expect(layers().species.tegu).toBe(false);
-    expect(layers().visible.hotspots).toBe(true);
+    expect(layers().visible.sightings).toBe(true);
 
     // Showing a species on a hidden layer turns the layer on.
     applyUiCommand({ name: "toggle_layer", args: { layer: "sightings", visible: false } }, NOW);
@@ -160,8 +160,8 @@ describe("ui command handler", () => {
     expect(hud.camera.place).toBe("Key West");
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
-    expect(hud.layers).toEqual(["sightings", "hotspots", "stations", "alerts", "missions", "peers"]);
-    expect(hud.species).toEqual(["python", "tegu", "lionfish"]);
+    expect(hud.layers).toEqual(["sightings", "missions", "peers", "notes"]);
+    expect(hud.species).toEqual(["python", "tegu", "lionfish", "other"]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");
   });
 

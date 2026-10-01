@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { getGlobe, onGlobeReady, type GlobeApi, type ScreenPoint } from "client/globe/api";
 import styled from "client/styled";
+import { prefersReducedMotion } from "client/motion";
 
 import { CELL_DEG, cellCenter, parseHotspotId } from "../drawer/evidence";
 import { openEvidence } from "../selection";
 import { acquireAlpha, bracketSegments, monoWidth } from "./brackets";
 import { LabelArbiter, type LabelCandidate, type Rect } from "./label-arbiter";
-import { useTargets, type Target } from "./targets";
+import { labelledTargets, useTargets, type Target } from "./targets";
 
 /** Label metrics: 11 px JetBrains Mono advances about 6.6 px per glyph. */
 const LABEL_ADVANCE = 6.6;
@@ -130,7 +131,8 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
   const targets = useTargets();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelEls = useRef(new Map<string, HTMLButtonElement>());
-  const live = useRef<{ targets: Target[]; focus: boolean }>({ targets: [], focus: false });
+  const labelled = useMemo(() => labelledTargets(targets), [targets]);
+  const live = useRef<{ targets: Target[]; labelled: ReadonlySet<string>; focus: boolean }>({ targets: [], labelled: new Set(), focus: false });
   const drawRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -148,9 +150,10 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       if (!ctx) return;
       ctx.clearRect(0, 0, w, h);
       const globe = api && getGlobe() === api ? api : null;
-      const { targets: list, focus: scoped } = live.current;
+      const { targets: list, labelled: labelIds, focus: scoped } = live.current;
       const colors = readColors(canvas);
       const now = performance.now();
+      const still = prefersReducedMotion();
       const candidates: LabelCandidate[] = [];
       let selectedPoint: ScreenPoint | null = null;
       let fading = false;
@@ -162,12 +165,13 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
         if (!p || p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) continue;
         if (t.selected) selectedPoint = p;
         if (!firstSeen.has(t.id)) firstSeen.set(t.id, now);
-        const alpha = acquireAlpha(firstSeen.get(t.id)!, now, FADE_MS);
+        const alpha = acquireAlpha(firstSeen.get(t.id)!, now, still ? 0 : FADE_MS);
         if (alpha < 1) fading = true;
         const agent = !t.selected && !t.cited;
-        // A hovered panel row breathes: the bracket swells and shrinks until the pointer leaves.
-        const pulse = t.hovered ? 1 + 0.45 * (0.5 + 0.5 * Math.sin((now / PULSE_MS) * Math.PI * 2)) : 1;
-        if (t.hovered) fading = true;
+        // A hovered panel row breathes: the bracket swells and shrinks until the pointer leaves. Under reduced
+        // motion it holds a swollen size instead.
+        const pulse = !t.hovered ? 1 : still ? 1.3 : 1 + 0.45 * (0.5 + 0.5 * Math.sin((now / PULSE_MS) * Math.PI * 2));
+        if (t.hovered && !still) fading = true;
         const half = (t.selected ? BRACKET_SELECTED : agent ? BRACKET_HIGHLIGHT : BRACKET_CITED) * pulse;
         const color = t.selected ? colors.selected : agent ? colors.highlight : colors.cited;
         ctx.globalAlpha = alpha;
@@ -195,7 +199,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
           ctx.fillStyle = colors.selected;
           ctx.fill();
         }
-        candidates.push({ key: t.id, x: p.x, y: p.y, w: monoWidth(t.label, LABEL_ADVANCE, LABEL_PAD) + 2, h: LABEL_HEIGHT, bracket: half, priority: t.priority });
+        if (labelIds.has(t.id)) candidates.push({ key: t.id, x: p.x, y: p.y, w: monoWidth(t.label, LABEL_ADVANCE, LABEL_PAD) + 2, h: LABEL_HEIGHT, bracket: half, priority: t.priority });
       }
       ctx.globalAlpha = 1;
       for (const id of [...firstSeen.keys()]) if (!list.some((t) => t.id === id)) firstSeen.delete(id);
@@ -207,10 +211,12 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       const scope = scoped ? drawScope(ctx, w, h, selectedPoint) : null;
 
       // HUD surfaces are obstacles too: a label under the drawer or the timeline is a label nobody sees.
+      // Obstacles are in viewport pixels, labels in canvas pixels: the globe pane starts right of the chat column.
       const obstacles: Rect[] = [];
+      const origin = canvas.getBoundingClientRect();
       for (const el of document.querySelectorAll("[data-hud-obstacle]")) {
         const r = el.getBoundingClientRect();
-        obstacles.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+        obstacles.push({ x: r.left - origin.left, y: r.top - origin.top, w: r.width, h: r.height });
       }
       const placed = new Map(arbiter.solve(candidates, w, h, obstacles).map((p) => [p.key, p]));
       for (const [id, el] of labelEls.current) {
@@ -249,11 +255,11 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
 
   // `layout` changes when a panel opens or closes: the label obstacles moved, so labels are placed again.
   useEffect(() => {
-    live.current = { targets, focus };
+    live.current = { targets, labelled: new Set(labelled.map((t) => t.id)), focus };
     const globe = getGlobe();
     if (globe) globe.requestRender();
     else drawRef.current();
-  }, [targets, focus, layout]);
+  }, [targets, labelled, focus, layout]);
 
   const register = useCallback((id: string, el: HTMLButtonElement | null) => {
     if (el) labelEls.current.set(id, el);
@@ -264,7 +270,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
     <>
       <Layer ref={canvasRef} aria-hidden="true" data-testid="hud-overlay" />
       <Labels data-testid="hud-labels">
-        {targets.map((t) => (
+        {labelled.map((t) => (
           <LabelButton
             key={t.id}
             ref={(el) => register(t.id, el)}

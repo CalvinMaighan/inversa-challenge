@@ -1,4 +1,8 @@
 import type { AgentStreamEvent, AgentStreamRequest, BBox } from "shared/agent/events";
+import { SPECIES_IDS } from "shared/voice/ui-tools";
+
+/** Species filter keys the HUD reports (client/state/layers SPECIES_FILTER_IDS). */
+const SPECIES_FILTER_KEYS: readonly string[] = [...SPECIES_IDS, "other"];
 
 /**
  * What `spawn_thinking` runs. The session depends on this interface only, so tests inject a fake;
@@ -41,13 +45,16 @@ function isBBox(value: unknown): value is BBox {
  */
 export function agentViewFromHud(hud: unknown): AgentView | undefined {
   if (!hud || typeof hud !== "object") return undefined;
-  const { bbox, time, layers, selection } = hud as Record<string, unknown>;
+  const { bbox, time, layers, species, selection } = hud as Record<string, unknown>;
   const at = typeof time === "string" ? time : (time as { at?: unknown } | null)?.at;
   if (!isBBox(bbox) || typeof at !== "string" || !Number.isFinite(Date.parse(at))) return undefined;
+  // The species filter, like the typed chat sends it: only when it hides some species.
+  const shown = Array.isArray(species) ? SPECIES_FILTER_KEYS.filter((k) => species.includes(k)) : null;
   return {
     bbox: { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north },
     time: at,
     layers: Array.isArray(layers) ? layers.filter((l): l is string => typeof l === "string") : [],
+    ...(shown && shown.length < SPECIES_FILTER_KEYS.length ? { species: shown } : {}),
     selection: typeof selection === "string" ? selection : null,
   };
 }

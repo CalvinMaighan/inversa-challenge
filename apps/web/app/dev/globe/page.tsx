@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { devRoutesEnabled } from "server/dev-routes";
+
 import DevGlobe from "./DevGlobe";
 
 /** Read the flag per request, not at build: the same build serves production (off) and e2e (on). */
@@ -11,6 +13,6 @@ export const dynamic = "force-dynamic";
  * production build only with `INVERSA_DEV_ROUTES=1`.
  */
 export default function DevGlobePage() {
-  if (process.env.NODE_ENV === "production" && process.env.INVERSA_DEV_ROUTES !== "1") notFound();
+  if (!devRoutesEnabled()) notFound();
   return <DevGlobe />;
 }

@@ -147,6 +147,8 @@ type Evidence {
   raw: JSON
   rawKey: String
   sourceUrl: String
+  """Publisher web page for this record, for a new-tab link (PLAN.md C19). Null when none exists."""
+  sourcePageUrl: String
   fetchedAt: Time
   ingestLagSeconds: Int
   feed: FeedState

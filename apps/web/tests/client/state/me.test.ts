@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { get, init, isPersisted, set } from "@calvinjs/active-state";
 
 import { state } from "client/state";
-import { ensureIdentity, ME, PEER_COLORS, withIdentity, type MeState } from "client/state/me";
+import { colorOfNode, ensureIdentity, ME, PEER_COLORS, withIdentity, type MeState } from "client/state/me";
 
 init(state);
 
@@ -19,6 +19,9 @@ describe("ME", () => {
     expect(me.nodeId).toBe(UUID);
     expect(me.callsign).toBe("Ranger-0198");
     expect(me.color).toBe(PEER_COLORS[0x0f % PEER_COLORS.length]);
+    // A note's author colour comes from the node id alone, so it matches the identity with or without the peer online.
+    expect(colorOfNode(me.nodeId)).toBe(me.color);
+    expect([...PEER_COLORS] as string[]).toContain(colorOfNode("not-hex-at-all"));
   });
 
   test("withIdentity keeps an existing identity and strips colons (HLC separator)", () => {

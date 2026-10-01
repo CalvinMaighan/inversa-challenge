@@ -20,7 +20,7 @@ import { createPcmPlayback, type PcmPlayback } from "./playback";
 import { emitTaskEvent } from "./task-events";
 import { applyUiCommand } from "./ui-command-handler";
 
-/** Orb card API: `onTaskEvent((taskId, event) => …)` streams agent output for voice tasks. */
+/** Chat column API: `onTaskEvent((taskId, event) => …)` streams agent output for voice tasks. */
 export { onTaskEvent, type TaskEventListener } from "./task-events";
 
 /**
@@ -77,7 +77,7 @@ async function control(request: VoiceControlMessage, rt: Runtime | null = runtim
 }
 
 const CLOSE_MESSAGES: Record<string, string> = {
-  max_duration: "Voice session reached its time limit. Tap the orb to start again.",
+  max_duration: "Voice session reached its time limit. Press the mic to start again.",
   daily_budget: "Today's voice minutes are used up.",
   provider_denied: "Grok Voice is not available on this server's xAI key.",
   replaced: "Voice moved to another tab or window.",

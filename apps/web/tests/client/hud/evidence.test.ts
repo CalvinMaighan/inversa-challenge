@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatLatLon, unproject } from "client/hud/topbar/coords";
 import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, qualityBadges, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
 import { isDrawerOpen } from "client/hud/selection";
@@ -68,18 +67,23 @@ describe("evidence ids and links", () => {
     expect(evidenceBadges({ links: [], record: {} })).toEqual([]);
   });
 
-  test("quality badges: late sighting, flagged reading, failed fetch, degraded feed", () => {
+  test("quality badges in plain words: late, no reading, failed check, duplicate, disagreement, degraded feed", () => {
     const feed = (state: "nominal" | "stale") => ({ source: "ndbc", mode: "poll" as const, state, newestObservedAt: null, lastFetchAt: null, lastFetchRunId: "4", lagSeconds: 1, note: null });
-    const base = { record: {}, ingestLagSeconds: null, feed: null };
-    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 2 * 86_400 + 4 * 3600 })).toEqual([{ badge: "late", label: "LATE · ARRIVED 2d 4h AFTER" }]);
+    const base = { record: {}, ingestLagSeconds: null, feed: null, links: [] };
+    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 2 * 86_400 + 4 * 3600 })).toEqual([{ badge: "late", label: "Late report — reached us 2d 4h after it was seen" }]);
     expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 86_400 })).toEqual([]);
-    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "bad_dqf", value: null } })).toEqual([{ badge: "missing", label: "MISSING · BAD DQF" }]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "cloud", value: null } })).toEqual([{ badge: "missing", label: "Cloud cover — no reading" }]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "bad_dqf", value: null } })).toEqual([{ badge: "missing", label: "Bad satellite data — no reading" }]);
     expect(qualityBadges({ ...base, kind: "reading", record: { flag: "ok", value: 1 } })).toEqual([]);
     expect(qualityBadges({ ...base, kind: "fetch", record: { status: "error" }, feed: feed("stale") })).toEqual([
-      { badge: "failed", label: "FETCH FAILED" },
-      { badge: "feed", label: "NDBC FEED STALE", state: "stale" },
+      { badge: "failed", label: "Data check failed" },
+      { badge: "feed", label: "NDBC data out of date", state: "stale" },
     ]);
     expect(qualityBadges({ ...base, kind: "fetch", record: { status: "ok" }, feed: feed("nominal") })).toEqual([]);
+    const link = (id: string, relation: string) => ({ id, relation, source: "gbif" });
+    expect(qualityBadges({ ...base, kind: "sighting", links: [link("sighting:1", "duplicate_of")] })).toEqual([{ badge: "duplicate", label: "Same animal as an earlier report" }]);
+    expect(qualityBadges({ ...base, kind: "sighting", links: [link("sighting:7", "duplicates"), link("sighting:8", "duplicates")] }).map((b) => b.label)).toEqual(["Also reported 2 more times elsewhere"]);
+    expect(qualityBadges({ ...base, kind: "sighting", record: { conflict: true } })).toEqual([{ badge: "conflict", label: "Sources disagree" }]);
   });
 
   test("bracket locations come from lat/lon, then station, then the alert area", () => {
@@ -113,6 +117,7 @@ describe("evidence ids and links", () => {
       raw: undefined,
       rawKey: null,
       sourceUrl: null,
+      sourcePageUrl: null,
       fetchedAt: null,
       ingestLagSeconds: null,
       feed: { source: "inat", mode: "POLL", state: "LAGGING", lagSeconds: 300 },
@@ -163,40 +168,5 @@ describe("targets and selection", () => {
     expect(isDrawerOpen({ evidenceId: "sighting:1" })).toBe(true);
     expect(isDrawerOpen({ evidenceId: "sighting:1", drawerOpen: false })).toBe(false);
     expect(isDrawerOpen(undefined)).toBe(false);
-  });
-});
-
-describe("cursor coordinates", () => {
-  test("unproject inverts an affine projection and a curved one", () => {
-    const affine = (lon: number, lat: number) => ({ x: 500 + (lon + 80.9) * 400, y: 400 - (lat - 25.9) * 450 });
-    const hit = unproject(affine, 812, 133, { lon: -80.9, lat: 25.9 })!;
-    const back = affine(hit.lon, hit.lat);
-    expect(Math.hypot(back.x - 812, back.y - 133)).toBeLessThan(0.25);
-
-    // Orthographic globe centred on the camera: strongly non-linear toward the limb.
-    const R = 3000;
-    const lon0 = -81;
-    const lat0 = 26;
-    const rad = Math.PI / 180;
-    const ortho = (lon: number, lat: number) => {
-      const cosc = Math.sin(lat0 * rad) * Math.sin(lat * rad) + Math.cos(lat0 * rad) * Math.cos(lat * rad) * Math.cos((lon - lon0) * rad);
-      if (cosc < 0) return null;
-      return {
-        x: 600 + R * Math.cos(lat * rad) * Math.sin((lon - lon0) * rad),
-        y: 400 - R * (Math.cos(lat0 * rad) * Math.sin(lat * rad) - Math.sin(lat0 * rad) * Math.cos(lat * rad) * Math.cos((lon - lon0) * rad)),
-      };
-    };
-    const target = { lon: -60, lat: 40 };
-    const p = ortho(target.lon, target.lat)!;
-    const solved = unproject(ortho, p.x, p.y, { lon: lon0, lat: lat0 })!;
-    expect(solved.lon).toBeCloseTo(target.lon, 3);
-    expect(solved.lat).toBeCloseTo(target.lat, 3);
-    // Off the globe (the sky): no answer.
-    expect(unproject(ortho, 600 + R * 2, 400, { lon: lon0, lat: lat0 })).toBeNull();
-  });
-
-  test("lat/lon formatting", () => {
-    expect(formatLatLon({ lat: 25.7617, lon: -80.1918 })).toBe("25.7617°N 80.1918°W");
-    expect(formatLatLon({ lat: -1.5, lon: 2.25 }, 2)).toBe("1.50°S 2.25°E");
   });
 });

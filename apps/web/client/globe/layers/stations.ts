@@ -27,17 +27,33 @@ export function stationBucket(timeMs: number): number {
 const IN_SITU_PARAMS = ["AIR_C", "WATER_C", "STAGE_M", "WAVE_M", "RAIN_MM", "WIND_MS"] as const;
 
 export const READINGS_QUERY = `query GlobeStations($bbox: BBox!, $from: Time!, $to: Time!, $params: [Param!]) {
-  readings(bbox: $bbox, from: $from, to: $to, params: $params) { param observedAt origin station { id source lat lon } }
+  readings(bbox: $bbox, from: $from, to: $to, params: $params) { param value observedAt origin station { id source name lat lon } }
 }`;
 
 export type GqlReading = {
   param: string;
+  value?: number | null;
   observedAt: string;
   origin: string;
-  station: { id: string; source: string; lat: number; lon: number };
+  station: { id: string; source: string; name?: string; lat: number; lon: number };
 };
 
-export type StationMark = { stationId: string; source: string; lon: number; lat: number; evidenceId: string };
+export type StationMark = {
+  stationId: string;
+  source: string;
+  /** Station name for the hover tooltip; the id when the API sent none. */
+  name: string;
+  lon: number;
+  lat: number;
+  /** The latest reading the mark stands for. */
+  param: string;
+  value: number | null;
+  observedAtMs: number;
+  evidenceId: string;
+};
+
+/** Networks the legend lists, with their tint. */
+export const STATION_SOURCES = ["usgs", "ndbc", "coops"] as const;
 
 const SOURCE_COLORS: Record<string, string> = { usgs: "#4fb3ff", ndbc: "#3fd6c6", coops: "#c89bff" };
 const OTHER_SOURCE_COLOR = "#e8edf2";
@@ -58,11 +74,25 @@ export function latestPerStation(readings: readonly GqlReading[]): StationMark[]
     .map((r) => ({
       stationId: r.station.id,
       source: r.station.source,
+      name: r.station.name?.trim() || r.station.id,
       lon: r.station.lon,
       lat: r.station.lat,
+      param: r.param,
+      value: typeof r.value === "number" && Number.isFinite(r.value) ? r.value : null,
+      observedAtMs: Date.parse(r.observedAt),
       evidenceId: readingEvidenceId(r.station.id, r.param, r.observedAt, r.origin),
     }))
     .sort((a, b) => (a.stationId < b.stationId ? -1 : a.stationId > b.stationId ? 1 : 0));
+}
+
+/** Marks per network (usgs, ndbc, coops, other), for the legend's station rows. */
+export function stationBreakdown(stations: readonly Pick<StationMark, "source">[]): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries([...STATION_SOURCES, "other"].map((s) => [s, 0]));
+  for (const s of stations) {
+    const key = (STATION_SOURCES as readonly string[]).includes(s.source.toLowerCase()) ? s.source.toLowerCase() : "other";
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
 }
 
 function squareIcon(): HTMLCanvasElement {
@@ -87,11 +117,16 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
   let lastFrame = -1;
   const stats: LayerStats = { id: STATIONS, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
 
+  /** Drawn marks by evidence id, for `describe`. */
+  let byId = new Map<string, StationMark>();
+
   const draw = (key: string, stations: readonly StationMark[]) => {
     if (!marks || key === drawnKey) return;
     const { Cartesian3, Color, VerticalOrigin } = cesium();
     icon ??= squareIcon();
     marks.removeAll();
+    byId = new Map(stations.map((s) => [s.evidenceId, s]));
+    stats.breakdown = stationBreakdown(stations);
     for (const s of stations) {
       marks.add({
         id: s.evidenceId,
@@ -155,9 +190,14 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
       const stations = fetcher.want(key);
       if (stations) draw(key, stations);
     },
-    stats: () => ({ ...stats }),
+    stats: () => ({ ...stats, breakdown: stats.breakdown && { ...stats.breakdown } }),
+    describe(id) {
+      const s = enabled ? byId.get(id) : undefined;
+      return s ? { kind: "station", source: s.source, name: s.name, param: s.param, value: s.value, observedAtMs: s.observedAtMs, lon: s.lon, lat: s.lat } : null;
+    },
     destroy() {
       fetcher.cancel();
+      byId = new Map();
       if (viewer && marks) viewer.scene.primitives.remove(marks);
       marks = null;
       viewer = null;

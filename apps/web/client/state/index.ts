@@ -5,6 +5,7 @@ import { FEEDS } from "./feeds";
 import { LAYERS } from "./layers";
 import { ME } from "./me";
 import { MISSIONS } from "./missions";
+import { NOTES } from "./notes";
 import { PEERS } from "./peers";
 import { SELECTION } from "./selection";
 import { ACCENT_COLOR, THEME } from "./theme";
@@ -17,6 +18,7 @@ export { FEEDS } from "./feeds";
 export { LAYERS } from "./layers";
 export { ME } from "./me";
 export { MISSIONS } from "./missions";
+export { NOTES } from "./notes";
 export { PEERS } from "./peers";
 export { SELECTION } from "./selection";
 export { ACCENT_COLOR, THEME } from "./theme";
@@ -25,9 +27,9 @@ export { VIEW } from "./view";
 export { VOICE } from "./voice";
 
 /** Snapshot for `<ActiveState init={state} />`. Importing this module runs every `key()`. */
-export const state = catalog(TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR);
+export const state = catalog(TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR);
 
-export type StateKeyId = "TIME" | "VIEW" | "LAYERS" | "SELECTION" | "FEEDS" | "MISSIONS" | "PEERS" | "ME" | "AGENT_CARD" | "AGENT_CHAT" | "AGENT_HIGHLIGHT" | "VOICE" | "THEME" | "ACCENT_COLOR";
+export type StateKeyId = "TIME" | "VIEW" | "LAYERS" | "SELECTION" | "FEEDS" | "MISSIONS" | "PEERS" | "ME" | "NOTES" | "AGENT_CARD" | "AGENT_CHAT" | "AGENT_HIGHLIGHT" | "VOICE" | "THEME" | "ACCENT_COLOR";
 
 /**
  * Every key id in code-unit order. PLAN.md C6: a key's position here is its `keyIndex` on the SAB transport,

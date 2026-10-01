@@ -10,7 +10,8 @@
  * - the globe draws the sighting: `pick` at its projected screen point returns its `sighting:<id>`;
  * - the globe draws the alert: `pick` inside the polygon, away from the dot, returns its `alert:<id>`;
  * - the HUD sparkline redraws with one more sighting in the live frame (canvas pixels change);
- * - the `web` feed chip reports the fetch (FEEDS state from the `feeds` subscription, and the chip text).
+ * - the `web` feed row (About → Data sources since T41) reports the fetch (FEEDS state from the `feeds`
+ *   subscription, and the row text).
  * The chain under test: Axum write -> 5 s frame debounce -> `framesUpdated` -> gql worker -> db worker refetches
  * the changed hours and expires its query cache -> grid bump -> globe layers and HUD redraw.
  */
@@ -73,6 +74,9 @@ async function main() {
     await page.waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0, undefined, { timeout: 120_000 });
     await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "hotspots")?.frame ?? -1) >= 0, undefined, { timeout: 60_000 });
     await page.waitForTimeout(3_000); // camera settled, first alert fetch done
+    // T41: the feed rows live in About → Data sources; keep it open while the hook's rows land.
+    await page.click("[data-testid=status-button]");
+    await page.click("[data-testid=data-sources] > summary");
     const before = {
       navigations,
       badge: (await page.locator("[data-testid=hud-live]").textContent())?.trim() ?? "",

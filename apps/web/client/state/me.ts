@@ -18,6 +18,16 @@ const defaults: MeState = { nodeId: "", callsign: "", color: PEER_COLORS[0] };
 /** No auth (PRD §3): each viewer is a local identity that survives reloads. */
 export const ME = key("ME", defaults, { persist: true });
 
+/**
+ * A node's colour from its id alone (the last byte of the uuid), so a note by someone who is offline still draws
+ * in the colour they had. The identity picks its colour the same way.
+ */
+export function colorOfNode(nodeId: string): string {
+  const hex = nodeId.replace(/-/g, "");
+  const byte = parseInt(hex.slice(-2), 16);
+  return PEER_COLORS[(Number.isFinite(byte) ? byte : 0) % PEER_COLORS.length]!;
+}
+
 /** Fill in a missing identity from a fresh UUID. Pure; `ensureIdentity` applies it. */
 export function withIdentity(me: MeState, uuid: string): MeState {
   if (me.nodeId) return me;
@@ -26,7 +36,7 @@ export function withIdentity(me: MeState, uuid: string): MeState {
   return {
     nodeId,
     callsign: `Ranger-${hex.slice(0, 4).toUpperCase()}`,
-    color: PEER_COLORS[parseInt(hex.slice(-2), 16) % PEER_COLORS.length],
+    color: colorOfNode(nodeId),
   };
 }
 

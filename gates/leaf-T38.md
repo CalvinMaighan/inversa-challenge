@@ -2,14 +2,14 @@
 
 Scope:
 - Every data tool puts a C17 `ToolResultData` in `tool_end.data`: sightings/alerts tables, conditions series plus a latest-values table, hotspot cells, explain, backtest, feeds. The model text stays the compact summary.
-- The chat card shows collapsible data panels per turn (table, series, cells, explain, backtest, feeds), with an Expand pop-out (about 640 px, docked left of the card, clear of the globe centre; a full-screen sheet on phones). Theme tokens, so light/dark/tactical all work.
+- The chat column (T40; formerly the chat card) shows collapsible data panels per turn: table, series, cells, explain, backtest and feeds. Expand opens a pop-out of up to 640 px. It sits over the left part of the globe pane, next to the column, and stays clear of the globe pane's centre where the camera frames the answer. On phones it is a full-screen sheet. Theme tokens, so light, dark and tactical all work.
 - On the globe: the turn's highlight ids are bracketed through the HUD overlay (labelled, capped at 50), the camera frames the most relevant bbox, opening a panel re-frames it, hovering a row pulses its entity, hotspot cells show as outlined squares, TIME moves to the result window.
 - Coordinator directive (overrides the brief): no mock. Real LLM only (OpenRouter via T39, key from Doppler `inversa`/`dev`). No mock goldens; do not touch `server/agent/cordis/**` beyond the one-line tool_end data hook, `runtime/**` or `run-turn.ts`. Eval checks work in live mode. Merge main (T39) before the final gates.
 
 - [x] G1: unit tests pass across agent server, agent client and HUD
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/server/agent tests/client/agent tests/client/hud 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
   EXPECT: /([1-9][0-9]*) pass\s+0 fail/
-  EVIDENCE: 214 pass | 0 fail
+  EVIDENCE: 245 pass | 0 fail
 
 - [x] G2: tool → C17 view mapping has a named test for each of the 7 data tools (sightings, conditions, alerts, hotspots, explain_cell, backtest, feed_state), pure over the GraphQL fixture stub
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests/server/agent -t "C17 view" 2>&1 | grep -E "^ *[0-9]+ (pass|fail)"
@@ -41,7 +41,12 @@ Scope:
   EXPECT: /EVAL model=openai\/gpt-6-luna[\s\S]*EVAL views valid ([1-9]\d*)\/\1/
   EVIDENCE: EVAL model=openai/gpt-6-luna questions=15 fixture=2026-01-15T03:00:00Z | EVAL views valid 28/28
 
-- [x] G8: e2e:panels with the real LLM against next start + local Axum fixtures: table ≥1 row, series ≥1 line, highlight brackets equal the capped highlight count, camera moved, a row click opens the drawer with the real record
+- [x] G8: e2e:panels with the real LLM against next start and local Axum fixtures, asked from the chat column (T40). It checks:
+  - a table panel with at least 1 row and a series panel with at least 1 line;
+  - highlight brackets equal to the capped highlight count;
+  - the camera moved;
+  - the expanded panel is over the left half of the globe pane, clear of the chat column and of the pane's centre;
+  - a row click opens the drawer with the real record, and the column stays open.
   CHECK: cd apps/web && doppler run --project inversa --config dev -- bun run e2e:panels 2>&1 | grep -E "^PANELS "
   EXPECT: /^PANELS table=[1-9]\d* series=[1-9]\d* brackets=[1-9]\d* drawer=1$/m
   EVIDENCE: PANELS table=1 series=8 brackets=10 drawer=1
@@ -51,5 +56,9 @@ Scope:
   EXPECT: CLEAN
   EVIDENCE: CLEAN
 
-- [x] G10: screenshot docs/evidence/agent-panels.png shows the answer, table and series panels, and brackets on the globe (manual; looked at)
-  EVIDENCE: docs/evidence/agent-panels.png (1440×900, written by the G8 run, real gpt-6-luna answer). Viewed (final run, after the last main merge): the card holds the answer with citation chips 2–10 and a feed caveat, then "DATA · 3" (sightings table open: 09-02 18:09Z Green iguana research inat; water-level chart and latest-readings table collapsed). The expanded panel (≈640 px, left of the card, below the centre line) shows the sightings table and the "Water level (stage) · nearest stations within 0.25°" chart: y ticks 1.00/2.00 in m, x ticks 19:15–20:30, the Virginia Key line plus single-sample gauges as dots. Globe framed on Homestead to Virginia Key and Tamiami Canal; 10 labelled brackets (SIGHTING Green iguana · research, READING Virginia Key 0.54 m, Tamiami ×2, Northeast Shark Rv Slough, Black Creek Canal, …); the iguana's species icon is drawn because TIME moved to 02 SEPT 18:15Z.
+- [x] G10: screenshot docs/evidence/agent-panels.png shows the answer in the chat column, the expanded table and series panels next to the column, and brackets on the globe (manual; looked at)
+  EVIDENCE: docs/evidence/agent-panels.png (1440×900, written by the G8 run on the T40 layout with a real gpt-6-luna answer). Viewed:
+  - The chat column at x 0–420 holds the answer with chips 4–10, "DATA · 3" and source chips 1–10.
+  - "RESULT DATA · 3" pops out at about x 432–1070, y 490–888: next to the column, over the left part of the globe pane, and below the pane centre (930,450).
+  - The pop-out shows the sightings table (09-02 18:09Z Green iguana, research, inat, 25.554/-80.347) and the "Water level (stage) · nearest stations within 0.25°" chart. The chart has y ticks 1.00/2.00, x ticks 19:15–20:30, a line and single-sample dots.
+  - The globe has 10 labelled brackets: SIGHTING Green iguana · research, READING Virginia Key 0.54 m, Tamiami ×2, Northeast Shark Rv Slough, Black Creek Canal, Canal 111, McCormick Creek.

@@ -243,6 +243,27 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - New sightings and alerts appear within one pipeline tick plus the 5 s frame debounce.
 - A dev-only `INGEST_HOOK_SECRET` default lets the `web` hook source inject rows, so live updates can be verified end to end.
 
+### C19: source page links and simplified UI (added at user review)
+
+- `Evidence.sourcePageUrl: String` is the human web page for the record at its publisher, opened in a new tab. It is not the API URL (`sourceUrl` stays the fetched API URL). It is null when no page exists (modelled grid points, GOES cells, hotspots, fetch runs).
+- Patterns:
+
+| Source | `sourcePageUrl` |
+|---|---|
+| iNat | `https://www.inaturalist.org/observations/<ext_id>` |
+| GBIF | `https://www.gbif.org/occurrence/<gbifKey>` |
+| NAS | the NAS specimen viewer for the record's key |
+| USGS | `https://waterdata.usgs.gov/monitoring-location/<site>/` |
+| NDBC | `https://www.ndbc.noaa.gov/station_page.php?station=<id>` |
+| CO-OPS | `https://tidesandcurrents.noaa.gov/stationhome.html?id=<id>` |
+| NWS alert | the alert's own web page, or the CAP id URL when no page exists |
+| backtest | none |
+
+- UI default is "sightings first":
+  - Sightings and alerts are on by default. Stations, hotspots and LST/SST are off by default but stay one tap away in Layers.
+  - A species filter bar on the globe toggles python/tegu/iguana/lionfish/other with counts.
+  - The top bar collapses to the title, the LIVE/REPLAY badge, and one status icon button whose popover holds feeds, theme, focus and help.
+
 ## Tree
 
 - 1 Everglades Ops (`GATES.md`)
@@ -289,4 +310,9 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T39 merged+verified 11/11 (live eval 14/15). Prompt: disabled feeds need no citation. Driver smoke of bun run dev: api+web+signal, live agent 4 tools/7 citations/view.
 - T23/T24 (+C18 live mode as gates/leaf-T37.md): node-client 4/4, node-convo 4/4 + N4 ABANDON (H6), leaf-T23 3/3, leaf-T24 1/1, leaf-T37 4/4. TIME outside the window recentres it (`windowFor`/`retime`; set_time, play_timeline, agent view, share link, timeline date field); live edge follows now; framesUpdated expires the db worker's query cache; alerts/stations refetch on the data revision; `window.__inversa` hook (dev and e2e builds). e2e:client/convo/live run on a shared real stack (e2e/stack.ts: Axum, next start, signal Worker, Caddy-like proxy). Web 551 tests.
 - T38 merged 10/10 (agent data panels, globe highlights). Web 586 tests. Live eval 14-15/15 typical.
+- T40 merged 18/18 (chat-left layout, legend, tooltips, help). Web 620 tests.
+- T30/T31 merged 11/11 (axe 0/0 over 12 scans, keyboard walk, rate limits, injection test live, prod surface). Web 630, API 206, clippy clean.
+- T42 merged 7/7 (publisher links; EXTERNAL-LINKS 30/30 new tab). Accepted IEM VTEC page for VTEC-keyed NWS alerts. Re-run e2e:links after T41.
+- T43 field notes: the `note` entity carries field notes (text, lat, lon, species?, sightingId?, createdBy, callsign, createdAt); NOTES state key (pins, pick-on-map); notes globe layer (`note:<id>` pins, C14 kind `note`); the board tab reads "Notes" with crew missions behind a disclosure; drawer note card plus "Add note about this sighting"; read-only agent `notes` tool (C17 table); 3 CRDT note vectors (17/17 in both runners); `e2e:notes` on the dev stack (e2e/dev-stack.ts, shared with e2e:team). Authorship, length and rate caps are client-side (docs/security.md).
+- T41 (sightings-first, popovers, 48h, plain evidence, welcome) + T43 (field notes) merged; merged tree: web 673/0, FIRSTLOAD/CHROME/ATTRIBUTION/SPECIES/LINKS/LAYOUT/AXE/KEYBOARD pass. e2e:notes re-run blocked by user's running next dev (passed on branch: rtc_ms=624).
 - T27/T28 (branch): leaf-T27 3/3, leaf-T28 2/2; the voice and GOES-push rows of docs/perf.md are ABANDON (H6, H4). `e2e_quality_cases` seeds the 5 cases through fixtures, the signed hook and the real NDBC poller against a dead upstream. Live eval 5/5 quality and 15/15 four runs in a row (`feedSummary.mention` with cite markers; late records named). UI: `ENV_FLAGGED` frame sentinel (flagged pixels hatched, never filled from a neighbour), drawer quality badges and feed note, chips open their last fetch run; `bun run e2e:quality` writes 11 shots to docs/evidence/quality/. Perf: scrub 7.7 ms, cached 0.3 ms, first token p50 1.0 s, local edit 0.6 ms (same frame 20/20, `overlayOps`), RTC 12 ms, WS 82 ms, poll 8/8 (first retry within 2 min), idle 0, cold first globe frame 1.7 s (Cesium `preloadModule`). `e2e:team` runs on the shared stack. CONTRACT-REQUEST: C2 `Sighting.ingestedAt: Time!`; C4 `ENV_FLAGGED = -32767`. Web 590 tests, api 207.

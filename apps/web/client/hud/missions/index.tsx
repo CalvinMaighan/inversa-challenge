@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * Missions panel (PRD §3 flow 4, PLAN.md C16 slot): plan a mission from the selected hotspot cell, move it
- * planned → in progress → done, log removals, read totals per species, leave notes, chat with the team and
- * see who is on the board. Renders from the db worker's board (`team.ts`); every control is a native
- * button, select or input, so it works from the keyboard and inside T18's bottom sheet on phones.
+ * The Notes tab (T43; PLAN.md C16 slot, still exported as `MissionsPanel`): who is on the board, the field notes
+ * composer and list (`../notes`), team chat, and the crew missions of PRD §3 flow 4 behind a collapsed "Crew
+ * missions" disclosure: plan a mission from the selected hotspot cell, move it planned → in progress → done, log
+ * removals, read totals per species, leave mission notes. Renders from the db worker's board (`team.ts`); every
+ * control is a native button, select, input or details, so it works from the keyboard and inside the phone sheet.
  */
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
@@ -20,6 +21,7 @@ import { SELECTION, type SelectionState } from "client/state/selection";
 import styled from "client/styled";
 
 import { parseHotspotId, type HotspotRef } from "../drawer/evidence";
+import NotesPanel from "../notes/NotesPanel";
 import { Dot, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { useCell } from "../store";
 import {
@@ -207,6 +209,31 @@ const ChatForm = styled.form`
   input {
     flex: 1;
     min-width: 0;
+  }
+`;
+
+/** Crew missions fold away under a native disclosure; notes are the primary team view (T43). */
+const Disclosure = styled.details`
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap-s);
+  summary {
+    cursor: pointer;
+    color: var(--muted);
+    font: 600 11px / 1.2 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    &:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+  }
+  &[open] summary {
+    margin-bottom: var(--gap-s);
+  }
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-m);
   }
 `;
 
@@ -463,36 +490,50 @@ function PanelBody({ team }: { team: Team }) {
   const hotspot = useMemo(() => (evidenceId ? parseHotspotId(evidenceId) : null), [evidenceId]);
   // Sessions the mesh dropped are removed from PEERS; the TTL sweep belongs to the globe layer's timer.
   const peers = useMemo(() => allPeers.filter((p) => p.link !== "closed").sort((a, b) => a.callsign.localeCompare(b.callsign)), [allPeers]);
+  // A mission focused from the globe, or a hotspot selection, unfolds the crew missions; closing stays manual.
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const unfold = focusedId !== null || hotspot !== null;
+  useEffect(() => {
+    if (unfold && disclosure.current) disclosure.current.open = true;
+  }, [unfold, focusedId, evidenceId]);
   return (
     <Stack data-testid="team-panel" data-ready={model ? "1" : "0"}>
       <Presence me={me} peers={peers} />
-      <NewMission key={evidenceId ?? ""} team={team} hotspot={hotspot} />
-      <Section aria-label="Totals">
-        <SectionTitle>Removals</SectionTitle>
-        <Row>
-          <Pill $tone="ok">
-            total <Mono data-testid="totals-overall">{model?.totals.overall ?? 0}</Mono>
-          </Pill>
-          {SPECIES_IDS.map((s) => (
-            <Pill key={s} $tone="muted" data-testid={`totals-${s}`}>
-              {s} <Mono>{model?.totals.bySpecies[s] ?? 0}</Mono>
-            </Pill>
-          ))}
-        </Row>
-      </Section>
-      <Section aria-label="Missions">
-        <SectionTitle>Missions</SectionTitle>
-        {model && model.missions.length === 0 && <Hint>No missions yet.</Hint>}
-        <List data-testid="mission-list">
-          {model?.missions.map((m) => <MissionItem key={m.id} team={team} mission={m} model={model} focused={m.id === focusedId} me={me} peers={peers} />)}
-        </List>
-      </Section>
+      {model && <NotesPanel team={team} me={me} notes={model.fieldNotes} />}
       {model && <TeamChat team={team} model={model} me={me} peers={peers} />}
+      <Disclosure ref={disclosure} data-testid="crew-missions">
+        <summary>
+          Crew missions{model && model.missions.length > 0 ? ` (${model.missions.length})` : ""}
+        </summary>
+        <div>
+          <NewMission key={evidenceId ?? ""} team={team} hotspot={hotspot} />
+          <Section aria-label="Totals">
+            <SectionTitle>Removals</SectionTitle>
+            <Row>
+              <Pill $tone="ok">
+                total <Mono data-testid="totals-overall">{model?.totals.overall ?? 0}</Mono>
+              </Pill>
+              {SPECIES_IDS.map((s) => (
+                <Pill key={s} $tone="muted" data-testid={`totals-${s}`}>
+                  {s} <Mono>{model?.totals.bySpecies[s] ?? 0}</Mono>
+                </Pill>
+              ))}
+            </Row>
+          </Section>
+          <Section aria-label="Mission list">
+            <SectionTitle>Missions</SectionTitle>
+            {model && model.missions.length === 0 && <Hint>No missions yet.</Hint>}
+            <List data-testid="mission-list">
+              {model?.missions.map((m) => <MissionItem key={m.id} team={team} mission={m} model={model} focused={m.id === focusedId} me={me} peers={peers} />)}
+            </List>
+          </Section>
+        </div>
+      </Disclosure>
     </Stack>
   );
 }
 
-/** The panel content for `Hud`'s `missions` slot (PLAN.md C16). Starts the team session on mount. */
+/** The Notes tab content for the chat column's board slot (PLAN.md C16). Starts the team session on mount. */
 export default function MissionsPanel() {
   const team = useCell(teamCell);
   useEffect(() => {

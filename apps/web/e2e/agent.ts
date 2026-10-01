@@ -1,11 +1,12 @@
 /**
- * T14 e2e: the agent orb and card against the real agent (GPT-6 Luna on OpenRouter).
+ * T14/T40 e2e: the chat column against the real agent (GPT-6 Luna on OpenRouter).
  *
  *   bun run e2e:agent      (wraps `doppler run --project inversa --config dev`, which supplies OPENROUTER_API_KEY)
  *
- * Starts the eval's fixture GraphQL stub and `next dev` pointed at it, then in Chromium: open the card, ask,
- * see the tool rows, click a citation and check SELECTION (evidence id + drawerOpen), collapse with Esc. Then a
- * 375 px viewport screenshot of the card for G3 (docs/evidence/t14-card-375.png). Last line: FLOW-OK.
+ * Starts the eval's fixture GraphQL stub and `next dev` pointed at it, then in Chromium: the chat column is
+ * visible at load (full height, left), ask, see the tool rows, click a citation and check SELECTION (evidence id
+ * + drawerOpen), switch to Missions and back without losing the thread. Then at 375 px the column is a bottom
+ * sheet; it opens to full height inside the viewport for G3 (docs/evidence/t14-card-375.png). Last line: FLOW-OK.
  * The answer's wording is the model's; the checks are on tools, citations and UI state, not on text.
  */
 
@@ -86,27 +87,24 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   page.on("pageerror", (error) => errors.push(error.message));
 
   await page.goto(`${origin}/dev/agent?at=${encodeURIComponent(FIXTURE_NOW)}`, { waitUntil: "networkidle" });
-  const orb = page.getByRole("button", { name: /open agent chat/i });
-  await orb.waitFor();
+  const column = page.locator("[data-chat-column]");
+  await column.waitFor();
   // Hydrated once the dev probe reflects the ?at window.
   await page.waitForFunction(() => document.querySelector("[data-dev-probe]")?.getAttribute("data-time-at")?.startsWith("2026-01-15"));
 
-  // 1. Open: the orb morphs into the card.
-  await orb.click();
-  const card = page.getByRole("dialog", { name: "Agent chat" });
-  await card.waitFor();
-  await page.waitForFunction(() => document.querySelector("[data-agent-card]")?.getAttribute("data-stage") === "open");
-  const box = await card.boundingBox();
-  assert(box && Math.abs(box.width - 360) <= 1 && Math.abs(box.height - 480) <= 1, `card is ${box?.width}x${box?.height}, want 360x480`);
-  log(`card open at ${Math.round(box.x)},${Math.round(box.y)} ${box.width}x${box.height}`);
+  // 1. The chat column is visible at load: left edge, full height, about 420 px, with the mic in the composer.
+  const box = await column.boundingBox();
+  assert(box && box.x === 0 && box.y === 0 && Math.abs(box.height - 800) <= 1 && box.width >= 360 && box.width <= 560, `column at ${JSON.stringify(box)}, want x=0 full height 360-560 wide`);
+  assert(await column.getAttribute("data-layout") === "column", "column layout expected at 1280 px");
+  await column.getByRole("button", { name: "Start voice" }).waitFor();
+  log(`chat column at ${box.x},${box.y} ${box.width}x${box.height}`);
 
   // 2. Ask.
-  const input = card.getByRole("textbox", { name: "Question" });
-  assert(await input.evaluate((el) => el === document.activeElement), "composer is not focused after the card opened");
+  const input = column.getByRole("textbox", { name: "Question" });
   await input.fill(QUESTION);
   await input.press("Enter");
-  await card.getByText(QUESTION).waitFor();
-  const answer = card.locator('[data-source="text"][data-status="done"]').last();
+  await column.getByText(QUESTION).waitFor();
+  const answer = column.locator('[data-source="text"][data-status="done"]').last();
   await answer.waitFor({ timeout: STEP_TIMEOUT_MS });
 
   // 3. Tool rows: folded under "Worked for", expanded on click.
@@ -133,35 +131,40 @@ async function flow(origin: string, browser: Browser): Promise<void> {
   await chips.first().click();
   await page.waitForFunction((id) => document.querySelector("[data-dev-probe]")?.getAttribute("data-evidence-id") === id, firstId);
   assert((await probe(page, "data-drawer-open")) === "true", "citation click did not set SELECTION.drawerOpen");
-  log(`citation ${firstId} selected, drawer open`);
+  assert(await column.isVisible(), "the chat column hid when a citation was clicked");
+  log(`citation ${firstId} selected, drawer open, column still open`);
 
-  // 5. Esc collapses the card back into the orb.
-  await page.keyboard.press("Escape");
-  await card.waitFor({ state: "detached" });
-  await page.waitForFunction(() => document.activeElement?.getAttribute("aria-haspopup") === "dialog");
-  log("Esc collapsed the card; focus back on the orb");
+  // 5. Tabs: Missions and back; the thread is still there, scrolled to the answer.
+  await column.locator('[data-tab="board"]').click();
+  await column.locator('[data-tabpanel="board"]').waitFor();
+  assert(!(await column.locator('[data-tabpanel="agent"]').isVisible()), "Agent panel still visible on the Missions tab");
+  await column.locator('[data-tab="agent"]').click();
+  await answer.waitFor();
+  assert(await answer.isVisible(), "the answer is gone after switching tabs");
+  log("Missions tab and back; thread kept");
 
-  // Click-away collapses too.
-  await orb.click();
-  await page.waitForFunction(() => document.querySelector("[data-agent-card]")?.getAttribute("data-stage") === "open");
-  await page.mouse.click(200, 400);
-  await card.waitFor({ state: "detached" });
-  log("click-away collapsed the card");
-
-  // 6. G3: 375 px viewport, card as a full-width sheet inside the viewport.
+  // 6. G3: 375 px viewport, the column becomes a bottom sheet: collapsed to the composer, then full height.
   await page.setViewportSize({ width: 375, height: 812 });
-  await orb.click();
-  await page.waitForFunction(() => document.querySelector("[data-agent-card]")?.getAttribute("data-stage") === "open");
-  const sheet = await card.boundingBox();
-  assert(sheet, "no card at 375 px");
+  await page.waitForFunction(() => document.querySelector("[data-chat-column]")?.getAttribute("data-layout") === "sheet");
+  const collapsed = await column.boundingBox();
+  assert(collapsed && collapsed.y + collapsed.height <= 812 && collapsed.height < 120, `collapsed sheet ${JSON.stringify(collapsed)}`);
+  await column.getByRole("textbox", { name: "Question" }).waitFor();
+  const handle = column.locator("[data-sheet-handle]");
+  await handle.click();
+  await page.waitForFunction(() => document.querySelector("[data-chat-column]")?.getAttribute("data-sheet") === "half");
+  await handle.click();
+  await page.waitForFunction(() => document.querySelector("[data-chat-column]")?.getAttribute("data-sheet") === "full");
+  await page.waitForTimeout(400);
+  const sheet = await column.boundingBox();
+  assert(sheet, "no sheet at 375 px");
   const inside = sheet.x >= 0 && sheet.y >= 0 && sheet.x + sheet.width <= 375 && sheet.y + sheet.height <= 812;
-  assert(inside, `card at 375 px leaves the viewport: ${JSON.stringify(sheet)}`);
-  await card.locator("[data-timeline-toggle]").last().click();
+  assert(inside && sheet.width === 375, `sheet at 375 px leaves the viewport: ${JSON.stringify(sheet)}`);
+  await column.locator("[data-timeline-toggle]").last().click();
   // The Next.js dev badge sits in the bottom-left corner over the composer; it is not part of the app.
   await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
   mkdirSync(dirname(SCREENSHOT), { recursive: true });
   await page.screenshot({ path: SCREENSHOT });
-  log(`375 px card ${sheet.width}x${sheet.height} at ${sheet.x},${sheet.y}; screenshot ${SCREENSHOT}`);
+  log(`375 px sheet ${sheet.width}x${sheet.height} at ${sheet.x},${sheet.y}; screenshot ${SCREENSHOT}`);
 
   assert(errors.length === 0, `page errors: ${errors.join(" | ")}`);
   await context.close();

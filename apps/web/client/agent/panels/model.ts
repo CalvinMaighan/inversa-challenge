@@ -418,36 +418,35 @@ const TOP_LIMIT = 64;
 const MAX_HEIGHT = 600;
 const MIN_HEIGHT = 260;
 const MIN_WIDTH = 420;
-/** Below this viewport width the expanded panel is a full-screen sheet. */
+/** Below this viewport width the expanded panel is a full-screen sheet (the chat column is a bottom sheet there). */
 export const EXPAND_SHEET_BREAKPOINT = 768;
 
 /**
- * Where the expanded panel goes, docked left of the card and bottom-aligned with it, never over the globe
- * centre: the full 640 px right of the centre when there is room (big screens), else 640 px below the centre
- * line, else narrower right of the centre, else (phones, cramped windows) a full-screen sheet.
+ * Where the expanded panel goes (T40): over the left part of the globe pane, docked against the chat column and
+ * bottom-aligned with the pane, never over the pane's centre (where the camera frames the answer). The full
+ * 640 px beside the centre when the pane is wide enough, else up to 640 px below the centre line, else narrower
+ * beside the centre, else a sheet over the whole pane (never over the column). Phones: a full-screen sheet.
+ *
+ * `pane` is the globe pane's viewport rect; `viewport` the window.
  */
-export function expandedPanelRect(card: Rect, viewport: { width: number; height: number }): Rect & { sheet: boolean } {
+export function expandedPanelRect(pane: Rect, viewport: { width: number; height: number }): Rect & { sheet: boolean } {
   const vw = Math.max(0, viewport.width);
   const vh = Math.max(0, viewport.height);
-  const sheet = { top: 0, left: 0, width: vw, height: vh, sheet: true };
-  if (vw < EXPAND_SHEET_BREAKPOINT) return sheet;
-  const right = card.left - MARGIN;
-  const bottom = Math.min(vh - MARGIN, card.top + card.height);
-  const cx = vw / 2;
-  const cy = vh / 2;
-  const tallTop = Math.max(TOP_LIMIT, bottom - MAX_HEIGHT);
+  if (vw < EXPAND_SHEET_BREAKPOINT) return { top: 0, left: 0, width: vw, height: vh, sheet: true };
+  const left = pane.left + MARGIN;
+  const bottom = pane.top + pane.height - MARGIN;
+  const cx = pane.left + pane.width / 2;
+  const cy = pane.top + pane.height / 2;
+  const tallTop = Math.max(pane.top + TOP_LIMIT, bottom - MAX_HEIGHT);
 
-  const besideLeft = Math.max(cx + CENTRE_CLEAR, right - EXPAND_WIDTH, MARGIN);
-  const besideWidth = right - besideLeft;
-  if (besideWidth >= EXPAND_WIDTH) return { top: tallTop, left: besideLeft, width: besideWidth, height: bottom - tallTop, sheet: false };
+  const besideWidth = Math.min(EXPAND_WIDTH, Math.floor(cx - CENTRE_CLEAR - left));
+  if (besideWidth >= EXPAND_WIDTH) return { top: tallTop, left, width: besideWidth, height: bottom - tallTop, sheet: false };
 
-  const belowWidth = Math.min(EXPAND_WIDTH, right - MARGIN);
-  const belowTop = Math.max(cy + CENTRE_CLEAR, tallTop);
-  if (belowWidth >= MIN_WIDTH && bottom - belowTop >= MIN_HEIGHT) {
-    return { top: belowTop, left: right - belowWidth, width: belowWidth, height: bottom - belowTop, sheet: false };
-  }
-  if (besideWidth >= MIN_WIDTH) return { top: tallTop, left: besideLeft, width: besideWidth, height: bottom - tallTop, sheet: false };
-  return sheet;
+  const belowWidth = Math.min(EXPAND_WIDTH, pane.width - 2 * MARGIN);
+  const belowTop = Math.max(Math.ceil(cy + CENTRE_CLEAR), tallTop);
+  if (belowWidth >= MIN_WIDTH && bottom - belowTop >= MIN_HEIGHT) return { top: belowTop, left, width: belowWidth, height: bottom - belowTop, sheet: false };
+  if (besideWidth >= MIN_WIDTH) return { top: tallTop, left, width: besideWidth, height: bottom - tallTop, sheet: false };
+  return { top: pane.top, left: pane.left, width: pane.width, height: pane.height, sheet: true };
 }
 
 /** True when `rect` covers the point (x, y). */

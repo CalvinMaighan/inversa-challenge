@@ -11,11 +11,13 @@ import type { Cartesian2 as CartesianXY } from "cesium";
 
 import { LAYERS, type LayersState } from "client/state/layers";
 import { MISSIONS, type MissionsState } from "client/state/missions";
+import { NOTES, setNotePick, type NotesState } from "client/state/notes";
 import { PEERS, type Peer } from "client/state/peers";
 import { parseEvidenceId, SELECTION, type SelectionState } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
 import { VIEW } from "client/state/view";
 import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
+import { prefersReducedMotion } from "client/motion";
 
 import { registerGlobe, type GeoPoint, type GlobeApi } from "./api";
 import { cesium } from "./cesium";
@@ -31,6 +33,8 @@ import { browserQuotaStore } from "./quota";
 const VIEW_WRITE_DEBOUNCE_MS = 250;
 const DEFAULT_FLIGHT_S = 1.6;
 const BACKGROUND = "#07090d";
+/** Side of the square `pick` searches, CSS px. */
+const PICK_PX = 9;
 const GLOBE_BASE = "#0d1b2a";
 
 export type GlobeDiagnostics = {
@@ -110,8 +114,10 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     sightings: (i) => (frameSightings && i >= 0 && i < frameSightings.counts.length ? frameSightings.records(i) : []),
     revision: () => revision,
     layers: () => ({ ...LAYERS.defaults, ...get<LayersState>(LAYERS) }),
+    selection: () => get<SelectionState>(SELECTION)?.evidenceId ?? null,
     missions: () => ({ ...MISSIONS.defaults, ...get<MissionsState>(MISSIONS) }),
     peers: () => get<Peer[]>(PEERS) ?? [],
+    notes: () => get<NotesState>(NOTES)?.pins ?? [],
     gql: (query, variables, signal) => gqlRequest(query, variables, signal),
   };
 
@@ -171,7 +177,9 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     }),
   );
   disposers.push(subscribe(MISSIONS, scheduleRefresh));
+  disposers.push(subscribe(SELECTION, scheduleRefresh));
   disposers.push(subscribe(PEERS, scheduleRefresh));
+  disposers.push(subscribe(NOTES, scheduleRefresh));
 
   // Grid version: Atomics.waitAsync where it exists; elsewhere a slow poll (the ring fallback polls every ms).
   let watchToken = 0;
@@ -252,7 +260,8 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     camera.flyTo({
       destination: Cartesian3.fromDegrees(target.lon, target.lat, target.altitudeM ?? pose().altitudeM),
       orientation: { heading: CesiumMath.toRadians(target.heading ?? 0), pitch: CesiumMath.toRadians(target.pitch ?? -90), roll: 0 },
-      duration: target.durationS ?? DEFAULT_FLIGHT_S,
+      // Reduced motion: jump, never fly (Cesium completes a 0 s flight synchronously).
+      duration: prefersReducedMotion() ? 0 : (target.durationS ?? DEFAULT_FLIGHT_S),
       complete: done,
       cancel: done,
     });
@@ -316,7 +325,8 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
 
   /** Raw id under a point: a primitive's id, or a raster cell resolved through its layer. */
   const pickId = (x: number, y: number): string | null => {
-    const picked = scene.pick(new Cartesian2(x, y)) as { id?: unknown; primitive?: { id?: unknown } } | undefined;
+    // A 9 px pick square (Cesium's default is 3) makes small dots easy to hit.
+    const picked = scene.pick(new Cartesian2(x, y), PICK_PX, PICK_PX) as { id?: unknown; primitive?: { id?: unknown } } | undefined;
     const raw = typeof picked?.id === "string" ? picked.id : typeof picked?.primitive?.id === "string" ? picked.primitive.id : null;
     if (raw && !raw.startsWith(RASTER_PICK_PREFIX)) return raw;
     const at = globePoint(x, y);
@@ -351,14 +361,21 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     });
   }, ScreenSpaceEventType.MOUSE_MOVE);
   handler.setInputAction((click: { position: CartesianXY }) => {
+    // "Pick on map" (T43): while the note composer is armed, a click is a place, not a selection.
+    if (get<NotesState>(NOTES)?.picking) {
+      const at = globePoint(click.position.x, click.position.y);
+      if (at) setNotePick(at);
+      return;
+    }
     const id = pickId(click.position.x, click.position.y);
     if (id?.startsWith(MISSION_ID_PREFIX)) {
       const missionId = id.slice(MISSION_ID_PREFIX.length);
       set<MissionsState>(MISSIONS, (prev) => ({ ...MISSIONS.defaults, ...prev, focusedMissionId: missionId, panelOpen: true }));
       return;
     }
+    // A marker opens its record in the evidence drawer; empty globe clears the selection.
     const evidenceId = id && parseEvidenceId(id) ? id : null;
-    set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId }));
+    set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId, drawerOpen: evidenceId !== null }));
   }, ScreenSpaceEventType.LEFT_CLICK);
   disposers.push(() => {
     cancelAnimationFrame(cursorFrame);
@@ -387,6 +404,15 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     onCursor(cb) {
       cursorListeners.add(cb);
       return () => cursorListeners.delete(cb);
+    },
+    stats: () => layers.map((l) => l.stats()),
+    describe(id) {
+      if (destroyed) return null;
+      for (const layer of layers) {
+        const facts = layer.describe?.(id);
+        if (facts) return facts;
+      }
+      return null;
     },
   };
 

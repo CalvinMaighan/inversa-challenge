@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { alertBands, alertSampleTimes, alertsQuery, alertsVariables, collectAlerts, severityToken, type AlertRow } from "client/hud/timeline/alerts";
 import { bucketCounts, sparkY } from "client/hud/timeline/sparkline";
 import { formatClocks, isLive } from "client/hud/topbar/clock";
 
@@ -45,59 +44,6 @@ describe("sparkline bucketing", () => {
     expect(sparkY(16, 16, 24)).toBe(0);
     expect(sparkY(4, 16, 24)).toBe(12);
     expect(sparkY(3, 0, 24)).toBe(24);
-  });
-});
-
-describe("alert bands", () => {
-  const from = Date.parse("2026-09-01T00:00:00Z");
-  const to = Date.parse("2026-09-02T00:00:00Z");
-  const row = (id: string, onset: string | null, expires: string | null, severity = "Severe"): AlertRow => ({ id, event: "Freeze Warning", severity, headline: null, onset, expires });
-
-  test("samples cover the window at a fixed spacing and include both ends", () => {
-    const s = alertSampleTimes(from, to, 3 * 3600_000);
-    expect(s.length).toBe(9);
-    expect(s[0]).toBe(from);
-    expect(s[8]).toBe(to);
-    expect(alertSampleTimes(to, from)).toEqual([]);
-  });
-
-  test("one aliased document for all samples, deduplicated on the way back", () => {
-    const q = alertsQuery(2);
-    expect(q).toContain("$bbox: BBox!, $t0: Time!, $t1: Time!");
-    expect(q).toContain("a0: alerts(bbox: $bbox, at: $t0)");
-    expect(q).toContain("a1: alerts(bbox: $bbox, at: $t1)");
-    const vars = alertsVariables({ west: -83.2, south: 24.3, east: -79.8, north: 27.5 }, [from, to]);
-    expect(vars).toEqual({ bbox: { west: -83.2, south: 24.3, east: -79.8, north: 27.5 }, t0: "2026-09-01T00:00:00.000Z", t1: "2026-09-02T00:00:00.000Z" });
-    const a = row("a", null, null);
-    const b = row("b", null, null);
-    expect(collectAlerts({ a0: [a, b], a1: [b], a2: null }).map((x) => x.id)).toEqual(["a", "b"]);
-  });
-
-  test("bands clip to the window, open ends run to the window edge, and overlaps stack into lanes", () => {
-    const bands = alertBands(
-      [
-        row("late", "2026-09-01T20:00:00Z", null),
-        row("early", "2026-08-31T20:00:00Z", "2026-09-01T06:00:00Z"),
-        row("overlap", "2026-09-01T03:00:00Z", "2026-09-01T09:00:00Z", "Moderate"),
-        row("gone", "2026-08-20T00:00:00Z", "2026-08-21T00:00:00Z"),
-        row("after", "2026-09-01T07:00:00Z", "2026-09-01T08:00:00Z"),
-      ],
-      from,
-      to,
-    );
-    expect(bands.map((b) => [b.id, b.lane, new Date(b.startMs).toISOString().slice(11, 16), new Date(b.endMs).toISOString().slice(11, 16)])).toEqual([
-      ["early", 0, "00:00", "06:00"],
-      ["overlap", 1, "03:00", "09:00"],
-      ["after", 0, "07:00", "08:00"],
-      ["late", 0, "20:00", "00:00"],
-    ]);
-  });
-
-  test("severity tokens", () => {
-    expect(severityToken("Extreme")).toBe("danger");
-    expect(severityToken("Severe")).toBe("danger");
-    expect(severityToken("Moderate")).toBe("warn");
-    expect(severityToken("Minor")).toBe("muted");
   });
 });
 

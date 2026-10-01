@@ -21,7 +21,7 @@ export function speciesByKey(key: SpeciesKey) {
   return SPECIES.find((species) => species.key === key)!;
 }
 
-const EVIDENCE_KINDS = new Set<CitableKind>(["sighting", "reading", "alert", "fetch", "hotspot", "backtest"]);
+const EVIDENCE_KINDS = new Set<CitableKind>(["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note"]);
 
 /** `<kind>:<key>` with a known kind and a non-empty key. */
 export function parseEvidenceId(id: string): { kind: CitableKind; key: string } | null {

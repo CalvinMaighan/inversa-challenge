@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import AgentOrb from "client/agent";
+import AgentColumn from "client/agent";
 import { registerGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, TIME } from "client/state";
 import type { SelectionState } from "client/state/selection";
@@ -52,7 +52,7 @@ export default function DevAgent({ at }: { at: string | null }) {
           {last ? ` → ${last.lat.toFixed(3)}, ${last.lon.toFixed(3)}` : ""}
         </output>
       }
-      orb={<AgentOrb />}
+      side={<AgentColumn />}
     />
   );
 }

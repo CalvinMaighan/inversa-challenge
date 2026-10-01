@@ -27,6 +27,8 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
   let drawnKey = "";
   let shown: { grid: FrameGrid; frame: number; species: number[]; bounds: BBox } | null = null;
   const stats: LayerStats = { id: HOTSPOTS, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
+  /** The cell `pickAt` resolved last, so `describe` can give its score without reading the grid again. */
+  let lastPick: { id: string; species: number; score: number } | null = null;
 
   const ensureSurface = (grid: FrameGrid, bounds: BBox): RasterSurface | null => {
     if (!viewer) return null;
@@ -116,7 +118,12 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
       if (best < 0 || lut[bestValue * 4 + 3] === 0) return null;
       const meta = ctx.meta();
       if (!meta) return null;
-      return hotspotEvidenceId(best, lon, lat, frameStartMs(frame, meta.frame0UnixMs, stepMsOf(meta)));
+      const id = hotspotEvidenceId(best, lon, lat, frameStartMs(frame, meta.frame0UnixMs, stepMsOf(meta)));
+      lastPick = id ? { id, species: best, score: Math.min(1, Math.max(0, bestValue * grid.hotspotScale)) } : null;
+      return id;
+    },
+    describe(id) {
+      return enabled && lastPick?.id === id ? { kind: "hotspot", species: lastPick.species, score: lastPick.score } : null;
     },
     destroy() {
       surface?.destroy();

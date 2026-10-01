@@ -1,8 +1,10 @@
 "use client";
 
+import ExternalLink from "client/external-link";
 import styled, { keyframes } from "client/styled";
 
-import { MORPH_Z } from "../morph/morph.styled";
+/** Above the globe pane (HUD, drawer, legend) and the chat column, which share the shell's stacking context. */
+export const OVERLAY_Z = 1000;
 
 /** Data panels (PLAN.md C17). Colours come from the Emotion theme, whose values are the mode's CSS variables. */
 
@@ -113,11 +115,13 @@ export const HeadTitle = styled.span`
 
 export const Kind = styled.span`
   flex: 0 0 auto;
-  padding: 1px 4px;
+  padding: 0 4px;
+  border: 1px solid color-mix(in oklab, ${({ theme }) => theme.color.accent} 70%, transparent);
   border-radius: 3px;
   background: color-mix(in oklab, ${({ theme }) => theme.color.accent} 18%, transparent);
-  color: ${({ theme }) => theme.color.accent};
-  font: 700 9px / 1.3 ${({ theme }) => theme.font.mono};
+  /* Body text on the tint: accent-on-tint was 2.9:1 (axe color-contrast); the border carries the accent. */
+  color: ${({ theme }) => theme.color.text};
+  font: 700 10px / 1.3 ${({ theme }) => theme.font.mono};
   letter-spacing: 0.08em;
   text-transform: uppercase;
 `;
@@ -221,10 +225,31 @@ export const SortButton = styled.button`
   &[data-sorted] {
     color: ${({ theme }) => theme.color.text};
   }
+
+  /* The sticky header sits on the scroll box's top edge, which would cut an outside ring. */
+  &:focus-visible {
+    outline-offset: -2px;
+  }
 `;
 
 export const Tone = styled.span<{ $tone: "ok" | "warn" | "danger" | "muted" }>`
   color: ${({ theme, $tone }) => ({ ok: theme.color.ok, warn: theme.color.warn, danger: theme.color.danger, muted: theme.color.muted })[$tone]};
+`;
+
+/** The ↗ cell of a table row whose record has a page at its publisher. */
+export const PageLink = styled(ExternalLink)`
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: ${({ theme }) => theme.color.accent};
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in oklab, ${({ theme }) => theme.color.accent} 22%, transparent);
+  }
 `;
 
 export const TableFoot = styled.div`
@@ -424,9 +449,10 @@ export const Chip = styled.li<{ $tone: "ok" | "warn" | "danger" | "muted" }>`
 
 // ---------------------------------------------------------------- expanded panel
 
-export const Floating = styled.aside<{ $sheet: boolean }>`
+/** `$ms`: entrance length from `motionMs(POPOUT_MS, reduced)`, 0 under reduced motion. */
+export const Floating = styled.aside<{ $sheet: boolean; $ms: number }>`
   position: fixed;
-  z-index: ${MORPH_Z + 1};
+  z-index: ${OVERLAY_Z};
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -438,7 +464,9 @@ export const Floating = styled.aside<{ $sheet: boolean }>`
   -webkit-backdrop-filter: blur(14px) saturate(1.2);
   box-shadow: ${({ theme }) => theme.color.shadow};
   color: ${({ theme }) => theme.color.text};
-  animation: ${rise} 160ms ease-out;
+  animation-name: ${rise};
+  animation-duration: ${({ $ms }) => $ms}ms;
+  animation-timing-function: ease-out;
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;

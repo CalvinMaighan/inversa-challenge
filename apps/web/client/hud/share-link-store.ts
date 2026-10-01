@@ -4,10 +4,10 @@
  */
 import { get, set } from "@calvinjs/active-state";
 
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { onGlobeReady } from "client/globe/api";
-import { LAYERS, type LayersState } from "client/state/layers";
+import { LAYERS, shownSpecies, SPECIES_FILTER_IDS, type LayersState, type SpeciesFilterId } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { retime, TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
@@ -26,7 +26,7 @@ export function readShareState(): ShareState {
     // Live links carry no time: opening one later lands on the live edge of that moment, not in replay.
     at: isLive(time, Date.now()) && !time.playing ? undefined : (time.at ?? time.to),
     layers: LAYER_IDS.filter((id) => layers.visible[id]),
-    species: SPECIES_IDS.filter((id) => layers.species[id]),
+    species: shownSpecies(layers.species),
     evidenceId: selection.evidenceId,
   };
 }
@@ -59,7 +59,7 @@ export function applyShareState(state: ShareState): () => void {
         ? (Object.fromEntries(LAYER_IDS.map((id) => [id, visibleIds.has(id)])) as LayersState["visible"])
         : prev.visible,
       species: speciesIds
-        ? (Object.fromEntries(SPECIES_IDS.map((id) => [id, speciesIds.has(id)])) as LayersState["species"])
+        ? (Object.fromEntries(SPECIES_FILTER_IDS.map((id) => [id, speciesIds.has(id)])) as Record<SpeciesFilterId, boolean>)
         : prev.species,
     }));
   }

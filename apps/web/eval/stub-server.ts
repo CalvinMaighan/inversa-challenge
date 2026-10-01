@@ -97,6 +97,8 @@ const RESOLVERS: Record<string, (v: Vars) => Record<string, unknown>> = {
   AgentHotspots: (v) => ({ hotspots: hotspots(v), feeds: feeds() }),
   AgentExplainCell: (v) => ({ explainCell: explainCell(v), feeds: feeds() }),
   AgentBacktest: (v) => ({ backtest: backtest(v), feeds: feeds() }),
+  // The team board (T43): `board(id)` has no filters; the notes tool filters by bbox and time itself.
+  AgentNotes: (v) => ({ board: { id: String(v.id), notes: fixture.notes } }),
 };
 
 export type Stub = { origin: string; requests: StubRequest[]; stop(): void };

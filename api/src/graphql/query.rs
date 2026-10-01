@@ -35,6 +35,11 @@ pub const MAX_HOTSPOT_TOP: i32 = 5000;
 pub const MAX_BACKTEST_DAYS: i32 = 366;
 /// Upper bound on ops returned by one `opsSince` call or one subscription replay page.
 pub const OPS_PAGE: i64 = 5000;
+/// Complexity charged for a root field that scans a table or builds a blob (sightings, readings, frames,
+/// hotspots, explain, backtest, evidence, board, opsSince), on top of its selection. With
+/// [`super::MAX_COMPLEXITY`] it caps one document at about a dozen of them, so aliasing cannot fan one
+/// request out into hundreds of 31-day scans. `alerts` stays cheap: the HUD sends ~240 aliased samples.
+pub const HEAVY_FIELD: usize = 250;
 
 fn check_window(from: Time, to: Time) -> Result<()> {
     if from > to {
@@ -87,6 +92,7 @@ impl QueryRoot {
 
     /// Sightings inside `bbox` observed in `from..=to`, newest first, at most 5000. `taxa` takes
     /// taxon ids or focus species names; an empty `taxa` or `quality` list matches nothing.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn sightings(
         &self,
         ctx: &Context<'_>,
@@ -165,6 +171,7 @@ impl QueryRoot {
     }
 
     /// Readings of stations inside `bbox` observed in `from..=to`, newest first, at most 10000.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn readings(
         &self,
         ctx: &Context<'_>,
@@ -272,6 +279,7 @@ impl QueryRoot {
     }
 
     /// At most 24 frames as base64 EVF2 (C4). Larger requests go to `GET /v1/frames`.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn frames(&self, ctx: &Context<'_>, from: Time, to: Time, step_minutes: i32) -> Result<FrameChunk> {
         if from > to {
             return Err("`from` must not be after `to`".into());
@@ -299,6 +307,7 @@ impl QueryRoot {
     }
 
     /// Top cells of `species` at `at` inside `bbox` (default 100, at most 5000).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn hotspots(&self, ctx: &Context<'_>, species: ID, at: Time, bbox: BBox, top: Option<i32>) -> Result<HotspotGrid> {
         bbox.validate()?;
         let sp = self::species(&species)?;
@@ -320,6 +329,7 @@ impl QueryRoot {
     }
 
     /// Each term of the score of one 0.01° cell (`<col>:<row>`, C14).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn explain_cell(&self, ctx: &Context<'_>, cell: ID, species: ID, at: Time) -> Result<HotspotExplain> {
         let sp = self::species(&species)?;
         if hotspot::Grid::REGION.parse_cell(&cell).is_none() {
@@ -340,6 +350,7 @@ impl QueryRoot {
     }
 
     /// Top-10% hit rate over the last `days` full UTC days (1..=366).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn backtest(&self, ctx: &Context<'_>, species: ID, days: i32) -> Result<Backtest> {
         let sp = self::species(&species)?;
         if !(1..=MAX_BACKTEST_DAYS).contains(&days) {
@@ -350,11 +361,13 @@ impl QueryRoot {
     }
 
     /// Provenance of one record (C14 id): normalized record, raw payload, feed state and links.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn evidence(&self, ctx: &Context<'_>, id: ID) -> Result<Evidence> {
         crate::evidence::evidence(app_state(ctx), &id).await.map_err(|e| e.extend())
     }
 
     /// Materialized board: live missions and notes, messages by HLC, removal totals.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn board(&self, ctx: &Context<'_>, id: ID) -> Result<Board> {
         let board_id = id.0.clone();
         let view = app_state(ctx).team.read(move |c| crdt::board(c, &board_id)).await?;
@@ -375,6 +388,7 @@ impl QueryRoot {
 
     /// Persisted ops for a board with `seq` greater than the given one, in seq order, at most 5000
     /// per call (page with the last seq).
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn ops_since(&self, ctx: &Context<'_>, board_id: ID, seq: i64) -> Result<Vec<Op>> {
         Ok(ops_after(&app_state(ctx).team, board_id.0, seq).await?)
     }

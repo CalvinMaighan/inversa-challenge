@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent, ReactNode } from "react";
+import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 
 import styled from "client/styled";
 
@@ -17,12 +17,16 @@ const Frame = styled(Surface)<{ $side: Side; $width: number }>`
   top: var(--hud-top);
   bottom: var(--hud-bottom);
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
-  width: min(${(p) => p.$width}px, calc(100vw - 2 * var(--gap-m)));
+  width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-m);
   overflow: hidden;
   z-index: 3;
+
+  &:focus-visible {
+    outline-offset: -2px;
+  }
 
   ${MOBILE} {
     top: auto;
@@ -81,6 +85,11 @@ const Body = styled.div`
   overflow: auto;
   overscroll-behavior: contain;
   padding: var(--gap-m);
+
+  /* The orb keeps its corner over the sheet: the last rows scroll clear of it. */
+  ${MOBILE} {
+    padding-bottom: calc(var(--gap-m) + 96px);
+  }
 `;
 
 /** Collapsed panel: a tab on the panel's edge (desktop), or a pill above the timeline (phone). */
@@ -134,10 +143,61 @@ export type PanelProps = {
   "data-testid"?: string;
 };
 
+/** A text field keeps its focus when a panel opens next to it (voice or the agent may open the drawer while typing). */
+const isTextEntry = (el: Element) => el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !["button", "range", "checkbox", "radio"].includes(el.type)) || (el as HTMLElement).isContentEditable;
+
+/**
+ * Focus follows the panel: opening it from a control (a citation, a bracket label, its tab) moves focus into
+ * it, so the keyboard and screen readers land on what just appeared; closing it hands focus back to whatever
+ * opened it, or to the panel's tab. Nothing is taken from an idle page (a share link or voice opening the
+ * drawer) or from a text field, and the first render never moves focus.
+ */
+function usePanelFocus(open: boolean) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const tabRef = useRef<HTMLButtonElement>(null);
+  const returnTo = useRef<HTMLElement | null>(null);
+  /** The collapsed tab was pressed: it unmounts before the effect runs, so focus is on <body> by then. */
+  const fromTabRef = useRef(false);
+  const wasOpen = useRef(open);
+  useLayoutEffect(() => {
+    if (open === wasOpen.current) return;
+    wasOpen.current = open;
+    const active = document.activeElement;
+    const idle = !active || active === document.body;
+    if (open) {
+      const frame = frameRef.current;
+      const byTab = fromTabRef.current;
+      fromTabRef.current = false;
+      if (!frame || (idle && !byTab) || (!idle && (frame.contains(active) || isTextEntry(active)))) return;
+      returnTo.current = idle ? null : (active as HTMLElement);
+      frame.focus({ preventScroll: true });
+      return;
+    }
+    // Focus was inside the panel, which is gone now: hand it back.
+    const back = returnTo.current;
+    returnTo.current = null;
+    if (!idle) return;
+    (back?.isConnected ? back : tabRef.current)?.focus({ preventScroll: true });
+  }, [open]);
+  return { frameRef, tabRef, fromTabRef };
+}
+
 export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, actions, children, ...rest }: PanelProps) {
+  const { frameRef, tabRef, fromTabRef } = usePanelFocus(open);
   if (!open) {
     return onOpen ? (
-      <Tab $side={side} type="button" data-hud-obstacle="" onClick={onOpen} aria-expanded={false} data-testid={rest["data-testid"] && `${rest["data-testid"]}-tab`}>
+      <Tab
+        ref={tabRef}
+        $side={side}
+        type="button"
+        data-hud-obstacle=""
+        onClick={() => {
+          fromTabRef.current = true;
+          onOpen();
+        }}
+        aria-expanded={false}
+        data-testid={rest["data-testid"] && `${rest["data-testid"]}-tab`}
+      >
         <Icon name="chevron" />
         {tabLabel}
       </Tab>
@@ -146,6 +206,8 @@ export default function Panel({ side, title, open, onClose, onOpen, tabLabel, wi
   return (
     <Frame
       as="section"
+      ref={frameRef}
+      tabIndex={-1}
       data-hud-obstacle=""
       $side={side}
       $width={width}

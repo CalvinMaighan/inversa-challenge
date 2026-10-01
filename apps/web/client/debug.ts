@@ -11,7 +11,7 @@ import type { StateKeyId } from "client/state";
 import { TIME, type TimeState } from "client/state/time";
 import { threadsBooted } from "client/threads/boot";
 import { frameIndexAt, getFrameGrid, getFrameMeta, getFrameSightings } from "client/threads/api";
-import { EVF_SPECIES } from "shared/frames";
+import { EVF_SPECIES, SIGHTING_FLAG } from "shared/frames";
 
 export const DEBUG_HOOK = process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_INVERSA_E2E === "1";
 
@@ -37,6 +37,8 @@ export type InversaDebug = {
   maxHotspot(atIso: string, species: (typeof EVF_SPECIES)[number]): number | null;
   /** Sighting ids in the frame covering `atIso`. */
   sightingIds(atIso: string): number[];
+  /** Sighting records (id, EVF taxon, position) in the frame covering `atIso`, duplicates left out. */
+  sightingRecords(atIso: string): { id: number; taxon: number; lon: number; lat: number }[];
   /** Globe: screen point of a place, the evidence id under a point, layer stats and render diagnostics. */
   project(lon: number, lat: number): ScreenPoint | null;
   pick(x: number, y: number): string | null;
@@ -129,6 +131,15 @@ export function installDebugHook(): void {
       const sightings = getFrameSightings();
       if (i === null || !sightings || i >= sightings.counts.length) return [];
       return sightings.records(i).map((r) => r.id);
+    },
+    sightingRecords(atIso) {
+      const i = frameAt(atIso);
+      const sightings = getFrameSightings();
+      if (i === null || !sightings || i >= sightings.counts.length) return [];
+      return sightings
+        .records(i)
+        .filter((r) => !(r.flags & SIGHTING_FLAG.duplicate))
+        .map((r) => ({ id: r.id, taxon: r.taxon, lon: r.lon, lat: r.lat }));
     },
     project: (lon, lat) => getGlobe()?.project(lon, lat) ?? null,
     pick: (x, y) => getGlobe()?.pick(x, y) ?? null,

@@ -8,6 +8,11 @@ import styled from "client/styled";
 export const MOBILE_QUERY = "(max-width: 640px)";
 export const MOBILE = `@media ${MOBILE_QUERY}`;
 
+/** The globe pane (a size container, client/ui/AppShell) is narrow: next to a wide chat column on a laptop. */
+export const NARROW_PANE = "@container globe (max-width: 760px)";
+/** The globe pane cannot fit the feed chips and the readouts on one top-bar row. */
+export const COMPACT_PANE = "@container globe (max-width: 1180px)";
+
 const subscribeMobile = (cb: () => void) => {
   const mq = window.matchMedia(MOBILE_QUERY);
   mq.addEventListener("change", cb);
@@ -118,7 +123,7 @@ export const SectionTitle = styled.h3`
 `;
 
 /** Inline SVG icons: strokes in currentColor, 16 px box. */
-export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" }) {
+export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" | "layers" | "help" | "info" | "theme" }) {
   const paths: Record<typeof name, ReactNode> = {
     play: <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none" />,
     pause: (
@@ -141,6 +146,27 @@ export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "liv
     ),
     chevron: <path d="m6 3.5 4.5 4.5L6 12.5" />,
     external: <path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V13H3V5h3.5" />,
+    layers: <path d="M8 2 14 5.2 8 8.4 2 5.2zM2.5 8 8 11 13.5 8M2.5 10.8 8 13.8l5.5-3" />,
+    info: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M8 7.2v4" />
+        <circle cx="8" cy="4.9" r="0.45" fill="currentColor" />
+      </>
+    ),
+    theme: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M8 1.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor" stroke="none" />
+      </>
+    ),
+    help: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.6.2-.8.6-.8 1.2v.3" />
+        <circle cx="8" cy="11.6" r="0.4" fill="currentColor" />
+      </>
+    ),
   };
   return (
     <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

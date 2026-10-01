@@ -5,6 +5,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { QUALITY_CODES } from "shared/frames";
+import { publisherOf } from "shared/source-pages";
 import { useTheme } from "client/styled";
 import type {
   BacktestView,
@@ -49,6 +50,7 @@ import {
   Empty,
   Fill,
   Legend,
+  PageLink,
   Rationale,
   SortButton,
   Stat,
@@ -95,6 +97,25 @@ function useSelected(): string | null {
 
 // ---------------------------------------------------------------- table
 
+/** ↗ to the row's record at its publisher, in a new tab. Its clicks and keys stay off the row (which opens the drawer). */
+export function SourcePageIcon({ url }: { url: unknown }) {
+  const publisher = publisherOf(url);
+  if (!publisher || typeof url !== "string") return null;
+  return (
+    <PageLink
+      href={url}
+      aria-label={`Open at ${publisher}`}
+      title={`Open at ${publisher} in a new tab`}
+      data-source-page=""
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onFocus={(event) => event.stopPropagation()}
+    >
+      ↗
+    </PageLink>
+  );
+}
+
 export function TablePanel({ view, turnId, wide }: ViewProps & { view: TableView }) {
   useHoverCleanup(turnId);
   const [sort, setSort] = useState<SortState>(null);
@@ -102,6 +123,9 @@ export function TablePanel({ view, turnId, wide }: ViewProps & { view: TableView
   const selected = useSelected();
   const sorted = useMemo(() => sortRows(view.rows, view.columns, sort), [view, sort]);
   const { rows, hidden } = visibleRows(sorted, showAll);
+  // `sourcePageUrl` is a hidden column (no entry in `columns`): drawn as a leading ↗ when any row has a page, first
+  // so it stays in view when the table scrolls sideways.
+  const pages = view.rows.some((row) => publisherOf(row.sourcePageUrl));
   if (view.rows.length === 0) return <Empty>No rows in this window.</Empty>;
 
   const cell = (column: TableColumn, value: TableView["rows"][number][string]) => {
@@ -111,10 +135,22 @@ export function TablePanel({ view, turnId, wide }: ViewProps & { view: TableView
 
   return (
     <>
-      <TableScroll $maxHeight={wide ? 360 : 220} onPointerLeave={() => hoverEvidence(turnId, null)}>
+      <TableScroll
+        $maxHeight={wide ? 360 : 220}
+        onPointerLeave={() => hoverEvidence(turnId, null)}
+        // Chromium leaves a partly visible control where it is on Tab: bring headers and rows fully into the box.
+        onFocus={(event) => event.target.scrollIntoView({ block: "nearest", inline: "nearest" })}
+      >
         <Table data-table-rows={sorted.length}>
           <thead>
             <tr>
+              {pages && (
+                <th title="Record page at its publisher, in a new tab">
+                  <abbr title="Source page" style={{ display: "block", padding: "4px 6px", textDecoration: "none" }}>
+                    ↗
+                  </abbr>
+                </th>
+              )}
               {view.columns.map((column) => {
                 const active = sort?.key === column.key;
                 return (
@@ -148,6 +184,11 @@ export function TablePanel({ view, turnId, wide }: ViewProps & { view: TableView
                 onBlur={() => hoverEvidence(turnId, null)}
                 title={`Open evidence ${row.evidenceId}`}
               >
+                {pages && (
+                  <td data-kind="link">
+                    <SourcePageIcon url={row.sourcePageUrl} />
+                  </td>
+                )}
                 {view.columns.map((column) => (
                   <td key={column.key} data-kind={column.kind}>
                     {cell(column, row[column.key] ?? null)}

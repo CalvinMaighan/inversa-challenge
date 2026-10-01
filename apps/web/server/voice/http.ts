@@ -6,6 +6,7 @@ import {
   type VoiceSessionOpenResponse,
 } from "shared/voice/protocol";
 
+import { clientIp } from "../rate-limit";
 import { isVoiceControlMessage } from "./view-state-control";
 import type { VoiceSessionRegistry } from "./voice-sessions";
 
@@ -29,10 +30,7 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 const notFound = () => json({ error: "Voice session not found" }, 404);
 
 /** First `X-Forwarded-For` hop (Caddy sets it), then `X-Real-IP`, else one shared local bucket. */
-export function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip")?.trim() || "local";
-}
+export { clientIp };
 
 export async function handleOpenSession(request: Request, registry: VoiceSessionRegistry): Promise<Response> {
   const result = await registry.open(clientIp(request));

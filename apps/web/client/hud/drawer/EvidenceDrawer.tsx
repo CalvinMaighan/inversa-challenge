@@ -3,15 +3,19 @@
 import { useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import ExternalLink from "client/external-link";
 import { SELECTION } from "client/state/selection";
+import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
+import NoteCard, { AddNoteButton } from "../notes/NoteCard";
 import {
   evidenceBadges,
+  evidenceLocation,
   loadEvidence,
   parseBacktestId,
   parseHotspotId,
@@ -23,6 +27,8 @@ import {
 } from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
+import { plainSummary } from "./summary";
+import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
 
 const Section = styled.section`
@@ -110,19 +116,29 @@ const BADGE: Record<BadgeGroup, { label: (n: number) => string; tone: Tone }> = 
   conflicts: { label: (n) => `${n} CONFLICT${n === 1 ? "" : "S"}`, tone: "danger" },
 };
 
-const QUALITY_TONE: Record<QualityBadge["badge"], Tone> = { late: "warn", missing: "muted", failed: "danger", feed: "warn" };
+/** A data-quality flag in the plain summary: a toned chip in UI type that wraps, unlike the technical pills. */
+const Flag = styled(Pill)`
+  height: auto;
+  min-height: 22px;
+  padding: 3px 8px;
+  white-space: normal;
+  font: 500 12px / 1.35 var(--font-ui);
+  letter-spacing: normal;
+`;
+
+const QUALITY_TONE: Record<QualityBadge["badge"], Tone> = { late: "warn", missing: "muted", failed: "danger", feed: "warn", duplicate: "muted", conflict: "danger" };
 const FEED_TONE: Record<string, Tone> = { lagging: "warn", stale: "stale", down: "danger" };
 
-/** Late, missing, failed-fetch and degraded-feed badges, first thing under the id (PRD §7). */
+/** PRD §7 in plain words, right under the summary: late, no reading, failed check, duplicate, disagreement, feed. */
 function QualityBadges({ evidence }: { evidence: Evidence }) {
   const badges = qualityBadges(evidence);
   if (badges.length === 0) return null;
   return (
-    <Badges aria-label="Data quality" data-testid="hud-drawer-quality" style={{ marginTop: "var(--gap-s)", marginBottom: 0 }}>
+    <Badges aria-label="Data quality" data-testid="hud-drawer-quality" style={{ marginTop: "calc(-1 * var(--gap-s))", marginBottom: "var(--gap-m)" }}>
       {badges.map((b) => (
-        <Pill key={b.badge} $tone={b.state ? (FEED_TONE[b.state] ?? "warn") : QUALITY_TONE[b.badge]} data-quality={b.badge}>
+        <Flag key={b.badge} $tone={b.state ? (FEED_TONE[b.state] ?? "warn") : QUALITY_TONE[b.badge]} data-quality={b.badge}>
           {b.label}
-        </Pill>
+        </Flag>
       ))}
     </Badges>
   );
@@ -201,10 +217,12 @@ function Record({ evidence }: { evidence: Evidence }) {
         <Meta>
           <dt>Source</dt>
           <dd>
-            {evidence.sourceUrl ? (
-              <a href={evidence.sourceUrl} target="_blank" rel="noopener noreferrer">
+            {evidence.sourceUrl && /^https?:\/\//.test(evidence.sourceUrl) ? (
+              <ExternalLink href={evidence.sourceUrl}>
                 {evidence.sourceUrl.replace(/^https?:\/\//, "").slice(0, 60)} <Icon name="external" />
-              </a>
+              </ExternalLink>
+            ) : evidence.sourceUrl ? (
+              <Mono>{evidence.sourceUrl}</Mono>
             ) : (
               "—"
             )}
@@ -258,7 +276,7 @@ function Record({ evidence }: { evidence: Evidence }) {
             <div key={k} style={{ display: "contents" }}>
               <dt>{k}</dt>
               <dd>
-                <Mono>{valueText(v)}</Mono>
+                <RecordValue value={v} text={valueText(v)} />
               </dd>
             </div>
           ))}
@@ -276,8 +294,97 @@ function Record({ evidence }: { evidence: Evidence }) {
   );
 }
 
+/** "Add note about this sighting" (T43), small and under the id: prefills the Notes composer with its place. */
+function SightingNoteAction({ id, evidence }: { id: string; evidence: Evidence }) {
+  const at = evidenceLocation(evidence.record);
+  if (!at) return null;
+  return (
+    <Section>
+      <AddNoteButton sightingId={id.slice("sighting:".length)} lon={at.lon} lat={at.lat} />
+    </Section>
+  );
+}
+
+const KIND_TITLES: Record<string, string> = {
+  sighting: "Sighting",
+  reading: "Station reading",
+  alert: "Weather alert",
+  hotspot: "Hotspot",
+  backtest: "How well hotspots did",
+  fetch: "Data fetch",
+  note: "Field note",
+};
+
+const Lead = styled.section`
+  margin-bottom: var(--gap-m);
+
+  h3 {
+    margin: 0 0 4px;
+    font: 600 16px / 1.3 var(--font-ui);
+    color: var(--text);
+  }
+
+  p {
+    margin: 0;
+    color: var(--muted);
+    font: 400 13px / 1.45 var(--font-ui);
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    margin-top: var(--gap-s);
+    object-fit: cover;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--border);
+  }
+`;
+
+const Expert = styled.details`
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap-s);
+
+  > summary {
+    margin-bottom: var(--gap-s);
+    color: var(--muted);
+    font: 600 12px / 1.6 var(--font-ui);
+    cursor: pointer;
+  }
+`;
+
+/** Everything technical, collapsed: the id, links, source, lag, the normalized record and the raw payload. */
+export function ExpertDetails({ id, evidence }: { id: string | null; evidence: Evidence | null }) {
+  return (
+    <Expert data-testid="drawer-expert">
+      <summary>Details for experts</summary>
+      <Section>
+        <Mono style={{ fontSize: 12, overflowWrap: "anywhere" }} data-testid="hud-drawer-id">
+          {id}
+        </Mono>
+      </Section>
+      {evidence ? <Record evidence={evidence} /> : null}
+    </Expert>
+  );
+}
+
+/** The plain-language lead: what, where, when, how sure, and the photo when there is one. */
+export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evidence; atMs: number }) {
+  const s = plainSummary(kind, evidence.record, atMs);
+  if (!s) return null;
+  return (
+    <Lead aria-label="Summary" data-testid="evidence-summary">
+      <h3>{s.title}</h3>
+      {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
+      {/* eslint-disable-next-line @next/next/no-img-element -- same-origin media proxy (/v1/media), already sized and cached; the image optimizer would fetch it again */}
+      {s.photo ? <img src={s.photo} alt={`Photo: ${s.title}`} loading="lazy" /> : null}
+    </Lead>
+  );
+}
+
 /**
- * Evidence drawer (PRD §3 flow 2): opens on `SELECTION.evidenceId` and shows the normalized record, the raw
+ * Evidence drawer (PRD §3 flow 2): a plain-language lead (T41) and the publisher link up top; under "Details for
+ * experts", the id, the normalized record, the raw
  * payload as fetched, source link, fetch time, ingest lag, feed state, and duplicate / revision / conflict
  * links. Hotspot evidence adds the explain panel, and the backtest panel is one click from it.
  */
@@ -286,8 +393,12 @@ export default function EvidenceDrawer() {
   const open = isDrawerOpen(selection);
   const id = open ? selection!.evidenceId! : null;
   const [backtestFor, setBacktestFor] = useState<string | null>(null);
-  const state = useLoad(id, () => loadEvidence(id!));
+  // Ages read against the time cursor, so a replayed record says how old it was then.
+  const atMs = Date.parse(useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? TIME.defaults.to);
   const kind = id ? id.slice(0, id.indexOf(":")) : "";
+  // Field notes (T43) are not Axum evidence: the card reads the local board, so nothing is requested for them.
+  const note = kind === "note" ? id!.slice("note:".length) : null;
+  const state = useLoad(note ? null : id, () => loadEvidence(id!));
   const hotspot = id ? parseHotspotId(id) : null;
   const backtest = id ? parseBacktestId(id) : null;
   const showBacktest = hotspot !== null && backtestFor === id;
@@ -298,25 +409,22 @@ export default function EvidenceDrawer() {
       open={open}
       onClose={closeDrawer}
       width={400}
-      title={
-        <>
-          Evidence · <span style={{ color: "var(--text)" }}>{kind}</span>
-        </>
-      }
+      title={KIND_TITLES[kind] ?? "Record"}
       tabLabel="Evidence"
       actions={
-        <IconButton type="button" onClick={clearSelection} title="Clear selection">
-          Clear
-        </IconButton>
+        <>
+          {state.status === "ready" && <SourcePageLink url={state.data.sourcePageUrl} />}
+          <IconButton type="button" onClick={clearSelection} title="Clear selection">
+            Clear
+          </IconButton>
+        </>
       }
       data-testid="hud-drawer"
     >
-      <Section>
-        <Mono style={{ fontSize: 12, overflowWrap: "anywhere" }} data-testid="hud-drawer-id">
-          {id}
-        </Mono>
-        {state.status === "ready" && <QualityBadges evidence={state.data} />}
-      </Section>
+      {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
+      {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
+      {note && <NoteCard id={note} />}
+      {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
       {hotspot && (
         <Section>
           {showBacktest ? (
@@ -340,7 +448,7 @@ export default function EvidenceDrawer() {
           </IconButton>
         </Note>
       )}
-      {state.status === "ready" && <Record evidence={state.data} />}
+      <ExpertDetails id={id} evidence={state.status === "ready" ? state.data : null} />
     </Panel>
   );
 }

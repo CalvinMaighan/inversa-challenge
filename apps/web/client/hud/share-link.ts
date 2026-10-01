@@ -8,19 +8,20 @@
  * - `c`: lat, lon (5 decimals, about 1 m), altitude in metres, heading and pitch in degrees (1 decimal).
  * - `t`: the TIME cursor, UTC to the minute (frames are 15-minute steps, so nothing finer exists).
  * - `l`: visible layers, explicit, so layers hidden by default come back on too. Empty means none visible.
- * - `sp`: species filter, omitted when every species is on.
+ * - `sp`: species filter (the four focus species and `other`), omitted when every species is on.
  * - `e`: selected evidence id (PLAN.md C14).
  *
  * Decoding is defensive: a link is untrusted input, so each field is validated and clamped, and a bad field is
  * dropped instead of failing the whole link. Encode and decode are pure; `client/hud/ShareLinkSync.tsx` wires
  * them to the store and `history.replaceState`.
  */
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
+import { SPECIES_FILTER_IDS, type SpeciesFilterId } from "client/state/layers";
 import { parseEvidenceId } from "client/state/selection";
 
 export type LayerId = (typeof LAYER_IDS)[number];
-export type SpeciesId = (typeof SPECIES_IDS)[number];
+export type SpeciesId = SpeciesFilterId;
 
 export type ShareCamera = { lat: number; lon: number; altitudeM: number; heading: number; pitch: number };
 
@@ -73,8 +74,8 @@ export function encodeShareLink(state: ShareState): string {
     if (t) params.set("t", t);
   }
   if (state.layers) params.set("l", LAYER_IDS.filter((id) => state.layers!.includes(id)).join(","));
-  if (state.species && state.species.length < SPECIES_IDS.length) {
-    params.set("sp", SPECIES_IDS.filter((id) => state.species!.includes(id)).join(","));
+  if (state.species && state.species.length < SPECIES_FILTER_IDS.length) {
+    params.set("sp", SPECIES_FILTER_IDS.filter((id) => state.species!.includes(id)).join(","));
   }
   if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
@@ -115,7 +116,7 @@ export function decodeShareLink(hash: string): ShareState {
   if (t && Number.isFinite(Date.parse(t))) out.at = new Date(Date.parse(t)).toISOString();
   const layers = decodeList(params.get("l"), LAYER_IDS);
   if (layers) out.layers = layers;
-  const species = decodeList(params.get("sp"), SPECIES_IDS);
+  const species = decodeList(params.get("sp"), SPECIES_FILTER_IDS);
   if (species) out.species = species;
   const e = params.get("e");
   if (e && parseEvidenceId(e)) out.evidenceId = e;

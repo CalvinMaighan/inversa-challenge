@@ -454,6 +454,38 @@ async fn resolver_apply_ops_rejects_bad_ops_and_big_bodies() {
     assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
 
+/// Query cost limits (docs/security.md): aliasing cannot fan one document out into many table scans, and
+/// runaway nesting is refused, while the HUD's largest real document (241 aliased `alerts` samples) passes.
+#[tokio::test]
+async fn resolver_limits_query_cost() {
+    let state = seeded().await;
+    let window = "from: \"2026-09-01T00:00:00Z\", to: \"2026-09-02T00:00:00Z\"";
+    let fanned: Vec<String> = (0..20).map(|i| format!("s{i}: sightings(bbox: {REGION}, {window}) {{ id }}")).collect();
+    let body = gql(&state, &format!("{{ {} }}", fanned.join(" ")), json!({})).await;
+    assert!(body["data"].is_null(), "{body}");
+    assert!(error_message(&body).contains("complex"), "{body}");
+
+    // A handful of heavy fields is fine.
+    let few: Vec<String> = (0..3).map(|i| format!("s{i}: sightings(bbox: {REGION}, {window}) {{ id lat lon }}")).collect();
+    let body = gql(&state, &format!("{{ {} feeds {{ source }} }}", few.join(" ")), json!({})).await;
+    assert!(body["errors"].is_null(), "{body}");
+
+    // The alert-band document the HUD sends for a 30-day window at 3 h spacing.
+    let bands: Vec<String> = (0..241)
+        .map(|i| format!("a{i}: alerts(bbox: {REGION}, at: \"{}\") {{ id event severity headline onset expires }}", iso(ms(2026, 9, 1, 0) + i * 3 * HOUR)))
+        .collect();
+    let body = gql(&state, &format!("{{ {} }}", bands.join(" ")), json!({})).await;
+    assert!(body["errors"].is_null(), "{body}");
+
+    // Nesting past MAX_DEPTH (introspection types nest through ofType).
+    let mut deep = String::from("name");
+    for _ in 0..super::MAX_DEPTH {
+        deep = format!("ofType {{ {deep} }}");
+    }
+    let body = gql(&state, &format!("{{ __type(name: \"Sighting\") {{ fields {{ type {{ {deep} }} }} }} }}"), json!({})).await;
+    assert!(error_message(&body).contains("nested too deep"), "{body}");
+}
+
 /// `ops` over a real socket: graphql-transport-ws subscribe, `applyOps` over HTTP on the same
 /// server, then the op arrives as a `next` message.
 #[tokio::test]

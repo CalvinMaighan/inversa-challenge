@@ -20,8 +20,11 @@ describe("default agent runner", () => {
       bbox: HUD.bbox,
       time: "2026-09-30T12:00:00.000Z",
       layers: ["sightings", "hotspots"],
+      species: ["python"],
       selection: "sighting:inat-1",
     });
+    // Every species shown: no filter to pass on.
+    expect(agentViewFromHud({ ...HUD, species: ["python", "tegu", "iguana", "lionfish", "other"] })?.species).toBeUndefined();
     expect(agentViewFromHud(null)).toBeUndefined();
     expect(agentViewFromHud({ bbox: { west: 1 }, time: { at: "2026-09-30T12:00:00Z" } })).toBeUndefined();
     expect(agentViewFromHud({ ...HUD, time: { at: "not a time" } })).toBeUndefined();

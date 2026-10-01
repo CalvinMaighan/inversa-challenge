@@ -2,14 +2,22 @@ import { key } from "@calvinjs/active-state";
 
 import type { EvidenceKind } from "shared/agent/events";
 
-/** Viewport rect, CSS pixels, as `getBoundingClientRect` reports it. */
-export type AnchorRect = { x: number; y: number; width: number; height: number };
+/** Chat column tabs (PRD §12 "Layout"): the agent thread, or the team board (shown as "Notes", T43). */
+export const AGENT_TABS = ["agent", "board"] as const;
+export type AgentTab = (typeof AGENT_TABS)[number];
 
+/** Phone bottom-sheet snap points, lowest first. Desktop ignores it: the column is always fully open. */
+export const SHEET_SNAPS = ["collapsed", "half", "full"] as const;
+export type SheetSnap = (typeof SHEET_SNAPS)[number];
+
+/** The chat column's UI state. The key keeps its PLAN.md name from the orb era (T14); T40 made it the column. */
 export type AgentCardState = {
-  /** Orb morphed into the chat card. */
-  open: boolean;
-  /** Orb rect the card morphs from and collapses back to; null until the orb has measured itself. */
-  anchor: AnchorRect | null;
+  /** Tab the column shows. */
+  tab: AgentTab;
+  /** Phone sheet height. */
+  sheet: SheetSnap;
+  /** Activity arrived on a tab while the other one was showing; cleared when that tab opens. */
+  unread: Record<AgentTab, boolean>;
 };
 
 export type AgentCitation = { id: string; kind: EvidenceKind; label: string };
@@ -43,7 +51,7 @@ export type AgentHighlightState = {
   hover: AgentHighlightTarget | null;
 };
 
-const cardDefaults: AgentCardState = { open: false, anchor: null };
+const cardDefaults: AgentCardState = { tab: "agent", sheet: "collapsed", unread: { agent: false, board: false } };
 const chatDefaults: AgentChatState = { sessionId: null, messages: [] };
 const highlightDefaults: AgentHighlightState = { turnId: null, targets: [], hover: null };
 

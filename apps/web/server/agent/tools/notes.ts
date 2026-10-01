@@ -1,0 +1,204 @@
+/**
+ * `notes` (T43): read-only view of the team's field notes, the `note` entities on the CRDT board (PLAN.md C5)
+ * through GraphQL `board(id)`, filtered here by bbox and time window (the board query has no filters). Rows go
+ * back as a C17 table with `note:<id>` highlight ids, so "what have people noted near Homestead today?" lands on
+ * the globe. Note text is written by people in the app: untrusted data for the model, never instructions.
+ */
+
+import { z } from "zod";
+
+import { REGION_BBOX } from "@/server/agent/config";
+import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
+import { evidence, SPECIES_KEYS } from "@/server/agent/tools/evidence";
+import { gql } from "@/server/agent/tools/gql";
+import { extentOf, MAX_HIGHLIGHT, MAX_VIEW_ROWS, withView, type ToolViewData } from "@/server/agent/tools/views";
+import type { BBox } from "@/shared/agent/events";
+import type { TableView } from "@/shared/agent/results";
+import { LAYER_IDS } from "@/shared/voice/ui-tools";
+
+/** One shared board for the region (client/state/missions.ts DEFAULT_BOARD_ID). */
+export const BOARD_ID = "everglades";
+const HOUR_MS = 3_600_000;
+/** Notes are human and sparse: a week by default, up to 90 days back. */
+const DEFAULT_HOURS = 24 * 7;
+const MAX_HOURS = 24 * 90;
+/** Rows the model reads; the panel shows up to MAX_VIEW_ROWS. */
+const MAX_MODEL_ROWS = 40;
+/**
+ * `ctx.now` is the timeline cursor, which sits on a 15-minute frame step at the live edge (PLAN.md C15), while
+ * notes carry wall-clock times: a note written in the current quarter hour must still count as "today".
+ */
+const LIVE_EDGE_SLACK_MS = 15 * 60_000;
+/** Note text is capped at 500 characters client-side; the model sees at most this much of each. */
+const MODEL_TEXT_CHARS = 240;
+
+const NOTES_QUERY = `query AgentNotes($id: ID!) { board(id: $id) { id notes { id fields } } }`;
+
+type GqlNote = { id: string; fields: unknown };
+
+export type NoteRow = {
+  id: string;
+  text: string;
+  lat: number;
+  lon: number;
+  species: string | null;
+  sightingId: string | null;
+  callsign: string;
+  createdBy: string;
+  createdAt: string;
+};
+
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** A field note from its merged registers; null for mission notes or rows without text, a place and a time. */
+export function noteRow(n: GqlNote): NoteRow | null {
+  const f = (typeof n.fields === "object" && n.fields !== null ? n.fields : {}) as Record<string, unknown>;
+  if (f._deleted === true) return null;
+  const lat = num(f.lat);
+  const lon = num(f.lon);
+  const text = str(f.text).trim();
+  const createdAt = str(f.createdAt);
+  if (!text || lat === null || lon === null || Math.abs(lat) > 90 || Math.abs(lon) > 180 || !Number.isFinite(Date.parse(createdAt))) return null;
+  const species = str(f.species);
+  return {
+    id: n.id,
+    text,
+    lat,
+    lon,
+    species: (SPECIES_KEYS as readonly string[]).includes(species) ? species : null,
+    sightingId: str(f.sightingId) || null,
+    callsign: str(f.callsign),
+    createdBy: str(f.createdBy),
+    createdAt: new Date(createdAt).toISOString(),
+  };
+}
+
+const bboxSchema = z
+  .object({
+    west: z.number().min(-180).max(180),
+    south: z.number().min(-90).max(90),
+    east: z.number().min(-180).max(180),
+    north: z.number().min(-90).max(90),
+  })
+  .refine((b) => b.west < b.east && b.south < b.north, "bbox needs west < east and south < north")
+  .describe("Area in degrees. Get one from geocode. Defaults to the user's current view, else the whole region.");
+
+const timeSchema = z
+  .string()
+  .refine((value) => value === "" || Number.isFinite(Date.parse(value)), "must be an ISO 8601 time")
+  .describe("ISO 8601 time");
+
+const notesInput = z.object({
+  bbox: bboxSchema.optional(),
+  species: z.enum(SPECIES_KEYS).optional().describe("Only notes tagged with this species."),
+  from: timeSchema.optional(),
+  to: timeSchema.optional(),
+  hours: z.number().min(1).max(MAX_HOURS).optional().describe("Lookback from `to` (default 168 = 7 days; 'today' is 24)."),
+});
+
+const inBox = (b: BBox, lat: number, lon: number) => lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east;
+
+/** Filter and order notes: inside the box and window, newest first. Exported for the tests. */
+export function selectNotes(rows: readonly NoteRow[], bbox: BBox, window: { from: string; to: string }, species?: string): NoteRow[] {
+  const from = Date.parse(window.from);
+  const to = Date.parse(window.to);
+  return rows
+    .filter((r) => inBox(bbox, r.lat, r.lon))
+    .filter((r) => {
+      const t = Date.parse(r.createdAt);
+      return t >= from && t <= to;
+    })
+    .filter((r) => !species || r.species === species)
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (a.id < b.id ? 1 : -1));
+}
+
+/** C17 table: one row per note with `note:<id>` for click-through, highlight ids, and the notes' own extent. */
+export function notesView(rows: readonly NoteRow[], bbox: BBox, title: string): ToolViewData {
+  const shown = rows.slice(0, MAX_VIEW_ROWS);
+  const table: TableView = {
+    view: "table",
+    title,
+    columns: [
+      { key: "time", label: "Written", kind: "time" },
+      { key: "author", label: "By", kind: "text" },
+      { key: "species", label: "Species", kind: "text" },
+      { key: "note", label: "Note", kind: "text" },
+      { key: "lat", label: "Lat", unit: "°", kind: "number" },
+      { key: "lon", label: "Lon", unit: "°", kind: "number" },
+      { key: "sighting", label: "About sighting", kind: "text" },
+    ],
+    rows: shown.map((r) => ({
+      evidenceId: `note:${r.id}`,
+      time: r.createdAt,
+      author: r.callsign || r.createdBy.slice(0, 8),
+      species: r.species,
+      note: r.text,
+      lat: r.lat,
+      lon: r.lon,
+      sighting: r.sightingId ? `sighting:${r.sightingId}` : null,
+    })),
+    ...(rows.length > shown.length ? { total: rows.length } : {}),
+  };
+  return { result: table, highlight: shown.slice(0, MAX_HIGHLIGHT).map((r) => `note:${r.id}`), bbox: extentOf(shown) ?? bbox };
+}
+
+function resolveBbox(input: BBox | undefined, ctx: CapabilityContext): BBox {
+  const b = input ?? ctx.view?.bbox ?? REGION_BBOX;
+  const clamped = { west: Math.max(b.west, REGION_BBOX.west), south: Math.max(b.south, REGION_BBOX.south), east: Math.min(b.east, REGION_BBOX.east), north: Math.min(b.north, REGION_BBOX.north) };
+  if (clamped.west >= clamped.east || clamped.south >= clamped.north) throw new Error("bbox is outside the operating region (South Florida, 24.3–27.5°N, 83.2–79.8°W)");
+  return clamped;
+}
+
+export const notes = {
+  name: LAYER_IDS[8],
+  description:
+    "Field notes people on the team wrote on the map in this app (plain text, a place, optional species and sighting link). Human observations, not a data feed: report them as what someone noted, with who and when. Default window: the last 7 days; use hours: 24 for 'today'. The user sees every row in a table panel.",
+  inputSchema: notesInput,
+  async execute(input: z.infer<typeof notesInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+    const bbox = resolveBbox(input.bbox, ctx);
+    const edge = ctx.now.getTime() + LIVE_EDGE_SLACK_MS;
+    const asked = input.to ? Date.parse(input.to) : edge;
+    // A `to` at or after the reference time means "now": the live edge, so the current quarter hour counts.
+    const to = new Date(asked >= ctx.now.getTime() - LIVE_EDGE_SLACK_MS ? Math.max(asked, edge) : asked);
+    const hours = Math.min(input.hours ?? DEFAULT_HOURS, MAX_HOURS);
+    const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
+    if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
+    const window = { from: from.toISOString(), to: to.toISOString() };
+    const data = await gql<{ board: { notes: GqlNote[] } }>("AgentNotes", NOTES_QUERY, { id: BOARD_ID }, ctx.signal);
+    const all = data.board.notes.map(noteRow).filter((r): r is NoteRow => r !== null);
+    const rows = selectNotes(all, bbox, window, input.species);
+    const shown = rows.slice(0, MAX_MODEL_ROWS);
+    const evidenceRows = shown.map((r) => evidence("note", r.id, `${r.callsign || "note"} · ${r.createdAt} · ${r.text.slice(0, 60)}`));
+    const bySpecies: Record<string, number> = {};
+    for (const r of rows) bySpecies[r.species ?? "untagged"] = (bySpecies[r.species ?? "untagged"] ?? 0) + 1;
+    const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * HOUR_MS)));
+    const title = `Field notes · last ${days} ${days === 1 ? "day" : "days"}`;
+    const out: CapabilityOutput = {
+      data: {
+        source: "Team field notes written by people in this app: human observations, not a data feed, so no feed health applies.",
+        bbox,
+        window,
+        total: rows.length,
+        onBoard: all.length,
+        bySpecies,
+        truncated: rows.length > shown.length,
+        rows: shown.map((r, i) => ({
+          evidenceId: evidenceRows[i]!.id,
+          author: r.callsign || r.createdBy.slice(0, 8),
+          createdAt: r.createdAt,
+          species: r.species,
+          lat: r.lat,
+          lon: r.lon,
+          aboutSighting: r.sightingId ? `sighting:${r.sightingId}` : null,
+          text: r.text.length > MODEL_TEXT_CHARS ? `${r.text.slice(0, MODEL_TEXT_CHARS)}…` : r.text,
+        })),
+        evidence: evidenceRows,
+      },
+      evidence: evidenceRows,
+      feeds: [],
+      count: rows.length,
+    };
+    return withView(out, notesView(rows, bbox, title));
+  },
+};
