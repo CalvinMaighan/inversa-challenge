@@ -1,0 +1,1049 @@
+{
+  "app": "python",
+  "note": "Held-out benchmark set (gates/leaf-AG2.md G5/G6): paraphrases and new questions the prompts never saw. Same schema as the main file plus paraphraseOf and changelog.",
+  "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "created before the final tuning runs: paraphrases of documented questions (paraphraseOf) and new questions across the ten categories; not edited after seeing results."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "ph-replay-month: the span phrase took only \"30 days\" or \"month\"; \"30-day\" names the same span, so the pattern now takes that spelling too (1 pattern; the same spelling fix the main set got)."
+    }
+  ],
+  "questions": [
+    {
+      "id": "ph-lookup-week",
+      "category": "lookup",
+      "question": "Any python reports in the Everglades this past week?",
+      "intent": "Paraphrase of the 7-day sightings lookup.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-lookup-sightings-7d",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "phrases": [
+          "python",
+          "(research|needs id|casual|curated|grade)"
+        ],
+        "cites": {
+          "sighting": 2
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-lookup-air-homestead",
+      "category": "lookup",
+      "question": "What's the air temperature in Homestead right now?",
+      "intent": "New: an air reading at another place.",
+      "expectedTools": [
+        "geocode",
+        "conditions"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(\\u00B0C|\\u00B0F|degrees)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ],
+        "cites": {
+          "reading": 1
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-lookup-top-cells",
+      "category": "lookup",
+      "question": "which cells rank highest for a removal crew tonight and why",
+      "intent": "Casual paraphrase of the hotspot ranking lookup.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:hotspot"
+      ],
+      "paraphraseOf": "python-lookup-hotspots-big-cypress",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "heuristic",
+          "density"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-lookup-week-total",
+      "category": "lookup",
+      "question": "How many python reports this week, and how many were duplicates?",
+      "intent": "Paraphrase of the weekly count with duplicates.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-lookup-week-count",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+ pythons (live|in the)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "\\d+",
+          "(report|sighting)",
+          "(distinct|duplicate|dedup)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-change-week",
+      "category": "change",
+      "question": "Python reports: this week vs last week?",
+      "intent": "Terse paraphrase of the week-on-week comparison.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-change-week-on-week",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(last|previous|prior) week",
+          "(more|fewer|same|up|down|rose|fell|increase|decrease|\\d+ (to|vs\\.?|versus|compared with) \\d+)",
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-change-lst-3d",
+      "category": "change",
+      "question": "Has the land surface temperature at Shark Valley moved over the last three days?",
+      "intent": "Paraphrase of the LST change question.",
+      "expectedTools": [
+        "geocode",
+        "conditions"
+      ],
+      "mustCite": [
+        "feed:goes19",
+        "kind:reading"
+      ],
+      "paraphraseOf": "python-change-lst-3d",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(LST|land surface)",
+          "(rose|fell|warmer|cooler|steady|up|down|gap|missing|cloud)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-change-last-day",
+      "category": "change",
+      "question": "What happened in the last day across the Everglades?",
+      "intent": "New: the 24 h change across feeds.",
+      "expectedTools": [
+        "sightings",
+        "alerts",
+        "conditions",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:nws",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(24 hours|last day|since yesterday|past day)",
+          "(new|no new)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-explain-taylor",
+      "category": "explain",
+      "question": "why is taylor slough lit up on the map",
+      "intent": "Casual paraphrase of the Taylor Slough explanation.",
+      "expectedTools": [
+        "geocode",
+        "hotspots",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:hotspot"
+      ],
+      "paraphraseOf": "python-explain-taylor-slough",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "heuristic",
+          "(density|activity|access)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-explain-activity",
+      "category": "explain",
+      "question": "What is the 'activity' part of the score?",
+      "intent": "New wording for the activity term explanation.",
+      "expectedTools": [
+        "explain_cell",
+        "source_info"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "activity",
+          "(temperature|LST|air)",
+          "heuristic"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-explain-cold-drop",
+      "category": "explain",
+      "question": "Scores dropped when it got cold in January. Why?",
+      "intent": "Paraphrase of the cold-snap explanation.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell",
+        "conditions"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "kind:reading"
+      ],
+      "paraphraseOf": "python-explain-cold-snap-drop",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "cold",
+          "activity",
+          "heuristic"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-relevance-lst",
+      "category": "relevance",
+      "question": "Why track land surface temperature at all?",
+      "intent": "Paraphrase of the LST relevance question.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:goes19",
+        "kind:source"
+      ],
+      "paraphraseOf": "python-relevance-lst",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "pythons (will|always) (bask|move)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(LST|land surface)",
+          "(activity|heuristic)",
+          "cloud"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-relevance-stage",
+      "category": "relevance",
+      "question": "What does the water level have to do with pythons?",
+      "intent": "New wording for the stage relevance question.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "high water (makes|causes|drives) pythons"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "stage|water level",
+          "(access|context|conditions)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-relevance-trust",
+      "category": "relevance",
+      "question": "Can I actually rely on the hotspot ranking?",
+      "intent": "Paraphrase of the backtest trust question.",
+      "expectedTools": [
+        "backtest"
+      ],
+      "mustCite": [
+        "kind:backtest"
+      ],
+      "paraphraseOf": "python-relevance-backtest",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "baseline",
+          "heuristic"
+        ],
+        "cites": {
+          "backtest": 1
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-quality-unconfirmed",
+      "category": "quality",
+      "question": "Which python reports are unconfirmed?",
+      "intent": "Paraphrase of the needs-ID question.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-quality-needs-id",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(needs id|casual|conflict|unconfirmed)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-quality-late",
+      "category": "quality",
+      "question": "any python records that showed up late?",
+      "intent": "Casual paraphrase of the late-arrivals question.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:nas",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-quality-late",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(late|after|lag)",
+          "(hours?|days?)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-quality-feeds-broken",
+      "category": "quality",
+      "question": "Is anything broken in the data feeds right now?",
+      "intent": "New: the stale and down feeds, named with ages.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:ndbc",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "phrases": [
+          "stale",
+          "down",
+          "ndbc"
+        ],
+        "cites": {
+          "fetch": 3
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-quality-sst-conflict",
+      "category": "quality",
+      "question": "The GOES sea temperature at Biscayne doesn't match the buoy. Which do we trust?",
+      "intent": "Paraphrase of the buoy-versus-satellite conflict.",
+      "expectedTools": [
+        "geocode",
+        "conditions"
+      ],
+      "mustCite": [
+        "feed:ndbc",
+        "feed:goes19",
+        "kind:reading"
+      ],
+      "paraphraseOf": "py-legacy-quality-conflict-biscayne-sst",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "phrases": [
+          "conflict|disagree|differ",
+          "measured|in-situ",
+          "stale"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-planning-tamiami-weekend",
+      "category": "planning",
+      "question": "Where along the Tamiami Trail should we send crews this weekend?",
+      "intent": "Paraphrase of the weekend planning question.",
+      "expectedTools": [
+        "geocode",
+        "hotspots",
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:nws"
+      ],
+      "paraphraseOf": "python-planning-tamiami-weekend",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "heuristic",
+          "(forecast|weekend)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-planning-best-evening",
+      "category": "planning",
+      "question": "Which evening this week is best for a road cruise?",
+      "intent": "Paraphrase of the best-night question.",
+      "expectedTools": [
+        "weather_forecast",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "paraphraseOf": "python-planning-best-night",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(night|evening)",
+          "heuristic",
+          "(\\u00B0F|degrees|temperature)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-planning-blind-spots",
+      "category": "planning",
+      "question": "Where are we flying blind on data tonight?",
+      "intent": "New wording for the no-recent-data question.",
+      "expectedTools": [
+        "feed_state",
+        "conditions",
+        "sightings"
+      ],
+      "mustCite": [
+        "kind:fetch",
+        "feed:goes19"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(missing|stale|no recent|gap|cloud)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-planning-cold-tonight",
+      "category": "planning",
+      "question": "Will it be too cold for pythons to move tonight?",
+      "intent": "Paraphrase of the cold-night caveat.",
+      "expectedTools": [
+        "conditions",
+        "weather_forecast",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:reading",
+        "feed:nws"
+      ],
+      "paraphraseOf": "python-planning-cold-tonight",
+      "pass": {
+        "mode": "caveat",
+        "forbid": [
+          "pythons (will|won't|will not) (be )?(move|active|out)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(threshold|activity term|heuristic)",
+          "(\\u00B0F|\\u00B0C|degrees)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-sources-sighting-platform",
+      "category": "sources",
+      "question": "Which platform did this python report come from?",
+      "intent": "Paraphrase of the sighting-origin question.",
+      "expectedTools": [
+        "evidence"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-sources-sighting",
+      "context": {
+        "selectedEvidence": "a python sighting"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(iNaturalist|GBIF|NAS)",
+          "observed",
+          "https?:\\/\\/"
+        ],
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-sources-licences",
+      "category": "sources",
+      "question": "Under what licences do we get the python app's feeds?",
+      "intent": "Paraphrase of the licences question.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:usgs",
+        "feed:nws",
+        "kind:source"
+      ],
+      "paraphraseOf": "python-sources-licences",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "public domain",
+          "(CC|Creative Commons|licen[cs]e)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-sources-nas-speed",
+      "category": "sources",
+      "question": "How quickly does NAS publish new records?",
+      "intent": "New wording for the NAS cadence question.",
+      "expectedTools": [
+        "source_info",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:nas",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "NAS",
+          "(weeks|months|days|lag)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-replay-month",
+      "category": "replay",
+      "question": "Play back the last month of python sightings.",
+      "intent": "Paraphrase of the 30-day replay.",
+      "expectedTools": [
+        "set_view",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-replay-30d",
+      "view": {
+        "timeline": "play last 30 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(30[- ]days?|month)",
+          "report|sighting"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-replay-tuesday-noon",
+      "category": "replay",
+      "question": "At noon last Tuesday, what did we know about Shark Valley?",
+      "intent": "Reordered paraphrase of the knowledge-time question.",
+      "expectedTools": [
+        "geocode",
+        "sightings",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "python-replay-known-tuesday",
+      "view": {
+        "timeline": "last Tuesday 12:00"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(as of|at the time|known|knew)",
+          "(later|since|after)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-replay-cold-map",
+      "category": "replay",
+      "question": "Put the map at the January cold snap and show the hotspot cells.",
+      "intent": "New wording for the cold-snap map replay.",
+      "expectedTools": [
+        "set_view",
+        "hotspots",
+        "conditions"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "kind:reading"
+      ],
+      "view": {
+        "map": "cold-snap scene",
+        "timeline": "2026-01-15"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "cold",
+          "(January|2026-01)",
+          "heuristic"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-population",
+      "category": "boundary",
+      "question": "Roughly how many pythons are in the Everglades these days?",
+      "intent": "Paraphrase of the population refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "python-boundary-population",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "(about|roughly|approximately|estimated?|around|tens of|hundreds of) [\\d,]*\\s*(thousand )?pythons"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-odds",
+      "category": "boundary",
+      "question": "What are the odds of spotting a python at Flamingo tonight?",
+      "intent": "Paraphrase of the percent-chance refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "python-boundary-risk-percent",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(probabilit|percent|chance|odds)",
+          "heuristic"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-tampa",
+      "category": "boundary",
+      "question": "Any pythons up near Tampa?",
+      "intent": "Paraphrase of the outside-region refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "python-boundary-orlando",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "\\d+ (python )?(reports|sightings) near Tampa"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(Everglades|South Florida)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-iguanas",
+      "category": "boundary",
+      "question": "where are the iguanas cold-stunned this morning",
+      "intent": "New: a context-species question, refused by name.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "iguanas? (will be|are) (stunned|easy|good)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(python|Burmese python)",
+          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-carp",
+      "category": "boundary",
+      "question": "How are the carp rivers looking in Louisiana?",
+      "intent": "Paraphrase of the carp refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "python-boundary-carp",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(ft|feet|cfs)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(Carp app|carp)",
+          "(Everglades|South Florida)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-boundary-levee-safety",
+      "category": "boundary",
+      "question": "Safe to drive the levee roads around Shark Valley tonight?",
+      "intent": "Paraphrase of the night-safety caveat.",
+      "expectedTools": [
+        "alerts",
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "paraphraseOf": "python-boundary-safe-night",
+      "pass": {
+        "mode": "caveat",
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "\\bunsafe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
+          "(alert|forecast)"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-team-notes-today",
+      "category": "team",
+      "question": "Anything the crews noted today?",
+      "intent": "Paraphrase of today's notes question.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "paraphraseOf": "python-team-notes-today",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "phrases": [
+          "(noted|wrote|note)"
+        ],
+        "cites": {
+          "note": 1
+        }
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-team-shark-valley-chat",
+      "category": "team",
+      "question": "What's the chatter about Shark Valley today?",
+      "intent": "Paraphrase of the messages question.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:message"
+      ],
+      "paraphraseOf": "python-team-messages",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "phrases": [
+          "(message|wrote|said|sent|no messages)",
+          "Shark Valley"
+        ]
+      },
+      "app": "python",
+      "helper": false
+    },
+    {
+      "id": "ph-team-crews-on-cells",
+      "category": "team",
+      "question": "Are tonight's crews on the best cells?",
+      "intent": "New wording for the missions-versus-hotspots question.",
+      "expectedTools": [
+        "team_board",
+        "hotspots"
+      ],
+      "mustCite": [
+        "kind:mission",
+        "kind:hotspot"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 2,
+        "phrases": [
+          "mission",
+          "heuristic"
+        ],
+        "cites": {
+          "mission": 1,
+          "hotspot": 1
+        }
+      },
+      "app": "python",
+      "helper": false
+    }
+  ]
+}

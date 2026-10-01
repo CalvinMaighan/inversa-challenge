@@ -33,7 +33,16 @@ export const sourceInfo = {
   async execute(input: z.infer<typeof sourceInfoInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const configured = ctx.app.feeds.map((f) => f.source);
     const asked = given(input.feed)?.toLowerCase();
-    const direct = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
+    const exact = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
+    // A feed named in words ("USGS NAS", "Coral Reef Watch", "Open-Meteo"): the feeds whose id, publisher or name share the most words with it.
+    const words = (asked ?? "").split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+    const scored = configured.map((s) => {
+      const facts = SOURCE_FACTS[s];
+      const hay = `${s} ${facts?.sayAs ?? ""} ${facts?.publisher ?? ""} ${ctx.app.feeds.find((f) => f.source === s)?.name ?? ""}`.toLowerCase();
+      return { s, score: words.filter((w) => hay.includes(w)).length };
+    });
+    const best = Math.max(0, ...scored.map((x) => x.score));
+    const direct = exact.length > 0 || !asked ? exact : best > 0 ? scored.filter((x) => x.score === best).map((x) => x.s) : [];
     if (asked && direct.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
     // An archive and the live source it copies belong in one answer: asking for one brings the other.
     const known = new Set<string>(configured);
@@ -102,6 +111,7 @@ export const sourceInfo = {
           note: `Facts are static (adapter documentation); health is the feed's current state. ${rows.length} feed${rows.length === 1 ? "" : "s"} returned (${rows.map((r) => r.feed).join(", ")}): a question about the sources, licences, rate limits or feeds names every one of them. Introduce each feed with its \`headline\`, copied verbatim (it names the publisher, licence and rate limit as written, with the marker); a related feed is included because the answer needs both; end with the freshnessLine.`,
           freshnessLine,
           ...(asked && wanted.length < configured.length ? { otherFeeds: `this app has ${configured.length - wanted.length} more feed${configured.length - wanted.length === 1 ? "" : "s"} (${configured.filter((s) => !wanted.includes(s)).join(", ")}): a question about the data sources, licences or rate limits as a whole needs source_info with no feed argument` } : {}),
+          markers: `Cite every feed you name: ${rows.map((row) => row.cite).join(" ")}`,
           rows,
         },
         evidenceRows,
@@ -178,11 +188,14 @@ export const evidenceTool = {
         record: row.record,
         sourceUrl: row.sourceUrl,
         sourcePageUrl: row.sourcePageUrl,
+        ...(row.sourcePageUrl ? { pageLine: `Publisher page: ${row.sourcePageUrl} (write this URL out in full)` } : {}),
         fetchedAt: row.fetchedAt,
         fetchedLocal,
         issuedLocal: stamp("issuedAt") ? localTime(ctx.app, stamp("issuedAt")!) : null,
         observedLocal: stamp("observedAt") ? localTime(ctx.app, stamp("observedAt")!) : null,
         agesAtReference: ages,
+        // The dates in words, so an answer about a record says observed, submitted and fetched with their times.
+        datesLine: [stamp("observedAt") ? `observed ${localTime(ctx.app, stamp("observedAt")!)}` : null, stamp("ingestedAt") ? `submitted (stored) ${localTime(ctx.app, stamp("ingestedAt")!)}` : null, stamp("issuedAt") ? `issued ${localTime(ctx.app, stamp("issuedAt")!)}` : null, row.fetchedAt && Number.isFinite(Date.parse(row.fetchedAt)) ? `fetched ${localTime(ctx.app, row.fetchedAt)}` : null].filter(Boolean).join("; "),
         ingestLagSeconds: row.ingestLagSeconds,
         feed: feedSource,
         links: row.links,

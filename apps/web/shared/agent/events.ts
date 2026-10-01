@@ -23,7 +23,7 @@ export type AgentStreamEvent =
       error?: string;
     }
   | { type: "context"; windowTokens: number; segments: { label: string; tokens: number }[] }
-  | ({ type: "view"; bbox: BBox; time: string } & CarpViewState)
+  | ({ type: "view"; bbox: BBox; time: string } & CarpViewState & LionfishViewState)
   | { type: "citation"; id: string; kind: EvidenceKind; label: string }
   | { type: "done"; content: string }
   | { type: "error"; message: string }
@@ -35,6 +35,15 @@ export type AgentStreamEvent =
  * knowledge time in unix ms (absent = live), `replay` switches the timeline to knowledge time.
  */
 export type CarpViewState = { site?: string; asOf?: number; replay?: boolean };
+
+/**
+ * Lionfish view state (shared contract with the lionfish UI, leaf UL): `preset` is a camera preset, one of the
+ * four area ids (`fl-keys`, `mx-caribbean`, `belize`, `co-caribbean`) or `all-areas`; `region` and `area` both
+ * carry the area id when one area is framed (absent for all four); `layers` names config layer ids to switch on
+ * (`heat`, `hotspots`, `marine`, `sightings`, `sst`, `stations`, `notes`, `missions`); `basis` is the priority
+ * basis toggle. Knowledge time comes with `asOf` and `replay` from CarpViewState. Read structurally.
+ */
+export type LionfishViewState = { preset?: string; region?: string; area?: string; layers?: string[]; basis?: "submitted" | "observed" };
 
 /**
  * Evidence ids are `<kind>:<key>` (PLAN.md C14). `note:<id>` is a team field note on the CRDT board (T43);
@@ -53,7 +62,7 @@ export type AgentStreamRequest = {
    * `species`: the globe's species filter keys still shown, sent only when the filter hides an animal.
    * `windowHours`: the trailing sightings window the globe draws (48, 168 or 720; T44).
    */
-  view?: { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState;
+  view?: { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState & LionfishViewState;
 };
 
 export const AGENT_STREAM_CONTENT_TYPE = "application/x-ndjson";

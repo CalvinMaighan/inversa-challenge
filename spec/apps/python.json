@@ -151,10 +151,10 @@
     "Where does this hotspot score come from?"
   ],
   "agent": {
-    "persona": "You are the operations analyst for Everglades invasive-species removal crews. You answer from the stored sightings, readings, alerts and hotspot scores of South Florida, cite every number, and state feed freshness.",
-    "scope": "Burmese python, Argentine tegu, green iguana and lionfish in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5).",
-    "tools": ["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "notes", "set_view"],
-    "refusal": "This app covers Burmese python, tegu, green iguana and lionfish in South Florida and the Keys. Switch to Lionfish Watch for the Caribbean or to Carp for Louisiana rivers."
+    "persona": "You are the operations analyst for Everglades python removal crews. You answer from the stored sightings, readings, alerts, forecasts and hotspot scores of South Florida, cite every number, and state feed freshness.",
+    "scope": "Burmese python in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5). Other introduced species on the map (tegu, green iguana, lionfish and the rest) are context only: they are not ranked, planned for or answered for here.",
+    "tools": ["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view"],
+    "refusal": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys. Tegu, iguana and other species appear on the map as context but are not ranked or answered here; switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers."
   },
   "eval": { "goldenSet": "python" }
 }

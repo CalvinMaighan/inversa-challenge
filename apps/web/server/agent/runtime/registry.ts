@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import type { AgentStreamEvent, BBox, CarpViewState, EvidenceKind } from "@/shared/agent/events";
+import type { AgentStreamEvent, BBox, CarpViewState, EvidenceKind, LionfishViewState } from "@/shared/agent/events";
 import type { AppConfig } from "@/shared/apps";
 import type { FeedState } from "@/shared/feed-state";
 
@@ -21,7 +21,7 @@ export type CapabilityOutput = {
   count: number;
 };
 
-export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState;
+export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null } & CarpViewState & LionfishViewState;
 
 export type CapabilityContext = {
   /** The app the turn runs in: its regions bound every area, its API prefix every query (C-A5). */

@@ -965,17 +965,31 @@ export const weatherForecast = {
   inputSchema: weatherInput,
   async execute(input: z.infer<typeof weatherInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const siteName = given(input.site);
-    const site = siteName ? resolveSites(ctx.app, [siteName])[0]! : null;
-    if (!site && (input.lat === undefined || input.lon === undefined)) throw new Error("give a configured site (NWPS id, town or name), or lat and lon");
+    // A species app has no configured locations: a `site` there is a place name, so the point comes from lat and lon.
+    const site = siteName && ctx.app.locations.length > 0 ? resolveSites(ctx.app, [siteName])[0]! : null;
+    if (!site && (input.lat === undefined || input.lon === undefined)) throw new Error(ctx.app.locations.length > 0 ? "give a configured site (NWPS id, town or name), or lat and lon" : "give lat and lon (from geocode) for the place");
     const lat = site?.lat ?? input.lat!;
     const lon = site?.lon ?? input.lon!;
     const periods = input.periods ?? 6;
     const now = ctx.now.getTime();
     const from = now - 12 * HOUR_MS;
     const to = now + periods * 12 * HOUR_MS;
+    // The point's own grid cell, else the nearest gridpoint within half a degree (a park has one grid per office).
     const bbox: BBox = { west: lon - 0.06, south: lat - 0.06, east: lon + 0.06, north: lat + 0.06 };
-    const data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, from: iso(from), to: iso(to), params: ["AIR_C", "WIND_MS", "RAIN_MM"] }, ctx);
-    const modeled = data.readings.filter((r) => r.origin.toLowerCase() === "modeled" && (r.station.kind.toLowerCase() === "grid" || r.station.source === "nws-forecast" || r.station.source === "nws"));
+    const isGrid = (r: GqlReading) => r.origin.toLowerCase() === "modeled" && (r.station.kind.toLowerCase() === "grid" || r.station.source === "nws-forecast" || r.station.source === "nws");
+    let data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, from: iso(from), to: iso(to), params: ["AIR_C", "WIND_MS", "RAIN_MM"] }, ctx);
+    let nearest: string | null = null;
+    if (!data.readings.some(isGrid) && !site) {
+      const wide: BBox = { west: lon - 0.5, south: lat - 0.5, east: lon + 0.5, north: lat + 0.5 };
+      const around = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox: wide, from: iso(from), to: iso(to), params: ["AIR_C", "WIND_MS", "RAIN_MM"] }, ctx);
+      const grids = around.readings.filter(isGrid);
+      const best = grids.map((r) => r.station).sort((a, b) => Math.hypot(a.lat - lat, a.lon - lon) - Math.hypot(b.lat - lat, b.lon - lon))[0];
+      if (best) {
+        nearest = best.name;
+        data = { readings: grids.filter((r) => r.station.id === best.id), feeds: around.feeds };
+      }
+    }
+    const modeled = data.readings.filter(isGrid);
     const byTime = new Map<string, Partial<Record<string, number | null>>>();
     for (const r of modeled) {
       const slot = byTime.get(r.observedAt) ?? {};
@@ -984,8 +998,9 @@ export const weatherForecast = {
     }
     const feed = data.feeds.find((f) => f.source === "nws-forecast") ?? data.feeds.find((f) => f.source === "nws") ?? null;
     const updateTime = feed?.newestObservedAt ?? feed?.lastFetchAt ?? null;
-    const office = site?.office ?? "NWS";
-    const grid = site?.grid ?? `${lat.toFixed(3)},${lon.toFixed(3)}`;
+    const gridStation = modeled[0]?.station ?? null;
+    const office = site?.office ?? gridStation?.name.match(/\b([A-Z]{3})\b/)?.[1] ?? "NWS";
+    const grid = site?.grid ?? (gridStation ? gridStation.id : `${lat.toFixed(3)},${lon.toFixed(3)}`);
     // No comma in an id: the citation parser splits marker groups on commas.
     const fid = `nws:${office}/${grid.replace(",", "x")}:${updateTime ? ms(updateTime) : 0}`;
     const rows = [...byTime.entries()]
@@ -1029,7 +1044,8 @@ export const weatherForecast = {
       output(
         {
           site: site?.lid ?? null,
-          name: site?.name ?? null,
+          name: site?.name ?? gridStation?.name ?? null,
+          ...(nearest ? { nearest: `no gridpoint at the point itself; this is the nearest stored gridpoint, ${nearest}` } : {}),
           office,
           grid,
           updateTime,

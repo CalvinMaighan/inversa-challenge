@@ -1,0 +1,1159 @@
+{
+  "app": "lionfish",
+  "note": "Held-out benchmark set (gates/leaf-AG2.md G5/G6): paraphrases and new questions the prompts never saw. Same schema as the main file plus paraphraseOf and changelog.",
+  "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "created before the final tuning runs: paraphrases of documented questions (paraphraseOf) and new questions across the ten categories; not edited after seeing results."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "population forbids: the negated form still matched when a possessive sat between the negation and the noun (\"whether Belize's lionfish population is growing\"); the lookbehind now exempts a negation word anywhere earlier in the sentence (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "lh-replay-ranking-month-ago: the span phrase took only \"month\" or \"30 days\"; \"30-day\" and \"four weeks\" name the same span, so the pattern now takes those spellings too (1 pattern; the same spelling fix the main sets got)."
+    }
+  ],
+  "questions": [
+    {
+      "id": "lh-lookup-mx-month",
+      "category": "lookup",
+      "question": "what lionfish got reported around cozumel and the rest of the mexican caribbean in the past month?",
+      "intent": "Casual paraphrase of the 30-day Mexican Caribbean lookup.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "lionfish-lookup-mx-30d",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "phrases": [
+          "Mexican Caribbean|Quintana Roo|Cozumel|Chinchorro",
+          "(research|needs id|casual|grade)",
+          "observed"
+        ],
+        "cites": {
+          "sighting": 2
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-lookup-heat-everywhere",
+      "category": "lookup",
+      "question": "Heat stress check please: DHW and alert level for all four areas.",
+      "intent": "Paraphrase of the four-area heat lookup.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "paraphraseOf": "lionfish-lookup-heat-four-areas",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "DHW|degree heating",
+          "alert level|BAA|bleaching alert",
+          "\\d{4}-\\d{2}-\\d{2}|days? (old|ago)|as of",
+          "Belize",
+          "Colombia"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-lookup-swell-looe",
+      "category": "lookup",
+      "question": "Any swell at Looe Key right now?",
+      "intent": "Paraphrase of the wave lookup at a reef.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "paraphraseOf": "lionfish-lookup-waves-cozumel",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(model|Open-Meteo|forecast)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-lookup-fl-quiet",
+      "category": "lookup",
+      "question": "Has anyone reported a lionfish in Florida in the last 7 days?",
+      "intent": "New: the empty-week trap in Florida, answered as no reports, not no lionfish.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "(?<!(mean|imply|say|show) )no lionfish (are|were) (there|present)",
+          "lionfish (are|were) absent"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "report",
+          "(not (the same as|mean)|doesn't mean|does not mean)(?:[^.]|\\.\\d){0,60}(absen|no lionfish|none there)|no reports? (is|are) not"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-lookup-rank-areas",
+      "category": "lookup",
+      "question": "Rank the four areas for the next lionfish survey.",
+      "intent": "New: an area ranking with components and thin areas named.",
+      "expectedTools": [
+        "hotspots"
+      ],
+      "mustCite": [
+        "kind:hotspot"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "invasion risk"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "heuristic",
+          "(recent reports|heat stress|ID quality|identification|completeness)",
+          "thin"
+        ],
+        "cites": {
+          "hotspot": 1
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-lookup-san-andres-newest",
+      "category": "lookup",
+      "question": "What's the newest lionfish report with a photo from San Andres?",
+      "intent": "Paraphrase (no accent) of the San Andrés photo lookup.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "lionfish-lookup-san-andres-photo",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "San Andr[e\\u00E9]s|Colombia",
+          "observed"
+        ],
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-change-mx-vs-prior",
+      "category": "change",
+      "question": "In the Mexican Caribbean, were there more lionfish reports in the last 30 days than in the 30 days before?",
+      "intent": "Paraphrase of the 30-vs-30 comparison, moved to Mexico.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "lionfish-change-fl-30-vs-30",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "\\d+",
+          "observed",
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-change-dhw-cozumel-month",
+      "category": "change",
+      "question": "How much has DHW changed off Cozumel in the past 30 days?",
+      "intent": "Paraphrase of the DHW change question at another reef.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "paraphraseOf": "lionfish-change-dhw-looe-key",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "DHW|degree heating",
+          "(rose|risen|fell|fallen|peak|steady|up|down|increas|climb)",
+          "\\u00B0C-weeks|degree.?C.?weeks|C-weeks"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-change-belize-alert-week",
+      "category": "change",
+      "question": "Has Belize's bleaching alert level changed in the last 7 days?",
+      "intent": "New: one area's alert-level change this week.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "alert level|BAA",
+          "(changed|unchanged|rose|fell|same|from|went)",
+          "Belize"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-change-waves-glovers",
+      "category": "change",
+      "question": "Are the waves at Glover's Reef building or easing over the next few days?",
+      "intent": "Paraphrase of the wave trend question at another reef.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "paraphraseOf": "lionfish-change-waves-chinchorro",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "Glover",
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(build|rising|increas|calm|dropping|decreas|steady|eas)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-explain-top-cozumel",
+      "category": "explain",
+      "question": "whats pushing the cozumel cell to the top of the ranking",
+      "intent": "Casual paraphrase of the top-cell explanation.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:inat"
+      ],
+      "paraphraseOf": "lionfish-explain-top-cell",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "Cozumel",
+          "(recent reports|heat stress|ID quality|identification|completeness)",
+          "heuristic"
+        ],
+        "cites": {
+          "hotspot": 1
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-explain-belize-blank",
+      "category": "explain",
+      "question": "Belize has no recent-reports score. Why?",
+      "intent": "Paraphrase of the Belize thin-area explanation.",
+      "expectedTools": [
+        "sightings",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:hotspot"
+      ],
+      "paraphraseOf": "lionfish-explain-belize-thin",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
+          "(heat stress|history|GBIF|NAS)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-explain-recipe",
+      "category": "explain",
+      "question": "Walk me through the pieces of the survey priority and their weights.",
+      "intent": "Paraphrase of the score recipe question.",
+      "expectedTools": [
+        "explain_cell",
+        "source_info"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "kind:source"
+      ],
+      "paraphraseOf": "lionfish-explain-score-recipe",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "recent reports",
+          "(ID quality|identification)",
+          "heat stress",
+          "completeness",
+          "weight",
+          "heuristic"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-explain-dhw-watch",
+      "category": "explain",
+      "question": "Florida shows DHW over 13 but only a Watch alert. How come?",
+      "intent": "New: accumulated versus current heat, from the data.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "accumulat",
+          "(current|HotSpot|hot ?spot)",
+          "(DHW|degree heating)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-relevance-why-dhw",
+      "category": "relevance",
+      "question": "Why does the app care about degree heating weeks?",
+      "intent": "Paraphrase of the SST relevance question, about DHW.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:source"
+      ],
+      "paraphraseOf": "lionfish-relevance-sst",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "lionfish (cause|caused|drive)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(reef|heat stress)",
+          "context"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-relevance-waves-not-ranked",
+      "category": "relevance",
+      "question": "Why isn't the wave forecast part of the ranking?",
+      "intent": "Paraphrase of the waves-kept-separate question.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "paraphraseOf": "lionfish-relevance-waves-separate",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(separate|kept out|not part|outside|apart)",
+          "(field|dive|survey)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-relevance-nas-worth",
+      "category": "relevance",
+      "question": "Is USGS NAS worth having if it is months behind?",
+      "intent": "New: the value of a late curated feed.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nas",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(curated|verified|authoritative|history)",
+          "(lag|weeks|months|late|behind)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-quality-old-dives",
+      "category": "quality",
+      "question": "Any old dives that only got uploaded to iNaturalist this month?",
+      "intent": "Paraphrase of the late-submission question.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "lionfish-quality-late-submissions",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "submitted|uploaded",
+          "observed",
+          "(days|months|years) (later|after|before|earlier)"
+        ],
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-quality-gbif-copies",
+      "category": "quality",
+      "question": "how many of the gbif lionfish records are just inat copies",
+      "intent": "Casual paraphrase of the GBIF duplicates question.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:gbif",
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "paraphraseOf": "lionfish-quality-gbif-duplicates",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "phrases": [
+          "duplicate|copy|copies",
+          "iNaturalist|iNat",
+          "GBIF",
+          "(not|never) (counted|count)"
+        ],
+        "cites": {
+          "sighting": 2
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-quality-belize-buoy",
+      "category": "quality",
+      "question": "Can we check the satellite sea temperature against a buoy in Belize?",
+      "intent": "Paraphrase of the buoy-versus-satellite question for an area without buoys.",
+      "expectedTools": [
+        "conditions"
+      ],
+      "mustCite": [
+        "feed:goes19",
+        "kind:reading"
+      ],
+      "paraphraseOf": "lionfish-quality-buoy-vs-satellite",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "buoy|in-situ|measured",
+          "satellite|GOES",
+          "no (sea temperature )?buoys?(?:[^.]|\\.\\d){0,80}Belize|(only|just)(?:[^.]|\\.\\d){0,60}Florida"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-quality-crw-stale",
+      "category": "quality",
+      "question": "How stale is the Coral Reef Watch layer?",
+      "intent": "Paraphrase of the CRW latency question.",
+      "expectedTools": [
+        "reef_heat",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:fetch"
+      ],
+      "paraphraseOf": "lionfish-quality-crw-latency",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(Coral Reef Watch|CRW)",
+          "(daily|latency|behind|delay|days? old)",
+          "(stale|fresh|nominal|current)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-quality-mid-sea",
+      "category": "quality",
+      "question": "One Colombian report sits in open water. Is its position reliable?",
+      "intent": "New: an imprecise or obscured position, named with its accuracy.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(obscured|imprecise|accuracy|uncertain|open (sea|water)|offshore)",
+          "Colombia"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-planning-calm-weekend",
+      "category": "planning",
+      "question": "Which area has the calmest seas this weekend?",
+      "intent": "Paraphrase of the calm-waves planning question, for the weekend.",
+      "expectedTools": [
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "paraphraseOf": "lionfish-planning-calm-3d",
+      "pass": {
+        "mode": "answer",
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "wave",
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(Saturday|Sunday|weekend)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-planning-chinchorro-trip",
+      "category": "planning",
+      "question": "Thinking about a Banco Chinchorro trip next week: worth it?",
+      "intent": "Paraphrase of the trip-worth question at another reef.",
+      "expectedTools": [
+        "geocode",
+        "sightings",
+        "reef_heat",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "feed:openmeteo"
+      ],
+      "paraphraseOf": "lionfish-planning-glovers",
+      "pass": {
+        "mode": "caveat",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(report|sighting)",
+          "(heat|DHW|alert level)",
+          "(wave|72|three days|3 days|horizon)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-planning-october-20",
+      "category": "planning",
+      "question": "What will the sea be like at Looe Key on the 20th of October?",
+      "intent": "New: a date beyond the 72 h horizon.",
+      "expectedTools": [
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "forbid": [
+          "20(th)? (of )?October(?:[^.]|\\.\\d){0,40}\\d(\\.\\d+)?\\s*(m|metres|meters)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(3|three)[- ]days?|72 hours",
+          "(beyond|cannot|can't|doesn't|does not|only)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-sources-openmeteo-commercial",
+      "category": "sources",
+      "question": "Can we use the Open-Meteo wave data commercially?",
+      "intent": "Paraphrase of the licence question, for one feed.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "paraphraseOf": "lionfish-sources-licences",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "non-commercial",
+          "CC BY"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-sources-crw-credit",
+      "category": "sources",
+      "question": "How should we credit the heat stress data?",
+      "intent": "New: the CRW credit and DOI.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(Coral Reef Watch|CRW)",
+          "(DOI|credit)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-sources-feed-ages",
+      "category": "sources",
+      "question": "give me the age of every feed",
+      "intent": "Casual paraphrase of the freshness question.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "feed:openmeteo",
+        "kind:fetch"
+      ],
+      "paraphraseOf": "lionfish-sources-freshness",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "phrases": [
+          "iNat",
+          "(CRW|Coral Reef Watch)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ],
+        "cites": {
+          "fetch": 3
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-replay-belize-aug-15",
+      "category": "replay",
+      "question": "What did the Belize picture look like on August 15?",
+      "intent": "Paraphrase of the knowledge-time question, another date.",
+      "expectedTools": [
+        "sightings",
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw"
+      ],
+      "paraphraseOf": "lionfish-replay-known-sept-1",
+      "view": {
+        "timeline": "August 15, replay mode"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(as of|at the time|known|knew)",
+          "(later|since|afterwards|after that)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-replay-chinchorro-peak",
+      "category": "replay",
+      "question": "When was the DHW at Banco Chinchorro highest this quarter?",
+      "intent": "New: the DHW peak date at another reef.",
+      "expectedTools": [
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "moved to the peak date"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "DHW|degree heating",
+          "\\d{4}-\\d{2}-\\d{2}|(January|February|March|April|May|June|July|August|September|October|November|December) \\d"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-replay-ranking-month-ago",
+      "category": "replay",
+      "question": "How did the priority ranking look a month ago compared with now?",
+      "intent": "Paraphrase of the past-ranking question, a month back.",
+      "expectedTools": [
+        "hotspots",
+        "set_view"
+      ],
+      "mustCite": [
+        "kind:hotspot"
+      ],
+      "paraphraseOf": "lionfish-replay-priority-two-weeks",
+      "view": {
+        "timeline": "a month ago"
+      },
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "heuristic",
+          "(month|30[- ]days?|four weeks)",
+          "(then|at the time|differ|changed|same)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-roatan",
+      "category": "boundary",
+      "question": "lionfish around roatan honduras?",
+      "intent": "Paraphrase of the outside-area refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "lionfish-boundary-bahamas",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "\\d+ (lionfish )?(reports|sightings) (in|around|near) (Roatan|Honduras)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(Florida Keys|four areas)(?:[^.]|\\.\\d){0,120}(Mexic|Belize|Colombia)|four (survey )?areas"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-risk-score",
+      "category": "boundary",
+      "question": "give me a percentage risk score for cozumel",
+      "intent": "Paraphrase of the risk-percent refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "lionfish-boundary-risk-percent",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(percent|single|risk (score|number))",
+          "component"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-pythons",
+      "category": "boundary",
+      "question": "any burmese pythons reported in the keys?",
+      "intent": "Paraphrase of the other-species refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "lionfish-boundary-iguana",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "pythons? (were|are) (reported|seen|found)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "lionfish",
+          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-count-keys",
+      "category": "boundary",
+      "question": "How many lionfish are there in the Florida Keys?",
+      "intent": "Paraphrase of the abundance refusal.",
+      "expectedTools": [],
+      "mustCite": [],
+      "paraphraseOf": "lionfish-boundary-abundance",
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "(about|roughly|approximately|estimated?|around) [\\d,]+ lionfish"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-reef-dying",
+      "category": "boundary",
+      "question": "Is the reef at Looe Key dying because of lionfish?",
+      "intent": "New: a causal reef-damage claim, refused.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "forbid": [
+          "(?<!(whether|if|that) )lionfish (are|is) (killing|damaging|destroying)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0,
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(reef (damage|health|decline)|cause|causal|killing|dying)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-boundary-growth-mx",
+      "category": "boundary",
+      "question": "Is the lionfish population in the Mexican Caribbean growing?",
+      "intent": "Paraphrase of the population-growth caveat, another area.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat"
+      ],
+      "paraphraseOf": "lionfish-boundary-population",
+      "pass": {
+        "mode": "caveat",
+        "forbid": [
+          "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})population (is|has been) (growing|increasing|declining|shrinking|stable)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "phrases": [
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-team-looe-notes",
+      "category": "team",
+      "question": "Did anyone leave notes around Looe Key this week?",
+      "intent": "Paraphrase of the notes-near-a-reef question.",
+      "expectedTools": [
+        "geocode",
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "paraphraseOf": "lionfish-team-who-noted-looe",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "phrases": [
+          "(noted|wrote|note|no notes)",
+          "Looe Key"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-team-trips",
+      "category": "team",
+      "question": "What survey trips are on the board for the coming week?",
+      "intent": "Paraphrase of the planned-missions question.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "paraphraseOf": "lionfish-team-missions",
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "phrases": [
+          "mission"
+        ],
+        "cites": {
+          "mission": 1
+        }
+      },
+      "app": "lionfish",
+      "helper": false
+    },
+    {
+      "id": "lh-team-cozumel-chat",
+      "category": "team",
+      "question": "Any messages about the Cozumel survey today?",
+      "intent": "New: messages filtered by another place.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:message"
+      ],
+      "pass": {
+        "mode": "answer",
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "phrases": [
+          "(message|wrote|said|sent|no messages)",
+          "Cozumel"
+        ]
+      },
+      "app": "lionfish",
+      "helper": false
+    }
+  ]
+}

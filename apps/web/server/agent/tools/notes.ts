@@ -213,6 +213,9 @@ export const notes = {
         total: rows.length,
         onBoard: all.length,
         bySpecies,
+        ...(shown.some((r) => r.sightingId)
+          ? { linkedSightings: shown.filter((r) => r.sightingId).map((r) => ({ note: `note:${r.id}`, sighting: `sighting:${r.sightingId}`, next: `call evidence with id "sighting:${r.sightingId}" for the sighting's grade, dates and source` })) }
+          : {}),
         truncated: rows.length > shown.length,
         ...(wider.length
           ? {
