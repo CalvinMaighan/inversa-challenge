@@ -229,6 +229,148 @@ type FrameRange {
   to: Time!
 }
 
+# ---------------------------------------------------------------------------------------------
+# Forecast store (C3): `forecasts`, `forecastVerify`, `siteStatusAt`. Conditions apps only; a
+# species app answers with error code NOT_CONDITIONS_APP. Sites are NWPS ids of configured
+# locations (`locations[].nwps`); an unknown one is UNKNOWN_SITE. Stage is NWPS feet, flow kcfs.
+# ---------------------------------------------------------------------------------------------
+
+"""NWPS flood category, from NWPS stage thresholds only ("at or above")."""
+enum FloodCategory { NONE ACTION MINOR MODERATE MAJOR }
+"""
+NWPS_LIVE rows were captured by this process (as-of views gate them by ingestion time);
+IEM_ARCHIVE rows were backfilled from the Iowa Environmental Mesonet HML archive (gated by
+issuance time only); NWS_GRIDPOINT rows come from api.weather.gov.
+"""
+enum ForecastSource { NWPS_LIVE IEM_ARCHIVE NWS_GRIDPOINT }
+"""
+Age band at the as-of time. Observations: FRESH <= 2 h, AGING <= 6 h, else STALE.
+Forecasts: FRESH <= 24 h since issuance, AGING <= 36 h, else STALE. MISSING: nothing known.
+"""
+enum Freshness { FRESH AGING STALE MISSING }
+
+type FloodThresholds {
+  actionFt: Float
+  minorFt: Float
+  moderateFt: Float
+  majorFt: Float
+}
+
+type ForecastPoint {
+  validAt: Time!
+  stageFt: Float
+  flowKcfs: Float
+  """Null when the stage or the site's thresholds were unknown when stored."""
+  category: FloodCategory
+}
+
+"""One forecast issuance as stored. Cite as `forecast:<id>`."""
+type ForecastSnapshot {
+  id: ID!
+  site: ID!
+  """`stageflow` (NWPS API), `hml` (IEM archive), ..."""
+  product: String!
+  issuedAt: Time!
+  ingestedAt: Time!
+  source: ForecastSource!
+  payloadHash: String!
+  """0 for the first payload of an issuance; a changed payload with the same issuedAt is 1, 2, ... (all kept)."""
+  revision: Int!
+  validFrom: Time
+  validTo: Time
+  horizonEnd: Time
+  peakStageFt: Float
+  peakAt: Time
+  peakCategory: FloodCategory
+  points: [ForecastPoint!]!
+}
+
+"""What was known about a site's forecast at `asOf`."""
+type ForecastView {
+  site: ID!
+  asOf: Time!
+  """The forecast in force at asOf: greatest issuance at or before asOf that was captured (live) or public (archive) by then."""
+  snapshot: ForecastSnapshot
+  """Issuances known at asOf, newest first, at most `history`."""
+  history: [ForecastSnapshot!]!
+  """The first asOf with a forecast: when the earliest stored snapshot became knowable (archive rows at issuance, live rows when captured)."""
+  replayCoverageStart: Time
+  """First live capture by this process; before it every forecast is an archive copy."""
+  liveCoverageStart: Time
+  snapshotCount: Int!
+}
+
+"""An observed NWPS value (stage on the NWPS datum, the one the flood categories use)."""
+type SiteObservation {
+  observedAt: Time!
+  ingestedAt: Time!
+  source: ForecastSource!
+  stageFt: Float
+  flowKcfs: Float
+}
+
+type SiteConflict {
+  """gauge_vs_forecast, stale_forecast, stale_observation or no_thresholds."""
+  kind: String!
+  detail: String!
+  forecastFt: Float
+  observedFt: Float
+  """observed - forecast, feet."""
+  differenceFt: Float
+}
+
+type SiteStatus {
+  site: ID!
+  asOf: Time!
+  """Newest NWPS observation knowable at asOf."""
+  observation: SiteObservation
+  stageFt: Float
+  """Category of the observed stage against the NWPS thresholds known at asOf."""
+  category: FloodCategory
+  thresholds: FloodThresholds
+  observationFreshness: Freshness!
+  forecastFreshness: Freshness!
+  forecast: ForecastSnapshot
+  """The forecast point valid nearest asOf (within 30 min), the one the gauge is compared to."""
+  forecastNow: ForecastPoint
+  conflicts: [SiteConflict!]!
+  """NWS alert versions first seen at or before asOf and not ended by then."""
+  activeAlerts: Int!
+}
+
+"""One forecast point against the observation nearest its valid time (within 30 min)."""
+type ForecastVerifyPoint {
+  validAt: Time!
+  forecastFt: Float
+  forecastCategory: FloodCategory
+  observedAt: Time
+  observedFt: Float
+  observedCategory: FloodCategory
+  """forecast - observed, feet. Null when either side is missing; never interpolated."""
+  errorFt: Float
+  missing: Boolean!
+}
+
+type ForecastVerification {
+  site: ID!
+  issuedAt: Time!
+  snapshot: ForecastSnapshot!
+  points: [ForecastVerifyPoint!]!
+  paired: Int!
+  missing: Int!
+  """Mean of forecast - observed over paired points; positive = forecast ran high."""
+  biasFt: Float
+  meanAbsErrorFt: Float
+  maxAbsErrorFt: Float
+  peakForecastFt: Float
+  peakForecastCategory: FloodCategory
+  """Highest observed stage inside the forecast's valid window."""
+  peakObservedFt: Float
+  peakObservedCategory: FloodCategory
+  """The observed peak reached the same category as the forecast peak. Null when either side is unknown."""
+  peakCategoryHit: Boolean
+}
+
 type Query {
   feeds: [FeedState!]!
   sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
@@ -245,6 +387,12 @@ type Query {
   evidence(id: ID!): Evidence!
   board(id: ID!): Board!
   opsSince(boardId: ID!, seq: Int!): [Op!]!
+  """The forecast known at asOf (default now) for a site, with the last `history` issuances known then (default 1, at most 60). Conditions apps only."""
+  forecasts(site: ID!, asOf: Time, history: Int): ForecastView!
+  """The issuance at issuedAt (newest revision) scored against the NWPS observations stored since. Conditions apps only."""
+  forecastVerify(site: ID!, issuedAt: Time!): ForecastVerification!
+  """What was known about a site at asOf; conflictFt (default 1) is the gauge-vs-forecast difference that counts as a conflict. Conditions apps only."""
+  siteStatusAt(site: ID!, asOf: Time!, conflictFt: Float): SiteStatus!
 }
 
 type Mutation {

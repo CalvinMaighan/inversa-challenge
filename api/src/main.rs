@@ -7,6 +7,7 @@ mod db;
 mod e2e_tests;
 mod evidence;
 mod feed_state;
+mod forecast;
 mod frames;
 mod graphql;
 mod hotspot;
