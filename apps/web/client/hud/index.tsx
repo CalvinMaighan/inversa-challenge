@@ -4,6 +4,9 @@ import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } 
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import CarpHud from "client/carp/CarpHud";
+import LionfishChip from "client/lionfish/LionfishChip";
+import LionfishHud from "client/lionfish/LionfishHud";
+import { isSurveyApp, parseCellEvidenceId } from "client/lionfish/model";
 import { SELECTION } from "client/state/selection";
 import styled from "client/styled";
 
@@ -104,6 +107,7 @@ function HudBody({ sync = true }: HudProps) {
   const [focus, setFocus] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const drawerOpen = useActiveState<HudSelection, boolean>(SELECTION, isDrawerOpen)[0] ?? false;
+  const selectedId = useActiveState<HudSelection, string | null>(SELECTION, (s) => s.evidenceId)[0] ?? null;
   const closeHelp = useCallback(() => setHelpOpen(false), []);
   const app = useActiveApp();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -127,6 +131,9 @@ function HudBody({ sync = true }: HudProps) {
   }, []);
 
   const conditions = app.kind === "conditions";
+  // Lionfish Watch: its own layers, chip and priority card; a survey cell id opens that card, not the drawer.
+  const survey = isSurveyApp(app);
+  const cardOwnsSelection = survey && parseCellEvidenceId(selectedId) !== null;
   return (
     <Root ref={rootRef} data-hud="" data-kind={app.kind} data-drawer-open={drawerOpen ? "" : undefined}>
       {sync && <Sync />}
@@ -135,12 +142,13 @@ function HudBody({ sync = true }: HudProps) {
       <GlobeTooltip />
       <TopRow ref={barRef}>
         <AppSelect />
-        {conditions ? null : <SpeciesBar />}
+        {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
         <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
       </TopRow>
       {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
       {conditions ? <CarpHud key={app.id} app={app} /> : null}
-      <EvidenceDrawer />
+      {survey ? <LionfishHud key={app.id} app={app} /> : null}
+      {cardOwnsSelection ? null : <EvidenceDrawer />}
       {conditions ? null : <Timeline />}
       {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
     </Root>
