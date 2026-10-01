@@ -43,8 +43,8 @@ export const bboxSchema = z
     east: z.number().min(-180).max(180),
     north: z.number().min(-90).max(90),
   })
-  .refine((b) => b.west < b.east && b.south < b.north, "bbox needs west < east and south < north")
-  .describe("Area in degrees. Get one from geocode. Defaults to the user's current view.");
+  // A box with no area (north equal to south, a slip models make) is not an error: resolveBbox reads it as not given.
+  .describe("Area in degrees (west < east, south < north). Get one from geocode. Defaults to the user's current view.");
 
 export const timeSchema = z
   .string()
@@ -54,7 +54,9 @@ export const timeSchema = z
 
 /** The asked-for (or viewed) area cut to the app's extent; outside it the tool refuses with the app's refusal text (P4). */
 export function resolveBbox(input: BBox | undefined, ctx: Pick<CapabilityContext, "app" | "view">): BBox {
-  const bbox = input ?? ctx.view?.bbox ?? appBBox(ctx.app);
+  // A degenerate box (no width or height) means the model meant the view or the region, not a line.
+  const given = input && input.west < input.east && input.south < input.north ? input : undefined;
+  const bbox = given ?? ctx.view?.bbox ?? appBBox(ctx.app);
   const clamped = clampToApp(ctx.app, bbox);
   if (!clamped) throw new Error(`bbox is outside this app's regions (${ctx.app.regions.map((r) => r.name).join(", ")}). ${ctx.app.agent.refusal}`);
   return clamped;

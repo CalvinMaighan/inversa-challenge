@@ -420,6 +420,9 @@ const speciesCounts = {
           rows.length === 0
             ? `No ${name.toLowerCase()} was reported in this area and window.`
             : "Counts are distinct sightings (duplicates stand behind their first report). The cite marker is the newest sighting: give the count and paste the marker right after.",
+        // The one-species scope in a sentence the answer pastes: other animals are context, the app ranks and plans for this one.
+        scopeLine: `Any other animal is background context here and is not counted: this app ranks cells and plans for the ${name} alone. Paste this sentence in every answer about what animals or species were seen.`,
+        next: "A question about how many reports came in, which were duplicates or late, or their grades needs the records themselves: call sightings for the same area and window in this same turn, cite every record counted, and say the count is of distinct animals after the duplicates were set aside.",
         rows: rows.slice(0, MAX_MODEL_ROWS).map((row) => ({
           species: row.species,
           scientificName: row.scientificName,

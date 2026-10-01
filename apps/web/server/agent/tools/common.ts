@@ -22,27 +22,34 @@ const HOUR_MS = 3_600_000;
 // ---------------------------------------------------------------- source_info
 
 const sourceInfoInput = z.object({
-  feed: z.string().min(2).max(40).optional().describe("A feed id of this app (usgs, nwps, nws-alerts, nws-forecast, iem, inat, ndbc, crw, ...; 'nws' means both NWS feeds). Omit for every feed."),
+  feed: z.string().min(2).max(200).optional().describe("A feed id of this app (usgs, nwps, nws-alerts, nws-forecast, iem, inat, ndbc, crw, ...; 'nws' means both NWS feeds), or several separated by commas. Omit for every feed: one call returns them all, so never call this once per feed."),
 });
 
 export const sourceInfo = {
   name: "source_info",
   description:
-    "Static facts about one feed of this app or all of them: publisher, API URL, human page, licence and attribution, cadence, typical latency, rate limit, coverage limits and what the feed can and cannot tell us, plus each feed's current health. Cite a row as its source:<feed> id. Use it for 'why do we track', 'where does X come from', licence, rate limit, archive and replay-coverage questions.",
+    "Static facts about one feed of this app, several, or all of them (omit feed: one call covers every feed, so a licences, rate-limits or sources question is one call, never one per feed): publisher, API URL, human page, licence and attribution, cadence, typical latency, rate limit, coverage limits and what the feed can and cannot tell us, plus each feed's current health. Cite a row as its source:<feed> id. Use it for 'why do we track', 'where does X come from', licence, rate limit, archive and replay-coverage questions.",
   inputSchema: sourceInfoInput,
   async execute(input: z.infer<typeof sourceInfoInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const configured = ctx.app.feeds.map((f) => f.source);
-    const asked = given(input.feed)?.toLowerCase();
-    const exact = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
-    // A feed named in words ("USGS NAS", "Coral Reef Watch", "Open-Meteo"): the feeds whose id, publisher or name share the most words with it.
-    const words = (asked ?? "").split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
-    const scored = configured.map((s) => {
-      const facts = SOURCE_FACTS[s];
-      const hay = `${s} ${facts?.sayAs ?? ""} ${facts?.publisher ?? ""} ${ctx.app.feeds.find((f) => f.source === s)?.name ?? ""}`.toLowerCase();
-      return { s, score: words.filter((w) => hay.includes(w)).length };
-    });
-    const best = Math.max(0, ...scored.map((x) => x.score));
-    const direct = exact.length > 0 || !asked ? exact : best > 0 ? scored.filter((x) => x.score === best).map((x) => x.s) : [];
+    const askedText = given(input.feed)?.toLowerCase();
+    // Several feeds in one call ("inat, usgs, nws"): each name resolves on its own; "all" or "*" means every feed.
+    const askedList = askedText ? askedText.split(/\s*[,;/]\s*|\s+and\s+/).map((s) => s.trim()).filter(Boolean) : [];
+    const asked = askedList.length === 0 || askedList.some((s) => s === "all" || s === "*" || s === "every") ? undefined : askedText;
+    const resolveOne = (name: string): string[] => {
+      const exact = configured.filter((s) => s === name || s.startsWith(`${name}-`) || name.startsWith(`${s}-`));
+      if (exact.length > 0) return exact;
+      // A feed named in words ("USGS NAS", "Coral Reef Watch", "Open-Meteo"): the feeds whose id, publisher or name share the most words with it.
+      const words = name.split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+      const scored = configured.map((s) => {
+        const facts = SOURCE_FACTS[s];
+        const hay = `${s} ${facts?.sayAs ?? ""} ${facts?.publisher ?? ""} ${ctx.app.feeds.find((f) => f.source === s)?.name ?? ""}`.toLowerCase();
+        return { s, score: words.filter((w) => hay.includes(w)).length };
+      });
+      const best = Math.max(0, ...scored.map((x) => x.score));
+      return best > 0 ? scored.filter((x) => x.score === best).map((x) => x.s) : [];
+    };
+    const direct = asked ? [...new Set(askedList.flatMap(resolveOne))] : configured;
     if (asked && direct.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
     // An archive and the live source it copies belong in one answer: asking for one brings the other.
     const known = new Set<string>(configured);
@@ -99,6 +106,11 @@ export const sourceInfo = {
       rows: rows.map((row) => ({ evidenceId: `source:${row.feed}`, feed: row.feed, publisher: row.publisher, cadence: row.cadence, licence: row.licence, health: row.health?.state ?? null, page: row.pageUrl, sourcePageUrl: row.pageUrl })),
     };
     const boundary = ctx.app.copy.boundaryNote ?? ctx.app.copy.about;
+    // The feed's live lag is feed_state's: a cadence, latency or freshness question needs both markers.
+    const next = asked ? "How often, how late, how fresh or whether the feed is current: call feed_state (no arguments) in this same turn for the live lag and the fetch markers, and cite them next to this row's source marker." : null;
+    // In a scored app the score's terms are explain_cell's: a source row only says where a term's input comes from.
+    const terms = ctx.app.agent.tools.includes("explain_cell") ? ctx.app.score.components.map((c) => (typeof c === "string" ? c : String((c as { id?: unknown }).id ?? ""))).filter(Boolean) : [];
+    const scoreTerms = terms.length ? `The score's terms (${terms.join(", ")}; ${ctx.app.score.label}) are explained by explain_cell, not by these rows: a question about a term, what it means or why a cell scores calls hotspots and then explain_cell for the top cell in this same turn, and cites that hotspot marker as well as the source marker of the feed behind the term.` : null;
     const freshnessLine = rows
       .filter((row) => row.health)
       .map((row) => `${row.feed} ${row.health!.state}${row.health!.lastFetchAt ? `, last fetched ${localTime(ctx.app, row.health!.lastFetchAt)}` : ""} ${row.cite}`)
@@ -110,6 +122,8 @@ export const sourceInfo = {
           boundary,
           note: `Facts are static (adapter documentation); health is the feed's current state. ${rows.length} feed${rows.length === 1 ? "" : "s"} returned (${rows.map((r) => r.feed).join(", ")}): a question about the sources, licences, rate limits or feeds names every one of them. Introduce each feed with its \`headline\`, copied verbatim (it names the publisher, licence and rate limit as written, with the marker); a related feed is included because the answer needs both; end with the freshnessLine.`,
           freshnessLine,
+          ...(next ? { next } : {}),
+          ...(scoreTerms ? { scoreTerms } : {}),
           ...(asked && wanted.length < configured.length ? { otherFeeds: `this app has ${configured.length - wanted.length} more feed${configured.length - wanted.length === 1 ? "" : "s"} (${configured.filter((s) => !wanted.includes(s)).join(", ")}): a question about the data sources, licences or rate limits as a whole needs source_info with no feed argument` } : {}),
           markers: `Cite every feed you name: ${rows.map((row) => row.cite).join(" ")}`,
           rows,

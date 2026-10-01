@@ -129,8 +129,8 @@ describe("capability tools", () => {
     expect(output.feeds).toEqual([]);
     const rows = output.data.rows as { author: string; species: string | null; aboutSighting: string | null; text: string }[];
     expect(rows[0]).toMatchObject({ author: "Ranger-B2C3", species: "python", aboutSighting: null });
-    // Two field notes plus the Flamingo note (AG2) and one mission note that is not a field note.
-    expect(output.data.onBoard).toBe(3);
+    // Two field notes plus the Flamingo note (AG2), the Tram Road note of today (FX), and one mission note that is not a field note.
+    expect(output.data.onBoard).toBe(4);
     // An explicit `to` at the reference time still means now; a historical `to` is taken as given.
     expect((await run("notes", { bbox: homestead, hours: 24, to: NOW.toISOString() })).count).toBe(1);
     expect((await run("notes", { bbox: homestead, hours: 24, to: "2026-01-15T02:00:00Z" })).count).toBe(0);
@@ -144,7 +144,9 @@ describe("capability tools", () => {
 
     // Species filter, and a wider window reaching the Flamingo notes only through the region box.
     expect((await run("notes", { bbox: homestead, hours: 24, species: "python" })).count).toBe(1);
-    expect((await run("notes", { hours: 24 * 7 })).count).toBe(3);
+    expect((await run("notes", { hours: 24 * 7 })).count).toBe(4);
+    // Today over the whole region: the Tram Road note (01:40Z) and the Homestead note written in the quarter hour after the reference time.
+    expect((await run("notes", { hours: 24 })).evidence.map((row) => row.id)).toEqual(["note:0194a1b2-0005-7000-8000-000000000005", "note:0194a1b2-0007-7000-8000-000000000007"]);
     await expect(run("notes", { from: "2026-01-16T00:00:00Z", to: "2026-01-15T00:00:00Z" })).rejects.toThrow(/empty/);
   });
 
@@ -327,7 +329,8 @@ describe("capability tools", () => {
   });
 
   test("GraphQL errors surface as tool errors", async () => {
-    const result = await registry.execute("explain_cell", { species: "python", cell: "5:5" }, ctx);
+    // A cell off the region's grid: the API's `parse_cell` rejects it (the stub scores any cell on the grid).
+    const result = await registry.execute("explain_cell", { species: "python", cell: "5000:5" }, ctx);
     expect(result).toMatchObject({ ok: false, code: "error", error: expect.stringContaining("AgentExplainCell") });
   });
 });
