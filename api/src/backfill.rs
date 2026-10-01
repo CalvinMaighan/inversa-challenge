@@ -227,6 +227,26 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         ]
     };
 
+    // Taxon cards (T44): the fixtures replay a recorded /v1/taxa page; a network run asks iNat for every
+    // taxon the walk added. Enrichment failing never fails the backfill (the API retries it in the background).
+    let enriched = if args.fixtures {
+        let mut n = 0;
+        for entry in std::fs::read_dir(fixtures_root().join("inat")).context("fixtures/inat")? {
+            let path = entry?.path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with("taxa-") && name.ends_with(".json") {
+                n += crate::taxon_info::apply_page(&target, &std::fs::read(&path)?).await?;
+            }
+        }
+        n
+    } else {
+        crate::taxon_info::enrich(&target).await.unwrap_or_else(|e| {
+            eprintln!("taxa: enrichment incomplete: {e:#}");
+            0
+        })
+    };
+    println!("taxa: enriched {enriched} with iNat names, groups, summaries and photos");
+
     // Frames first, so rows from payloads that did normalize are rendered even if some failed.
     let started = Instant::now();
     let (from, to) = rebuild_frames(&target).await?;

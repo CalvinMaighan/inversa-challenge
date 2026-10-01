@@ -200,7 +200,7 @@ enum Refusal {
 impl IntoResponse for Refusal {
     fn into_response(self) -> Response {
         let (status, msg) = match self {
-            Refusal::BadId => (StatusCode::BAD_REQUEST, "media id must be a sighting id (integer)".to_string()),
+            Refusal::BadId => (StatusCode::BAD_REQUEST, "media id must be a sighting or taxon id (integer)".to_string()),
             Refusal::NotFound(m) => (StatusCode::NOT_FOUND, m),
             Refusal::Blocked(m) => (StatusCode::FORBIDDEN, format!("blocked: {m}")),
             Refusal::Upstream(m) => (StatusCode::BAD_GATEWAY, format!("upstream: {m}")),
@@ -286,28 +286,60 @@ impl MediaProxy {
     }
 }
 
-async fn media(
-    State(state): State<AppState>,
-    Extension(proxy): Extension<Arc<MediaProxy>>,
-    Path(id): Path<String>,
-) -> Result<Response, Refusal> {
+/// Which table a media id points at: a sighting's observation photo, or a taxon's default photo (T44).
+#[derive(Clone, Copy)]
+enum Subject {
+    Sighting,
+    Taxon,
+}
+
+impl Subject {
+    fn table(self) -> &'static str {
+        match self {
+            Subject::Sighting => "sightings",
+            Subject::Taxon => "taxa",
+        }
+    }
+
+    fn cache_key(self, id: i64) -> String {
+        match self {
+            Subject::Sighting => format!("media/{id}"),
+            Subject::Taxon => format!("media/taxon/{id}"),
+        }
+    }
+}
+
+async fn media(State(state): State<AppState>, Extension(proxy): Extension<Arc<MediaProxy>>, Path(id): Path<String>) -> Result<Response, Refusal> {
+    serve(state, proxy, Subject::Sighting, id).await
+}
+
+async fn taxon_media(State(state): State<AppState>, Extension(proxy): Extension<Arc<MediaProxy>>, Path(id): Path<String>) -> Result<Response, Refusal> {
+    serve(state, proxy, Subject::Taxon, id).await
+}
+
+async fn serve(state: AppState, proxy: Arc<MediaProxy>, subject: Subject, id: String) -> Result<Response, Refusal> {
     let id: i64 = id.parse().map_err(|_| Refusal::BadId)?;
-    let key = format!("media/{id}");
+    let key = subject.cache_key(id);
     let cached = state.archive.get(&key).await.ok().and_then(|b| sniff_image(&b).map(|kind| (kind, b)));
     let (kind, bytes) = match cached {
         Some(hit) => hit,
         None => {
+            let table = subject.table();
             let url: Option<Option<String>> = state
                 .obs
                 .read(move |c| {
                     use rusqlite::OptionalExtension;
-                    c.query_row("select photo_url from sightings where id = ?1", [id], |r| r.get(0)).optional()
+                    c.query_row(&format!("select photo_url from {table} where id = ?1"), [id], |r| r.get(0)).optional()
                 })
                 .await
                 .map_err(|e| Refusal::Internal(format!("{e:#}")))?;
+            let what = match subject {
+                Subject::Sighting => "sighting",
+                Subject::Taxon => "taxon",
+            };
             let url = match url {
-                None => return Err(Refusal::NotFound(format!("no sighting {id}"))),
-                Some(None) => return Err(Refusal::NotFound(format!("sighting {id} has no photo"))),
+                None => return Err(Refusal::NotFound(format!("no {what} {id}"))),
+                Some(None) => return Err(Refusal::NotFound(format!("{what} {id} has no photo"))),
                 Some(Some(url)) => url,
             };
             let (kind, bytes) = proxy.fetch(&url).await?;
@@ -334,7 +366,10 @@ pub fn routes() -> Router<AppState> {
 }
 
 pub fn routes_with(policy: Policy) -> Router<AppState> {
-    Router::new().route("/v1/media/{id}", get(media)).layer(Extension(Arc::new(MediaProxy::new(policy))))
+    Router::new()
+        .route("/v1/media/{id}", get(media))
+        .route("/v1/media/taxon/{id}", get(taxon_media))
+        .layer(Extension(Arc::new(MediaProxy::new(policy))))
 }
 
 #[cfg(test)]

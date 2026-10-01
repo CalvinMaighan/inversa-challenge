@@ -9,6 +9,7 @@ import { FEEDS, mergeFeedState, upsertFeedState } from "client/state/feeds";
 import { TIME, timeWindow, type TimeState } from "client/state/time";
 import { gqlRequest, gqlSubscribe } from "client/threads/api";
 
+import { syncTaxa } from "./taxa";
 import { isLive } from "./topbar/clock";
 import { FEED_FIELDS, normalizeFeedState } from "./topbar/feed-chips";
 
@@ -62,11 +63,18 @@ function LiveFollow() {
   return null;
 }
 
+/** TAXA follows the published frames (T44): names, groups, summaries and photos for every taxon on them. */
+function TaxaSync() {
+  useEffect(() => syncTaxa(), []);
+  return null;
+}
+
 export default function Sync() {
   return (
     <>
       <FeedSync />
       <LiveFollow />
+      <TaxaSync />
     </>
   );
 }

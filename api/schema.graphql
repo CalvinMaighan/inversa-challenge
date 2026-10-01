@@ -34,6 +34,24 @@ type Taxon {
   scientificName: String!
   commonName: String!
   focus: Boolean!
+  """iNaturalist taxon id (T44); null for taxa only GBIF or NAS have reported."""
+  inatTaxonId: ID
+  """Reptilia, Amphibia, Aves, Mammalia, Actinopterygii, Mollusca, Insecta, Arachnida, Plantae, Fungi or other."""
+  iconicGroup: String
+  """Plain text, at most two sentences, from the taxon's Wikipedia summary."""
+  summary: String
+  """Same-origin copy of the taxon's default photo (`/v1/media/taxon/<id>`)."""
+  photoUrl: String
+  """The taxon's page at iNaturalist, for a new-tab link."""
+  pageUrl: String
+}
+
+"""Distinct sightings of one taxon in a window (T44)."""
+type SpeciesCount {
+  taxon: Taxon!
+  count: Int!
+  """The newest sighting counted, citable as `sighting:<id>`."""
+  latestSightingId: ID
 }
 
 type Sighting {
@@ -207,6 +225,10 @@ type FrameRange {
 type Query {
   feeds: [FeedState!]!
   sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
+  """Taxa by id (or focus species name) and/or by a name fragment; at most 500."""
+  taxa(ids: [ID!], q: String): [Taxon!]!
+  """Top taxa by distinct sightings in a window, optionally limited to iconic groups; `top` defaults to 50."""
+  speciesCounts(bbox: BBox!, from: Time!, to: Time!, groups: [String!], top: Int): [SpeciesCount!]!
   readings(bbox: BBox!, from: Time!, to: Time!, params: [Param!]): [Reading!]!
   alerts(bbox: BBox!, at: Time!): [Alert!]!
   frames(from: Time!, to: Time!, stepMinutes: Int!): FrameChunk!

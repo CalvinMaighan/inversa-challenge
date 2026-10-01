@@ -89,9 +89,19 @@ export function evfFrameBytes(h: EvfHeader, sightingCount: number): number {
 
 /**
  * Sightings window: the globe draws, the species bar counts and the agent's view means every sighting in the
- * trailing SIGHTING_WINDOW_HOURS ending at the time cursor.
+ * trailing window ending at the time cursor. The length is state (`LAYERS.sightingHours`, T44), one of
+ * SIGHTING_WINDOW_OPTIONS; SIGHTING_WINDOW_HOURS is the default. Most people upload sightings a few days after
+ * they see them, so 7 days shows the most.
  */
-export const SIGHTING_WINDOW_HOURS = 48;
+export const SIGHTING_WINDOW_OPTIONS = [48, 168, 720] as const;
+export type SightingWindowHours = (typeof SIGHTING_WINDOW_OPTIONS)[number];
+export const SIGHTING_WINDOW_HOURS: SightingWindowHours = 168;
+
+/** "2 days", "7 days", "30 days". */
+export function windowLabel(hours: number): string {
+  const days = hours / 24;
+  return Number.isInteger(days) ? `${days} day${days === 1 ? "" : "s"}` : `${hours} hours`;
+}
 
 /** One decoded EVF2 sighting record. `id` is `sightings.id`, citable as `sighting:<id>` (C14). */
 export type SightingRecord = {

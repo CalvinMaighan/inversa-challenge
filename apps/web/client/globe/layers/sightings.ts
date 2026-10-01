@@ -1,28 +1,35 @@
 /**
- * Sightings: a PointPrimitiveCollection dot per record, coloured by species and fading with age over the
- * trailing 48 h window (SIGHTING_WINDOW_HOURS) ending at the time cursor, plus a BillboardCollection icon for the
- * four focus species once the camera is close enough to read it.
+ * Sightings: a PointPrimitiveCollection dot per record, coloured by taxon and fading with age over the trailing
+ * window (LAYERS.sightingHours: 2, 7 or 30 days, T44) ending at the time cursor, plus a BillboardCollection icon
+ * for the four focus species once the camera is close enough to read it.
  *
  * Records are the decoded EVF2 sighting sections of the window's frames (C16 FrameSightings). Each carries its
  * `sightings.id`, so every primitive is stamped `sighting:<id>` for `pick()` with no request of its own.
+ *
+ * Every taxon has its own colour (`client/globe/species.ts`); the filter hides focus species by key, other taxa
+ * by their group (animals, plants, others) or their own `t<id>` override. Taxon groups come from the TAXA store
+ * through `ctx.taxa()`; a taxon not loaded yet draws as an animal.
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 import type { BillboardCollection, PointPrimitiveCollection } from "cesium";
 
+import { sightingHoursOf } from "client/state/layers";
+import type { TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
 import { sightingEvidenceId } from "../evidence";
 import { stepMsOf } from "../frame-index";
-import { colorOfTaxon, enabledSpecies, OTHER_TAXA_KEY, otherTaxaShown, SPECIES_COLORS, speciesIndexOfTaxon } from "../species";
+import { colorOfTaxon, enabledSpecies, SPECIES_COLORS, speciesIndexOfTaxon, taxonShown } from "../species";
 import { createCanvas } from "./raster-surface";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
 
 const [SIGHTINGS] = LAYER_IDS;
 
-/** How far back the trail reaches (SIGHTING_WINDOW_HOURS, shared with the HUD and the agent), and how faint the oldest dot gets. */
+/** The trail of the default window, ms. The layer reads the live value from LAYERS. */
 export const SIGHTING_TRAIL_MS = SIGHTING_WINDOW_HOURS * 60 * 60_000;
+export const trailMs = (hours: number) => hours * 60 * 60_000;
 const OLDEST_ALPHA = 0.3;
 /** Icons only when the camera is within this range; from the region overview the dots carry it. */
 const ICON_MAX_DISTANCE_M = 250_000;
@@ -61,17 +68,17 @@ export function sightingWindowIndex(sightings: (frame: number) => readonly Sight
   return { records, frameOf: Uint32Array.from(frameOfList), offsets, stepMs };
 }
 
-/** Frames in the window: those starting less than SIGHTING_TRAIL_MS before the cursor's frame. */
-export const windowFrames = (stepMs: number) => Math.max(1, Math.ceil(SIGHTING_TRAIL_MS / stepMs));
+/** Frames in the window: those starting less than `hours` before the cursor's frame. */
+export const windowFrames = (stepMs: number, hours: number = SIGHTING_WINDOW_HOURS) => Math.max(1, Math.ceil(trailMs(hours) / stepMs));
 
 /**
  * Records of the trailing window ending at `frame`, oldest first (the newest draw on top), aged by whole
- * frames: a record `n` frames back is `n × step` old, and nothing SIGHTING_TRAIL_MS old or older is in.
+ * frames: a record `n` frames back is `n × step` old, and nothing `hours` old or older is in.
  */
-export function windowRecords(index: SightingWindowIndex, frame: number): TrailRecord[] {
+export function windowRecords(index: SightingWindowIndex, frame: number, hours: number = SIGHTING_WINDOW_HOURS): TrailRecord[] {
   const last = Math.min(frame, index.offsets.length - 2);
   if (last < 0) return [];
-  const first = Math.max(0, last - windowFrames(index.stepMs) + 1);
+  const first = Math.max(0, last - windowFrames(index.stepMs, hours) + 1);
   const out: TrailRecord[] = [];
   for (let i = index.offsets[first]!; i < index.offsets[last + 1]!; i += 1) out.push({ ...index.records[i]!, ageMs: (last - index.frameOf[i]!) * index.stepMs });
   return out;
@@ -82,33 +89,34 @@ export function distinctRecords(records: readonly TrailRecord[]): TrailRecord[] 
   return records.filter((r) => !(r.flags & SIGHTING_FLAG.duplicate));
 }
 
-/** Records the layer draws: duplicates hidden, species filter applied (`other` for non-focus taxa). */
-export function visibleRecords(records: readonly TrailRecord[], species: readonly number[], other = true): TrailRecord[] {
-  const on = new Set(species);
+/**
+ * Records the layer draws: duplicates hidden, the species filter applied (focus species by key, other taxa by
+ * their group or their own override, `taxonShown`).
+ */
+export function visibleRecords(records: readonly TrailRecord[], filter: Readonly<Record<string, unknown>> | undefined, byId: Readonly<Record<string, TaxonInfo>> = {}): TrailRecord[] {
+  const on = new Set(enabledSpecies(filter, SIGHTINGS));
   return distinctRecords(records).filter((r) => {
     const s = speciesIndexOfTaxon(r.taxon);
-    return s < 0 ? other : on.has(s);
+    return s < 0 ? taxonShown(filter, r.taxon, byId, SIGHTINGS) : on.has(s);
   });
 }
 
-export { OTHER_TAXA_KEY };
-
 /**
- * Records per focus species id, plus `other`, for the species bar and the legend's species rows. Counted before
- * the species filter, so a hidden species still shows what turning it back on would draw.
+ * Records per taxon id (as a string key), for the species bar, the chips' counts and the legend. The four
+ * focus species are always present (so a chip reads 0, not "—"). Counted before the species filter, so a
+ * hidden species still shows what turning it back on would draw.
  */
 export function sightingBreakdown(records: readonly Pick<SightingRecord, "taxon">[]): Record<string, number> {
-  const out: Record<string, number> = Object.fromEntries([...SPECIES_IDS, OTHER_TAXA_KEY].map((s) => [s, 0]));
+  const out: Record<string, number> = Object.fromEntries(SPECIES_IDS.map((_, i) => [String(i + 1), 0]));
   for (const r of records) {
-    const s = speciesIndexOfTaxon(r.taxon);
-    const key = s < 0 ? OTHER_TAXA_KEY : SPECIES_IDS[s]!;
+    const key = String(r.taxon);
     out[key] = (out[key] ?? 0) + 1;
   }
   return out;
 }
 
-export function trailAlpha(ageMs: number): number {
-  const t = Math.min(1, Math.max(0, ageMs / SIGHTING_TRAIL_MS));
+export function trailAlpha(ageMs: number, trail: number = SIGHTING_TRAIL_MS): number {
+  const t = Math.min(1, Math.max(0, ageMs / trail));
   return 1 - (1 - OLDEST_ALPHA) * t;
 }
 
@@ -175,11 +183,15 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
       clear();
       return;
     }
-    const filter = ctx.layers().species;
-    const species = enabledSpecies(filter, SIGHTINGS);
-    const other = otherTaxaShown(filter, SIGHTINGS);
+    const layers = ctx.layers();
+    const filter = layers.species;
+    const hours = sightingHoursOf(layers);
+    const taxa = ctx.taxa?.() ?? { byId: {}, version: 0 };
     const selected = ctx.selection?.() ?? null;
-    const key = `${frame}|${species.join(",")}|${other}|${selected}|${grid?.version() ?? -1}|${ctx.revision()}`;
+    const filterKey = Object.entries(filter)
+      .map(([k, v]) => `${k}=${String(v)}`)
+      .join(",");
+    const key = `${frame}|${hours}|${filterKey}|${selected}|${grid?.version() ?? -1}|${ctx.revision()}|${taxa.version}`;
     if (key === drawnKey) return;
     drawnKey = key;
 
@@ -190,8 +202,9 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
       windowKey = indexKey;
       windowIndex = sightingWindowIndex((f) => ctx.sightings(f), meta.frameCount, stepMsOf(meta));
     }
-    const trail = distinctRecords(windowRecords(windowIndex!, frame));
-    const visible = visibleRecords(trail, species, other);
+    const trail = distinctRecords(windowRecords(windowIndex!, frame, hours));
+    const visible = visibleRecords(trail, filter, taxa.byId);
+    const trailLength = trailMs(hours);
     points.removeAll();
     icons.removeAll();
     const iconRange = new DistanceDisplayCondition(0, ICON_MAX_DISTANCE_M);
@@ -200,7 +213,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     const ordered = selectedIndex < 0 ? visible : [...visible.slice(0, selectedIndex), ...visible.slice(selectedIndex + 1), visible[selectedIndex]!];
     for (const r of ordered) {
       const position = Cartesian3.fromDegrees(r.lon, r.lat);
-      const alpha = trailAlpha(r.ageMs) * (STRONG_QUALITY.has(r.quality) ? 1 : 0.8);
+      const alpha = trailAlpha(r.ageMs, trailLength) * (STRONG_QUALITY.has(r.quality) ? 1 : 0.8);
       const s = speciesIndexOfTaxon(r.taxon);
       const conflict = (r.flags & SIGHTING_FLAG.conflict) !== 0;
       const id = sightingEvidenceId(r.id);

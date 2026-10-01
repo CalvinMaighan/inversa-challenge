@@ -156,7 +156,7 @@ fn taxon(r: &Record) -> Option<TaxonRef> {
         return Some(f.taxon());
     }
     let name = r.scientific_name.as_deref().map(str::trim).filter(|n| !n.is_empty())?;
-    Some(TaxonRef { scientific_name: name.to_string(), common_name: r.common_name.clone().unwrap_or_default() })
+    Some(TaxonRef::named(name, r.common_name.clone().unwrap_or_default()))
 }
 
 /// Pure: one search page to rows, bbox only, day-precision dates only.
@@ -231,7 +231,7 @@ mod tests {
         ]});
         let s = sightings(&serde_json::to_vec(&page).unwrap());
         assert_eq!(s.len(), 1);
-        assert_eq!(s[0].taxon, TaxonRef { scientific_name: "Python sebae".into(), common_name: "African rock python".into() });
+        assert_eq!(s[0].taxon, TaxonRef::named("Python sebae", "African rock python"));
     }
 
     #[test]

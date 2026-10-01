@@ -59,8 +59,30 @@ impl Focus {
         }
     }
 
+    /// iNat taxon id of the focus taxon (the lionfish row stands for the genus Pterois).
+    pub fn inat_taxon_id(self) -> i64 {
+        match self {
+            Focus::Python => 238252,
+            Focus::Tegu => 318758,
+            Focus::Iguana => 35342,
+            Focus::Lionfish => 47284,
+        }
+    }
+
+    pub fn iconic_group(self) -> &'static str {
+        match self {
+            Focus::Lionfish => "Actinopterygii",
+            _ => "Reptilia",
+        }
+    }
+
     pub fn taxon(self) -> TaxonRef {
-        TaxonRef { scientific_name: self.scientific_name().into(), common_name: self.common_name().into() }
+        TaxonRef {
+            scientific_name: self.scientific_name().into(),
+            common_name: self.common_name().into(),
+            inat_taxon_id: Some(self.inat_taxon_id()),
+            iconic_group: Some(self.iconic_group().into()),
+        }
     }
 }
 

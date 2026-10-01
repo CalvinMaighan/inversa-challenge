@@ -281,17 +281,25 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 .prepare_cached(
                     "select s.id, s.source_id, s.ext_id, s.taxon_id, t.scientific_name, t.common_name, s.lat, s.lon,
                             s.accuracy_m, s.observed_at, s.quality, s.photo_url, s.raw_object_id, s.canonical_id,
-                            s.conflict, s.ingested_at
+                            s.conflict, s.ingested_at, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url, t.focus
                      from sightings s join taxa t on t.id = s.taxon_id where s.id = ?1",
                 )?
                 .query_row([sid], |r| {
+                    let taxon_id: i64 = r.get(3)?;
+                    let inat_id: Option<i64> = r.get(16)?;
                     Ok((
                         json!({
                             "id": r.get::<_, i64>(0)?.to_string(),
                             "source": r.get::<_, String>(1)?,
                             "extId": r.get::<_, String>(2)?,
-                            "taxon": {"id": r.get::<_, i64>(3)?.to_string(), "scientificName": r.get::<_, String>(4)?,
-                                      "commonName": r.get::<_, String>(5)?},
+                            // Taxon info (T44) rides in the record so the card needs no second request.
+                            "taxon": {"id": taxon_id.to_string(), "scientificName": r.get::<_, String>(4)?,
+                                      "commonName": r.get::<_, String>(5)?, "focus": r.get::<_, bool>(20)?,
+                                      "inatTaxonId": inat_id.map(|n| n.to_string()),
+                                      "iconicGroup": r.get::<_, Option<String>>(17)?,
+                                      "summary": r.get::<_, Option<String>>(18)?,
+                                      "photoUrl": r.get::<_, Option<String>>(19)?.map(|_| format!("/v1/media/taxon/{taxon_id}")),
+                                      "pageUrl": inat_id.map(crate::taxon_info::page_url)},
                             "lat": r.get::<_, f64>(6)?,
                             "lon": r.get::<_, f64>(7)?,
                             "accuracyM": r.get::<_, Option<f64>>(8)?,

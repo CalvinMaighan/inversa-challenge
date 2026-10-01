@@ -254,6 +254,8 @@ struct Taxon {
     name: String,
     preferred_common_name: Option<String>,
     ancestor_ids: Option<Vec<i64>>,
+    /// iNat's coarse group (Reptilia, Aves, Plantae, Insecta, ...), stored as `taxa.iconic_group`.
+    iconic_taxon_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -289,6 +291,8 @@ impl Taxon {
             None => TaxonRef {
                 scientific_name: self.name.clone(),
                 common_name: self.preferred_common_name.clone().unwrap_or_default(),
+                inat_taxon_id: Some(self.id),
+                iconic_group: Some(crate::taxon_info::iconic_group(self.iconic_taxon_name.as_deref()).to_string()),
             },
         }
     }

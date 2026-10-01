@@ -16,6 +16,7 @@ mod model;
 mod realtime;
 mod source_pages;
 mod state;
+mod taxon_info;
 
 use tokio::net::TcpListener;
 
@@ -37,6 +38,7 @@ async fn main() {
     }
 
     ingest::scheduler::spawn(state.clone());
+    taxon_info::spawn(state.clone());
     frames::spawn_builder(state.clone());
     feed_state::spawn_publisher(state.obs.clone(), state.hub.clone(), std::time::Duration::from_secs(15));
 

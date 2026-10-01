@@ -304,7 +304,7 @@ mod tests {
     fn row(ext: &str, name: &str, lat: f64, lon: f64, at: i64) -> Row {
         Row::Sighting(SightingRow {
             ext_id: ext.into(),
-            taxon: TaxonRef { scientific_name: name.into(), common_name: String::new() },
+            taxon: TaxonRef::named(name, ""),
             lat,
             lon,
             accuracy_m: None,

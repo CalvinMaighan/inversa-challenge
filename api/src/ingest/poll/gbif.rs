@@ -247,7 +247,7 @@ fn taxon(o: &Occurrence) -> Option<TaxonRef> {
         return Some(f.taxon());
     }
     let name = o.species.as_deref().or(o.scientific_name.as_deref()).map(str::trim).filter(|n| !n.is_empty())?;
-    Some(TaxonRef { scientific_name: name.to_string(), common_name: o.vernacular_name.clone().unwrap_or_default() })
+    Some(TaxonRef::named(name, o.vernacular_name.clone().unwrap_or_default()))
 }
 
 /// `eventDate` to unix ms: a single instant or day, or a range that stays within one day.

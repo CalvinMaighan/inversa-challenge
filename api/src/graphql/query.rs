@@ -14,7 +14,7 @@ use rusqlite::params;
 use super::types::{
     Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, FrameChunk, HotspotCell, HotspotExplain,
     HotspotGrid, HotspotTerm, Message, Mission, Op, Param, Quality, Reading, ReadingFlag, ReadingOrigin, Sighting,
-    Station, Taxon, Time,
+    SpeciesCount, Station, Taxon, Time,
 };
 use super::{app_state, now_ms};
 use crate::db::Db;
@@ -33,6 +33,9 @@ pub const MAX_ALERTS: usize = 500;
 pub const MAX_GQL_FRAMES: i64 = 24;
 pub const MAX_HOTSPOT_TOP: i32 = 5000;
 pub const MAX_BACKTEST_DAYS: i32 = 366;
+/// `taxa` returns at most this many rows; `speciesCounts` at most this many taxa (default 50).
+pub const MAX_TAXA: usize = 500;
+pub const DEFAULT_SPECIES_TOP: i32 = 50;
 /// Upper bound on ops returned by one `opsSince` call or one subscription replay page.
 pub const OPS_PAGE: i64 = 5000;
 /// Complexity charged for a root field that scans a table or builds a blob (sightings, readings, frames,
@@ -55,6 +58,19 @@ fn species(id: &ID) -> Result<Species> {
     Species::parse(id).ok_or_else(|| {
         format!("unknown species {:?}; expected python, tegu, iguana, lionfish or taxon id 1-4", id.as_str()).into()
     })
+}
+
+/// `taxa.id`s from ids or focus species names (`python`, `tegu`, `iguana`, `lionfish`).
+fn taxon_ids(ids: &[ID]) -> Result<Vec<i64>> {
+    ids.iter()
+        .map(|id| {
+            id.parse::<i64>()
+                .ok()
+                .filter(|n| *n > 0)
+                .or_else(|| Species::parse(id).map(Species::taxon_id))
+                .ok_or_else(|| async_graphql::Error::new(format!("unknown taxon {:?}", id.as_str())))
+        })
+        .collect()
 }
 
 /// Report a capped list next to the data it did return.
@@ -104,27 +120,14 @@ impl QueryRoot {
     ) -> Result<Vec<Sighting>> {
         bbox.validate()?;
         check_window(from, to)?;
-        let taxa = taxa
-            .map(|ids| {
-                ids.iter()
-                    .map(|id| {
-                        id.parse::<i64>()
-                            .ok()
-                            .filter(|n| *n > 0)
-                            .or_else(|| Species::parse(id).map(Species::taxon_id))
-                            .ok_or_else(|| async_graphql::Error::new(format!("unknown taxon {:?}", id.as_str())))
-                    })
-                    .collect::<Result<Vec<i64>>>()
-            })
-            .transpose()?;
-        let taxa = json_list(taxa);
+        let taxa = json_list(taxa.map(|ids| taxon_ids(&ids)).transpose()?);
         let quality = json_list(quality.map(|q| q.into_iter().map(Quality::db).collect()));
         let mut rows = app_state(ctx)
             .obs
             .read(move |c| {
-                let mut st = c.prepare_cached(
-                    "select s.id, s.source_id, s.ext_id, s.taxon_id, t.scientific_name, t.common_name, t.focus,
-                            s.lat, s.lon, s.accuracy_m, s.observed_at, s.quality, s.photo_url, s.canonical_id, s.conflict
+                let mut st = c.prepare_cached(&format!(
+                    "select s.id, s.source_id, s.ext_id, s.lat, s.lon, s.accuracy_m, s.observed_at, s.quality, s.photo_url,
+                            s.canonical_id, s.conflict, {}
                      from sightings s join taxa t on t.id = s.taxon_id
                      where s.observed_at between ?1 and ?2
                        and s.lat between ?3 and ?4 and s.lon between ?5 and ?6
@@ -132,29 +135,25 @@ impl QueryRoot {
                        and (?8 is null or s.quality in (select value from json_each(?8)))
                      order by s.observed_at desc, s.id desc
                      limit ?9",
-                )?;
+                    Taxon::COLUMNS
+                ))?;
                 let rows = st.query_map(
                     params![from.0, to.0, bbox.south, bbox.north, bbox.west, bbox.east, taxa, quality, MAX_SIGHTINGS as i64 + 1],
                     |r| {
-                        let quality: String = r.get(11)?;
+                        let quality: String = r.get(7)?;
                         Ok(Sighting {
                             id: ID(r.get::<_, i64>(0)?.to_string()),
                             source: r.get(1)?,
                             ext_id: r.get(2)?,
-                            taxon: Taxon {
-                                id: ID(r.get::<_, i64>(3)?.to_string()),
-                                scientific_name: r.get(4)?,
-                                common_name: r.get(5)?,
-                                focus: r.get(6)?,
-                            },
-                            lat: r.get(7)?,
-                            lon: r.get(8)?,
-                            accuracy_m: r.get(9)?,
-                            observed_at: Time(r.get(10)?),
-                            quality: Quality::from_db(&quality).ok_or_else(|| bad_column(11, "quality", &quality))?,
-                            photo_url: r.get(12)?,
-                            canonical_id: r.get::<_, Option<i64>>(13)?.map(|id| ID(id.to_string())),
-                            conflict: r.get(14)?,
+                            taxon: Taxon::from_row(r, 11)?,
+                            lat: r.get(3)?,
+                            lon: r.get(4)?,
+                            accuracy_m: r.get(5)?,
+                            observed_at: Time(r.get(6)?),
+                            quality: Quality::from_db(&quality).ok_or_else(|| bad_column(7, "quality", &quality))?,
+                            photo_url: r.get(8)?,
+                            canonical_id: r.get::<_, Option<i64>>(9)?.map(|id| ID(id.to_string())),
+                            conflict: r.get(10)?,
                         })
                     },
                 )?;
@@ -165,6 +164,96 @@ impl QueryRoot {
             rows.truncate(MAX_SIGHTINGS);
             note_truncated(ctx, "sightings", MAX_SIGHTINGS);
         }
+        Ok(rows)
+    }
+
+    /// Taxa by id (`taxa.id` or a focus species name) and/or by name (`q`, matched case-insensitively
+    /// inside the common or scientific name), at most 500, focus species first then by id.
+    async fn taxa(&self, ctx: &Context<'_>, ids: Option<Vec<ID>>, q: Option<String>) -> Result<Vec<Taxon>> {
+        let q = q.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        if ids.is_none() && q.is_none() {
+            return Err("`taxa` needs `ids` or `q`".into());
+        }
+        let ids = json_list(ids.map(|ids| taxon_ids(&ids)).transpose()?);
+        let like = q.map(|s| format!("%{}%", s.replace(['%', '_'], " ")));
+        let rows = app_state(ctx)
+            .obs
+            .read(move |c| {
+                let mut st = c.prepare_cached(&format!(
+                    "select {} from taxa t
+                     where (?1 is null or t.id in (select value from json_each(?1)))
+                       and (?2 is null or t.common_name like ?2 or t.scientific_name like ?2)
+                     order by t.focus desc, t.id
+                     limit ?3",
+                    Taxon::COLUMNS
+                ))?;
+                let rows = st.query_map(params![ids, like, MAX_TAXA as i64], |r| Taxon::from_row(r, 0))?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .await?;
+        Ok(rows)
+    }
+
+    /// Distinct sightings per taxon inside `bbox` observed in `from..=to`, most first. `groups` keeps
+    /// taxa whose `iconicGroup` is listed (`other` also matches taxa with no group); `top` defaults to 50.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn species_counts(
+        &self,
+        ctx: &Context<'_>,
+        bbox: BBox,
+        from: Time,
+        to: Time,
+        groups: Option<Vec<String>>,
+        top: Option<i32>,
+    ) -> Result<Vec<SpeciesCount>> {
+        bbox.validate()?;
+        check_window(from, to)?;
+        let top = top.unwrap_or(DEFAULT_SPECIES_TOP);
+        if !(1..=MAX_TAXA as i32).contains(&top) {
+            return Err(format!("`top` must be 1..={MAX_TAXA}").into());
+        }
+        let groups = groups
+            .map(|gs| {
+                gs.iter()
+                    .map(|g| {
+                        crate::taxon_info::GROUPS
+                            .iter()
+                            .find(|known| known.eq_ignore_ascii_case(g.trim()))
+                            .map(|k| k.to_string())
+                            .ok_or_else(|| {
+                                async_graphql::Error::new(format!("unknown group {g:?}; expected one of {}", crate::taxon_info::GROUPS.join(", ")))
+                            })
+                    })
+                    .collect::<Result<Vec<String>>>()
+            })
+            .transpose()?;
+        let other = groups.as_ref().is_some_and(|g| g.iter().any(|g| g == "other"));
+        let groups = json_list(groups);
+        let rows = app_state(ctx)
+            .obs
+            .read(move |c| {
+                let mut st = c.prepare_cached(&format!(
+                    "select {}, count(*) as n, s.id, max(s.observed_at)
+                     from sightings s join taxa t on t.id = s.taxon_id
+                     where s.observed_at between ?1 and ?2
+                       and s.lat between ?3 and ?4 and s.lon between ?5 and ?6
+                       and s.canonical_id is null
+                       and (?7 is null or t.iconic_group in (select value from json_each(?7)) or (?8 and t.iconic_group is null))
+                     group by t.id
+                     order by n desc, t.id
+                     limit ?9",
+                    Taxon::COLUMNS
+                ))?;
+                let rows = st.query_map(params![from.0, to.0, bbox.south, bbox.north, bbox.west, bbox.east, groups, other, top as i64], |r| {
+                    Ok(SpeciesCount {
+                        taxon: Taxon::from_row(r, 0)?,
+                        count: r.get::<_, i64>(8)? as i32,
+                        latest_sighting_id: r.get::<_, Option<i64>>(9)?.map(|id| ID(id.to_string())),
+                    })
+                })?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .await?;
         Ok(rows)
     }
 

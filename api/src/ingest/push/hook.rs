@@ -163,7 +163,7 @@ mod tests {
     fn body() -> Vec<u8> {
         serde_json::to_vec(&vec![Row::Sighting(SightingRow {
             ext_id: "web-1".into(),
-            taxon: TaxonRef { scientific_name: "Salvator merianae".into(), common_name: "Tegu".into() },
+            taxon: TaxonRef::named("Salvator merianae", "Tegu"),
             lat: 25.9,
             lon: -80.4,
             accuracy_m: Some(5.0),

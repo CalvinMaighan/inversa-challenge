@@ -1,24 +1,41 @@
 "use client";
 
-import { useId, useRef, useState, type PointerEvent } from "react";
+import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { OTHER_TAXON_COLOR, SPECIES_COLORS } from "client/globe/species";
-import { LAYERS, setSpeciesVisible, showAllSpecies, showOnlySpecies, SPECIES_FILTER_IDS, type LayersState, type SpeciesFilterId } from "client/state/layers";
+import { colorOfTaxon, groupShown, NEUTRAL_COLOR, SPECIES_COLORS, taxonShown } from "client/globe/species";
+import {
+  isSpeciesFiltered,
+  LAYERS,
+  setSightingHours,
+  setSpeciesVisible,
+  setTaxonVisible,
+  showAllSpecies,
+  showOnlySpecies,
+  showOnlyTaxon,
+  sightingHoursOf,
+  SPECIES_GROUP_IDS,
+  type LayersState,
+  type SpeciesFilterId,
+  type SpeciesGroupId,
+} from "client/state/layers";
+import { groupOf, isFocusTaxon, TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import styled from "client/styled";
-import { SIGHTING_WINDOW_HOURS } from "shared/frames";
-import { LAYER_IDS } from "shared/voice/ui-tools";
+import { SIGHTING_WINDOW_OPTIONS, windowLabel } from "shared/frames";
+import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
-import { SPECIES_GUIDE } from "../help/content";
+import { GROUP_GUIDE, SPECIES_GUIDE, WINDOW_NOTE } from "../help/content";
 import { formatCount } from "../legend/model";
 import { useGlobeStats } from "../legend/useGlobeStats";
 import { MOBILE, Mono, Surface } from "../primitives";
 
-/** Chip colours, indexed like SPECIES_FILTER_IDS: the globe's species colours, then other taxa. */
-export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, OTHER_TAXON_COLOR];
+/** Chip colours, indexed like SPECIES_GUIDE: the four focus colours, then the neutral of a group chip. */
+export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, NEUTRAL_COLOR];
 const [SIGHTINGS] = LAYER_IDS;
 /** A touch held this long shows only that species. */
 const LONG_PRESS_MS = 500;
+/** Non-focus animal chips in the bar: the most-seen taxa of the window. */
+export const TOP_ANIMAL_CHIPS = 6;
 
 const Bar = styled(Surface)`
   display: flex;
@@ -28,6 +45,7 @@ const Bar = styled(Surface)`
   padding: 4px;
   border-radius: var(--radius-m);
   min-width: 0;
+  max-width: min(100%, 760px);
 
   ${MOBILE} {
     gap: 2px;
@@ -46,7 +64,7 @@ const Slot = styled.span`
     left: 0;
     z-index: 6;
     width: max-content;
-    max-width: min(260px, 70cqw);
+    max-width: min(300px, 70cqw);
     padding: 5px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius-s);
@@ -80,6 +98,7 @@ const Chip = styled.button<{ $color: string }>`
   touch-action: manipulation;
   user-select: none;
   -webkit-touch-callout: none;
+  max-width: 190px;
 
   i {
     flex: none;
@@ -88,6 +107,12 @@ const Chip = styled.button<{ $color: string }>`
     border-radius: 50%;
     border: 2px solid ${(p) => p.$color};
     background: transparent;
+  }
+
+  span.name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &[aria-pressed="true"] {
@@ -100,6 +125,10 @@ const Chip = styled.button<{ $color: string }>`
     }
   }
 
+  &[data-empty] {
+    opacity: 0.55;
+  }
+
   &:hover {
     color: var(--text);
     border-color: var(--hud-line);
@@ -110,6 +139,7 @@ const Chip = styled.button<{ $color: string }>`
     padding: 0 6px;
     gap: 4px;
     font-size: 12px;
+    max-width: 150px;
   }
 `;
 
@@ -133,8 +163,101 @@ const All = styled.button`
   }
 `;
 
-function SpeciesChip({ id, index, on, count }: { id: SpeciesFilterId; index: number; on: boolean; count: number | null }) {
-  const guide = SPECIES_GUIDE[index]!;
+const Window = styled.select`
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--text);
+  font: 600 11.5px / 1 var(--font-ui);
+  cursor: pointer;
+  option {
+    background: var(--surface);
+  }
+
+  ${MOBILE} {
+    height: 28px;
+  }
+`;
+
+/** One chip of the bar: a focus species, a top animal, or a whole group. */
+export type ChipModel = {
+  /** `python`…`lionfish`, `animals|plants|others`, or `t<taxon id>`. */
+  key: string;
+  /** What the chip toggles. */
+  target: { kind: "species"; id: SpeciesFilterId } | { kind: "taxon"; id: number };
+  name: string;
+  /** The description line under the name on hover. */
+  full: string;
+  line: string;
+  color: string;
+  on: boolean;
+  count: number | null;
+};
+
+/** First sentence of a taxon summary, for the chip's one-line description. */
+export function firstSentence(text: string | null | undefined): string | null {
+  const t = text?.trim();
+  if (!t) return null;
+  const m = /^(.*?[.!?])(?:\s|$)/.exec(t);
+  return (m ? m[1]! : t).trim();
+}
+
+/**
+ * The bar's chips (T44): the four focus species pinned first, then the TOP_ANIMAL_CHIPS most-seen other animals
+ * of the window (a hidden one stays listed while it has sightings, so it can be turned back on), then the
+ * Plants and "Insects & others" group chips. Pure over the filter, the TAXA store and the layer breakdown
+ * (counts per taxon id, before the filter).
+ */
+export function speciesChips(filter: LayersState["species"], taxa: Readonly<Record<string, TaxonInfo>>, breakdown: Readonly<Record<string, number>> | null): ChipModel[] {
+  const count = (key: string) => (breakdown ? (breakdown[key] ?? 0) : null);
+  const chips: ChipModel[] = SPECIES_IDS.map((id, i) => {
+    const guide = SPECIES_GUIDE[i]!;
+    return { key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: SPECIES_COLORS[i]!, on: filter[id] !== false, count: count(String(i + 1)) };
+  });
+  const totals: Record<SpeciesGroupId, number> = { animals: 0, plants: 0, others: 0 };
+  const animals: { id: number; n: number; info: TaxonInfo | undefined }[] = [];
+  for (const [key, n] of Object.entries(breakdown ?? {})) {
+    const id = Number(key);
+    if (!Number.isInteger(id) || isFocusTaxon(id)) continue;
+    const info = taxa[key];
+    const group = info ? groupOf(info.iconicGroup) : "animals";
+    totals[group] += n;
+    if (group === "animals" && n > 0) animals.push({ id, n, info });
+  }
+  animals.sort((a, b) => b.n - a.n || a.id - b.id);
+  for (const { id, n, info } of animals.slice(0, TOP_ANIMAL_CHIPS)) {
+    const name = taxonName(info, `Species ${id}`);
+    chips.push({
+      key: `t${id}`,
+      target: { kind: "taxon", id },
+      name,
+      full: name,
+      line: firstSentence(info?.summary) ?? (info?.scientificName ? `${info.scientificName}, an introduced species` : "an introduced animal people reported"),
+      color: colorOfTaxon(id),
+      on: taxonShown(filter, id, taxa, SIGHTINGS),
+      count: breakdown ? n : null,
+    });
+  }
+  for (const id of SPECIES_GROUP_IDS) {
+    if (id === "animals") continue;
+    const guide = GROUP_GUIDE[id];
+    const on = groupShown(filter, id);
+    chips.push({ key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: NEUTRAL_COLOR, on, count: breakdown ? totals[id] : null });
+  }
+  return chips;
+}
+
+function toggle(chip: ChipModel, only: boolean): void {
+  if (chip.target.kind === "taxon") {
+    if (only) showOnlyTaxon(chip.target.id);
+    else setTaxonVisible(chip.target.id, !chip.on);
+  } else if (only) showOnlySpecies(chip.target.id);
+  else setSpeciesVisible(chip.target.id, !chip.on);
+}
+
+function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
   const tipId = useId();
   const [pressing, setPressing] = useState(false);
   const press = useRef<{ timer: ReturnType<typeof setTimeout> | null; fired: boolean }>({ timer: null, fired: false });
@@ -150,17 +273,19 @@ function SpeciesChip({ id, index, on, count }: { id: SpeciesFilterId; index: num
     setPressing(true);
     press.current.timer = setTimeout(() => {
       press.current.fired = true;
-      showOnlySpecies(id);
+      toggle(chip, true);
     }, LONG_PRESS_MS);
   };
+  const seen = `${formatCount(chip.count)} seen in the last ${windowLabel(hours)}.`;
   return (
     <Slot data-pressing={pressing ? "" : undefined}>
       <Chip
         type="button"
-        $color={SPECIES_CHIP_COLORS[index]!}
-        aria-pressed={on}
+        $color={chip.color}
+        aria-pressed={chip.on}
         aria-describedby={tipId}
-        data-species-chip={id}
+        data-species-chip={chip.key}
+        data-empty={chip.count === 0 ? "" : undefined}
         onPointerDown={onPointerDown}
         onPointerUp={cancel}
         onPointerLeave={cancel}
@@ -173,42 +298,71 @@ function SpeciesChip({ id, index, on, count }: { id: SpeciesFilterId; index: num
             press.current.fired = false;
             return;
           }
-          if (e.altKey) showOnlySpecies(id);
-          else setSpeciesVisible(id, !on);
+          toggle(chip, e.altKey);
         }}
       >
         <i aria-hidden="true" />
-        {guide.name}
-        <Count data-species-count="">{formatCount(count)}</Count>
+        <span className="name">{chip.name}</span>
+        <Count data-species-count="">{formatCount(chip.count)}</Count>
       </Chip>
       <span role="tooltip" id={tipId}>
-        <b>{guide.full}</b>: {guide.line}. {formatCount(count)} seen in the last {SIGHTING_WINDOW_HOURS} hours. Alt-click or hold to show only these.
+        <b>{chip.full}</b>: {chip.line.replace(/\.$/, "")}. {seen} Alt-click or hold to show only these.
       </span>
     </Slot>
   );
 }
 
+/** The 2 / 7 / 30 day window, compact. */
+function WindowSelect({ hours }: { hours: number }) {
+  return (
+    <Window
+      value={hours}
+      aria-label="Sightings window"
+      title={WINDOW_NOTE}
+      data-testid="sighting-window"
+      onChange={(e) => {
+        const next = Number(e.currentTarget.value);
+        const option = SIGHTING_WINDOW_OPTIONS.find((h) => h === next);
+        if (option) setSightingHours(option);
+      }}
+    >
+      {SIGHTING_WINDOW_OPTIONS.map((h) => (
+        <option key={h} value={h}>
+          Last {windowLabel(h)}
+        </option>
+      ))}
+    </Window>
+  );
+}
+
 /**
- * Species filter bar (T41), top left of the map: a chip per focus species plus "Other", with its globe colour
- * and how many sightings there are in the last 48 hours (GlobeApi stats breakdown, counted whatever the filter).
- * Click toggles; Alt-click or a long press shows only that species; "All" resets. It writes the LAYERS species
- * filter, which the globe, the legend, the timeline sparkline and the agent's view all read.
+ * Species filter bar (T41, T44), top left of the map: the four focus species pinned, then the most-seen other
+ * animals of the window, then Plants and "Insects & others" (off by default), each chip with its globe colour
+ * and how many sightings there are in the window (GlobeApi stats breakdown, counted whatever the filter), plus
+ * the window selector. Click toggles; Alt-click or a long press shows only that species; "All" brings every
+ * animal back. It writes the LAYERS species filter, which the globe, the legend, the timeline sparkline and the
+ * agent's view all read.
  */
 export default function SpeciesBar() {
-  const filter = useActiveState<LayersState, LayersState["species"]>(LAYERS, (l) => l.species)[0] ?? LAYERS.defaults.species;
+  const layers = useActiveState<LayersState>(LAYERS)[0];
+  const filter = layers?.species ?? LAYERS.defaults.species;
+  const hours = sightingHoursOf(layers);
+  const taxa = useActiveState<TaxaState, TaxaState["byId"]>(TAXA, (t) => t.byId)[0] ?? TAXA.defaults.byId;
   const stats = useGlobeStats();
   const breakdown = stats?.find((s) => s.id === SIGHTINGS)?.breakdown ?? null;
-  const filtered = SPECIES_FILTER_IDS.some((id) => filter[id] === false);
+  const chips = useMemo(() => speciesChips(filter, taxa, breakdown), [filter, taxa, breakdown]);
+  const filtered = isSpeciesFiltered(filter);
   return (
     <Bar role="group" aria-label="Species filter" data-hud-obstacle="" data-testid="species-bar">
-      {SPECIES_FILTER_IDS.map((id, i) => (
-        <SpeciesChip key={id} id={id} index={i} on={filter[id] !== false} count={breakdown ? (breakdown[id] ?? 0) : null} />
+      {chips.map((chip) => (
+        <SpeciesChip key={chip.key} chip={chip} hours={hours} />
       ))}
       {filtered ? (
-        <All type="button" onClick={showAllSpecies} data-testid="species-all" title="Show every species">
+        <All type="button" onClick={showAllSpecies} data-testid="species-all" title="Show every animal again">
           All
         </All>
       ) : null}
+      <WindowSelect hours={hours} />
     </Bar>
   );
 }

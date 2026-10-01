@@ -543,9 +543,20 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         if let Some(id) = self.taxa.get(name) {
             return Ok(Some(*id));
         }
+        // iNat ids and groups (T44) come from the iNat adapter only; a GBIF or NAS ref never
+        // clears them, and the first adapter to know a value fills it in on an existing row.
         self.tx
-            .prepare_cached("insert into taxa (scientific_name, common_name, focus) values (?1, ?2, 0) on conflict(scientific_name) do nothing")?
-            .execute(params![name, t.common_name.trim()])?;
+            .prepare_cached(
+                "insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group) values (?1, ?2, 0, ?3, ?4)
+                 on conflict(scientific_name) do update set
+                   inat_taxon_id = coalesce(taxa.inat_taxon_id, excluded.inat_taxon_id),
+                   iconic_group = coalesce(taxa.iconic_group, excluded.iconic_group),
+                   common_name = case when taxa.common_name = '' then excluded.common_name else taxa.common_name end
+                 where taxa.inat_taxon_id is null and excluded.inat_taxon_id is not null
+                    or taxa.iconic_group is null and excluded.iconic_group is not null
+                    or taxa.common_name = '' and excluded.common_name <> ''",
+            )?
+            .execute(params![name, t.common_name.trim(), t.inat_taxon_id, t.iconic_group])?;
         let id: i64 =
             self.tx.prepare_cached("select id from taxa where scientific_name = ?1")?.query_row([name], |r| r.get(0))?;
         self.taxa.insert(name.to_string(), id);
@@ -764,7 +775,7 @@ mod tests {
         vec![
             Row::Sighting(SightingRow {
                 ext_id: "obs-1".into(),
-                taxon: TaxonRef { scientific_name: "Python bivittatus".into(), common_name: "Burmese python".into() },
+                taxon: TaxonRef::named("Python bivittatus", "Burmese python"),
                 lat: 25.4,
                 lon: -80.6,
                 accuracy_m: Some(12.0),
@@ -774,7 +785,7 @@ mod tests {
             }),
             Row::Sighting(SightingRow {
                 ext_id: "obs-2".into(),
-                taxon: TaxonRef { scientific_name: "Anolis sagrei".into(), common_name: "Brown anole".into() },
+                taxon: TaxonRef { scientific_name: "Anolis sagrei".into(), common_name: "Brown anole".into(), inat_taxon_id: Some(116461), iconic_group: Some("Reptilia".into()) },
                 lat: 25.7,
                 lon: -80.3,
                 accuracy_m: None,

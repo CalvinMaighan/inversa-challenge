@@ -9,6 +9,7 @@ import type { LayerId, LayersState } from "client/state/layers";
 import type { MissionsState } from "client/state/missions";
 import type { NotePin } from "client/state/notes";
 import type { Peer } from "client/state/peers";
+import type { TaxaState } from "client/state/taxa";
 import type { FrameMeta, GqlVariables } from "client/threads/api";
 import type { SightingRecord } from "shared/frames";
 
@@ -61,6 +62,8 @@ export type LayerContext = {
   peers(): readonly Peer[];
   /** Live field notes on the team board (NOTES.pins, T43). */
   notes(): readonly NotePin[];
+  /** What the client knows about taxa (TAXA, T44): groups for the filter, names for tooltips. Optional for stand-in contexts. */
+  taxa?(): TaxaState;
   gql<T>(query: string, variables?: GqlVariables, signal?: AbortSignal): Promise<T>;
 };
 
