@@ -15,11 +15,28 @@
  * mark again in the next `requestAnimationFrame` callback. That span is the frame-change latency: HUD
  * re-render, TIME fan-out, the globe reading the frame from the SAB and redrawing, overlays re-projected.
  * Every request and WebSocket opened between the first and last step is counted.
+ *
+ * Per app (rubric `scrub-speed`, `timeline-replay/scrub-frames`):
+ *
+ *   bun run e2e:scrub -- --app <id>   the app's own page on the real stack (e2e/stack.ts: Axum over the app's fixture
+ *                                    backfill, the production e2e build, the signal Worker, the proxy)
+ *
+ * The same per-step measurement on the timeline the app shows, over 96 positions an hour apart (python and lionfish:
+ * the HUD scrubber, four 15-minute steps per position; carp: the stage chart's "what we knew" scrubber), each
+ * checked against what the app draws after that display frame: python, the globe's sightings layer is on the
+ * cursor's frame; lionfish, the survey overlay's as-of is the cursor's time; carp, the chart's cursor moved to the
+ * new position. Requests: every HTTP request and every WebSocket message the page sends while scrubbing.
+ * Line: `SCRUB app=<id> median=<ms> requests=<n> p95=<ms> work_median=<ms> frames=<verified distinct frames>
+ * steps=<n>`; exit 0 only when median < 16 ms, p95 <= 33.3 ms, requests = 0 and every step drew its frame.
  */
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Page } from "playwright";
+
+import type { AppId } from "../shared/apps";
+import { appArg } from "./args";
+import { buildApi, buildWeb, startStack } from "./stack";
 
 const APP_DIR = path.resolve(import.meta.dir, "..");
 const REPO_DIR = path.resolve(APP_DIR, "../..");
@@ -133,7 +150,151 @@ async function screenshot(page: Page) {
   log(`screenshot → ${path.relative(REPO_DIR, SHOT)}`);
 }
 
+// ---- per app, on the real stack ------------------------------------------------------------------------
+
+const POSITIONS = 96;
+
+type AppScrub = { latencies: number[]; work: number[]; drawn: string[]; verified: boolean[] };
+
+/** Runs inside the page: one input per position, timed to the next animation frame, then what the app drew checked. */
+async function scrubAppInPage({ kind, positions }: { kind: AppId; positions: number }): Promise<AppScrub> {
+  const input = document.querySelector<HTMLInputElement>(kind === "carp" ? "[data-carp-scrubber]" : "[data-hud-scrubber]");
+  if (!input) throw new Error("no scrubber");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  const nextFrame = () => new Promise<number>((resolve) => requestAnimationFrame(resolve));
+  const d = window.__inversa!;
+  const cursorMs = () => {
+    const t = d.state("TIME") as { at?: string; to: string };
+    return Date.parse(t.at ?? t.to);
+  };
+  // What the app drew, and whether it is the cursor's.
+  const drawn = (): { value: string; ok: (before: string) => boolean } => {
+    if (kind === "python") {
+      const frame = d.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1;
+      const want = d.snapshot().frame;
+      return { value: String(frame), ok: () => frame >= 0 && frame === want };
+    }
+    if (kind === "lionfish") {
+      const asof = document.querySelector('[data-testid="lionfish-overlay"]')?.getAttribute("data-asof") ?? "";
+      return { value: asof, ok: () => asof === String(cursorMs()) };
+    }
+    const cursor = document.querySelector<HTMLCanvasElement>('[data-testid="carp-chart"]')?.dataset.cursor ?? "";
+    return { value: cursor, ok: (before) => cursor !== "" && cursor !== before };
+  };
+  // The live edge is the scrubber's current value (carp: now inside a window that runs a week ahead).
+  const top = kind === "carp" ? Number(input.value) : Number(input.max);
+  const stride = kind === "carp" ? 1 : 4;
+  const latencies: number[] = [];
+  const work: number[] = [];
+  const values: string[] = [];
+  const verified: boolean[] = [];
+  await nextFrame();
+  await nextFrame();
+  for (let i = positions; i >= 1; i--) {
+    await new Promise((resolve) => setTimeout(resolve, Math.random() * 16));
+    const before = drawn().value;
+    // The wall clock throughout: a Playwright clock would replace requestAnimationFrame and performance.now.
+    const t0 = performance.now();
+    setValue.call(input, String(top - i * stride));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    await Promise.resolve();
+    work.push(performance.now() - t0);
+    await nextFrame();
+    latencies.push(performance.now() - t0);
+    const after = drawn();
+    values.push(after.value);
+    verified.push(after.ok(before));
+  }
+  return { latencies, work, drawn: values, verified };
+}
+
+async function appMain(app: AppId): Promise<void> {
+  const alog = (...a: unknown[]) => console.error(`[e2e:scrub ${app}]`, ...a);
+  buildApi(alog);
+  buildWeb(alog);
+  const stack = await startStack({ name: `scrub-${app}`, app, apps: [app] });
+  // The GPU, as a user's browser has one (Metal on macOS); software GL elsewhere, where a frame of the real globe
+  // costs the CPU tens of milliseconds and the latency measures the emulator, not the app.
+  const defaultArgs = process.platform === "darwin" ? "--use-angle=metal" : "--use-angle=swiftshader --enable-unsafe-swiftshader";
+  const gpuArgs = (process.env.SCRUB_CHROMIUM_ARGS ?? defaultArgs).split(/\s+/).filter(Boolean);
+  const browser = await chromium.launch({ headless: true, args: gpuArgs });
+  alog(`chromium ${gpuArgs.join(" ")}`);
+  let failed = true;
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    // Listening from the start: a socket opened at load reports the frames it sends later.
+    let recording = false;
+    const requests: string[] = [];
+    page.on("request", (r) => {
+      if (recording) requests.push(`${r.method()} ${r.url()} ${(/"operationName":"(\w+)"|query\s+(\w+)/.exec(r.postData() ?? "") ?? []).slice(1).find(Boolean) ?? ""}`);
+    });
+    page.on("websocket", (ws) => {
+      if (recording) requests.push(`WS open ${ws.url()}`);
+      ws.on("framesent", (f) => recording && requests.push(`WS send ${ws.url()} ${String(f.payload).slice(0, 80)}`));
+    });
+    await page.goto(`${stack.origin}/?app=${app}`, { waitUntil: "load" });
+    if (app === "python") {
+      await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: 120_000 });
+    } else if (app === "lionfish") {
+      await page.locator('[data-testid="lionfish-hud"][data-replay-ready="1"]').waitFor({ state: "attached", timeout: 120_000 });
+      if (await page.locator('[data-testid="lionfish-banner-dismiss"]').count()) await page.click('[data-testid="lionfish-banner-dismiss"]');
+    } else {
+      // A site's chart: the scrubber repaints its cursor.
+      await page.waitForFunction(() => document.querySelectorAll("[data-carp-row]").length > 0, undefined, { timeout: 120_000 });
+      await page.click('[data-carp-row="KRZL1"]');
+      await page.waitForFunction(() => /forecast:[1-9]/.test(document.querySelector<HTMLCanvasElement>('[data-testid="carp-chart"]')?.dataset.series ?? ""), undefined, { timeout: 60_000 });
+    }
+    // Loaded: the feed states answered (the HUD's one-time feeds query), then mount effects, the first frame grid
+    // and the feed subscription settle before recording.
+    await page.waitForFunction(() => ((window.__inversa?.state("FEEDS") as unknown[] | undefined)?.length ?? 0) > 0, undefined, { timeout: 120_000 });
+    await page.waitForTimeout(3_000);
+    // The renderer's own pace with nothing changing, for reading the latencies on this machine.
+    const idle = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const out: number[] = [];
+          let last = performance.now();
+          const tick = (now: number) => {
+            out.push(now - last);
+            last = now;
+            if (out.length < 60) requestAnimationFrame(tick);
+            else resolve(out.slice(1));
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    alog(`idle animation frame interval: median ${median(idle).toFixed(2)} ms, p95 ${p95(idle).toFixed(2)} ms`);
+    recording = true;
+    const r = await page.evaluate(scrubAppInPage, { kind: app, positions: POSITIONS });
+    // Anything the last steps set off.
+    await page.waitForTimeout(500);
+    recording = false;
+
+    const verified = r.verified.filter(Boolean).length;
+    const frames = new Set(r.drawn.filter((v, i) => r.verified[i])).size;
+    const med = median(r.latencies);
+    const p = p95(r.latencies);
+    console.log(`SCRUB app=${app} median=${med.toFixed(2)} requests=${requests.length} p95=${p.toFixed(2)} work_median=${median(r.work).toFixed(2)} frames=${frames} steps=${r.latencies.length} verified=${verified}`);
+    if (requests.length) alog("requests during scrub:", requests.slice(0, 20));
+    if (verified !== r.latencies.length) alog(`drawn frame not the cursor's on ${r.latencies.length - verified} steps: ${JSON.stringify(r.drawn)}`);
+    if (errors.length) alog("page errors:", errors);
+    failed = requests.length > 0 || med >= 16 || p > 33.3 || verified !== r.latencies.length || errors.length > 0;
+    await context.close();
+  } catch (err) {
+    alog(`failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    alog(stack.logs());
+  } finally {
+    await browser.close();
+    await stack.stop();
+  }
+  process.exit(failed ? 1 : 0);
+}
+
 async function main() {
+  if (process.argv.some((a) => a === "--app" || a.startsWith("--app="))) return appMain(appArg());
   const shot = process.argv.includes("--shot");
   build();
   const port = freePort();
