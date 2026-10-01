@@ -1,0 +1,2115 @@
+{
+  "app": "carp",
+  "scope": "Louisiana Field Conditions Explorer. Question: how have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? Eight demonstration locations (SMML1 Simmesport, KRZL1 Krotz Springs, BLRL1 Butte La Rose, MCGL1 Morgan City (Atchafalaya), BTRL1 Baton Rouge, AEXL1 Alexandria, MLUL1 Monroe, BXAL1 Bogalusa); L'CARP works only in the Atchafalaya Basin and targets silver, bighead, grass and black carp. The feeds describe conditions only: no carp abundance, catch, legal access or trip safety.",
+  "feeds": [
+    "usgs",
+    "nwps",
+    "nws",
+    "iem"
+  ],
+  "newTools": [
+    {
+      "name": "site_status",
+      "purpose": "Per-site operational review status for the carp locations: needs review flag with each reason (rule id, value, threshold, evidence ids), flood category now and at forecast peak, low water flag, and per-feed freshness (green <= 2 h, amber <= 6 h, red older; forecast stale after 36 h). Accepts asOf to recompute from data known at that time.",
+      "input": "{ sites?: string[] (lid or name; default all eight), asOf?: RFC 3339 (knowledge time; default now) }",
+      "output": "rows of { site, name, basin, needsReview, reasons: [{ rule, value, threshold, evidenceIds }], categoryNow, categoryPeak, lowWater, feeds: { usgs, nwps, nws: { state, newestAt, ageHours } } }",
+      "evidence": "reading:<usgs site>:stage_m:<ms>:measured, forecast:<lid>:<issued ms>, alert:<id>"
+    },
+    {
+      "name": "river_readings",
+      "purpose": "Observed stage and discharge series per site from USGS (15 min) and NWPS observed (hourly), each labelled with source and unit, plus window summary (latest, min, max, net change, 24 h mean for tidal MCGL1) and the known datum offset note (KRZL1).",
+      "input": "{ sites?: string[], from?: RFC 3339, to?: RFC 3339, hours?: number (default 24), params?: ('stage' | 'discharge')[], source?: 'usgs' | 'nwps' | 'both' }",
+      "output": "rows of { site, source, param, unit, latest: { value, at }, change, min, max, mean24h?, notMeasured?: boolean, datumNote? }",
+      "evidence": "reading:<station>:<param>:<observed ms>:measured"
+    },
+    {
+      "name": "river_forecast",
+      "purpose": "NWPS river forecast issuances per site, bitemporal: the issuance current at asOf (or a named issuance), its valid range, 6 hour points, peak and peak flood category, the site's NWPS thresholds (-9999 treated as missing), horizon, and provenance (nwps-live or iem-archive). Can return the previous issuance for revision comparisons.",
+      "input": "{ sites?: string[], asOf?: RFC 3339 (knowledge time; default now), issuedAt?: RFC 3339, previous?: number (also return N earlier issuances) }",
+      "output": "rows of { site, issuedAt, provenance, validFrom, validTo, points: [{ at, stageFt, flowKcfs? }], peak: { at, stageFt, category }, thresholds: { action, minor, moderate, major }, stale: boolean }",
+      "evidence": "forecast:<lid>:<issued ms>"
+    },
+    {
+      "name": "forecast_verify",
+      "purpose": "Score one past issuance against NWPS observed stage at its valid times: paired points, error per point, mean absolute error, max miss, and how many valid times have not happened yet.",
+      "input": "{ sites?: string[], issuedAt?: RFC 3339, daysAgo?: number }",
+      "output": "rows of { site, issuedAt, pairs: [{ at, forecastFt, observedFt, errorFt }], meanAbsErrorFt, maxErrorFt, pending }",
+      "evidence": "forecast:<lid>:<issued ms>, reading:<lid>:stage_m:<ms>:measured"
+    },
+    {
+      "name": "review_history",
+      "purpose": "Transitions of one site's needs review status over a window, with the time of each flip and the rule and evidence that caused it.",
+      "input": "{ site: string, from?: RFC 3339, to?: RFC 3339 (default last 7 days) }",
+      "output": "{ site, transitions: [{ at, from, to, rules: [{ rule, value, threshold, evidenceIds }] }] }",
+      "evidence": "forecast:<lid>:<issued ms>, reading:..., alert:<id>"
+    },
+    {
+      "name": "weather_forecast",
+      "purpose": "NWS gridpoint forecast periods for a site or point (api.weather.gov), with the office updateTime used for freshness.",
+      "input": "{ site?: string (carp location id or name), lat?: number, lon?: number, periods?: number (default 6) }",
+      "output": "{ office, grid, updateTime, periods: [{ name, start, end, temperatureF, windSpeed, windDirection, precipProbability, shortForecast }] }",
+      "evidence": "forecast:nws:<office>/<grid>:<updateTime ms>"
+    },
+    {
+      "name": "source_info",
+      "purpose": "Static facts about one feed of the active app: publisher, API URL, human page, licence and attribution text, cadence, typical latency, rate limit, coverage limits, and what the feed can and cannot tell us. Read from the app config, no network call.",
+      "input": "{ feed: string (a feed id of the active app, e.g. usgs, nwps, crw) } or {} for all feeds",
+      "output": "rows of { feed, publisher, apiUrl, pageUrl, licence, attribution, cadence, latency, rateLimit, coverage, limits[] }",
+      "evidence": "source:<feed>"
+    },
+    {
+      "name": "evidence",
+      "purpose": "Fetch one cited record by evidence id (wraps GraphQL `evidence(id)`): the record, its source API URL, publisher page, fetch time, ingest lag, feed state and links such as duplicateOf or the forecast issuance it belongs to.",
+      "input": "{ id: string (C14 evidence id, e.g. reading:..., sighting:..., forecast:...) }",
+      "output": "{ id, kind, record, sourceUrl, sourcePageUrl, fetchedAt, ingestLagSeconds, feed, links[] }",
+      "evidence": "the id passed in"
+    },
+    {
+      "name": "team_board",
+      "purpose": "Read the active app's team board (GraphQL `board(id: \"<app>:main\")`): missions with their sites or areas and dates, and committed messages with author, recipient, thread and time. Human records, not a data feed.",
+      "input": "{ kind?: 'missions' | 'messages' | 'all', about?: string (place, site or area name), hours?: number (default 168) }",
+      "output": "{ missions: [{ id, title, place, bbox, start, end, assignees }], messages: [{ id, from, to, thread, at, body }] }",
+      "evidence": "mission:<id>, message:<id>"
+    }
+  ],
+  "toolChanges": [
+    {
+      "tool": "alerts",
+      "change": "Accept `site` (carp location) besides bbox, and match statewide `alerts/active?area=LA` rows to sites by point or zone; an empty result returns the check time so 'no active alerts' is citable as a fetch."
+    },
+    {
+      "tool": "notes",
+      "change": "Accept a carp site name or lid as the place filter."
+    },
+    {
+      "tool": "set_view",
+      "change": "Accept the carp presets (all sites 31.1, -91.1, zoom 7.5; Atchafalaya 30.35, -91.55, zoom 8.5) and a replay flag that switches the timeline to knowledge time."
+    },
+    {
+      "tool": "feed_state",
+      "change": "Report usgs, nwps, nws and iem for the carp app."
+    }
+  ],
+  "questions": [
+    {
+      "id": "carp-lookup-review-today",
+      "app": "carp",
+      "category": "lookup",
+      "question": "Which locations need operational review today?",
+      "intent": "List the sites currently flagged needs review with each reason and its source.",
+      "expectedTools": [
+        "site_status",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws"
+      ],
+      "view": {
+        "map": "flagged sites highlighted, all-sites camera (31.1, -91.1, zoom 7.5)"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "needs? (operational )?review",
+          "(because|reason|due to)"
+        ],
+        "forbid": [
+          "carp (are|will be) (present|abundant|there)",
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-lookup-stage-krotz",
+      "app": "carp",
+      "category": "lookup",
+      "question": "What is the river stage at Krotz Springs right now?",
+      "intent": "Report the latest stage at KRZL1 with its time and which gauge reported it.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "\\bft\\b|feet",
+          "(USGS|NWPS)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-lookup-flood-category-atchafalaya",
+      "app": "carp",
+      "category": "lookup",
+      "question": "What is the flood category forecast for the Atchafalaya sites?",
+      "intent": "Give the forecast peak and its NWPS flood category for the four Atchafalaya sites with issuance times.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "view": {
+        "map": "Atchafalaya preset (30.35, -91.55, zoom 8.5)"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Simmesport|SMML1",
+          "Krotz|KRZL1",
+          "Butte La Rose|BLRL1",
+          "Morgan City|MCGL1",
+          "issued",
+          "(action|minor|moderate|major|no flood category|below (action|flood))"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-lookup-discharge-simmesport",
+      "app": "carp",
+      "category": "lookup",
+      "question": "How much water is the Atchafalaya carrying at Simmesport?",
+      "intent": "Report current discharge at SMML1 labelled with its source and unit.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "k?cfs|cubic feet",
+          "(USGS|NWPS)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-lookup-alerts",
+      "app": "carp",
+      "category": "lookup",
+      "question": "Are there any active NWS alerts at our river sites?",
+      "intent": "Check NWS alerts at every site and state the result with the check time, including when there are none.",
+      "expectedTools": [
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(no active|active) (NWS )?alerts?|alerts? (in effect|active)",
+          "(as of|checked|at \\d)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-lookup-show-atchafalaya",
+      "app": "carp",
+      "category": "lookup",
+      "question": "Show me the Atchafalaya Basin sites on the map.",
+      "intent": "Fly the map to the Atchafalaya preset and name the four sites there.",
+      "expectedTools": [
+        "set_view",
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "view": {
+        "map": "Atchafalaya preset (30.35, -91.55, zoom 8.5)"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Simmesport",
+          "Morgan City"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-lookup-weather-morgan-city",
+      "app": "carp",
+      "category": "lookup",
+      "question": "What is the NWS forecast for Morgan City tonight?",
+      "intent": "Summarise tonight's NWS gridpoint forecast for MCGL1 with its update time.",
+      "expectedTools": [
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(\\u00B0F|degrees|\\bF\\b)",
+          "(wind|rain|precip|showers|storm|clear|cloud)",
+          "updat"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-largest-rise-24h",
+      "app": "carp",
+      "category": "change",
+      "question": "Which location had the largest rise in river stage over the last 24 hours?",
+      "intent": "Rank the sites by 24 hour stage change from USGS series and name the largest rise.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "last 24 hours"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "\\bft\\b|feet",
+          "(24 ?h|24 hours|last day|past day)",
+          "(rose|rise|risen|up)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-change-week-baton-rouge",
+      "app": "carp",
+      "category": "change",
+      "question": "How has the stage at Baton Rouge changed over the past week?",
+      "intent": "Describe the 7 day stage trend at BTRL1 with start, end and net change.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "last 7 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Baton Rouge|BTRL1",
+          "\\bft\\b|feet",
+          "(rose|risen|fell|fallen|dropped|steady|unchanged|up|down)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-forecast-revision",
+      "app": "carp",
+      "category": "change",
+      "question": "How did today's river forecast for Simmesport change from yesterday's?",
+      "intent": "Compare the two latest NWPS issuances for SMML1 and state how the forecast peak moved.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "(higher|lower|raised|lowered|unchanged|same|earlier|later)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-forecast-rise-week",
+      "app": "carp",
+      "category": "change",
+      "question": "Which sites are forecast to rise the most over the next week?",
+      "intent": "Rank sites by forecast stage change over seven days from the latest issuances.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "\\bft\\b|feet",
+          "forecast"
+        ],
+        "forbid": [
+          "will (definitely|certainly)",
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-falling-3d",
+      "app": "carp",
+      "category": "change",
+      "question": "Which sites have been falling over the last three days?",
+      "intent": "List sites whose USGS stage dropped over 72 hours with the size of the drop.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "last 3 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(fell|fallen|falling|dropped|down|lower)",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-morgan-city-flow",
+      "app": "carp",
+      "category": "change",
+      "question": "Has the flow at Morgan City dropped today?",
+      "intent": "Answer with a 24 hour mean comparison because instantaneous discharge at the tidal MCGL1 gauge swings hour to hour.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "tid(al|e)",
+          "(mean|average)",
+          "k?cfs"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-change-category-since-yesterday",
+      "app": "carp",
+      "category": "change",
+      "question": "Did any site move into a new flood category since yesterday?",
+      "intent": "Compare each site's forecast flood category in the latest issuance with the previous day's issuance.",
+      "expectedTools": [
+        "river_forecast",
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(categor|action|minor|moderate|major)",
+          "issued"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-explain-start-review",
+      "app": "carp",
+      "category": "explain",
+      "question": "Why did this location start needing review?",
+      "intent": "Find when the selected site's status flipped to needs review and the readings, forecast or alert that triggered it.",
+      "expectedTools": [
+        "review_history",
+        "evidence"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "view": {
+        "timeline": "moved to the time the status changed"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(since|started|began|first flagged|flipped|changed)",
+          "(because|reason|due to|triggered)",
+          "\\d{1,2}(:\\d{2})?\\s*(am|pm|Z|UTC|CDT|CST)|\\d{4}-\\d{2}-\\d{2}"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2
+      },
+      "helper": true,
+      "context": {
+        "selectedSite": "MCGL1"
+      }
+    },
+    {
+      "id": "carp-explain-morgan-city-action",
+      "app": "carp",
+      "category": "explain",
+      "question": "Why does Morgan City keep showing action stage?",
+      "intent": "Explain that MCGL1 has a low tidal action stage and how long the forecast stays at or above it.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "action (stage|level)",
+          "tid(al|e)",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-explain-baton-rouge-not-flagged",
+      "app": "carp",
+      "category": "explain",
+      "question": "Why isn't Baton Rouge flagged even though it is forecast to rise?",
+      "intent": "Show that the BTRL1 forecast peak stays below action stage and list the review rules it does not meet.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "action (stage|level)",
+          "below|under|short of",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-explain-reasons-simmesport",
+      "app": "carp",
+      "category": "explain",
+      "question": "Walk me through each review rule for Simmesport.",
+      "intent": "List every review rule with SMML1's value against it and whether it fired.",
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(rule|reason|check)",
+          "(stage|forecast|alert|fresh)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-explain-flood-categories",
+      "app": "carp",
+      "category": "explain",
+      "question": "What do action, minor, moderate and major flood stage mean at Krotz Springs?",
+      "intent": "Give KRZL1's NWPS thresholds and what each category means operationally, measured on the NWPS gauge.",
+      "expectedTools": [
+        "river_forecast",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "action",
+          "minor",
+          "moderate",
+          "major",
+          "\\bft\\b|feet",
+          "NWPS|National Water Prediction|NWS"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-explain-monroe-low-water",
+      "app": "carp",
+      "category": "explain",
+      "question": "Why is Monroe marked as low water?",
+      "intent": "Explain the NWPS low water threshold flag at MLUL1 and that it is an operations signal, not a safety call.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "low[- ]water|low threshold",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-stage-discharge",
+      "app": "carp",
+      "category": "relevance",
+      "question": "Why do we track both river stage and discharge for carp fieldwork planning?",
+      "intent": "Explain what stage and discharge each tell an operations manager and their limits, with sources.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "stage",
+          "(discharge|flow)",
+          "(conditions|operations|fieldwork)"
+        ],
+        "forbid": [
+          "(more|fewer) carp",
+          "carp (are|will be) (present|abundant)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-relevance-flood-category",
+      "app": "carp",
+      "category": "relevance",
+      "question": "What does a flood category mean for our field operations?",
+      "intent": "Explain NWPS flood categories as gauge thresholds that change access and conditions, not as carp signals or safety verdicts.",
+      "expectedTools": [
+        "source_info",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(threshold|categor)",
+          "(gauge|stage)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "(more|fewer) carp"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-nws-weather",
+      "app": "carp",
+      "category": "relevance",
+      "question": "Why is the NWS weather forecast part of this app?",
+      "intent": "Explain how wind, rain and storms bear on fieldwork scheduling and how NWS alerts feed the review status.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(wind|rain|storm|weather)",
+          "(alert|review|schedul|plan)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-forecast-horizon",
+      "app": "carp",
+      "category": "relevance",
+      "question": "How far ahead do the river forecasts reach at each site?",
+      "intent": "Report each site's NWPS forecast horizon from the latest issuance and the 6 hour step.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "days?",
+          "(through|until|horizon|ahead|out to)",
+          "issued"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-why-these-sites",
+      "app": "carp",
+      "category": "relevance",
+      "question": "Why were these eight locations chosen?",
+      "intent": "Explain that they are demonstration locations with USGS, NWPS and NWS coverage, four of them in the Atchafalaya Basin where L'CARP works.",
+      "expectedTools": [
+        "site_status",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "demonstration",
+          "Atchafalaya",
+          "(USGS|NWPS|NWS)"
+        ],
+        "forbid": [
+          "Inversa('s)? (operating|actual|real) (areas|sites)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-alerts-review",
+      "app": "carp",
+      "category": "relevance",
+      "question": "How do NWS alerts affect which sites need review?",
+      "intent": "Explain the alert rule in the review status and show which sites any active alert covers right now.",
+      "expectedTools": [
+        "site_status",
+        "alerts",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "alert",
+          "review"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-relevance-iem-archive",
+      "app": "carp",
+      "category": "relevance",
+      "question": "Why do we use the Iowa Environmental Mesonet when NOAA already publishes forecasts?",
+      "intent": "Explain that NWPS keeps no forecast history, so the IEM archive backfills past issuances for replay.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(history|archive|past (forecasts|issuances))",
+          "(IEM|Iowa)",
+          "replay"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-stale-forecasts",
+      "app": "carp",
+      "category": "quality",
+      "question": "Which locations have stale or missing forecasts?",
+      "intent": "List each site's latest NWPS issuance age and flag any older than 36 hours or absent.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "(stale|missing|current|no current|up to date|within)",
+          "(hours?|h) (old|ago)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-quality-krotz-datum",
+      "app": "carp",
+      "category": "quality",
+      "question": "Why do USGS and NWPS stage differ at Krotz Springs?",
+      "intent": "Explain the datum offset at KRZL1 and that flood categories use only the NWPS stage.",
+      "expectedTools": [
+        "river_readings",
+        "evidence"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "datum|reference (point|elevation)|zero",
+          "NWPS",
+          "(flood categor|threshold|action stage)"
+        ],
+        "forbid": [
+          "USGS(?:[^.]|\\.\\d){0,60}\\b(below|above|under|over|exceeds?|short of)\\b(?:[^.]|\\.\\d){0,20}(action|flood|minor|moderate|major) (stage|categor)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-monroe-flow",
+      "app": "carp",
+      "category": "quality",
+      "question": "Why do the two flow numbers at Monroe disagree?",
+      "intent": "Show USGS and NWPS flow at MLUL1 side by side with units converted and say the conflict is unresolved, without blending them.",
+      "expectedTools": [
+        "river_readings",
+        "evidence"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "USGS",
+          "NWPS|NWS",
+          "(disagree|differ|conflict|mismatch)",
+          "cfs"
+        ],
+        "forbid": [
+          "(averag|blend)(e|ed|ing) (the )?(two|both)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-missing-discharge",
+      "app": "carp",
+      "category": "quality",
+      "question": "What is the discharge at Butte La Rose?",
+      "intent": "Say USGS does not measure discharge at BLRL1 and label any NWPS flow as an NWS estimate.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(not measured|does(n't| not) measure|no (USGS )?(discharge|flow) (data|reading|series|measurement)|stage only)"
+        ],
+        "forbid": [
+          "USGS(?:[^.]|\\.\\d){0,40}\\d[\\d,.]*\\s*k?cfs"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-late-gauges",
+      "app": "carp",
+      "category": "quality",
+      "question": "Are any of our gauges late reporting?",
+      "intent": "Report each site's newest observation age per feed against the 2 and 6 hour freshness bands.",
+      "expectedTools": [
+        "site_status",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)",
+          "(fresh|late|stale|lagging|on time|current)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-empty-alerts",
+      "app": "carp",
+      "category": "quality",
+      "question": "Why is the alerts panel empty?",
+      "intent": "Say there are no active NWS alerts at the sites, with the time of the check, and that this is a result rather than missing data.",
+      "expectedTools": [
+        "alerts",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "no active (NWS )?alerts?",
+          "(as of|checked|at \\d|ago)"
+        ],
+        "forbid": [
+          "(feed|data) (is )?(missing|down|broken)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-quality-forecast-versions",
+      "app": "carp",
+      "category": "quality",
+      "question": "Did we miss any forecast issuances this week?",
+      "intent": "Compare stored NWPS issuances per site against the daily cadence and report gaps with their source (nwps-live or iem-archive).",
+      "expectedTools": [
+        "river_forecast",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:iem",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "(nwps-live|iem-archive|archive|snapshot)",
+          "(gap|missing|missed|every day|daily|none missed)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-planning-compare-tomorrow",
+      "app": "carp",
+      "category": "planning",
+      "question": "Compare Krotz Springs and Butte La Rose for tomorrow morning.",
+      "intent": "Put the forecast stage, flood category, NWS weather and alerts for KRZL1 and BLRL1 tomorrow morning side by side with issuance times.",
+      "expectedTools": [
+        "river_forecast",
+        "weather_forecast",
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "view": {
+        "timeline": "tomorrow 06:00-12:00 Central"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Krotz",
+          "Butte La Rose",
+          "issued",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [
+          "safer|is safe|are safe"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 2
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-planning-best-days-simmesport",
+      "app": "carp",
+      "category": "planning",
+      "question": "Which days this week look best for fieldwork at Simmesport based on the river and weather forecasts?",
+      "intent": "Rank the coming days at SMML1 on forecast stage trend, rain and wind, stating that this covers conditions only.",
+      "expectedTools": [
+        "river_forecast",
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "forecast",
+          "conditions only|not (a )?(safety|access)|does not (cover|judge|assess) (safety|access)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "(more|fewer|best) (for )?carp"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-planning-focus-tomorrow",
+      "app": "carp",
+      "category": "planning",
+      "question": "Where should we focus operational review tomorrow?",
+      "intent": "Rank sites by tomorrow's review reasons from forecasts, alerts and data gaps.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:usgs",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "review",
+          "(because|reason|due to)"
+        ],
+        "forbid": [
+          "carp (are|will be)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-planning-rain-atchafalaya",
+      "app": "carp",
+      "category": "planning",
+      "question": "Is rain expected at any Atchafalaya site in the next three days?",
+      "intent": "Summarise NWS precipitation chances for the four Atchafalaya sites over three days with update times.",
+      "expectedTools": [
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(rain|showers|precip|storm|dry)",
+          "updat"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-planning-friday-morgan-city",
+      "app": "carp",
+      "category": "planning",
+      "question": "We plan to work at Morgan City on Friday. What stage is forecast then?",
+      "intent": "Give the MCGL1 forecast stage and category for Friday from the latest issuance, or say Friday is beyond the horizon.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "\\bft\\b|feet|beyond|horizon"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-planning-low-water-access",
+      "app": "carp",
+      "category": "planning",
+      "question": "Which sites could have low-water problems for launching boats this week?",
+      "intent": "Report low water threshold flags and forecast minimums while stating the data cannot confirm ramp access.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "low[- ]water|low threshold|below",
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(access|ramp|launch)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-stage-number",
+      "app": "carp",
+      "category": "sources",
+      "question": "Where does the stage number for Simmesport come from?",
+      "intent": "Name the USGS gauge 07381490 and NWPS SMML1, the API, fetch time and licence of the cited reading.",
+      "expectedTools": [
+        "evidence",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "USGS",
+          "07381490|SMML1",
+          "(fetched|retrieved|ingested)",
+          "public domain"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-flood-thresholds",
+      "app": "carp",
+      "category": "sources",
+      "question": "Who defines the flood stages, and where do we get them?",
+      "intent": "Name NWPS gauge metadata as the threshold source and note that missing flow thresholds are treated as missing.",
+      "expectedTools": [
+        "source_info",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "NWPS|National Water Prediction|NWS",
+          "(gauge|metadata)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-past-forecasts",
+      "app": "carp",
+      "category": "sources",
+      "question": "Where do past forecasts come from if NWPS keeps no history?",
+      "intent": "Explain our issuance snapshots and the IEM archive backfill, each tagged with its source.",
+      "expectedTools": [
+        "source_info",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(IEM|Iowa Environmental Mesonet)",
+          "(snapshot|archive)",
+          "(Iowa State|university)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-licences",
+      "app": "carp",
+      "category": "sources",
+      "question": "What are the licences and rate limits of the carp data sources?",
+      "intent": "List licence, attribution and rate limit facts for USGS, NWPS, NWS and IEM as recorded, saying where a limit is unpublished.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws",
+        "feed:iem",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "public domain",
+          "rate limit",
+          "(not published|unpublished|no published)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-freshness",
+      "app": "carp",
+      "category": "sources",
+      "question": "How fresh is each data feed right now?",
+      "intent": "Report each feed's state, newest observation and last fetch time.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "USGS",
+          "NWPS",
+          "NWS",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "cites": {
+          "fetch": 3
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-sources-nws-updated",
+      "app": "carp",
+      "category": "sources",
+      "question": "When was the NWS forecast for Krotz Springs last updated?",
+      "intent": "Give the NWS office updateTime for KRZL1's grid and note it is per office run, not per point.",
+      "expectedTools": [
+        "weather_forecast",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "updat",
+          "(office|LCH|Lake Charles)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-yesterday-afternoon",
+      "app": "carp",
+      "category": "replay",
+      "question": "Show me what we knew yesterday afternoon.",
+      "intent": "Move the timeline to yesterday 15:00 Central and report the forecasts, observations, alerts and review status known then, with later observations kept separate.",
+      "expectedTools": [
+        "set_view",
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:usgs",
+        "kind:forecast"
+      ],
+      "view": {
+        "timeline": "yesterday 15:00 Central, replay mode"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "(as of|at the time|known|knew)",
+          "(later|since then|afterwards|after that)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "carp-replay-forecast-vs-actual",
+      "app": "carp",
+      "category": "replay",
+      "question": "How did the forecast issued 2 days ago compare with what happened?",
+      "intent": "Score the issuance from two days ago against later NWPS observed stage per site and report the error.",
+      "expectedTools": [
+        "forecast_verify"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "issuance time two days ago to now, forecast vs observed"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "(observed|actual|measured)",
+          "(error|off by|higher|lower|within|missed|difference)",
+          "\\bft\\b|feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 1,
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-review-three-days-ago",
+      "app": "carp",
+      "category": "replay",
+      "question": "Which sites needed review at noon three days ago?",
+      "intent": "Recompute the review status from the data known at that time.",
+      "expectedTools": [
+        "site_status",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:usgs"
+      ],
+      "view": {
+        "timeline": "noon three days ago"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "review",
+          "(as of|at the time|known|then)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-coverage",
+      "app": "carp",
+      "category": "replay",
+      "question": "How far back can we replay forecasts?",
+      "intent": "State where replay coverage starts for our own snapshots and for the IEM backfill per site.",
+      "expectedTools": [
+        "river_forecast",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(IEM|archive)",
+          "(snapshot|our own)",
+          "(start|begin|earliest|back to)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-alerts-last-week",
+      "app": "carp",
+      "category": "replay",
+      "question": "Were any NWS alerts active at our sites last weekend?",
+      "intent": "Query alerts as known at last weekend's times and state the result even when none.",
+      "expectedTools": [
+        "alerts",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "view": {
+        "timeline": "last Saturday-Sunday"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "alert",
+          "(Saturday|Sunday|weekend)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-play-week",
+      "app": "carp",
+      "category": "replay",
+      "question": "Replay the last seven days of stage at the Atchafalaya sites.",
+      "intent": "Play the timeline over seven days with the Atchafalaya preset and summarise the net change per site.",
+      "expectedTools": [
+        "set_view",
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "view": {
+        "map": "Atchafalaya preset",
+        "timeline": "play last 7 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "\\bft\\b|feet",
+          "(Simmesport|Krotz|Butte La Rose|Morgan City)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-replay-knew-morgan-action",
+      "app": "carp",
+      "category": "replay",
+      "question": "Two days ago, did the forecast already show Morgan City reaching action stage?",
+      "intent": "Read the MCGL1 issuance current two days ago and compare its peak with the action stage, separately from what later happened.",
+      "expectedTools": [
+        "river_forecast",
+        "forecast_verify"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "issued",
+          "action",
+          "(later|then|at the time)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-abundance",
+      "app": "carp",
+      "category": "boundary",
+      "question": "How many carp are in the Atchafalaya right now?",
+      "intent": "Refuse because the feeds measure river and weather conditions, not carp abundance.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(abundance|how many|number of carp|carp (numbers|population|counts))",
+          "(river|stage|forecast|conditions)"
+        ],
+        "forbid": [
+          "\\d[\\d,]*\\s*(carp|fish)\\b",
+          "(estimate|roughly|about|approximately) \\d"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-catch",
+      "app": "carp",
+      "category": "boundary",
+      "question": "How many carp will we catch at Simmesport tomorrow?",
+      "intent": "Refuse because nothing in the data predicts catch.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(catch|harvest)",
+          "(river|stage|forecast|conditions)"
+        ],
+        "forbid": [
+          "\\d[\\d,.]*\\s*(carp|fish|pounds|lbs|tons)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-legal-access",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Are we legally allowed to fish at Butte La Rose?",
+      "intent": "Refuse because the data says nothing about legal access or permits.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(legal|access|permit|regulat)"
+        ],
+        "forbid": [
+          "\\b(yes|you are|you're)\\b(?:[^.]|\\.\\d){0,30}(allowed|legal|permitted)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-safety",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Is it safe to take the boat out at Morgan City tomorrow?",
+      "intent": "Report forecast stage, weather and alerts but decline to judge safety.",
+      "expectedTools": [
+        "river_forecast",
+        "weather_forecast",
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
+          "forecast"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "\\bunsafe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-flood-percent",
+      "app": "carp",
+      "category": "boundary",
+      "question": "What is the percent chance Simmesport floods this week?",
+      "intent": "Decline to give a probability because NWPS forecasts are deterministic, and report the forecast peak against flood stage instead.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(no|not|doesn't|does not)(?:[^.]|\\.\\d){0,60}(probabilit|percent|chance|likelihood)",
+          "forecast"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-causal-movement",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Does rising water make carp move into the Atchafalaya?",
+      "intent": "Refuse the causal claim because the app has no carp movement data.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(carp|movement|cause|causal)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that) )(rising water|high water|flooding) (makes|causes|drives|leads)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-common-carp",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Where are common carp in Louisiana right now?",
+      "intent": "Refuse because the app tracks river conditions at eight locations, has no carp sightings, and L'CARP targets silver, bighead, grass and black carp.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(eight|8) (river )?(sites|locations|gauges)|demonstration locations|Atchafalaya",
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(sighting|location|where)"
+        ],
+        "forbid": [
+          "common carp (are|were) (at|in|near|found)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-outside-area",
+      "app": "carp",
+      "category": "boundary",
+      "question": "What is the river stage on the Sabine River at Orange, Texas?",
+      "intent": "Refuse and name the eight demonstration locations the app covers.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(eight|8) (river )?(sites|locations|gauges)|demonstration locations|Atchafalaya"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(ft|feet)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-boundary-python",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Where are Burmese pythons active in the Everglades?",
+      "intent": "Refuse because pythons belong to the Python app and this app covers Louisiana river conditions.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(Python app|python)",
+          "(Louisiana|river|carp app)"
+        ],
+        "forbid": [
+          "(Shark Valley|Big Cypress|Flamingo)(?:[^.]|\\.\\d){0,40}(hotspot|sighting|active)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-notes-today",
+      "app": "carp",
+      "category": "team",
+      "question": "What field notes did the team leave today?",
+      "intent": "List today's notes with author, time and place, reported as human observations.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(noted|wrote|note)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-notes-krotz",
+      "app": "carp",
+      "category": "team",
+      "question": "Any notes near Krotz Springs this week?",
+      "intent": "List the week's notes within the KRZL1 area or say there are none.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(note|noted|no notes)",
+          "Krotz"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-messages-morgan",
+      "app": "carp",
+      "category": "team",
+      "question": "What did the team message about Morgan City today?",
+      "intent": "Summarise today's committed messages mentioning MCGL1 with sender and time.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:message"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(message|wrote|said|sent)",
+          "Morgan City"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "message": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-missions-week",
+      "app": "carp",
+      "category": "team",
+      "question": "Which missions are planned for this week?",
+      "intent": "List the week's missions with site, date and assignees.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "mission"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-mission-conditions",
+      "app": "carp",
+      "category": "team",
+      "question": "What are the river forecasts at the sites in tomorrow's missions?",
+      "intent": "Join tomorrow's missions to the forecast stage and category at their sites, with issuance times.",
+      "expectedTools": [
+        "team_board",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "kind:mission",
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "mission",
+          "issued"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "mission": 1,
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-flagged-no-mission",
+      "app": "carp",
+      "category": "team",
+      "question": "Which flagged sites have no mission planned?",
+      "intent": "Cross the needs review list with planned missions and list flagged sites without one.",
+      "expectedTools": [
+        "site_status",
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission",
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "review|flagged",
+          "mission"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-team-note-vs-gauge",
+      "app": "carp",
+      "category": "team",
+      "question": "A crew note says the ramp at Butte La Rose was under water. Does the gauge agree?",
+      "intent": "Set the note beside the BLRL1 stage at the note time and say the gauge cannot confirm ramp conditions.",
+      "expectedTools": [
+        "notes",
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:note",
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "note",
+          "(gauge|stage)",
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(ramp|confirm|verify)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "note": 1,
+          "reading": 1
+        }
+      },
+      "helper": false
+    }
+  ]
+}

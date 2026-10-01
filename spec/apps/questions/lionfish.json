@@ -1,0 +1,1975 @@
+{
+  "app": "lionfish",
+  "scope": "Lionfish Watch. Question: where should we prioritise lionfish surveys, given recent sightings, reef heat stress and ocean conditions? Lionfish (Pterois volitans/miles) only, in four areas: Florida Keys (fl-keys), Mexican Caribbean (mx-caribbean), Belize (belize, thin) and Colombian Caribbean (co-caribbean, thin). Sightings are not abundance; heat stress is context; no single risk percent; field conditions stay separate from priority.",
+  "feeds": [
+    "inat",
+    "gbif",
+    "nas",
+    "crw",
+    "openmeteo",
+    "ndbc",
+    "coops",
+    "goes19"
+  ],
+  "newTools": [
+    {
+      "name": "reef_heat",
+      "purpose": "NOAA Coral Reef Watch values (CRW_SST, CRW_SSTANOMALY, CRW_DHW, CRW_BAA) at reef cells of the four areas, latest or as a daily series, with the data date and latency.",
+      "input": "{ area?: 'fl-keys' | 'mx-caribbean' | 'belize' | 'co-caribbean', bbox?: BBox, from?: RFC 3339, to?: RFC 3339, at?: RFC 3339 }",
+      "output": "rows of { area, cell, lat, lon, date, sstC, anomalyC, dhwCWeeks, baa, baaLabel, latencyDays, series?: [...] }",
+      "evidence": "reading:crw:<cell>:<param>:<date ms>:satellite"
+    },
+    {
+      "name": "marine_forecast",
+      "purpose": "Open-Meteo Marine hourly forecast (wave height, wave period, current velocity converted from km/h, current direction) for an area point or place, 72 hour horizon, with daily summaries and the model run time.",
+      "input": "{ area?: string, place?: string, lat?: number, lon?: number, days?: number (max 3) }",
+      "output": "{ point, runAt, horizonHours, hourly: [{ at, waveM, wavePeriodS, currentKmh, currentMs, currentDirDeg }], daily: [{ date, waveMaxM, waveMeanM, currentMaxKmh }] }",
+      "evidence": "reading:openmeteo:<lat,lon>:wave_m:<at ms>:modeled"
+    },
+    {
+      "name": "source_info",
+      "purpose": "Static facts about one feed of the active app: publisher, API URL, human page, licence and attribution text, cadence, typical latency, rate limit, coverage limits, and what the feed can and cannot tell us. Read from the app config, no network call.",
+      "input": "{ feed: string (a feed id of the active app, e.g. usgs, nwps, crw) } or {} for all feeds",
+      "output": "rows of { feed, publisher, apiUrl, pageUrl, licence, attribution, cadence, latency, rateLimit, coverage, limits[] }",
+      "evidence": "source:<feed>"
+    },
+    {
+      "name": "evidence",
+      "purpose": "Fetch one cited record by evidence id (wraps GraphQL `evidence(id)`): the record, its source API URL, publisher page, fetch time, ingest lag, feed state and links such as duplicateOf or the forecast issuance it belongs to.",
+      "input": "{ id: string (C14 evidence id, e.g. reading:..., sighting:..., forecast:...) }",
+      "output": "{ id, kind, record, sourceUrl, sourcePageUrl, fetchedAt, ingestLagSeconds, feed, links[] }",
+      "evidence": "the id passed in"
+    },
+    {
+      "name": "team_board",
+      "purpose": "Read the active app's team board (GraphQL `board(id: \"<app>:main\")`): missions with their sites or areas and dates, and committed messages with author, recipient, thread and time. Human records, not a data feed.",
+      "input": "{ kind?: 'missions' | 'messages' | 'all', about?: string (place, site or area name), hours?: number (default 168) }",
+      "output": "{ missions: [{ id, title, place, bbox, start, end, assignees }], messages: [{ id, from, to, thread, at, body }] }",
+      "evidence": "mission:<id>, message:<id>"
+    }
+  ],
+  "toolChanges": [
+    {
+      "tool": "geocode",
+      "change": "Resolve the four area ids and names and places inside them (Cozumel, Banco Chinchorro, Glover's Reef, Turneffe, San Andrés, Looe Key, Key Largo); refuse places outside the four areas with their names."
+    },
+    {
+      "tool": "sightings",
+      "change": "Add `dateField: 'observed' | 'submitted'` and `knownAt` (ingested at or before); rows carry submittedAt, lag days, positional accuracy or obscured flag, and duplicateOf for GBIF copies of iNaturalist (matched on catalogNumber) so duplicates are never counted as corroboration."
+    },
+    {
+      "tool": "hotspots",
+      "change": "For lionfish, rank areas and cells by the L5 priority heuristic and return the four components (recent reports, ID quality, heat stress, completeness) separately; no single risk percent."
+    },
+    {
+      "tool": "explain_cell",
+      "change": "Terms are the four lionfish components with value, weight and rationale, plus evidence ids for the supporting reports and CRW cell."
+    },
+    {
+      "tool": "conditions",
+      "change": "Compare buoy (NDBC, CO-OPS) water temperature with GOES-19 and CRW SST in Florida, and say no buoy exists in the other areas."
+    }
+  ],
+  "questions": [
+    {
+      "id": "lionfish-lookup-belize-heat",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "Show recent lionfish reports near heat-stressed reefs in Belize.",
+      "intent": "List the last 30 days of Belize reports next to CRW heat stress at Belize reef cells, disclosing how thin the reports are.",
+      "expectedTools": [
+        "geocode",
+        "sightings",
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "kind:sighting"
+      ],
+      "view": {
+        "map": "Belize preset",
+        "timeline": "last 30 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Belize",
+          "(DHW|degree heating|alert level|heat stress)",
+          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-lookup-mx-30d",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "Show lionfish reports in the Mexican Caribbean from the last 30 days.",
+      "intent": "List and map reports in the mx-caribbean box by observed date with quality grades.",
+      "expectedTools": [
+        "geocode",
+        "sightings",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "view": {
+        "map": "mx-caribbean preset",
+        "timeline": "last 30 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Mexican Caribbean|Quintana Roo|Cozumel|Chinchorro",
+          "(research|needs id|casual|grade)",
+          "observed"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "sighting": 2
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-lookup-heat-four-areas",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "What is the reef heat stress in each of the four areas right now?",
+      "intent": "Report SST, anomaly, DHW and alert level at each area's reef cell with the CRW data date.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "DHW|degree heating",
+          "alert level|BAA|bleaching alert",
+          "\\d{4}-\\d{2}-\\d{2}|days? (old|ago)|as of",
+          "Belize",
+          "Colombia"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-lookup-waves-cozumel",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "What are wave heights near Cozumel today?",
+      "intent": "Report today's modelled wave height and period near Cozumel from Open-Meteo Marine.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(model|Open-Meteo|forecast)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-lookup-fl-week",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "Were any lionfish reported in the Florida Keys this week?",
+      "intent": "Report the week's Florida Keys reports, and if there are none say no reports came in rather than that no lionfish are there.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:gbif",
+        "feed:nas"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "report",
+          "(not (the same as|mean)|doesn't mean|does not mean)(?:[^.]|\\.\\d){0,60}(absen|no lionfish|none there)|no reports? (is|are) not"
+        ],
+        "forbid": [
+          "(?<!(mean|imply|say|show) )no lionfish (are|were) (there|present)",
+          "lionfish (are|were) absent"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-lookup-priority",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "Which area should we prioritise for lionfish surveys?",
+      "intent": "Rank the four areas by the priority heuristic with its components shown separately.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:inat",
+        "feed:crw"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "heuristic",
+          "(recent reports|heat stress|ID quality|identification|completeness)"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "invasion risk"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "hotspot": 1
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-lookup-san-andres-photo",
+      "app": "lionfish",
+      "category": "lookup",
+      "question": "Show me the most recent lionfish photo from San Andrés.",
+      "intent": "Find the newest research or needs-ID report with a photo near San Andrés and give its observed and submitted dates.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "San Andr[e\\u00E9]s|Colombia",
+          "observed"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-change-previous-month",
+      "app": "lionfish",
+      "category": "change",
+      "question": "Compare this with the previous month.",
+      "intent": "Compare report counts and heat stress in the selected area between the last 30 days and the 30 days before, without reading counts as abundance.",
+      "expectedTools": [
+        "sightings",
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "kind:sighting"
+      ],
+      "view": {
+        "timeline": "previous 30 days, then back"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(previous|prior|earlier) (month|30 days)",
+          "(more|fewer|same|no change|up|down|from \\d+ to \\d+)",
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ],
+        "forbid": [
+          "(population|abundance) (grew|increased|rose|fell|declined)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false,
+      "context": {
+        "area": "mx-caribbean",
+        "window": "last 30 days"
+      }
+    },
+    {
+      "id": "lionfish-change-dhw-looe-key",
+      "app": "lionfish",
+      "category": "change",
+      "question": "How has degree heating weeks changed at Looe Key over the past month?",
+      "intent": "Describe the DHW series at the Looe Key reef cell over 30 days with start, end and peak.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "last 30 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "DHW|degree heating",
+          "(rose|risen|fell|fallen|peak|steady|up|down)",
+          "\\u00B0C-weeks|degree.?C.?weeks|C-weeks"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-change-fl-30-vs-30",
+      "app": "lionfish",
+      "category": "change",
+      "question": "How do Florida Keys reports in the last 30 days compare with the 30 days before?",
+      "intent": "Count reports by observed date in both windows and state the difference with the observer caveat.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "\\d+",
+          "(observed)",
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-change-since-yesterday",
+      "app": "lionfish",
+      "category": "change",
+      "question": "What is new since yesterday across the four areas?",
+      "intent": "List reports ingested and CRW or marine updates since yesterday per area, with feed freshness.",
+      "expectedTools": [
+        "sightings",
+        "reef_heat",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(Florida Keys|Mexican Caribbean|Belize|Colombia)",
+          "(new|since yesterday|no new)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-change-waves-chinchorro",
+      "app": "lionfish",
+      "category": "change",
+      "question": "How is wave height forecast to change at Banco Chinchorro over the next three days?",
+      "intent": "Describe the 72 hour modelled wave trend at the Banco Chinchorro point.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Chinchorro",
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(build|rising|increas|calm|dropping|decreas|steady)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-change-baa-week",
+      "app": "lionfish",
+      "category": "change",
+      "question": "Did any area's bleaching alert level change this week?",
+      "intent": "Compare each area's CRW alert level now with seven days ago.",
+      "expectedTools": [
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "alert level|BAA",
+          "(changed|unchanged|rose|fell|same|from)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-explain-highlight",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "Why was this area highlighted?",
+      "intent": "Open the evidence for the selected area's priority: each component's value and rationale, the supporting reports and CRW cell, timestamps and source links.",
+      "expectedTools": [
+        "explain_cell",
+        "evidence"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:crw",
+        "feed:inat"
+      ],
+      "view": {
+        "map": "evidence card open on the area"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "heuristic",
+          "(recent reports|heat stress|ID quality|identification|completeness)",
+          "(observed|data date|as of|\\d{4}-\\d{2}-\\d{2})"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "invasion risk"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "hotspot": 1
+        }
+      },
+      "helper": true,
+      "context": {
+        "selectedArea": "mx-caribbean"
+      }
+    },
+    {
+      "id": "lionfish-explain-dhw-baa-disagree",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "Why can degree heating weeks and the bleaching alert level disagree?",
+      "intent": "Explain that DHW accumulates 12 weeks of heat stress while the alert level also needs a current HotSpot, using the Florida values as the example.",
+      "expectedTools": [
+        "reef_heat",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "accumulat",
+          "(HotSpot|hot ?spot|current (heat|anomaly|SST))",
+          "(DHW|degree heating)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-explain-colombia-hot-but-low",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "Why does Colombia rank low when its water is warm?",
+      "intent": "Show that the recent reports component is near empty in the co-caribbean box while heat stress is context only.",
+      "expectedTools": [
+        "explain_cell",
+        "sightings",
+        "reef_heat"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:crw",
+        "feed:inat"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
+          "(heat|SST|anomaly)",
+          "(component|heuristic)"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-explain-belize-thin",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "Why does Belize show no recent-reports score?",
+      "intent": "Explain that Belize has too few reports in the window to rank, with the counts, and what it still shows.",
+      "expectedTools": [
+        "sightings",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:hotspot"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
+          "(heat stress|history|GBIF|NAS)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-explain-score-recipe",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "How is the priority score put together?",
+      "intent": "Describe the four visible components, their configured weights and that it is a labelled heuristic.",
+      "expectedTools": [
+        "explain_cell",
+        "source_info"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "recent reports",
+          "(ID quality|identification)",
+          "heat stress",
+          "completeness",
+          "weight",
+          "heuristic"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-explain-top-cell",
+      "app": "lionfish",
+      "category": "explain",
+      "question": "Why is the top cell off Cozumel ranked first?",
+      "intent": "Break the top Cozumel cell into its components with evidence links.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:inat"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "Cozumel",
+          "(recent reports|heat stress|ID quality|identification|completeness)",
+          "heuristic"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "hotspot": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-relevance-ocean-measures",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "What do SST, anomaly, degree heating weeks, bleaching alert level, waves and currents mean for survey planning?",
+      "intent": "Explain each measure, its source and limits, which ones feed the priority heuristic and which only inform field conditions.",
+      "expectedTools": [
+        "source_info",
+        "reef_heat",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(SST|sea surface)",
+          "anomal",
+          "(degree heating|DHW)",
+          "(alert level|BAA)",
+          "wave",
+          "current",
+          "(context|not proof|does not show|doesn't show)"
+        ],
+        "forbid": [
+          "heat (stress )?(causes|caused) lionfish",
+          "lionfish (cause|caused) (the )?bleaching"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-relevance-waves-separate",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "Why are wave and current forecasts kept out of the priority score?",
+      "intent": "Explain that field conditions decide when to dive, not where lionfish matter, so they stay separate.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(separate|kept out|not part|outside)",
+          "(field|dive|survey)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-relevance-sst",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "Why is sea surface temperature in a lionfish app?",
+      "intent": "Explain reef heat stress as context for where reef surveys matter, not as evidence of lionfish effects.",
+      "expectedTools": [
+        "source_info",
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(reef|heat stress)",
+          "context"
+        ],
+        "forbid": [
+          "lionfish (cause|caused|drive)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-relevance-current-units",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "What do the current speeds mean for survey dives, and what units are they in?",
+      "intent": "Explain Open-Meteo current velocity, its km/h unit and conversion, and that it is modelled.",
+      "expectedTools": [
+        "marine_forecast",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "km\\/h",
+          "(m\\/s|knots)",
+          "model"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-relevance-gbif",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "Why do we use GBIF if it lags by days?",
+      "intent": "Explain GBIF as history and a second index, deduplicated against iNaturalist so copies never count as corroboration.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:gbif",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(history|historical)",
+          "(lag|delay|days|weeks)",
+          "duplicate|dedup"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-relevance-nas",
+      "app": "lionfish",
+      "category": "relevance",
+      "question": "What does USGS NAS add to the picture?",
+      "intent": "Explain NAS as curated records with weeks to months of lag, global in coverage but stale outside Florida.",
+      "expectedTools": [
+        "source_info",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:nas",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(curated|verified|authoritative)",
+          "(lag|weeks|months)",
+          "(Colombia|outside Florida|stale)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-late-submissions",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Which areas have newly submitted reports of older sightings?",
+      "intent": "List reports submitted in the last 30 days whose observed date is more than 30 days earlier, per area, with the lag.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "submitted|uploaded",
+          "observed",
+          "(days|months|years) (later|after|before|earlier)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-quality-freshest",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Which highlighted areas have the freshest supporting data?",
+      "intent": "For each highlighted area give the age of its newest report, CRW date and marine forecast run.",
+      "expectedTools": [
+        "hotspots",
+        "feed_state",
+        "evidence"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:inat",
+        "feed:crw",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(Florida Keys|Mexican Caribbean|Belize|Colombia)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)",
+          "(fresh|stale|lag|old)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-gbif-duplicates",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Which GBIF records duplicate iNaturalist?",
+      "intent": "List GBIF records that are copies of iNaturalist observations, matched by catalogue number, per area, and say they are not counted twice.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:gbif",
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "duplicate|copy|copies",
+          "iNaturalist|iNat",
+          "GBIF",
+          "(not|never) (counted|count)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "sighting": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-buoy-vs-satellite",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Where are buoys and satellite SST disagreeing?",
+      "intent": "Compare in-situ buoy and satellite SST in the Florida Keys and state that the other areas have no buoys to compare.",
+      "expectedTools": [
+        "geocode",
+        "conditions"
+      ],
+      "mustCite": [
+        "feed:ndbc",
+        "feed:goes19",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "buoy|in-situ|measured",
+          "satellite|GOES",
+          "(disagree|differ|conflict|agree)",
+          "(only|just)(?:[^.]|\\.\\d){0,60}Florida|no (sea temperature )?buoys?(?:[^.]|\\.\\d){0,80}(Mexic|Belize|Colombia)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-nas-colombia",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Is the NAS data for Colombia current?",
+      "intent": "Report the newest NAS record date in the co-caribbean box and call it stale.",
+      "expectedTools": [
+        "sightings",
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:nas",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "NAS",
+          "(stale|old|newest|latest|not current)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-crw-latency",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Why is the reef heat data almost two days old?",
+      "intent": "Explain CRW daily cadence and about 1.7 days latency, and state when the feed counts as stale.",
+      "expectedTools": [
+        "reef_heat",
+        "feed_state",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(Coral Reef Watch|CRW)",
+          "(daily|latency|behind|delay)",
+          "(stale|fresh)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-research-grade",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "How many of the recent Mexican Caribbean reports are research grade?",
+      "intent": "Split the last 30 days of mx-caribbean reports by quality grade.",
+      "expectedTools": [
+        "geocode",
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "research",
+          "\\d+"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-quality-imprecise-location",
+      "app": "lionfish",
+      "category": "quality",
+      "question": "Are any recent reports placed in open water far from a reef?",
+      "intent": "Flag reports whose coordinates are obscured or imprecise, such as mid-sea points, using positional accuracy from the record.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(obscured|imprecise|accuracy|uncertain|open (sea|water)|offshore)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-planning-calm-3d",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "Where are waves forecast calmer over the next three days?",
+      "intent": "Rank the four areas by modelled wave height per day for 72 hours, kept separate from the priority ranking.",
+      "expectedTools": [
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "view": {
+        "timeline": "next 72 hours"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "wave",
+          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
+          "(separate|not part of|independent of|apart from)(?:[^.]|\\.\\d){0,60}priority|priority(?:[^.]|\\.\\d){0,60}(separate|unchanged|not affected)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-planning-next-survey",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "Where should we run the next survey, and when?",
+      "intent": "Pick from the priority heuristic first, then choose a day from the marine forecast, presenting the two separately.",
+      "expectedTools": [
+        "hotspots",
+        "explain_cell",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "heuristic",
+          "(wave|sea|current)"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)",
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": true
+    },
+    {
+      "id": "lionfish-planning-weekend-currents",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "Will currents at Banco Chinchorro be strong this weekend?",
+      "intent": "Give modelled currents for the weekend, or say the 3 day horizon does not reach it.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(km\\/h|m\\/s|knots|beyond|horizon|three days|3 days|72)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-planning-glovers",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "Is a survey trip to Glover's Reef worth it given the data?",
+      "intent": "Lay out Belize's thin report record, its heat stress and the sea forecast, and leave the decision to the analyst.",
+      "expectedTools": [
+        "geocode",
+        "sightings",
+        "reef_heat",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
+          "(heat|DHW|alert level)",
+          "wave"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-planning-fl-tomorrow",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "Which Florida Keys reefs combine recent reports and calm seas tomorrow?",
+      "intent": "List Florida cells with recent reports and tomorrow's modelled wave height at each.",
+      "expectedTools": [
+        "geocode",
+        "hotspots",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "kind:hotspot",
+        "feed:openmeteo",
+        "feed:inat"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "wave",
+          "(report|sighting)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-planning-two-weeks",
+      "app": "lionfish",
+      "category": "planning",
+      "question": "What will the waves be like at Cozumel in two weeks?",
+      "intent": "Say the marine forecast covers three days and give only what it covers.",
+      "expectedTools": [
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(3|three)[- ]days?|72 hours",
+          "(beyond|cannot|can't|doesn't|does not|only)"
+        ],
+        "forbid": [
+          "in two weeks(?:[^.]|\\.\\d){0,40}\\d(\\.\\d+)?\\s*(m|metres|meters)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-sources-dhw-number",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "Where does this degree heating weeks number come from?",
+      "intent": "Name NOAA Coral Reef Watch CoralTemp 5 km via ERDDAP, the cell, data date, fetch time and the required credit and DOI.",
+      "expectedTools": [
+        "evidence",
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(Coral Reef Watch|CRW)",
+          "(5 ?km|CoralTemp)",
+          "(DOI|credit)",
+          "(fetched|retrieved)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false,
+      "context": {
+        "selectedEvidence": "reading at the Looe Key CRW cell"
+      }
+    },
+    {
+      "id": "lionfish-sources-licences",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "What licences apply to the lionfish data sources?",
+      "intent": "List licence and attribution per feed, including CRW credit, Open-Meteo non-commercial CC BY and per-observation iNaturalist licences.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "feed:openmeteo",
+        "feed:inat",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "CC BY",
+          "non-commercial",
+          "(Coral Reef Watch|CRW)",
+          "iNaturalist"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-sources-sighting",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "Where did this sighting come from?",
+      "intent": "Name the feed, the publisher page link, observed and submitted dates, quality grade and any duplicate links of the selected record.",
+      "expectedTools": [
+        "evidence"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(iNaturalist|GBIF|NAS)",
+          "observed",
+          "https?:\\/\\/"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "sighting": 1
+        }
+      },
+      "helper": false,
+      "context": {
+        "selectedEvidence": "a sighting"
+      }
+    },
+    {
+      "id": "lionfish-sources-wave-modelled",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "Is the wave forecast measured or modelled?",
+      "intent": "Say Open-Meteo Marine is a modelled forecast and name its cadence and licence.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:openmeteo",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "model",
+          "Open-Meteo"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-sources-freshness",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "How fresh is each data feed right now?",
+      "intent": "Report each feed's state, newest data and last fetch time.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw",
+        "feed:openmeteo",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "iNat",
+          "(CRW|Coral Reef Watch)",
+          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "cites": {
+          "fetch": 3
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-sources-goes",
+      "app": "lionfish",
+      "category": "sources",
+      "question": "Which satellite gives the hourly sea temperature, and does it cover all four areas?",
+      "intent": "Name GOES-19 full disk SST, its hourly cadence and that it covers all four areas, unlike the absent CONUS product.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:goes19",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "GOES",
+          "(full disk|full-disk)",
+          "(hour)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-90d-mx",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "Replay how reports and heat stress changed over the last 90 days in the Mexican Caribbean.",
+      "intent": "Play the timeline over the 90 day backfill in the mx-caribbean preset and summarise the shifts.",
+      "expectedTools": [
+        "set_view",
+        "sightings",
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw"
+      ],
+      "view": {
+        "map": "mx-caribbean preset",
+        "timeline": "play last 90 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(90 days|three months)",
+          "(DHW|heat)",
+          "report"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-known-sept-1",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "What did we know about Belize on September 1?",
+      "intent": "Show only records ingested by September 1 and list later uploads of earlier sightings separately.",
+      "expectedTools": [
+        "sightings",
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw"
+      ],
+      "view": {
+        "timeline": "September 1, replay mode"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(as of|at the time|known|knew)",
+          "(later|since|afterwards|after that)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-dhw-peak",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "When did heat stress peak at Looe Key in the last 90 days?",
+      "intent": "Find the date of the highest DHW at the Looe Key cell in 90 days and move the timeline there.",
+      "expectedTools": [
+        "reef_heat",
+        "set_view"
+      ],
+      "mustCite": [
+        "feed:crw",
+        "kind:reading"
+      ],
+      "view": {
+        "timeline": "moved to the peak date"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "DHW|degree heating",
+          "\\d{4}-\\d{2}-\\d{2}|(January|February|March|April|May|June|July|August|September|October|November|December) \\d"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-august-late",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "Which reports observed in August arrived only after August ended?",
+      "intent": "List August observations submitted after August 31 with their lag.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "August",
+          "(submitted|uploaded|arrived)",
+          "(after|later)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-fl-week",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "Step through last week day by day in the Florida Keys.",
+      "intent": "Step the timeline daily over the last 7 days and narrate the reports and heat stress for each day.",
+      "expectedTools": [
+        "set_view",
+        "sightings",
+        "reef_heat"
+      ],
+      "mustCite": [
+        "feed:inat",
+        "feed:crw"
+      ],
+      "view": {
+        "map": "fl-keys preset",
+        "timeline": "step daily over last 7 days"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|day)",
+          "(report|heat|DHW)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-replay-priority-two-weeks",
+      "app": "lionfish",
+      "category": "replay",
+      "question": "What did the priority ranking look like two weeks ago?",
+      "intent": "Show the area ranking as computed with data known two weeks ago and how it differs from today.",
+      "expectedTools": [
+        "hotspots",
+        "set_view"
+      ],
+      "mustCite": [
+        "kind:hotspot"
+      ],
+      "view": {
+        "timeline": "two weeks ago"
+      },
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "heuristic",
+          "(two weeks|14 days)",
+          "(then|at the time|differ|changed|same)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-population",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Is the lionfish population growing in Belize?",
+      "intent": "Decline because reports reflect observer effort, not population, and give the report counts with that caveat.",
+      "expectedTools": [
+        "sightings"
+      ],
+      "mustCite": [
+        "feed:inat"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ],
+        "forbid": [
+          "population (is|has been) (growing|increasing|declining|shrinking|stable)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-risk-percent",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "What is the invasion risk percentage for the Florida Keys?",
+      "intent": "Refuse a single risk number and point to the separate priority components.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(percent|single|risk (score|number))",
+          "component"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-causal-reef",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Are lionfish killing the reefs at Glover's?",
+      "intent": "Refuse the causal claim because the app has sightings and heat stress, not reef damage measurements.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(reef (damage|health|decline)|cause|causal|killing)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that) )lionfish (are|is) (killing|damaging|destroying)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-heat-damage",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Does high heat stress mean lionfish are damaging the reef?",
+      "intent": "Refuse because heat stress is context, not proof of lionfish damage.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "context",
+          "(not|no)(?:[^.]|\\.\\d){0,40}(proof|evidence|cause)"
+        ],
+        "forbid": [
+          "heat stress (means|shows|proves)(?:[^.]|\\.\\d){0,40}lionfish"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-iguana",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Where are invasive green iguanas on Cozumel?",
+      "intent": "Refuse because the app covers lionfish only, naming the species and areas it covers.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "lionfish",
+          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        ],
+        "forbid": [
+          "iguanas? (were|are) (reported|seen|found)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-bahamas",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Show lionfish reports in the Bahamas.",
+      "intent": "Refuse because the Bahamas lie outside the four areas, naming them.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(Florida Keys|four areas)(?:[^.]|\\.\\d){0,120}(Mexic|Belize|Colombia)|four (survey )?areas"
+        ],
+        "forbid": [
+          "\\d+ (lionfish )?(reports|sightings) in the Bahamas"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-abundance",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "How many lionfish live on Banco Chinchorro?",
+      "intent": "Refuse an abundance estimate and offer report counts with the observer caveat.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "phrases": [
+          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        ],
+        "forbid": [
+          "(about|roughly|approximately|estimated?|around) [\\d,]+ lionfish"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-boundary-safe-dive",
+      "app": "lionfish",
+      "category": "boundary",
+      "question": "Is it safe to dive at San Andrés tomorrow?",
+      "intent": "Give the modelled waves and currents but decline to judge dive safety.",
+      "expectedTools": [
+        "geocode",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "phrases": [
+          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
+          "(wave|current)"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "\\bunsafe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-notes-week",
+      "app": "lionfish",
+      "category": "team",
+      "question": "What field notes did the team leave this week?",
+      "intent": "List the week's notes with author, time, place and any linked sighting.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(noted|wrote|note)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-who-noted-looe",
+      "app": "lionfish",
+      "category": "team",
+      "question": "Who noted lionfish near Looe Key?",
+      "intent": "Find notes near Looe Key mentioning lionfish and name who wrote them and when.",
+      "expectedTools": [
+        "geocode",
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(noted|wrote|note|no notes)",
+          "Looe Key"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-messages",
+      "app": "lionfish",
+      "category": "team",
+      "question": "What has the team said about Belize today?",
+      "intent": "Summarise today's committed messages mentioning Belize with sender and time.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:message"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "(message|wrote|said|sent|no messages)",
+          "Belize"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-missions",
+      "app": "lionfish",
+      "category": "team",
+      "question": "Which survey missions are planned?",
+      "intent": "List planned missions with area, dates and assignees.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "mission"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-mission-seas",
+      "app": "lionfish",
+      "category": "team",
+      "question": "What are the wave forecasts for the reefs in our planned missions?",
+      "intent": "Join planned missions to the marine forecast at their places on their dates, or flag dates beyond the horizon.",
+      "expectedTools": [
+        "team_board",
+        "marine_forecast"
+      ],
+      "mustCite": [
+        "kind:mission",
+        "feed:openmeteo"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "mission",
+          "wave"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "lionfish-team-notes-linked",
+      "app": "lionfish",
+      "category": "team",
+      "question": "Which notes are linked to sightings, and are those sightings research grade?",
+      "intent": "List notes with a sighting link and the linked record's quality grade.",
+      "expectedTools": [
+        "notes",
+        "evidence"
+      ],
+      "mustCite": [
+        "kind:note",
+        "kind:sighting"
+      ],
+      "pass": {
+        "mode": "answer",
+        "phrases": [
+          "note",
+          "(research|needs id|casual|grade)"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
+      "helper": false
+    }
+  ]
+}
