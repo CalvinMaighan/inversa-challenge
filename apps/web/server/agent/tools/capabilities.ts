@@ -305,8 +305,13 @@ const sightings = {
         ...(knownAt ? { knownAt, knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are left out` } : {}),
         ...(ctx.app.copy.sightingsNote ? { sightingsNote: ctx.app.copy.sightingsNote } : {}),
         ...(widened
-          ? { widened: `Nothing in the ${askedDays} days asked for; the window was widened to the last ${widenHours / 24} days. Say so.` }
+          ? {
+              inAskedWindow: 0,
+              widened: `Nothing in the ${askedDays} days asked for: the window was widened to the last ${widenHours / 24} days, so the rows below are OLDER than the window asked for. Say that nothing was reported in the ${askedDays} days, then give the older rows as older.`,
+              emptyWindowNote: "No reports in a window does not mean no lionfish or no animals: it can mean nobody surveyed or uploaded. Say this in those words.",
+            }
           : {}),
+        ...(!widened && rows.length === 0 ? { emptyWindowNote: "No reports in a window does not mean no animals there: it can mean nobody surveyed or uploaded. Say this in those words." } : {}),
         ...(older > 0
           ? { [`olderInLast${widenHours / 24}Days`]: older, hint: `Nothing in this window, but ${older} older in the ${widenHours / 24} days before it: call again with hours: ${widenHours} to show them.` }
           : {}),
@@ -587,6 +592,12 @@ const conditions = {
         if (!other) continue;
         const delta = mean(other.map((row) => row.value!)) - refMean;
         if (Math.abs(delta) > threshold) {
+          // Each buoy against the nearest satellite or model point (within 0.1°), so a per-station difference is a tool number.
+          const pairs = reference.flatMap((m) => {
+            const nearest = [...other].sort((a, b) => Math.hypot(a.station.lat - m.station.lat, a.station.lon - m.station.lon) - Math.hypot(b.station.lat - m.station.lat, b.station.lon - m.station.lon))[0];
+            if (!nearest || Math.hypot(nearest.station.lat - m.station.lat, nearest.station.lon - m.station.lon) > 0.1) return [];
+            return [{ measured: m.station.name, measuredValue: m.value, measuredCite: `[e:${idOf(m)}]`, [origin]: nearest.station.name, [`${origin}Value`]: nearest.value, [`${origin}Cite`]: `[e:${idOf(nearest)}]`, difference: Number((nearest.value! - m.value!).toFixed(2)) }];
+          });
           conflicts.push({
             param,
             ...(regionId ? { area: regionId } : {}),
@@ -595,6 +606,7 @@ const conditions = {
             delta: Number(delta.toFixed(2)),
             threshold,
             prefer: "measured",
+            ...(pairs.length ? { pairs } : {}),
           });
         }
       }

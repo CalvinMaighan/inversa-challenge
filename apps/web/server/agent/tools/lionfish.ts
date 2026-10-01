@@ -668,7 +668,7 @@ const hotspotsInput = (species: z.ZodType<string>) =>
 export const lionfishHotspots = (species: z.ZodType<string>) => ({
   name: "hotspots",
   description:
-    "Survey priority cells (L5 heuristic): top cells of one area or all four, each with the four components separately (recent reports, ID quality, heat stress, completeness; value, state, weight, rationale), the CRW heat values (DHW and alert level together), the 72 h field window and rankScore (orders cells only; thin areas have none). Never a single risk percent. Use explain_cell for a cell's records.",
+    "Survey priority cells (L5 heuristic): top cells of one area or all four, each with the four components separately (recent reports, ID quality, heat stress, completeness; value, state, weight, rationale), the CRW heat values (DHW and alert level together), the 72 h field window and rankScore (orders cells only; thin areas have none). Never a single risk percent. For a cell's records, and for how the score is built (its parts, weights and rationale), use explain_cell instead.",
   inputSchema: hotspotsInput(species),
   async execute(input: z.infer<ReturnType<typeof hotspotsInput>>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const named = given(input.area) ?? given(input.region);

@@ -1454,7 +1454,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "(90 days|three months)",
+          "(90[- ]days?|three[- ]months?|quarter)",
           "(DHW|heat)",
           "report"
         ],
@@ -1981,6 +1981,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "population forbids: the negated form still matched when a possessive sat between the negation and the noun (\"whether Belize's lionfish population is growing\"); the lookbehind now exempts a negation word anywhere earlier in the sentence (2 patterns)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "lionfish-replay-90d-mx: the span phrase accepted only \"90 days\"; \"90-day record\" and \"three-month\" name the same span, so the pattern now takes either spelling (1 pattern)."
     }
   ]
 }
