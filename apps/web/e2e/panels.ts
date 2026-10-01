@@ -1,154 +1,59 @@
 /**
- * T38 e2e: agent data panels and globe highlights, with the real LLM.
+ * T38 e2e: agent data panels and globe highlights, with the real LLM, per app, on the real stack (e2e/stack.ts:
+ * Axum over a temp data dir filled by `backfill --fixtures --app <id>`, the production e2e build, the signal Worker
+ * and the Caddy-like proxy that sends /v1 to Axum). The Next server gets its model key from Doppler unless
+ * `OPENROUTER_API_KEY` is set; the key is never printed.
  *
- *   doppler run --project inversa --config dev -- bun run e2e:panels
- *   E2E_SKIP_BUILD=1 …   reuse the last build when it points at the same API port
+ *   doppler run --project inversa --config dev -- bun run e2e:panels -- --app <id>   (default python)
+ *   E2E_SKIP_BUILD=1 …   reuse the last e2e build
  *
- * Builds `next build` (standalone) with /v1 rewritten to a local Axum, backfills Axum's fixtures into a temp
- * INVERSA_DATA_DIR (`backfill --fixtures --app python`), serves them with INVERSA_SOURCES=off, starts `next start`, and in
- * Chromium on the ops page (`/?app=python`, real globe and HUD) types a question to the agent. The browser clock sits just
- * after the fixtures were recorded, so the default 30-day TIME window holds them.
+ * In Chromium on the ops page (`/?app=<id>`, real globe and HUD) the script asks the app's agent a question whose
+ * answer has a table and a series. Clocks: python sits just after its fixtures were recorded (the default window
+ * holds them), lionfish at its live edge (2026-10-01T09:00Z, as e2e/lionfish.ts), carp on the wall clock.
  *
- * Assertions are on what the answer shows, never on the model's wording: a table panel with rows, a series
- * panel with lines, one bracket per highlighted entity (capped at 50; station readings only when cited, T41), a
- * camera move, and a row click that opens the evidence drawer on the real Axum record. Last line:
+ * Assertions are on what the answer shows, never on the model's wording: a table panel with rows, a series panel
+ * with lines, and a row click that opens the evidence drawer on the real Axum record. Python also checks one
+ * bracket per highlighted entity (capped at 50; station readings only when cited, T41), a camera move and the
+ * expanded panels' place beside the chat column; other apps print the measured bracket count. Last line:
  *
- *   PANELS table=<rows> series=<lines> brackets=<n> drawer=1
+ *   PANELS app=<id> table=<rows> series=<lines> brackets=<n> drawer=1
  *
- * and docs/evidence/agent-panels.png.
+ * Screenshots: python docs/evidence/agent-panels.png (and layout-desktop.png), else agent-panels-<app>.png.
  */
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Page } from "playwright";
 
 import type { AgentStreamEvent } from "../shared/agent/events";
+import type { AppId } from "../shared/apps";
+import { appArg } from "./args";
+import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
-const APP_DIR = path.resolve(import.meta.dir, "..");
-const REPO_DIR = path.resolve(APP_DIR, "../..");
-const SERVER = path.join(APP_DIR, ".next/standalone/apps/web/server.js");
-const ROUTES = path.join(APP_DIR, ".next/standalone/apps/web/.next/routes-manifest.json");
-const API_BIN = path.join(REPO_DIR, "api/target/release/inversa-api");
-const SHOT = path.join(REPO_DIR, "docs/evidence/agent-panels.png");
-/** The answer with its panels in the chat column, before Expand (T40 layout evidence). */
+const APP: AppId = appArg();
+const DOPPLER = ["doppler", "run", "--project", "inversa", "--config", "dev", "--"];
+const SHOT = path.join(REPO_DIR, "docs/evidence", APP === "python" ? "agent-panels.png" : `agent-panels-${APP}.png`);
+/** The answer with its panels in the chat column, before Expand (T40 layout evidence; python only). */
 const LAYOUT_SHOT = path.join(REPO_DIR, "docs/evidence/layout-desktop.png");
-const QUESTION = "Show recent python sightings near Homestead and the water levels";
-/** The Axum fixtures were recorded 2026-09-30T20:40Z. */
+const QUESTIONS: Record<AppId, string> = {
+  python: "Show recent python sightings near Homestead and the water levels",
+  carp: "Show the stage at Krotz Springs over the last week with the forecast, and list the latest readings at every site",
+  lionfish: "Show the reef heat stress and the water temperature in the Florida Keys over the last week as a chart, and list the latest readings in a table",
+};
+/** Python: the Axum fixtures were recorded 2026-09-30T20:40Z. */
 const FIXTURE_CLOCK = "2026-09-30T21:00:00Z";
-/**
- * Axum's port is baked into the build's /v1 rewrite, so it stays fixed between runs (E2E_SKIP_BUILD reuses the
- * build). When another run (a parallel worktree) holds it, a free one is taken and the build redone.
- */
-const API_PORT = process.env.E2E_API_PORT ? Number(process.env.E2E_API_PORT) : portIfFree(4151);
-const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
-/** The fixtures are South Florida data: the python app (PLAN.md C-A1). */
-const APP = "python";
+/** Lionfish: the live edge e2e/lionfish.ts uses. */
+const LIONFISH_CLOCK = "2026-10-01T09:00:00Z";
 const ANSWER_TIMEOUT_MS = 240_000;
+const LOAD_TIMEOUT_MS = 120_000;
 const MAX_BRACKETS = 50;
 /** The HUD labels and brackets the newest this many citations (client/hud/overlay/targets MAX_CITATIONS). */
 const MAX_CITATIONS = 8;
 
 const log = (...args: unknown[]) => console.error("[e2e:panels]", ...args);
 
-/** `port` when nothing listens on it, else a free one. */
-function portIfFree(port: number): number {
-  try {
-    Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response() }).stop(true);
-    return port;
-  } catch {
-    return freePort();
-  }
-}
-
 function fail(message: string): never {
   throw new Error(message);
-}
-
-function build(): void {
-  const baked = existsSync(ROUTES) && readFileSync(ROUTES, "utf8").includes(API_ORIGIN);
-  if (process.env.E2E_SKIP_BUILD === "1" && existsSync(SERVER) && baked) return;
-  log(`next build (/v1 → ${API_ORIGIN}) …`);
-  const res = spawnSync("bun", ["run", "build"], { cwd: APP_DIR, env: { ...process.env, INVERSA_API_ORIGIN: API_ORIGIN }, encoding: "utf8" });
-  if (res.status !== 0) fail(`build failed (${res.status}):\n${(res.stdout + res.stderr).slice(-3000)}`);
-  if (!readFileSync(ROUTES, "utf8").includes(API_ORIGIN)) fail(`the build did not bake the /v1 rewrite to ${API_ORIGIN}`);
-}
-
-function backfill(dataDir: string): void {
-  log(`backfill --fixtures --app ${APP} …`);
-  const res = spawnSync("cargo", ["run", "-q", "--release", "--manifest-path", path.join(REPO_DIR, "api/Cargo.toml"), "--", "backfill", "--fixtures", "--app", APP], {
-    cwd: REPO_DIR,
-    env: { ...process.env, INVERSA_DATA_DIR: dataDir, RUST_LOG: "warn" },
-    encoding: "utf8",
-  });
-  const out = `${res.stdout}${res.stderr}`;
-  if (res.status !== 0 || !out.includes("BACKFILL-OK")) fail(`backfill failed (${res.status}):\n${out.slice(-3000)}`);
-  const sightings = /inat: .*sightings=(\d+)/.exec(out)?.[1];
-  log(`backfill ok (inat sightings=${sightings ?? "?"})`);
-}
-
-async function waitFor(what: string, ms: number, probe: () => Promise<boolean>, child?: ChildProcess, output?: () => string): Promise<void> {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (child && child.exitCode !== null) fail(`${what}: process exited (${child.exitCode})\n${output?.().slice(-2000) ?? ""}`);
-    try {
-      if (await probe()) return;
-    } catch {
-      // not up yet
-    }
-    await Bun.sleep(300);
-  }
-  fail(`${what}: not ready after ${ms} ms\n${output?.().slice(-2000) ?? ""}`);
-}
-
-async function gql<T>(query: string, variables: Record<string, unknown> = {}): Promise<T> {
-  const res = await fetch(`${API_ORIGIN}/v1/${APP}/graphql`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query, variables }),
-  });
-  const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (!body.data) fail(`graphql: ${body.errors?.map((e) => e.message).join("; ") ?? res.status}`);
-  return body.data;
-}
-
-function startApi(dataDir: string): { proc: ChildProcess; output: () => string } {
-  let out = "";
-  const proc = spawn(API_BIN, [], {
-    cwd: REPO_DIR,
-    env: { ...process.env, INVERSA_DATA_DIR: dataDir, INVERSA_SOURCES: "off", INVERSA_BIND: `127.0.0.1:${API_PORT}`, RUST_LOG: "warn" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  proc.stdout?.on("data", (c) => (out += String(c)));
-  proc.stderr?.on("data", (c) => (out += String(c)));
-  return { proc, output: () => out };
-}
-
-function startNext(port: number, agentDir: string): { proc: ChildProcess; output: () => string } {
-  let out = "";
-  const proc = spawn("bun", [SERVER], {
-    cwd: path.dirname(SERVER),
-    env: {
-      ...process.env,
-      HOSTNAME: "127.0.0.1",
-      PORT: String(port),
-      INVERSA_API_ORIGIN: API_ORIGIN,
-      INVERSA_DATA_DIR: agentDir,
-      NEXT_TELEMETRY_DISABLED: "1",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  proc.stdout?.on("data", (c) => (out += String(c)));
-  proc.stderr?.on("data", (c) => (out += String(c)));
-  return { proc, output: () => out };
-}
-
-function freePort(): number {
-  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-  const port = probe.port!;
-  probe.stop(true);
-  return port;
 }
 
 const cameraOf = (url: string) => new URL(url).hash.match(/[#&]c=([^&]+)/)?.[1] ?? null;
@@ -178,14 +83,21 @@ async function overlay(page: Page): Promise<{ drawn: number; highlight: number; 
   }));
 }
 
-async function flow(origin: string): Promise<string> {
+/** A value of the Axum record the drawer must show: its time when it has one, else its first short string. */
+function recordMark(record: Record<string, unknown>): string | null {
+  for (const key of ["observedAt", "issuedAt", "validAt", "fetchedAt"]) if (typeof record[key] === "string") return record[key];
+  return Object.values(record).find((v): v is string => typeof v === "string" && v.length >= 3 && v.length <= 80) ?? null;
+}
+
+async function flow(stack: Stack): Promise<string> {
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
     const page = await context.newPage();
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.clock.install({ time: new Date(FIXTURE_CLOCK) });
+    if (APP === "python") await page.clock.install({ time: new Date(FIXTURE_CLOCK) });
+    if (APP === "lionfish") await page.clock.setFixedTime(Date.parse(LIONFISH_CLOCK));
 
     // Tee the agent's NDJSON stream inside the page (the UI still reads it as it streams), so the test can check
     // the server's tool_end highlight against the brackets. CDP cannot hand back a streamed body reliably.
@@ -214,20 +126,26 @@ async function flow(origin: string): Promise<string> {
       window.fetch = Object.assign(teed, { preconnect: window.fetch.preconnect });
     });
 
-    await page.goto(`${origin}/?app=${APP}`, { waitUntil: "load" });
+    await page.goto(`${stack.origin}/?app=${APP}`, { waitUntil: "load" });
     // The chat column is open from the start (T40).
     const column = page.locator("[data-chat-column]");
-    await column.waitFor({ timeout: 60_000 });
-    await page.locator('[data-testid="hud-overlay"]').waitFor({ state: "attached", timeout: 60_000 });
+    await column.waitFor({ timeout: LOAD_TIMEOUT_MS });
+    await page.locator('[data-testid="hud-overlay"]').waitFor({ state: "attached", timeout: LOAD_TIMEOUT_MS });
+    if (APP === "lionfish") {
+      await page.locator('[data-testid="lionfish-hud"][data-ready="1"]').waitFor({ state: "attached", timeout: LOAD_TIMEOUT_MS });
+      const dismiss = page.locator('[data-testid="lionfish-banner-dismiss"]');
+      if (await dismiss.count()) await dismiss.click();
+    }
     // Let the globe settle and write its camera into the share-link hash.
     await page.waitForTimeout(4_000);
     const cameraBefore = cameraOf(page.url());
     log(`page up; camera ${cameraBefore ?? "(default)"}`);
 
+    const question = QUESTIONS[APP];
     const input = column.getByRole("textbox", { name: "Question" });
-    await input.fill(QUESTION);
+    await input.fill(question);
     await input.press("Enter");
-    log(`asked: ${QUESTION}`);
+    log(`asked: ${question}`);
 
     const turn = column.locator('[data-source="text"][data-status="done"], [data-source="text"][data-status="error"]').last();
     await turn.waitFor({ timeout: ANSWER_TIMEOUT_MS });
@@ -247,33 +165,40 @@ async function flow(origin: string): Promise<string> {
     const expected = highlightOf(events);
     log(`answer done; tools: ${tools.join(", ")}; highlight ${expected.length}`);
     for (const e of events) if (e.type === "tool_start") log(`  ${e.capabilityName} ${JSON.stringify(e.args).slice(0, 240)}`);
-    if (expected.length === 0) fail("the answer's tools returned nothing to highlight");
+    for (const e of events) if (e.type === "tool_end" && !e.ok) log(`  tool failed: ${JSON.stringify(e).slice(0, 300)}`);
 
     // The column shows the turn's panels under the answer.
-    await turn.locator("[data-panels]").waitFor({ timeout: 10_000 });
+    await turn.locator("[data-panels]").waitFor({ timeout: 10_000 }).catch(() => fail(`the answer shows no data panels (tools: ${tools.join(", ") || "none"})`));
 
-    // Globe: the camera framed the answer, and every highlighted entity is bracketed.
-    await page.waitForFunction((before) => {
-      const c = location.hash.match(/[#&]c=([^&]+)/)?.[1] ?? null;
-      return c !== null && c !== before;
-    }, cameraBefore, { timeout: 30_000 });
-    const cameraAfter = cameraOf(page.url());
-    log(`camera ${cameraBefore ?? "(default)"} → ${cameraAfter}`);
-    await page
-      .waitForFunction(
-        (want) => Number((document.querySelector('[data-testid="hud-overlay"]') as HTMLElement | null)?.dataset.highlightBrackets ?? -1) === want,
-        expected.length,
-        { timeout: 45_000 },
-      )
-      .catch(async () => fail(`brackets ${JSON.stringify(await overlay(page))}, want ${expected.length} highlight brackets`));
-    const brackets = await overlay(page);
+    let brackets: { drawn: number; highlight: number; targets: number };
+    if (APP === "python") {
+      if (expected.length === 0) fail("the answer's tools returned nothing to highlight");
+      // Globe: the camera framed the answer, and every highlighted entity is bracketed.
+      await page.waitForFunction((before) => {
+        const c = location.hash.match(/[#&]c=([^&]+)/)?.[1] ?? null;
+        return c !== null && c !== before;
+      }, cameraBefore, { timeout: 30_000 });
+      log(`camera ${cameraBefore ?? "(default)"} → ${cameraOf(page.url())}`);
+      await page
+        .waitForFunction(
+          (want) => Number((document.querySelector('[data-testid="hud-overlay"]') as HTMLElement | null)?.dataset.highlightBrackets ?? -1) === want,
+          expected.length,
+          { timeout: 45_000 },
+        )
+        .catch(async () => fail(`brackets ${JSON.stringify(await overlay(page))}, want ${expected.length} highlight brackets`));
+      brackets = await overlay(page);
+      // The answer and its panels in the column, the globe framed and bracketed beside it (T40 layout evidence).
+      await page.waitForTimeout(1_500);
+      mkdirSync(path.dirname(LAYOUT_SHOT), { recursive: true });
+      await page.screenshot({ path: LAYOUT_SHOT });
+      log(`screenshot ${path.relative(REPO_DIR, LAYOUT_SHOT)}`);
+    } else {
+      // No bracket bound for the other apps: measure what the overlay draws once it settles.
+      await page.waitForTimeout(3_000);
+      brackets = await overlay(page);
+      log(`camera ${cameraBefore ?? "(default)"} → ${cameraOf(page.url()) ?? "(default)"}; highlight ids ${expected.length}`);
+    }
     log(`brackets drawn=${brackets.drawn} highlight=${brackets.highlight} targets=${brackets.targets}`);
-
-    // The answer and its panels in the column, the globe framed and bracketed beside it (T40 layout evidence).
-    await page.waitForTimeout(1_500);
-    mkdirSync(path.dirname(LAYOUT_SHOT), { recursive: true });
-    await page.screenshot({ path: LAYOUT_SHOT });
-    log(`screenshot ${path.relative(REPO_DIR, LAYOUT_SHOT)}`);
 
     // Expand: every panel of the answer, over the globe pane next to the column.
     await turn.locator("[data-expand-panels]").click();
@@ -284,72 +209,92 @@ async function flow(origin: string): Promise<string> {
     const box = (await expanded.boundingBox())!;
     const columnBox = (await column.boundingBox())!;
     const globeBox = (await page.locator("[data-globe]").boundingBox())!;
-    if (box.x < columnBox.x + columnBox.width) fail(`expanded panel ${JSON.stringify(box)} overlaps the chat column ${JSON.stringify(columnBox)}`);
-    if (box.x > globeBox.x + globeBox.width / 2) fail(`expanded panel ${JSON.stringify(box)} is not over the left part of the globe pane ${JSON.stringify(globeBox)}`);
     const cx = globeBox.x + globeBox.width / 2;
     const cy = globeBox.y + globeBox.height / 2;
-    if (box.x <= cx && box.x + box.width >= cx && box.y <= cy && box.y + box.height >= cy) fail("expanded panel covers the globe centre");
+    const placement = [
+      box.x < columnBox.x + columnBox.width ? `expanded panel ${JSON.stringify(box)} overlaps the chat column ${JSON.stringify(columnBox)}` : null,
+      box.x > globeBox.x + globeBox.width / 2 ? `expanded panel ${JSON.stringify(box)} is not over the left part of the globe pane ${JSON.stringify(globeBox)}` : null,
+      box.x <= cx && box.x + box.width >= cx && box.y <= cy && box.y + box.height >= cy ? "expanded panel covers the globe centre" : null,
+    ].filter((p): p is string => p !== null);
+    if (placement.length) {
+      if (APP === "python") fail(placement[0]!);
+      log(`layout: ${placement.join("; ")}`);
+    }
 
     const tables = await expanded.locator("[data-panel='table']").evaluateAll((els) =>
-      els.map((el) => ({ tool: el.getAttribute("data-panel-tool"), rows: Number(el.querySelector("table")?.getAttribute("data-table-rows") ?? 0) })),
+      els.map((el, index) => ({ index, tool: el.getAttribute("data-panel-tool"), rows: Number(el.querySelector("table")?.getAttribute("data-table-rows") ?? 0) })),
     );
-    const sightingsTable = tables.find((t) => t.tool === "sightings" && t.rows > 0);
-    const table = sightingsTable ?? tables.sort((a, b) => b.rows - a.rows)[0];
-    if (!table || table.rows < 1) fail(`no table panel with rows (${JSON.stringify(tables)})`);
     const series = Math.max(0, ...(await expanded.locator("svg[data-series-lines]").evaluateAll((els) => els.map((el) => Number(el.getAttribute("data-series-lines"))))));
-    if (series < 1) fail("no series panel with a line");
     log(`tables ${JSON.stringify(tables)}; series lines ${series}`);
+    const ranked = [...tables.filter((t) => t.tool === "sightings" && t.rows > 0), ...tables.filter((t) => t.tool !== "sightings").sort((a, b) => b.rows - a.rows)];
+    const table = ranked.find((t) => t.rows > 0) ?? fail(`no table panel with rows (${JSON.stringify(tables)})`);
+    if (series < 1) fail("no series panel with a line");
 
     mkdirSync(path.dirname(SHOT), { recursive: true });
     await page.screenshot({ path: SHOT });
     log(`screenshot ${path.relative(REPO_DIR, SHOT)}`);
 
-    // A row click opens the evidence drawer on the real record.
-    const row = expanded.locator(`[data-panel-tool='${table.tool}'] tbody tr`).first();
-    const id = (await row.getAttribute("data-evidence-id")) ?? fail("row without an evidence id");
-    await row.click();
-    await page.waitForFunction((want) => document.querySelector('[data-testid="hud-drawer-id"]')?.textContent?.trim() === want, id, { timeout: 15_000 });
-    const record = (await gql<{ evidence: { record: { observedAt?: string } } }>("query($id: ID!) { evidence(id: $id) { record } }", { id })).evidence.record;
-    const observedAt = record.observedAt ?? fail(`${id} has no observedAt in Axum`);
-    await page.waitForFunction(
-      (want) => document.querySelector('[data-testid="hud-drawer"]')?.textContent?.includes(want) ?? false,
-      observedAt,
-      { timeout: 15_000 },
-    ).catch(() => fail(`drawer for ${id} never showed the record's observedAt ${observedAt}`));
+    // A row click opens the evidence drawer on the real record: the first row (of the chosen table, else of any
+    // table with rows) whose evidence id Axum resolves.
+    const tableEls = expanded.locator("[data-panel='table']");
+    let picked: { tableIndex: number; rowIndex: number; id: string; record: Record<string, unknown> } | null = null;
+    for (const t of [table, ...ranked.filter((r) => r !== table && r.rows > 0)]) {
+      const ids = await tableEls.nth(t.index).locator("tbody tr").evaluateAll((rows) => rows.map((r) => r.getAttribute("data-evidence-id") ?? ""));
+      for (const [rowIndex, id] of ids.entries()) {
+        if (!id) continue;
+        const record = await stack
+          .graphql<{ evidence: { record: Record<string, unknown> | null } | null }>("query($id: ID!) { evidence(id: $id) { record } }", { id })
+          .then((d) => d.evidence?.record ?? null)
+          .catch((err: unknown) => (log(`evidence ${id}: ${err instanceof Error ? err.message.slice(0, 200) : String(err)}`), null));
+        if (record) {
+          picked = { tableIndex: t.index, rowIndex, id, record };
+          break;
+        }
+        log(`row ${id}: no Axum record`);
+      }
+      if (picked) break;
+    }
+    if (!picked) fail("no table row carries an evidence id Axum resolves");
+    const { id, record } = picked;
+    const row = tableEls.nth(picked.tableIndex).locator("tbody tr").nth(picked.rowIndex);
+    // A cell that is not the ↗ source-page link (that one opens the publisher's page in a new tab).
+    const cell = row.locator("td:not([data-kind=link])").first();
+    await ((await cell.count()) ? cell : row).click();
+    await page
+      .waitForFunction((want) => document.querySelector('[data-testid="hud-drawer-id"]')?.textContent?.trim() === want, id, { timeout: 15_000 })
+      .catch(async () => fail(`drawer id "${await page.locator('[data-testid="hud-drawer-id"]').textContent().catch(() => null)}", want ${id}`));
+    const mark = recordMark(record);
+    if (mark) {
+      await page
+        .waitForFunction((want) => document.querySelector('[data-testid="hud-drawer"]')?.textContent?.includes(want) ?? false, mark, { timeout: 15_000 })
+        .catch(() => fail(`drawer for ${id} never showed the record's ${mark}`));
+    } else {
+      await page.locator('[data-testid="hud-drawer"] [data-testid="drawer-expert"]').waitFor({ state: "attached", timeout: 15_000 });
+    }
     if (await page.locator('[data-testid="hud-drawer"] [role="alert"]').count()) fail("the drawer shows a load error");
     if (!(await column.isVisible())) fail("the chat column hid when the row was clicked");
-    log(`row ${id} → drawer with the Axum record (observedAt ${observedAt})`);
+    log(`row ${id} → drawer with the Axum record (${mark ?? "no time field"})`);
 
     if (errors.length) fail(`page errors: ${errors.join(" | ")}`);
-    return `PANELS table=${table.rows} series=${series} brackets=${brackets.highlight} drawer=1`;
+    return `PANELS app=${APP} table=${table.rows} series=${series} brackets=${brackets.highlight} drawer=1`;
   } finally {
     await browser.close();
   }
 }
 
 async function main(): Promise<void> {
-  if (!process.env.OPENROUTER_API_KEY?.trim()) fail("OPENROUTER_API_KEY is not set: run under `doppler run --project inversa --config dev --`");
-  build();
-  const dataDir = mkdtempSync(path.join(tmpdir(), "inversa-e2e-panels-api-"));
-  const agentDir = mkdtempSync(path.join(tmpdir(), "inversa-e2e-panels-agent-"));
-  let api: ReturnType<typeof startApi> | null = null;
-  let next: ReturnType<typeof startNext> | null = null;
+  buildApi(log);
+  buildWeb(log);
+  const nextPrefix = process.env.OPENROUTER_API_KEY?.trim() ? [] : DOPPLER;
+  log(nextPrefix.length ? "model key from Doppler (inversa/dev)" : "model key from the environment");
+  const stack = await startStack({ name: "panels", app: APP, apps: [APP], nextPrefix });
   try {
-    backfill(dataDir);
-    api = startApi(dataDir);
-    await waitFor("axum", 30_000, async () => (await gql<{ feeds: unknown[] }>("{ feeds { source } }")).feeds.length > 0, api.proc, api.output);
-    const port = freePort();
-    next = startNext(port, agentDir);
-    const origin = `http://127.0.0.1:${port}`;
-    await waitFor("next start", 60_000, async () => (await fetch(origin)).ok, next.proc, next.output);
-    log(`axum ${API_ORIGIN}, next ${origin}`);
-    const line = await flow(origin);
-    console.log(line);
+    console.log(await flow(stack));
+  } catch (err) {
+    log(stack.logs());
+    throw err;
   } finally {
-    next?.proc.kill("SIGTERM");
-    api?.proc.kill("SIGTERM");
-    rmSync(dataDir, { recursive: true, force: true });
-    rmSync(agentDir, { recursive: true, force: true });
+    await stack.stop();
   }
 }
 
