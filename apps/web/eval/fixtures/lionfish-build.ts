@@ -136,12 +136,15 @@ const STATIONS: Station[] = [
   { id: "crw-mx-cozumel", source: "crw", name: "CRW 5 km pixel Cozumel", lat: 20.375, lon: -87.025, kind: "crw_pixel" },
   { id: "crw-bz-glovers", source: "crw", name: "CRW 5 km pixel Glover's Reef", lat: 16.775, lon: -87.825, kind: "crw_pixel" },
   { id: "crw-co-sanandres", source: "crw", name: "CRW 5 km pixel San Andrés", lat: 12.525, lon: -81.625, kind: "crw_pixel" },
-  { id: "om-looe", source: "openmeteo-marine", name: "Open-Meteo Marine Looe Key", lat: 24.55, lon: -81.4, kind: "grid" },
-  { id: "om-keylargo", source: "openmeteo-marine", name: "Open-Meteo Marine Key Largo", lat: 25.05, lon: -80.4, kind: "grid" },
-  { id: "om-cozumel", source: "openmeteo-marine", name: "Open-Meteo Marine Cozumel", lat: 20.4, lon: -87.0, kind: "grid" },
-  { id: "om-chinchorro", source: "openmeteo-marine", name: "Open-Meteo Marine Banco Chinchorro", lat: 18.6, lon: -87.3, kind: "grid" },
-  { id: "om-glovers", source: "openmeteo-marine", name: "Open-Meteo Marine Glover's Reef", lat: 16.8, lon: -87.8, kind: "grid" },
-  { id: "om-sanandres", source: "openmeteo-marine", name: "Open-Meteo Marine San Andrés", lat: 12.5, lon: -81.65, kind: "grid" },
+  // Open-Meteo Marine grid points as the real adapter requests them (api/src/ingest/poll/openmeteo.rs `marine_grid`, 0.5° cell
+  // centres per area) and as the recorded live payloads (api/fixtures/openmeteo/lionfish-wave-*.json, 2026-09-30) return them
+  // with values (sea, not land): the Keys are covered (26 sea points in the Florida box; 24.550,-81.450 sits 4 km from Looe Key).
+  { id: "om-looe", source: "openmeteo-marine", name: "Open-Meteo Marine 24.550,-81.450 (Looe Key)", lat: 24.55, lon: -81.45, kind: "grid" },
+  { id: "om-keylargo", source: "openmeteo-marine", name: "Open-Meteo Marine 25.050,-80.450 (Key Largo)", lat: 25.05, lon: -80.45, kind: "grid" },
+  { id: "om-cozumel", source: "openmeteo-marine", name: "Open-Meteo Marine 20.550,-86.650 (Cozumel)", lat: 20.55, lon: -86.65, kind: "grid" },
+  { id: "om-chinchorro", source: "openmeteo-marine", name: "Open-Meteo Marine 18.550,-87.150 (Banco Chinchorro)", lat: 18.55, lon: -87.15, kind: "grid" },
+  { id: "om-glovers", source: "openmeteo-marine", name: "Open-Meteo Marine 16.750,-87.750 (Glover's Reef)", lat: 16.75, lon: -87.75, kind: "grid" },
+  { id: "om-sanandres", source: "openmeteo-marine", name: "Open-Meteo Marine 12.450,-81.550 (San Andrés)", lat: 12.45, lon: -81.55, kind: "grid" },
   { id: "MLRF1", source: "ndbc", name: "MLRF1 Molasses Reef", lat: 25.012, lon: -80.376, kind: "buoy" },
   { id: "SMKF1", source: "ndbc", name: "SMKF1 Sombrero Key", lat: 24.628, lon: -81.11, kind: "buoy" },
   { id: "goes-fl-molasses", source: "goes19-sst", name: "GOES-19 SST cell Molasses Reef", lat: 25.015, lon: -80.375, kind: "goes_cell" },

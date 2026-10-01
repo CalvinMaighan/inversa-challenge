@@ -15,9 +15,21 @@ import { SOURCE_FACTS } from "@/server/agent/tools/source-facts";
 import { extentOf, MAX_HIGHLIGHT, withView, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
 import type { TableView } from "@/shared/agent/results";
-import { boardIdFor } from "@/shared/apps";
+import { boardIdFor, LAYER_IDS } from "@/shared/apps";
 
 const HOUR_MS = 3_600_000;
+const DAY_MS = 24 * HOUR_MS;
+/** The sightings tool is named after the layer it fills. */
+const [SIGHTINGS] = LAYER_IDS;
+
+/** The data tool that reads a feed's rows, for a species app that has it: a feed question shows the feed's rows too, not only its facts. */
+const DATA_TOOL_OF: Record<string, { tool: string; how: string }> = {
+  inat: { tool: SIGHTINGS, how: "over the four areas, hours 2160 (90 days), no quality filter: its rows with observed and submitted dates" },
+  gbif: { tool: SIGHTINGS, how: "over the four areas, hours 2160 (90 days): its rows, the duplicateOf copies, their lag days" },
+  nas: { tool: SIGHTINGS, how: "over the four areas (or the area asked), hours 2160 (90 days): its rows and their observed dates, so the answer shows how old its newest record is" },
+  crw: { tool: "reef_heat", how: "for the area or all four: today's SST, anomaly, DHW and alert level with the product date and its age" },
+  "openmeteo-marine": { tool: "marine_forecast", how: "for the area or place: the wave and current numbers with their units" },
+};
 
 // ---------------------------------------------------------------- source_info
 
@@ -32,7 +44,9 @@ export const sourceInfo = {
   inputSchema: sourceInfoInput,
   async execute(input: z.infer<typeof sourceInfoInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const configured = ctx.app.feeds.map((f) => f.source);
-    const asked = given(input.feed)?.toLowerCase();
+    // "all", "every", "*" and the like mean every feed, as leaving the argument out does.
+    const askedRaw = given(input.feed)?.toLowerCase();
+    const asked = askedRaw && !/^(all|all feeds|every|every feed|everything|any|none|\*)$/.test(askedRaw) ? askedRaw : undefined;
     const exact = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
     // A feed named in words ("USGS NAS", "Coral Reef Watch", "Open-Meteo"): the feeds whose id, publisher or name share the most words with it.
     const words = (asked ?? "").split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
@@ -53,9 +67,11 @@ export const sourceInfo = {
       const facts = SOURCE_FACTS[source];
       const config = ctx.app.feeds.find((f) => f.source === source)!;
       const state = data.feeds.find((f) => f.source === source);
+      const dataTool = DATA_TOOL_OF[source];
       return {
         feed: source,
         cite: `[e:source:${source}]`,
+        ...(dataTool && ctx.app.agent.tools.includes(dataTool.tool) ? { next: `These are the feed's facts. To show what it holds, call ${dataTool.tool} ${dataTool.how}, and cite its rows beside this marker.` } : {}),
         sayAs: facts?.sayAs ?? config.name ?? source,
         headline: `${facts?.sayAs ?? config.name ?? source} (publisher: ${facts?.publisher ?? "unknown"}; licence: ${facts?.licence ?? "not recorded"}; rate limit: ${facts?.rateLimit ?? "not published"}) [e:source:${source}]`,
         name: config.name ?? facts?.publisher ?? source,
@@ -169,6 +185,9 @@ export const evidenceTool = {
     const stamp = (key: string) => (typeof record[key] === "string" && Number.isFinite(Date.parse(record[key] as string)) ? Date.parse(record[key] as string) : null);
     const ageOf = (ms: number | null) => (ms === null ? null : `${Math.round(((ctx.now.getTime() - ms) / HOUR_MS) * 10) / 10} hours old`);
     const ages = { issued: ageOf(stamp("issuedAt")), observed: ageOf(stamp("observedAt")), fetched: ageOf(row.fetchedAt && Number.isFinite(Date.parse(row.fetchedAt)) ? Date.parse(row.fetchedAt) : null) };
+    // The lag in days too (one decimal), so "submitted <n> days later" is a tool value, never the model's own arithmetic.
+    const lagDays = row.ingestLagSeconds === null ? null : Math.round((row.ingestLagSeconds / 86_400) * 10) / 10;
+    const datedRows = datesInRecord(row.record);
     // Provenance in one line: the record's publisher and licence as the source facts write them, and when we
     // fetched it, so 'where does this number come from' is answered by copying it.
     const facts = feedSource ? SOURCE_FACTS[feedSource] : undefined;
@@ -197,6 +216,17 @@ export const evidenceTool = {
         // The dates in words, so an answer about a record says observed, submitted and fetched with their times.
         datesLine: [stamp("observedAt") ? `observed ${localTime(ctx.app, stamp("observedAt")!)}` : null, stamp("ingestedAt") ? `submitted (stored) ${localTime(ctx.app, stamp("ingestedAt")!)}` : null, stamp("issuedAt") ? `issued ${localTime(ctx.app, stamp("issuedAt")!)}` : null, row.fetchedAt && Number.isFinite(Date.parse(row.fetchedAt)) ? `fetched ${localTime(ctx.app, row.fetchedAt)}` : null].filter(Boolean).join("; "),
         ingestLagSeconds: row.ingestLagSeconds,
+        ...(lagDays !== null ? { ingestLagDays: lagDays, ingestLagWords: `${lagDays} days later` } : {}),
+        ...(datedRows.length
+          ? {
+              // Records inside this record (a hotspot's counted reports): their dates and ages, newest first.
+              recordsInside: datedRows.slice(0, 20).map((r) => ({ ...r, observedAge: `${Math.round(((ctx.now.getTime() - Date.parse(r.observedAt)) / DAY_MS) * 10) / 10} days old` })),
+              ...(() => {
+                const newest = datedRows.find((r) => r.id.startsWith("sighting:"));
+                return newest ? { newestSightingInside: { ...newest, observedAge: `${Math.round(((ctx.now.getTime() - Date.parse(newest.observedAt)) / DAY_MS) * 10) / 10} days old` } } : {};
+              })(),
+            }
+          : {}),
         feed: feedSource,
         links: row.links,
         raw: rawText === null ? null : rawText.length > MAX_RAW_CHARS ? `${rawText.slice(0, MAX_RAW_CHARS)}…` : rawText,
@@ -208,6 +238,24 @@ export const evidenceTool = {
     );
   },
 };
+
+/** Dated records nested inside a record (a hotspot's evidence rows), not the record itself: id and observedAt, newest first. */
+function datesInRecord(record: unknown): { id: string; observedAt: string }[] {
+  const out: { id: string; observedAt: string }[] = [];
+  const walk = (node: unknown, depth: number) => {
+    if (depth > 6 || typeof node !== "object" || node === null) return;
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item, depth + 1);
+      return;
+    }
+    const o = node as Record<string, unknown>;
+    if (depth > 0 && typeof o.id === "string" && typeof o.observedAt === "string" && Number.isFinite(Date.parse(o.observedAt))) out.push({ id: o.id, observedAt: o.observedAt });
+    for (const value of Object.values(o)) walk(value, depth + 1);
+  };
+  walk(record, 0);
+  const seen = new Set<string>();
+  return out.filter((r) => !seen.has(r.id) && seen.add(r.id)).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt));
+}
 
 // ---------------------------------------------------------------- team_board
 

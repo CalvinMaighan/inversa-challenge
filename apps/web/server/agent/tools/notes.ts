@@ -225,8 +225,11 @@ export const notes = {
           : {}),
         rows: shown.map((r, i) => ({
           evidenceId: evidenceRows[i]!.id,
+          cite: `[e:note:${r.id}]`,
           author: r.callsign || r.createdBy.slice(0, 8),
           createdAt: r.createdAt,
+          // The age in words, so the answer copies it instead of computing one.
+          age: `${Math.round(((ctx.now.getTime() - Date.parse(r.createdAt)) / HOUR_MS) * 10) / 10} hours old`,
           species: r.species,
           lat: r.lat,
           lon: r.lon,

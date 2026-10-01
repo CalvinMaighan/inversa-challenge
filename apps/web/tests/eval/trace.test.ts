@@ -49,6 +49,9 @@ describe("eval trace", () => {
     // A hyphen after a word is a joiner, not a minus: "last-90-days" holds 90 (which the question supplies), not -90.
     expect(extractNumbers("in the last-90-days window, a 3-night average").map((n) => n.value)).toEqual([90, 3]);
     expect(numbersTrace("the wider last-90-days results", [JSON.stringify({ windowDays: 90 })]).ungrounded).toEqual([]);
+    // Digits glued to a letter are an identifier: a DOI suffix or a station id never yields a value from its tail.
+    expect(extractNumbers("cite https://doi.org/10.3390/rs12233856 and buoy MLRF1").map((n) => n.value)).toEqual([10.339]);
+    expect(numbersTrace("DOI https://doi.org/10.3390/rs12233856", [JSON.stringify({ doi: "https://doi.org/10.3390/rs12233856" })]).ungrounded).toEqual([]);
     expect(extractNumbers("the anomaly was -1.2 °C").map((n) => n.value)).toEqual([-1.2]);
     // A whole number's trailing zeros are a rounding: 8110 matches 8105..8115, "21,200" matches 21187.
     expect(extractNumbers("8.11 kcfs = 8110 cfs")[1]).toEqual({ value: 8110, decimals: -1, raw: "8110" });

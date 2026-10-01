@@ -112,7 +112,8 @@ function explainCell(v: Vars) {
   if (!found) throw new Error(`no priority score for lionfish in cell ${String(v.cell)} at ${String(v.at)}`);
   const weights = (v.weights ?? null) as Vars | null;
   const cell = reweighted(found as unknown as Cell, weights);
-  return { ...found, ...cell, at: String(v.at), terms: [], basis: typeof v.basis === "string" ? v.basis : found.basis };
+  // The API's explainCell carries the species it explains; the hotspot evidence id is built from it.
+  return { ...found, ...cell, species: "lionfish", at: String(v.at), terms: [], basis: typeof v.basis === "string" ? v.basis : found.basis };
 }
 
 function board(v: Vars) {

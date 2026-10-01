@@ -50,8 +50,9 @@ const NOT_A_VALUE = [
   /\b[a-z]*-?(?:usgs|nws|nwps|nwsa|nwsf|iem|web)-[a-z-]*\d+\b/gi,
 ];
 
-// A hyphen after a letter is a joiner, not a minus: "last-90-days" holds 90, not -90.
-const NUMBER = /(?<![A-Za-z])-?\d[\d,]*(?:\.\d+)?/g;
+// A hyphen after a letter is a joiner, not a minus: "last-90-days" holds 90, not -90. Digits glued to a letter are an
+// identifier ("rs12233856" in a DOI, "MLRF1"), never a value, so a run of digits starts only after a non-alphanumeric.
+const NUMBER = /(?<![A-Za-z0-9])-?\d[\d,]*(?:\.\d+)?/g;
 
 /** Numbers in free text, after stripping ids, dates and times. Each with its decimal places. */
 export function extractNumbers(text: string): { value: number; decimals: number; raw: string }[] {

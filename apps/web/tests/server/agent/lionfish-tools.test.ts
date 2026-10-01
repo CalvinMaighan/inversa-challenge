@@ -241,7 +241,17 @@ describe("lionfish tool: marine_forecast", () => {
     expect((belize.data.points as any[]).map((p) => p.station)).toEqual(["om-glovers"]);
     const point = await run("marine_forecast", { lat: 12.5, lon: -81.7 });
     expect((point.data.points as any[]).map((p) => p.station)).toEqual(["om-sanandres"]);
-    expect((point.data.points as any[])[0].distanceDeg).toBeLessThan(0.1);
+    expect((point.data.points as any[])[0].distanceDeg).toBeLessThan(0.2);
+    // A reef reads its whole area and keeps the nearest grid point, so a reef far from any point still gets one.
+    const looe = await run("marine_forecast", { place: "Looe Key", days: 1 });
+    expect((looe.data.points as any[]).map((p) => p.station)).toEqual(["om-looe"]);
+    expect(String(looe.data.horizonLine)).toMatch(/covers 72 hours \(three days\)/);
+    // The day asked about: inside the horizon it points at the daily row, beyond it the result says so and gives no number.
+    const soon = await run("marine_forecast", { place: "Cozumel", date: "2026-10-02" });
+    expect(soon.data.asked).toMatchObject({ date: "2026-10-02", covered: true });
+    const far = await run("marine_forecast", { place: "Cozumel", date: "2026-10-15" });
+    expect(far.data.asked).toMatchObject({ date: "2026-10-15", covered: false });
+    expect(String((far.data.asked as any).say)).toMatch(/cannot reach 2026-10-15/);
     const unknown = await run("marine_forecast", { place: "Roatan" });
     expect(String(unknown.data.placeIgnored)).toMatch(/not a place the app knows/);
     expect((unknown.data.points as any[]).length).toBe(6);
@@ -261,6 +271,10 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     expect(Object.keys(cells[0].components)).toEqual(["recentReports", "idQuality", "heatStress", "completeness"]);
     expect(cells[0].components.recentReports).toMatchObject({ value: 1, state: "ok", weight: 1 });
     expect(cells[0].components.completeness).toMatchObject({ weight: 0 });
+    // The ranking carries no reasons (those come from explain_cell) and a summary line with the marker per cell.
+    expect(cells[0].components.recentReports.rationale).toBeUndefined();
+    expect(String(cells[0].summary)).toMatch(/^Mexican Caribbean cell mx-caribbean:87:205: rankScore 0.81 \(a heuristic that only orders cells\); recent reports 1 \(ok, weight 1\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(String(out.data.say)).toMatch(/needs explain_cell/);
     expect(cells[0].heat).toMatchObject({ dhwCWeeks: 8.1, baa: 3, baaLabel: "Bleaching Alert Level 1", productDate: "2026-09-29", dataAge: "2 days old" });
     expect(cells[0].heat.cite.dhw).toMatch(/^\[e:reading:crw-mx-cozumel:dhw:\d+:satellite\]$/);
     expect(cells[0].fieldWindow).toMatchObject({ state: "ok", horizonHours: 72, currentMaxKmh: expect.any(Number) });
@@ -324,6 +338,17 @@ describe("lionfish tool: hotspots and explain_cell (components)", () => {
     expect(belize.data).toMatchObject({ cell: "belize:72:82", rankScore: null, thin: true });
     const point = await run("explain_cell", { species: "lionfish", lat: 24.546, lon: -81.406 });
     expect(point.data.cell).toBe("fl-keys:179:24");
+    // Placeholders beside an area (cell "0:0", lat 0, lon 0) still land on the area named.
+    const filled = await run("explain_cell", { species: "lionfish", cell: "0:0", lat: 0, lon: 0, area: "Florida Keys" });
+    expect(filled.data.cell).toBe("fl-keys:179:24");
+    expect(String(filled.data.summary)).toMatch(/^Florida Keys \/ South Florida cell fl-keys:179:24: rankScore 0.62/);
+    expect(String(belize.data.thinNote)).toMatch(/^Belize is a thin area: .*still shows heat stress \(DHW 5.28 °C-weeks, alert level 3, product day 2026-09-29\) and the history records from GBIF and NAS \[e:hotspot:lionfish:belize:72:82:\d+\]$/);
+    // Nothing given: the top cell of the four areas, with the recipe, the summary line and the newest counted report's age.
+    const top = await run("explain_cell", { species: "lionfish" });
+    expect(top.data).toMatchObject({ cell: "mx-caribbean:87:205", newestReport: { id: "sighting:8001", observedAge: "1.9 days old" } });
+    expect(String(top.data.recipe)).toMatch(/^How the score is built: recent reports \(weight 1\): kernel-weighted.*completeness \(weight 0, lowers confidence, never the rank\).*\[e:hotspot:lionfish:mx-caribbean:87:205:\d+\]$/);
+    expect(String(top.data.summary)).toMatch(/\[e:hotspot:/);
+    expect(String(top.data.next)).toMatch(/call sightings for Mexican Caribbean/);
   });
 });
 
@@ -420,9 +445,21 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(String((crw.data.record as any).credit)).toMatch(/NOAA Coral Reef Watch/);
     expect(String((crw.data.record as any).doi)).toMatch(/doi\.org/);
     expect(String(crw.data.sourceUrl)).toMatch(/dhw_5km/);
+    // The lag in days is a tool value (never the model's arithmetic); a hotspot record lists the dated records inside it with ages.
+    const late = await run("evidence", { id: "sighting:7003" });
+    expect(late.data).toMatchObject({ ingestLagDays: 20.8, ingestLagWords: "20.8 days later" });
+    expect(late.data.recordsInside).toBeUndefined();
+    const hotspot = await run("evidence", { id: `hotspot:lionfish:mx-caribbean:87:205:${NOW.getTime()}` });
+    expect(hotspot.data.newestSightingInside).toMatchObject({ id: "sighting:8001", observedAt: "2026-09-29T15:00:00Z", observedAge: "1.9 days old" });
+    expect((hotspot.data.recordsInside as any[]).length).toBeGreaterThan(4);
     const sources = await run("source_info", {});
     const rows = sources.data.rows as any[];
     expect(rows.map((r) => r.feed)).toEqual(["inat", "gbif", "nas", "crw", "openmeteo-marine", "ndbc", "goes19-sst"]);
+    // Each feed's facts point at the tool that shows its rows; "all" means every feed.
+    expect(String(rows.find((r) => r.feed === "nas").next)).toMatch(/call sightings over the four areas/);
+    expect(String(rows.find((r) => r.feed === "crw").next)).toMatch(/call reef_heat/);
+    expect(rows.find((r) => r.feed === "ndbc").next).toBeUndefined();
+    expect(((await run("source_info", { feed: "all" })).data.rows as any[]).length).toBe(7);
     expect(rows.find((r) => r.feed === "openmeteo-marine").licence).toMatch(/non-commercial/);
     expect(rows.find((r) => r.feed === "crw").attribution).toMatch(/NOAA Coral Reef Watch/);
     expect(rows.find((r) => r.feed === "crw").licence).toMatch(/credit to NOAA Coral Reef Watch/);
@@ -432,6 +469,7 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect(feeds.evidence.map((e) => e.id)).toContain("fetch:lf-crw-7299");
     const notes = await run("notes", { hours: 168 });
     expect(notes.data.total).toBe(6);
+    expect((notes.data.rows as any[])[0]).toMatchObject({ cite: expect.stringMatching(/^\[e:note:/), age: expect.stringMatching(/hours old$/) });
     const board = await run("team_board", { kind: "missions" });
     expect((board.data.missions as any[]).map((m) => m.title)).toHaveLength(3);
     const belize = await run("team_board", { kind: "messages", about: "Belize", hours: 24 });

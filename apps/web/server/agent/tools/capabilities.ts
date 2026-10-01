@@ -327,7 +327,7 @@ const sightings = {
           ? { [`olderInLast${widenHours / 24}Days`]: older, hint: `Nothing in this window, but ${older} older in the ${widenHours / 24} days before it: call again with hours: ${widenHours} to show them.` }
           : {}),
         ...(duplicates.length
-          ? { duplicateNote: `${duplicates.length} row${duplicates.length === 1 ? " is" : "s are"} a copy of another record (duplicateOf: GBIF or NAS re-publishing an iNaturalist report): never counted as a second animal or as corroboration; say "not counted" and cite both markers.` }
+          ? { duplicateNote: `${duplicates.length} row${duplicates.length === 1 ? " is" : "s are"} a copy of another record (duplicateOf: GBIF or NAS re-publishing an iNaturalist report): never counted as a second animal or as corroboration; write "not counted twice" and cite both markers.` }
           : {}),
         ...(wanted && wanted.unresolved.length > 0 ? { unresolvedSpecies: wanted.unresolved.map((name) => `${name}: not tracked in this app`) } : {}),
         total: rows.length,
@@ -919,7 +919,7 @@ const feedState = {
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
-    const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], data.feeds, data.feeds.length);
+    const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it. This is the feeds' health only: whether one feed's data for a place is current needs that feed's data tool as well (sightings for inat, gbif or nas rows with their dates; reef_heat for crw; marine_forecast for the marine forecast), cited beside the fetch marker." }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
 };
