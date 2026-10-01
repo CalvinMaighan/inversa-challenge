@@ -99,6 +99,7 @@ describe("evidence ids and links", () => {
       raw: undefined,
       rawKey: null,
       sourceUrl: null,
+      sourcePageUrl: null,
       fetchedAt: null,
       ingestLagSeconds: null,
       feed: { source: "inat", mode: "POLL", state: "LAGGING", lagSeconds: 300 },

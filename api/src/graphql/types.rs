@@ -304,6 +304,8 @@ pub struct Evidence {
     pub raw: Option<serde_json::Value>,
     pub raw_key: Option<String>,
     pub source_url: Option<String>,
+    /// Publisher web page for this record, for a new-tab link (PLAN.md C19). Null when none exists.
+    pub source_page_url: Option<String>,
     pub fetched_at: Option<Time>,
     pub ingest_lag_seconds: Option<i64>,
     pub feed: Option<FeedState>,

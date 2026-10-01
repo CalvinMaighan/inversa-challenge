@@ -60,3 +60,8 @@ Scope:
 
 - [ ] G11: a first-visit welcome explains the app in plain words in two sentences or fewer, shows the species chips with one-line plain descriptions, and offers example questions; it is dismissible and remembered. Live agent answers use plain language for non-experts and keep citations (live eval still passes the leaf-T39 threshold) (manual: screenshot `docs/evidence/simplify-welcome.png` plus the eval line)
   EVIDENCE: pending
+
+- [ ] G12: the sightings layer shows every sighting in a trailing 48 h window ending at TIME.at (fading with age), not only the current frame. The window length is one constant, shown in the legend or welcome as "last 48 hours". Unit test named "48h sighting window": frames across 48 h are merged and the boundary is exclusive at 48 h; e2e:firstload's sighting count equals the API count of sightings in that window
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "48h sighting window" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending

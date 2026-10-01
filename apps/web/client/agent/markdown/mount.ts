@@ -1,3 +1,5 @@
+import { markExternalLink } from "shared/links";
+
 import { parseStreamMarkdown, type StreamMdBlock, type StreamMdInline, type StreamMdListItem } from "./parse";
 
 /**
@@ -42,9 +44,9 @@ function appendInlines(parent: ParentNode, nodes: StreamMdInline[], cites: CiteI
       }
       case "a": {
         const link = document.createElement("a");
-        link.href = node.href;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        link.setAttribute("href", node.href);
+        // Other origins open in a new tab; a link back into the app stays in this one.
+        markExternalLink(link);
         appendInlines(link, node.children, cites);
         parent.append(link);
         break;
