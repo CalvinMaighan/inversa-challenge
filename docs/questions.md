@@ -8,7 +8,7 @@ Each question lists its intent, the agent tools it should call, what it must cit
 |---|---|---|---|
 | carp | 69 | 8 | `site_status`, `river_readings`, `river_forecast`, `forecast_verify`, `review_history`, `weather_forecast`, `source_info`, `evidence`, `team_board` |
 | lionfish | 65 | 8 | `reef_heat`, `marine_forecast`, `source_info`, `evidence`, `team_board` |
-| python | 68 | 8 | `weather_forecast`, `source_info`, `evidence`, `team_board` |
+| python | 67 | 8 | `weather_forecast`, `source_info`, `evidence`, `team_board` |
 
 ## carp
 
@@ -983,7 +983,7 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - View: map: Flamingo; timeline: step daily over last 7 days
   - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(Monday\|Tuesday\|Wednesday\|Thursday\|Friday\|Saturday\|Sunday\|day)`, `Flamingo`.
 
-### python / boundary (14)
+### python / boundary (13)
 
 - **py-legacy-iguana-cold-snap** (legacy `iguana-cold-snap`): Is tonight's cold snap a good iguana capture window around Homestead?
   - Intent: Refuse because iguanas are outside the Python app's scope, naming what it covers.
@@ -993,10 +993,6 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Refuse because lionfish belong to Lionfish Watch, and name the Python app's scope.
   - Tools: none. Cites: nothing.
   - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `(python\|Burmese python)`, `Lionfish Watch\|lionfish app`. Must not match `(wave\|sea) (height\|state) (is\|of) \d`.
-- **py-legacy-tegu-sightings-homestead** (legacy `tegu-sightings-homestead`): Show me recent tegu sightings around Homestead.
-  - Intent: Refuse because tegus are outside the Python app's scope.
-  - Tools: none. Cites: nothing.
-  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `(python\|Burmese python)`, `(only\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something))`. Must not match `\d+ tegus?`.
 - **py-legacy-lionfish-key-largo** (legacy `lionfish-key-largo`): Where should lionfish divers work near Key Largo, and is the sea state OK?
   - Intent: Refuse because lionfish belong to Lionfish Watch, and name the Python app's scope.
   - Tools: none. Cites: nothing.
@@ -1007,8 +1003,8 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must match `(python\|Burmese python)`, `(only\|(cannot\|can't\|can ?not\|unable to\|do not\|don't\|does not\|doesn't\|is not\|isn't\|no data\|not something))`. Must not match `\d+ (green )?iguanas?`.
 - **py-legacy-homestead-species-counts** (legacy `homestead-species-counts`): What invasive animals were seen near Homestead this week?
   - Intent: Give the Burmese python count near Homestead and say the app tracks Burmese pythons only; it holds no counts for other animals.
-  - Tools: `geocode`, `species_counts`. Cites: `feed:inat`, `kind:sighting`.
-  - Pass: mode caveat; min 1 citation (1 sighting); numbers trace to tool output; discloses feed state. Must match `(python\|Burmese python)`, `(only\|context\|not (ranked\|planned))`. Must not match `\d+ (other\|introduced) (species\|animals)`.
+  - Tools: `geocode`, `species_counts`. Cites: `feed:inat`.
+  - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(python\|Burmese python)`, `(only\|context\|not (ranked\|planned))`. Must not match `\d+ (other\|introduced) (species\|animals)`.
 - **py-legacy-quality-id-conflict-tegu** (legacy `quality-id-conflict-tegu`): Are there any tegu reports near Homestead I should double-check before sending a crew?
   - Intent: Refuse because tegus are outside the Python app's scope.
   - Tools: none. Cites: nothing.

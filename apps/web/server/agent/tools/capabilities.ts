@@ -202,7 +202,7 @@ const imprecise = (row: Pick<GqlSighting, "accuracyM">) => row.accuracyM === nul
 const sightings = {
   name: LAYER.sightings,
   description:
-    "Sightings of the app's one species (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags. Default window: the last 7 days. A window ending now that comes back empty is widened to the last 30 days (the result says so). The user sees every row in a table panel. For a count with the newest record to cite use species_counts.",
+    "Sightings of the app's one species (iNaturalist, USGS NAS, GBIF) in an area and time window. Rows carry quality grade, duplicate links (duplicateOf) and ID-conflict flags. Default window: the last 7 days. A window ending now that comes back empty is widened to the last 30 days (the result says so). The user sees every row in a table panel. For 'which species were seen' use species_counts.",
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
@@ -392,7 +392,7 @@ const speciesCountsInput = z.object({
 const speciesCounts = {
   name: "species_counts",
   description:
-    "How many sightings of the app's one species were reported in an area and window, with its newest sighting to cite. Default window: the last 7 days. Use it for 'how many…' and 'has any been reported…' questions; use sightings for the records themselves.",
+    "Which species were seen in an area and window (this app tracks one), with its count and newest sighting to cite. Default window: the last 7 days. Use it for 'what invasive animals…', 'which species…', 'what has been reported…' questions; use sightings for the records of the species: how many reports came in, duplicates, late reports.",
   inputSchema: speciesCountsInput,
   async execute(input: z.infer<typeof speciesCountsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);

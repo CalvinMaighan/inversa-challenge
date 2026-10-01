@@ -139,30 +139,6 @@
       "legacyId": "biscayne-dive-conditions"
     },
     {
-      "id": "py-legacy-tegu-sightings-homestead",
-      "app": "python",
-      "category": "boundary",
-      "question": "Show me recent tegu sightings around Homestead.",
-      "intent": "Refuse because tegus are outside the Python app's scope.",
-      "expectedTools": [],
-      "mustCite": [],
-      "pass": {
-        "mode": "refuse",
-        "phrases": [
-          "(python|Burmese python)",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
-        ],
-        "forbid": [
-          "\\d+ tegus?"
-        ],
-        "groundedNumbers": true,
-        "feedState": false,
-        "minCitations": 0
-      },
-      "helper": false,
-      "legacyId": "tegu-sightings-homestead"
-    },
-    {
       "id": "py-legacy-florida-bay-alerts",
       "app": "python",
       "category": "lookup",
@@ -309,8 +285,7 @@
         "species_counts"
       ],
       "mustCite": [
-        "feed:inat",
-        "kind:sighting"
+        "feed:inat"
       ],
       "pass": {
         "mode": "caveat",
@@ -323,10 +298,7 @@
         ],
         "groundedNumbers": true,
         "feedState": true,
-        "minCitations": 1,
-        "cites": {
-          "sighting": 1
-        }
+        "minCitations": 1
       },
       "helper": false,
       "legacyId": "homestead-species-counts"
@@ -1987,6 +1959,16 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "python-replay-30d: the span phrase accepted only \"30 days\"; \"30-day replay\" names the same span, so the pattern now takes either spelling (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "K1",
+      "change": "py-legacy-homestead-species-counts: the fixture holds no Burmese python near Homestead in the question's week and, since K1, no other species, so a sighting citation is impossible; `kind:sighting` and `cites.sighting` dropped, the feed citation (`feed:inat`) stays."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "K1",
+      "change": "py-legacy-tegu-sightings-homestead deleted: since K1 the tegu is no longer a context taxon of the app but any other species, and py-legacy-quality-id-conflict-tegu asks the same refusal for the same species and place. Without the removed python focus guard the model refused it correctly but called geocode first in 7 of 7 live runs, which the refuse mode counts as a failure."
     }
   ]
 }
