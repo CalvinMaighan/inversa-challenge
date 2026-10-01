@@ -36,6 +36,8 @@ import { layerClock } from "./layers/clock";
 import { MISSION_ID_PREFIX } from "./layers/missions";
 import { RASTER_PICK_PREFIX } from "./layers/types";
 import { browserQuotaStore } from "./quota";
+import { registerZoom } from "./zoom/api";
+import { installZoom, type ZoomDiagnostics } from "./zoom/controller";
 
 const VIEW_WRITE_DEBOUNCE_MS = 250;
 const DEFAULT_FLIGHT_S = 1.6;
@@ -54,6 +56,8 @@ export type GlobeDiagnostics = {
   imagery: ImageryState;
   /** Visual preset stages and the scope (GC2). */
   look: LookDiagnostics;
+  /** Zoom limits, altitude, ground clearance and the last zoom animation (GE8). */
+  zoom: ZoomDiagnostics;
 };
 
 export type GlobeHandle = {
@@ -262,6 +266,14 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   const look = installLook(scene, { requestRender: () => governor.request() });
   disposers.push(() => look.destroy());
 
+  // ---- zoom (GE8): wheel, double click, pinch, steps, limits per imagery, ground guard -------------------------
+  const zoom = installZoom(widget, { governor, imagery: () => imagery.state(), zones: () => GOOGLE_3D_ZONES[activeAppId()], reducedMotion: prefersReducedMotion, container });
+  registerZoom(zoom);
+  disposers.push(() => {
+    registerZoom(null);
+    zoom.destroy();
+  });
+
   // ---- camera ↔ VIEW -------------------------------------------------------------------------------------
   const pose = (): CameraPose => {
     const c = camera.positionCartographic;
@@ -465,6 +477,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
       layers: layers.map((l) => l.stats()),
       imagery: imagery.state(),
       look: look.state(),
+      zoom: zoom.diagnostics(),
     }),
     destroy() {
       if (destroyed) return;

@@ -24,6 +24,7 @@ import Sync from "./Sync";
 import Timeline from "./timeline/Timeline";
 import GlobeTooltip from "./tooltip/GlobeTooltip";
 import TopBar from "./topbar/TopBar";
+import ZoomControls from "./zoom/ZoomControls";
 
 /**
  * Fills the HUD slot of the globe pane. The slot hands pointer events to its direct children; this root gives
@@ -163,6 +164,8 @@ function HudBody({ sync = true }: HudProps) {
         {cardOwnsSelection ? null : <EvidenceDrawer />}
         {conditions ? null : <Timeline />}
         {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
+        {/* GE8: zoom controls (+/-, altitude slider, reset, fit sightings) at the right of the globe. */}
+        <ZoomControls />
       </Chrome>
       <BottomBar />
     </Root>

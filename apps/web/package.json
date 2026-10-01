@@ -48,7 +48,8 @@
     "e2e:media": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/media.ts",
     "e2e:overlays": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/overlays.ts",
     "e2e:places": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/places.ts",
-    "perf:poll": "bun e2e/perf-poll.ts"
+    "perf:poll": "bun e2e/perf-poll.ts",
+    "e2e:zoom": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/zoom.ts"
   },
   "dependencies": {
     "@calvinjs/active-state": "workspace:*",
