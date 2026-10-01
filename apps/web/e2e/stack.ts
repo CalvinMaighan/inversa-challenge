@@ -36,7 +36,7 @@ const SERVER = path.join(APP_DIR, ".next/standalone/apps/web/server.js");
 /** Written next to the standalone server by an e2e build; a plain build does not have it. */
 const E2E_MARKER = path.join(APP_DIR, ".next/standalone/apps/web/.e2e-build");
 /** The Axum binary, run directly so a SIGTERM reaches it (cargo run would not forward it). */
-const API_BIN = path.join(process.env.CARGO_TARGET_DIR ?? path.join(REPO_DIR, "api/target"), "release/inversa-api");
+export const API_BIN = path.join(process.env.CARGO_TARGET_DIR ?? path.join(REPO_DIR, "api/target"), "release/inversa-api");
 
 export const COLD_SNAP_SCENE = "cold-snap-2026-02-01";
 const WRANGLER = "wrangler@4.145.0";
