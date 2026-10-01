@@ -958,7 +958,105 @@ async fn forecast_graphql_site_status_at() {
     assert!(error_message(&body).contains("conflictFt"), "{body}");
 }
 
-/// Species apps answer every forecast query with a typed error and no data.
+// ---------------------------------------------------------------------------------------------
+// C5 needs review: `siteReview`, `reviewHistory`, `reviewBoard` (conditions apps only).
+// ---------------------------------------------------------------------------------------------
+
+const REASON_FIELDS: &str = "rule outcome severity value valueText threshold unit source observedAt issuedAt link evidenceIds explanation";
+
+#[tokio::test]
+async fn review_graphql_site_review_asof() {
+    let (state, _, d0, d1) = carp_seeded().await;
+    let q = format!(
+        "query($site: ID!, $asOf: Time) {{ siteReview(site: $site, asOf: $asOf) {{
+            site location name asOf status summary stageFt observedAt change24hFt categoryNow peakStageFt peakAt categoryPeak
+            forecastIssuedAt forecastSource observationFreshness forecastFreshness activeAlerts usgsStageFt usgsObservedAt tidal
+            reasons {{ {REASON_FIELDS} }} checks {{ rule outcome }} }} }}"
+    );
+    // d1 + 4 h: the Flood Watch (seen at d1, gone at d1 + 6 h) is the one reason.
+    let body = gql(&state, &q, json!({"site": "BTRL1", "asOf": iso(d1 + 4 * HOUR)})).await;
+    let r = &body["data"]["siteReview"];
+    assert_eq!((r["site"].as_str(), r["status"].as_str()), (Some("BTRL1"), Some("REVIEW")), "{body}");
+    assert_eq!(r["summary"], "Needs review: active_alert.");
+    let reasons = r["reasons"].as_array().unwrap();
+    assert_eq!(reasons.len(), 1, "{body}");
+    assert_eq!(reasons[0]["rule"], "active_alert");
+    assert_eq!((reasons[0]["outcome"].as_str(), reasons[0]["severity"].as_str()), (Some("FIRED"), Some("MEDIUM")));
+    assert_eq!(reasons[0]["valueText"], "Flood Watch");
+    assert_eq!(reasons[0]["source"], "nws");
+    assert_eq!(reasons[0]["observedAt"], iso(d1));
+    assert_eq!(reasons[0]["evidenceIds"], json!(["alert:urn:oid:2.49.0.1.840.0.1"]));
+    assert_eq!(reasons[0]["link"], "https://api.weather.gov/alerts/urn:oid:2.49.0.1.840.0.1");
+    assert_eq!(r["forecastIssuedAt"], iso(d1));
+    assert_eq!(r["forecastSource"], "NWPS_LIVE");
+    assert_eq!((r["categoryNow"].as_str(), r["categoryPeak"].as_str()), (Some("NONE"), Some("NONE")));
+    assert_eq!(r["observedAt"], iso(d1 + 3 * HOUR));
+    assert!((r["change24hFt"].as_f64().unwrap() - 0.72).abs() < 1e-9, "{body}");
+    assert_eq!((r["observationFreshness"].as_str(), r["forecastFreshness"].as_str()), (Some("FRESH"), Some("FRESH")));
+    assert_eq!((r["activeAlerts"].as_i64(), r["tidal"].as_bool(), r["usgsStageFt"].clone()), (Some(1), Some(false), Value::Null));
+    let rules: std::collections::BTreeSet<&str> = r["checks"].as_array().unwrap().iter().map(|c| c["rule"].as_str().unwrap()).collect();
+    assert_eq!(rules.len(), 7, "every rule checked: {rules:?}");
+    // Same site, three hours later: the watch has ended, everything current: OK.
+    let body = gql(&state, &q, json!({"site": "btrl1", "asOf": iso(d1 + 7 * HOUR)})).await;
+    assert_eq!(body["data"]["siteReview"]["status"], "OK", "{body}");
+    assert_eq!(body["data"]["siteReview"]["reasons"], json!([]));
+    // Before d0 was captured: the archive forecast is known, but there is no observation 24 h
+    // before the newest one, so the 24 h change is unknown: CANNOT_ASSESS, not OK.
+    let body = gql(&state, &q, json!({"site": "BTRL1", "asOf": iso(d0 + 30 * 60_000)})).await;
+    let r = &body["data"]["siteReview"];
+    assert_eq!((r["status"].as_str(), r["forecastSource"].as_str()), (Some("CANNOT_ASSESS"), Some("IEM_ARCHIVE")), "{body}");
+    assert_eq!(r["reasons"][0]["rule"], "missing_input");
+    assert_eq!(r["reasons"][0]["valueText"], "baseline");
+    // By location id; default asOf = now (a year after the seed): everything stale.
+    let loc = state.app.cfg.locations.iter().find(|l| l.nwps.as_deref() == Some("BTRL1")).unwrap().id.clone();
+    let body = gql(&state, &q, json!({"site": loc})).await;
+    let r = &body["data"]["siteReview"];
+    assert_eq!((r["site"].as_str(), r["location"].as_str(), r["status"].as_str()), (Some("BTRL1"), Some(loc.as_str()), Some("CANNOT_ASSESS")), "{body}");
+    assert_eq!((r["observationFreshness"].as_str(), r["forecastFreshness"].as_str()), (Some("STALE"), Some("STALE")));
+    let body = gql(&state, &q, json!({"site": "XXXX1"})).await;
+    assert_eq!(error_code(&body), "UNKNOWN_SITE");
+}
+
+#[tokio::test]
+async fn review_graphql_history_and_board() {
+    let (state, _, _, d1) = carp_seeded().await;
+    let q = format!(
+        "query($site: ID!, $from: Time, $to: Time) {{ reviewHistory(site: $site, from: $from, to: $to) {{
+            site from to evaluations initial {{ status }} transitions {{ at from to cleared reasons {{ {REASON_FIELDS} }} }} }} }}"
+    );
+    let body = gql(&state, &q, json!({"site": "BTRL1", "from": iso(d1 - 2 * HOUR), "to": iso(d1 + 8 * HOUR)})).await;
+    let h = &body["data"]["reviewHistory"];
+    assert_eq!((h["site"].as_str(), h["initial"]["status"].as_str()), (Some("BTRL1"), Some("OK")), "{body}");
+    let t = h["transitions"].as_array().unwrap();
+    assert_eq!(t.len(), 2, "{body}");
+    assert_eq!((t[0]["at"].as_str(), t[0]["from"].as_str(), t[0]["to"].as_str()), (Some(iso(d1).as_str()), Some("OK"), Some("REVIEW")));
+    assert_eq!(t[0]["reasons"][0]["rule"], "active_alert");
+    assert_eq!((t[1]["at"].as_str(), t[1]["to"].as_str()), (Some(iso(d1 + 6 * HOUR).as_str()), Some("OK")));
+    assert_eq!(t[1]["cleared"], json!(["active_alert"]));
+    assert!(h["evaluations"].as_i64().unwrap() > 2);
+    // Default window: the 7 days before `to`.
+    let body = gql(&state, &q, json!({"site": "BTRL1", "to": iso(d1 + 8 * HOUR)})).await;
+    assert_eq!(body["data"]["reviewHistory"]["from"], iso(d1 + 8 * HOUR - 7 * DAY), "{body}");
+    // Window validation.
+    let body = gql(&state, &q, json!({"site": "BTRL1", "from": iso(d1), "to": iso(d1 - 1)})).await;
+    assert!(error_message(&body).contains("`from` must not be after `to`"), "{body}");
+    let body = gql(&state, &q, json!({"site": "BTRL1", "from": iso(d1 - 32 * DAY), "to": iso(d1)})).await;
+    assert!(error_message(&body).contains("31-day cap"), "{body}");
+
+    const B: &str = "query($asOf: Time) { reviewBoard(asOf: $asOf) { asOf review ok cannotAssess sites { site status reasons { rule } } } }";
+    let body = gql(&state, B, json!({"asOf": iso(d1 + 4 * HOUR)})).await;
+    let b = &body["data"]["reviewBoard"];
+    let n = state.app.cfg.locations.iter().filter(|l| l.nwps.is_some()).count() as i64;
+    assert_eq!((b["review"].as_i64(), b["ok"].as_i64(), b["cannotAssess"].as_i64()), (Some(1), Some(0), Some(n - 1)), "{body}");
+    let sites = b["sites"].as_array().unwrap();
+    assert_eq!(sites.len() as i64, n);
+    assert_eq!((sites[0]["site"].as_str(), sites[0]["status"].as_str()), (Some("BTRL1"), Some("REVIEW")), "review ranks first");
+    assert!(sites[1..].iter().all(|s| s["status"] == "CANNOT_ASSESS"), "sites with no data are never OK");
+    let body = gql(&state, B, json!({"asOf": iso(d1 + 7 * HOUR)})).await;
+    assert_eq!((body["data"]["reviewBoard"]["review"].as_i64(), body["data"]["reviewBoard"]["ok"].as_i64()), (Some(0), Some(1)), "{body}");
+}
+
+/// Species apps answer every forecast and review query with a typed error and no data.
 #[tokio::test]
 async fn forecast_graphql_species_apps_get_typed_error() {
     for app in ["python", "lionfish"] {
@@ -967,6 +1065,9 @@ async fn forecast_graphql_species_apps_get_typed_error() {
             "{ forecasts(site: \"BTRL1\") { site } }",
             "{ forecastVerify(site: \"BTRL1\", issuedAt: \"2026-09-30T15:00:00Z\") { site } }",
             "{ siteStatusAt(site: \"BTRL1\", asOf: \"2026-09-30T15:00:00Z\") { site } }",
+            "{ siteReview(site: \"BTRL1\") { site } }",
+            "{ reviewHistory(site: \"BTRL1\") { site } }",
+            "{ reviewBoard { review } }",
         ] {
             let body = gql(&state, q, json!({})).await;
             assert_eq!(error_code(&body), "NOT_CONDITIONS_APP", "{app}: {body}");

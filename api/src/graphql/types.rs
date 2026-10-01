@@ -9,6 +9,7 @@ use chrono::{DateTime, SecondsFormat};
 use crate::app::config::App;
 use crate::feed_state;
 use crate::forecast;
+use crate::review;
 
 /// RFC 3339 timestamp, carried as unix milliseconds (the storage format of every time column).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -745,6 +746,223 @@ impl From<forecast::query::Verification> for ForecastVerification {
             peak_observed_ft: v.peak_observed_ft,
             peak_observed_category: v.peak_observed_category.map(Into::into),
             peak_category_hit: v.peak_category_hit,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Needs review (C5): conditions apps only. Mirrors `crate::review`. No field scores abundance,
+// catch, access or trip safety; the feeds cannot establish them.
+// ---------------------------------------------------------------------------------------------
+
+/// REVIEW: a review rule fired. OK: none fired and observation, forecast and thresholds are
+/// current. CANNOT_ASSESS: inputs missing or stale, so OK would be a guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum ReviewStatus {
+    Review,
+    Ok,
+    CannotAssess,
+}
+
+impl From<review::Status> for ReviewStatus {
+    fn from(s: review::Status) -> Self {
+        match s {
+            review::Status::Review => ReviewStatus::Review,
+            review::Status::Ok => ReviewStatus::Ok,
+            review::Status::CannotAssess => ReviewStatus::CannotAssess,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum ReviewSeverity {
+    High,
+    Medium,
+    Info,
+}
+
+impl From<review::Severity> for ReviewSeverity {
+    fn from(s: review::Severity) -> Self {
+        match s {
+            review::Severity::High => ReviewSeverity::High,
+            review::Severity::Medium => ReviewSeverity::Medium,
+            review::Severity::Info => ReviewSeverity::Info,
+        }
+    }
+}
+
+/// FIRED: the rule applies. CLEAR: checked, does not apply. UNKNOWN: could not be checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub enum ReviewOutcome {
+    Fired,
+    Clear,
+    Unknown,
+}
+
+impl From<review::Outcome> for ReviewOutcome {
+    fn from(o: review::Outcome) -> Self {
+        match o {
+            review::Outcome::Fired => ReviewOutcome::Fired,
+            review::Outcome::Clear => ReviewOutcome::Clear,
+            review::Outcome::Unknown => ReviewOutcome::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SimpleObject)]
+pub struct ReviewReason {
+    pub rule: String,
+    pub outcome: ReviewOutcome,
+    pub severity: ReviewSeverity,
+    pub value: Option<f64>,
+    pub value_text: Option<String>,
+    pub threshold: Option<f64>,
+    pub unit: Option<String>,
+    pub source: String,
+    pub observed_at: Option<Time>,
+    pub issued_at: Option<Time>,
+    pub link: Option<String>,
+    pub evidence_ids: Vec<ID>,
+    pub explanation: String,
+}
+
+impl From<review::Reason> for ReviewReason {
+    fn from(r: review::Reason) -> Self {
+        ReviewReason {
+            rule: r.rule.id().into(),
+            outcome: r.outcome.into(),
+            severity: r.severity.into(),
+            value: r.value,
+            value_text: r.value_text,
+            threshold: r.threshold,
+            unit: r.unit.map(Into::into),
+            source: r.source,
+            observed_at: r.observed_at.map(Time),
+            issued_at: r.issued_at.map(Time),
+            link: r.link,
+            evidence_ids: r.evidence_ids.into_iter().map(ID).collect(),
+            explanation: r.explanation,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SimpleObject)]
+pub struct SiteReview {
+    pub site: ID,
+    pub location: ID,
+    pub name: String,
+    pub as_of: Time,
+    pub status: ReviewStatus,
+    pub summary: String,
+    pub reasons: Vec<ReviewReason>,
+    pub checks: Vec<ReviewReason>,
+    pub stage_ft: Option<f64>,
+    pub observed_at: Option<Time>,
+    #[graphql(name = "change24hFt")]
+    pub change_24h_ft: Option<f64>,
+    pub category_now: Option<FloodCategory>,
+    pub peak_stage_ft: Option<f64>,
+    pub peak_at: Option<Time>,
+    pub category_peak: Option<FloodCategory>,
+    pub forecast_issued_at: Option<Time>,
+    pub forecast_source: Option<ForecastSource>,
+    pub observation_freshness: Freshness,
+    pub forecast_freshness: Freshness,
+    pub active_alerts: i32,
+    pub usgs_stage_ft: Option<f64>,
+    pub usgs_observed_at: Option<Time>,
+    pub tidal: bool,
+}
+
+impl From<review::SiteReview> for SiteReview {
+    fn from(r: review::SiteReview) -> Self {
+        SiteReview {
+            site: ID(r.site.lid),
+            location: ID(r.site.location),
+            name: r.site.name,
+            as_of: Time(r.as_of),
+            status: r.status.into(),
+            summary: r.summary,
+            reasons: r.reasons.into_iter().map(Into::into).collect(),
+            checks: r.checks.into_iter().map(Into::into).collect(),
+            stage_ft: r.stage_ft,
+            observed_at: r.observed_at.map(Time),
+            change_24h_ft: r.change_24h_ft,
+            category_now: r.category_now.map(Into::into),
+            peak_stage_ft: r.peak_stage_ft,
+            peak_at: r.peak_at.map(Time),
+            category_peak: r.category_peak.map(Into::into),
+            forecast_issued_at: r.forecast_issued_at.map(Time),
+            forecast_source: r.forecast_source.map(Into::into),
+            observation_freshness: r.observation_freshness.into(),
+            forecast_freshness: r.forecast_freshness.into(),
+            active_alerts: r.active_alerts as i32,
+            usgs_stage_ft: r.usgs_stage_ft,
+            usgs_observed_at: r.usgs_observed_at.map(Time),
+            tidal: r.tidal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SimpleObject)]
+pub struct ReviewBoard {
+    pub as_of: Time,
+    pub review: i32,
+    pub ok: i32,
+    pub cannot_assess: i32,
+    pub sites: Vec<SiteReview>,
+}
+
+impl From<review::Board> for ReviewBoard {
+    fn from(b: review::Board) -> Self {
+        ReviewBoard {
+            as_of: Time(b.as_of),
+            review: b.review as i32,
+            ok: b.ok as i32,
+            cannot_assess: b.cannot_assess as i32,
+            sites: b.sites.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, SimpleObject)]
+pub struct ReviewTransition {
+    pub at: Time,
+    pub from: ReviewStatus,
+    pub to: ReviewStatus,
+    pub reasons: Vec<ReviewReason>,
+    pub cleared: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, SimpleObject)]
+pub struct ReviewHistory {
+    pub site: ID,
+    pub from: Time,
+    pub to: Time,
+    pub initial: SiteReview,
+    pub transitions: Vec<ReviewTransition>,
+    pub evaluations: i32,
+}
+
+impl From<review::History> for ReviewHistory {
+    fn from(h: review::History) -> Self {
+        ReviewHistory {
+            site: ID(h.site.lid),
+            from: Time(h.from),
+            to: Time(h.to),
+            initial: h.initial.into(),
+            transitions: h
+                .transitions
+                .into_iter()
+                .map(|t| ReviewTransition {
+                    at: Time(t.at),
+                    from: t.from.into(),
+                    to: t.to.into(),
+                    reasons: t.reasons.into_iter().map(Into::into).collect(),
+                    cleared: t.cleared.into_iter().map(|r| r.id().to_string()).collect(),
+                })
+                .collect(),
+            evaluations: h.evaluations as i32,
         }
     }
 }

@@ -371,6 +371,113 @@ type ForecastVerification {
   peakCategoryHit: Boolean
 }
 
+# ---------------------------------------------------------------------------------------------
+# Needs review (C5): `siteReview`, `reviewHistory`, `reviewBoard`. Conditions apps only
+# (NOT_CONDITIONS_APP otherwise). Evaluated strictly from the data known at asOf (C3 as-of
+# queries). Conditions only: nothing here estimates carp abundance, catch, access or trip safety.
+# ---------------------------------------------------------------------------------------------
+
+"""
+REVIEW: a review rule fired (stage_rise, forecast_category, active_alert, rapid_change_forecast
+or source_conflict). OK: none fired and observation, 24 h baseline, forecast and thresholds are
+current. CANNOT_ASSESS: an input is missing or stale, so OK would be a guess.
+"""
+enum ReviewStatus { REVIEW OK CANNOT_ASSESS }
+enum ReviewSeverity { HIGH MEDIUM INFO }
+"""FIRED: the rule applies. CLEAR: checked, does not apply. UNKNOWN: could not be checked."""
+enum ReviewOutcome { FIRED CLEAR UNKNOWN }
+
+type ReviewReason {
+  """stage_rise, forecast_category, active_alert, rapid_change_forecast, stale_input, missing_input or source_conflict."""
+  rule: String!
+  outcome: ReviewOutcome!
+  severity: ReviewSeverity!
+  """Measured value: 24 h rise (ft), forecast peak (ft), forecast 24 h rise (ft), age (h), stage difference (ft) or flow ratio."""
+  value: Float
+  """Non-numeric value: category reached, alert event, which input is missing or stale, which conflict."""
+  valueText: String
+  threshold: Float
+  """ft, ft/24 h, h or ratio."""
+  unit: String
+  """nwps-live, iem-archive, nws, nwps, or two joined with + for a conflict."""
+  source: String!
+  """Observation time, forecast valid time of the peak, or when the alert was first seen."""
+  observedAt: Time
+  """Forecast issuance or alert onset."""
+  issuedAt: Time
+  link: String
+  """reading:<lid>:stage_m:<ms>:measured, forecast:<lid>:<issued ms>, alert:<NWS id>."""
+  evidenceIds: [ID!]!
+  """One plain line."""
+  explanation: String!
+}
+
+type SiteReview {
+  """NWPS id."""
+  site: ID!
+  """Config location id."""
+  location: ID!
+  name: String!
+  asOf: Time!
+  status: ReviewStatus!
+  summary: String!
+  """Fired reasons, most severe first."""
+  reasons: [ReviewReason!]!
+  """Every rule's evaluation (fired, clear or unknown), in rule order."""
+  checks: [ReviewReason!]!
+  """Newest NWPS observed stage (the datum the flood categories use)."""
+  stageFt: Float
+  observedAt: Time
+  """NWPS stage change over 24 h; null when stale or no baseline."""
+  change24hFt: Float
+  """NWPS observed stage against the NWPS thresholds known at asOf."""
+  categoryNow: FloodCategory
+  """Forecast peak within the horizon."""
+  peakStageFt: Float
+  peakAt: Time
+  categoryPeak: FloodCategory
+  forecastIssuedAt: Time
+  forecastSource: ForecastSource
+  observationFreshness: Freshness!
+  forecastFreshness: Freshness!
+  activeAlerts: Int!
+  """Newest USGS stage, display only: its datum can differ from NWPS (KRZL1 -2.45 ft), so it is never compared with flood thresholds."""
+  usgsStageFt: Float
+  usgsObservedAt: Time
+  """Tidal site: larger noise floors for stage rise and forecast rise."""
+  tidal: Boolean!
+}
+
+type ReviewBoard {
+  asOf: Time!
+  review: Int!
+  ok: Int!
+  cannotAssess: Int!
+  """REVIEW first (most severe first), then CANNOT_ASSESS, then OK."""
+  sites: [SiteReview!]!
+}
+
+type ReviewTransition {
+  at: Time!
+  from: ReviewStatus!
+  to: ReviewStatus!
+  """Fired reasons right after the flip."""
+  reasons: [ReviewReason!]!
+  """Rules that fired before the flip and no longer do."""
+  cleared: [String!]!
+}
+
+type ReviewHistory {
+  site: ID!
+  from: Time!
+  to: Time!
+  """The review at `from`."""
+  initial: SiteReview!
+  transitions: [ReviewTransition!]!
+  """Instants evaluated: `from` plus every time an input could change in the window."""
+  evaluations: Int!
+}
+
 type Query {
   feeds: [FeedState!]!
   sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
@@ -393,6 +500,12 @@ type Query {
   forecastVerify(site: ID!, issuedAt: Time!): ForecastVerification!
   """What was known about a site at asOf; conflictFt (default 1) is the gauge-vs-forecast difference that counts as a conflict. Conditions apps only."""
   siteStatusAt(site: ID!, asOf: Time!, conflictFt: Float): SiteStatus!
+  """Needs-review status of a site (NWPS id or location id) from the data known at asOf (default now). Conditions apps only."""
+  siteReview(site: ID!, asOf: Time): SiteReview!
+  """Status flips of a site in from..to (default the 7 days before to; to defaults to now; at most 31 days). Conditions apps only."""
+  reviewHistory(site: ID!, from: Time, to: Time): ReviewHistory!
+  """Every configured site's review at asOf (default now), REVIEW first, with counts. Conditions apps only."""
+  reviewBoard(asOf: Time): ReviewBoard!
 }
 
 type Mutation {

@@ -67,5 +67,17 @@
     "tools": ["readings", "alerts", "evidence", "feeds", "view"],
     "refusal": "Carp Field Conditions covers river and weather conditions at the Louisiana demonstration locations only. It cannot estimate carp abundance, expected catch, legal access or trip safety."
   },
-  "eval": { "goldenSet": "carp" }
+  "eval": { "goldenSet": "carp" },
+  "review": {
+    "stageRiseFt": 2.0,
+    "tidalSites": ["MCGL1"],
+    "tidalStageRiseFt": 3.0,
+    "forecastHorizonHours": 72,
+    "rapidRiseFtPer24h": 2.0,
+    "tidalRapidRiseFtPer24h": 3.0,
+    "staleObservationHours": 6,
+    "staleForecastHours": 36,
+    "conflictFt": 1.0,
+    "flowConflictRatio": 1.5
+  }
 }

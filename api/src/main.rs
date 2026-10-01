@@ -15,6 +15,7 @@ mod ingest;
 mod media;
 mod model;
 mod realtime;
+mod review;
 mod source_pages;
 mod state;
 mod taxon_info;

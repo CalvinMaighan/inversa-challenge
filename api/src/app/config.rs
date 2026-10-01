@@ -285,6 +285,9 @@ pub struct AppConfig {
     pub helper_questions: Vec<String>,
     pub agent: AgentCfg,
     pub eval: EvalCfg,
+    /// "Needs review" thresholds of a conditions app (`crate::review`); defaults when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<crate::review::ReviewCfg>,
 }
 
 /// The config files, compiled in: the binary needs no path to `spec/` at runtime.
@@ -345,6 +348,11 @@ impl AppConfig {
         match self.kind {
             AppKind::Species if self.taxa.is_empty() => return Err("kind species needs at least one taxon".into()),
             AppKind::Conditions if !self.taxa.is_empty() => return Err("kind conditions must list no taxa".into()),
+            _ => {}
+        }
+        match (&self.review, self.kind) {
+            (Some(_), AppKind::Species) => return Err("review is for kind conditions apps only".into()),
+            (Some(r), _) => r.validate()?,
             _ => {}
         }
         if self.taxa.len() > u8::MAX as usize {
