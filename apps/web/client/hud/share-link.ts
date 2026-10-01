@@ -3,14 +3,16 @@
  *
  * The hash is a URLSearchParams string, readable by a person and stable under round trip:
  *
- *   #v=1&c=25.76170,-80.19180,45000,12.5,-62.0&t=2026-09-30T20:30Z&l=sightings,hotspots&sp=python&e=sighting:123
+ *   #v=2&app=python&c=25.76170,-80.19180,45000,12.5,-62.0&t=2026-09-30T20:30Z&l=sightings,hotspots&sp=python&e=sighting:123
  *
+ * - `app` (v=2, PLAN.md C-A5): the app the view belongs to. Species keys and layers are that app's. A `v=1` link
+ *   predates the apps and decodes as python (the Everglades build it was made in).
  * - `c`: lat, lon (5 decimals, about 1 m), altitude in metres, heading and pitch in degrees (1 decimal).
  * - `t`: the TIME cursor, UTC to the minute (frames are 15-minute steps, so nothing finer exists).
  * - `l`: visible layers, explicit, so layers hidden by default come back on too. Empty means none visible.
- * - `sp`: species filter keys shown (the four focus species and the categories `snakes` … `other`, T44),
- *   omitted when it is the default (every focus species and animal category on; insects, spiders, plants and
- *   other off).
+ * - `sp`: species filter keys shown (the app's focus species and the categories `snakes` … `other`, T44),
+ *   omitted when it is the app's default (every focus species and animal category on; insects, spiders, plants
+ *   and other off).
  * - `st`: taxon overrides on top of the categories (T44): taxon ids shown, hidden ones with a leading `-`.
  * - `w`: the sightings window in hours (48, 168 or 720), omitted at the default.
  * - `e`: selected evidence id (PLAN.md C14).
@@ -21,8 +23,10 @@
  */
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { isWindowHours, LAYERS, SPECIES_FILTER_IDS, type SpeciesFilterId } from "client/state/layers";
+import { activeApp, V1_APP } from "client/state/app";
+import { isWindowHours, layersFor, speciesFilterIds, type SpeciesFilterId } from "client/state/layers";
 import { parseEvidenceId } from "client/state/selection";
+import { getApp, isAppId, type AppConfig, type AppId } from "shared/apps";
 import type { SightingWindowHours } from "shared/frames";
 
 export type LayerId = (typeof LAYER_IDS)[number];
@@ -31,6 +35,8 @@ export type SpeciesId = SpeciesFilterId;
 export type ShareCamera = { lat: number; lon: number; altitudeM: number; heading: number; pitch: number };
 
 export type ShareState = {
+  /** The app the view belongs to (v=2). */
+  app?: AppId;
   camera?: ShareCamera;
   /** RFC 3339 UTC. */
   at?: string;
@@ -45,12 +51,15 @@ export type ShareState = {
   evidenceId?: string | null;
 };
 
-/** The default species filter as a shown-key list. */
-export const DEFAULT_SPECIES: readonly SpeciesId[] = SPECIES_FILTER_IDS.filter((id) => LAYERS.defaults.species[id]);
+/** An app's default species filter as a shown-key list. */
+export function defaultSpecies(app: AppConfig): SpeciesId[] {
+  const { species } = layersFor(app);
+  return speciesFilterIds(app).filter((id) => species[id] === true);
+}
 
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v) => b.includes(v));
 
-export const SHARE_LINK_VERSION = 1;
+export const SHARE_LINK_VERSION = 2;
 const MAX_ALTITUDE_M = 20_000_000;
 const MIN_ALTITUDE_M = 1;
 
@@ -72,10 +81,12 @@ export function compactIso(iso: string): string | null {
   return new Date(Math.round(ms / 60_000) * 60_000).toISOString().replace(":00.000Z", "Z");
 }
 
-/** State → hash body (no leading `#`). Fields left undefined are omitted. */
+/** State → hash body (no leading `#`). Fields left undefined are omitted; species defaults are those of `state.app`. */
 export function encodeShareLink(state: ShareState): string {
   const params = new URLSearchParams();
   params.set("v", String(SHARE_LINK_VERSION));
+  if (state.app) params.set("app", state.app);
+  const app = state.app ? getApp(state.app) : activeApp();
   const c = state.camera;
   if (c && [c.lat, c.lon, c.altitudeM, c.heading, c.pitch].every(Number.isFinite)) {
     params.set(
@@ -88,13 +99,13 @@ export function encodeShareLink(state: ShareState): string {
     if (t) params.set("t", t);
   }
   if (state.layers) params.set("l", LAYER_IDS.filter((id) => state.layers!.includes(id)).join(","));
-  if (state.species && !sameList(state.species, DEFAULT_SPECIES)) {
-    params.set("sp", SPECIES_FILTER_IDS.filter((id) => state.species!.includes(id)).join(","));
+  if (state.species && !sameList(state.species, defaultSpecies(app))) {
+    params.set("sp", speciesFilterIds(app).filter((id) => state.species!.includes(id)).join(","));
   }
   if (state.taxa && state.taxa.length > 0) {
     params.set("st", [...state.taxa].sort((a, b) => a[0] - b[0]).map(([id, shown]) => `${shown ? "" : "-"}${id}`).join(","));
   }
-  if (state.hours !== undefined && state.hours !== LAYERS.defaults.sightingHours) params.set("w", String(state.hours));
+  if (state.hours !== undefined && state.hours !== layersFor(app).sightingHours) params.set("w", String(state.hours));
   if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
   // link stays readable.
@@ -122,19 +133,26 @@ function decodeList<T extends string>(raw: string | null, allowed: readonly T[])
   return allowed.filter((id) => wanted.has(id));
 }
 
-/** Hash (with or without `#`) → the fields it carries. Unknown versions and invalid fields decode to nothing. */
+/**
+ * Hash (with or without `#`) → the fields it carries. `v=2` carries its app (an unknown or missing one leaves
+ * `app` out); `v=1` (and a hash with no version) decodes as python. Unknown versions and invalid fields decode to
+ * nothing. Species keys are checked against the link's app.
+ */
 export function decodeShareLink(hash: string): ShareState {
   const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-  const version = params.get("v");
-  if (version !== null && version !== String(SHARE_LINK_VERSION)) return {};
+  const version = params.get("v") ?? "1";
+  if (version !== "1" && version !== String(SHARE_LINK_VERSION)) return {};
   const out: ShareState = {};
+  const linkApp = version === "1" ? V1_APP : params.get("app");
+  if (isAppId(linkApp)) out.app = linkApp;
+  const app = out.app ? getApp(out.app) : activeApp();
   const camera = decodeCamera(params.get("c"));
   if (camera) out.camera = camera;
   const t = params.get("t");
   if (t && Number.isFinite(Date.parse(t))) out.at = new Date(Date.parse(t)).toISOString();
   const layers = decodeList(params.get("l"), LAYER_IDS);
   if (layers) out.layers = layers;
-  const species = decodeList(params.get("sp"), SPECIES_FILTER_IDS);
+  const species = decodeList(params.get("sp"), speciesFilterIds(app));
   if (species) out.species = species;
   const st = params.get("st");
   if (st !== null) {
@@ -152,7 +170,10 @@ export function decodeShareLink(hash: string): ShareState {
   return out;
 }
 
-/** True when the hash carries at least one share-link field. */
+/**
+ * True when the hash carries at least one view field. An app alone (the bare `#v=1` an empty old link decodes
+ * to) is not a view.
+ */
 export function hasShareFields(state: ShareState): boolean {
-  return Object.keys(state).length > 0;
+  return Object.keys(state).some((k) => k !== "app");
 }

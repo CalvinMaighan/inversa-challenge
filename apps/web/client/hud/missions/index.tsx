@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { speciesIds } from "shared/apps";
 
 import { getGlobe } from "client/globe/api";
 import { ME, type MeState } from "client/state/me";
@@ -245,7 +246,7 @@ function focusMission(m: Mission | null): void {
   if (m) getGlobe()?.flyTo({ lon: m.lon, lat: m.lat, altitudeM: FOCUS_ALTITUDE_M });
 }
 
-const emptyForm: MissionForm = { title: "", species: SPECIES_IDS[0], cell: "", at: "" };
+const emptyForm = (): MissionForm => ({ title: "", species: speciesIds(activeApp())[0] ?? "", cell: "", at: "" });
 
 /**
  * This node's removal totals (PLAN.md C5: the op carries the node's running total). `readBoard` returns merged
@@ -270,7 +271,7 @@ function counterStore(): CounterStore {
  * Keyed on the selection by its parent, so a new cell mounts a fresh form.
  */
 function NewMission({ team, hotspot }: { team: Team; hotspot: HotspotRef | null }) {
-  const [form, setForm] = useState<MissionForm>(() => (hotspot ? formFromHotspot(hotspot) : emptyForm));
+  const [form, setForm] = useState<MissionForm>(() => (hotspot ? formFromHotspot(hotspot) : emptyForm()));
   const [errors, setErrors] = useState<FormErrors>({});
   const [busy, setBusy] = useState(false);
 
@@ -314,7 +315,7 @@ function NewMission({ team, hotspot }: { team: Team; hotspot: HotspotRef | null 
         <Field>
           Species
           <Select name="species" value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })} data-testid="mission-species">
-            {SPECIES_IDS.map((s) => (
+            {speciesIds(activeApp()).map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -513,7 +514,7 @@ function PanelBody({ team }: { team: Team }) {
               <Pill $tone="ok">
                 total <Mono data-testid="totals-overall">{model?.totals.overall ?? 0}</Mono>
               </Pill>
-              {SPECIES_IDS.map((s) => (
+              {speciesIds(activeApp()).map((s) => (
                 <Pill key={s} $tone="muted" data-testid={`totals-${s}`}>
                   {s} <Mono>{model?.totals.bySpecies[s] ?? 0}</Mono>
                 </Pill>

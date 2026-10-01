@@ -5,7 +5,8 @@
  */
 import type { BillboardCollection } from "cesium";
 
-import { REGION_BBOX } from "client/state/view";
+import { activeApp } from "client/state/app";
+import { appBBox } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
@@ -151,7 +152,7 @@ export function createStationsLayer(ctx: LayerContext): GlobeLayer {
       return ctx
         .gql<{ readings: GqlReading[] }>(
           READINGS_QUERY,
-          { bbox: { ...REGION_BBOX }, from: new Date(to - LOOKBACK_MS).toISOString(), to: new Date(to).toISOString(), params: [...IN_SITU_PARAMS] },
+          { bbox: appBBox(activeApp()), from: new Date(to - LOOKBACK_MS).toISOString(), to: new Date(to).toISOString(), params: [...IN_SITU_PARAMS] },
           signal,
         )
         .then((d) => latestPerStation(d.readings));

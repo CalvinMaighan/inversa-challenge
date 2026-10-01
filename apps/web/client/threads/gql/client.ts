@@ -2,25 +2,53 @@
  * GraphQL over HTTP and graphql-transport-ws, as the gql worker runs them. `WebSocket` and `fetch` are
  * injectable so the reconnect logic runs under bun against fakes.
  */
+import { DEFAULT_APP_ID, isAppId, type AppId } from "shared/apps";
+
 import { backoffMs } from "./backoff";
 import type { GqlResult, GqlVariables, Sink, SocketStatus } from "./protocol";
 
-export const GRAPHQL_HTTP_PATH = "/v1/graphql";
+/** The app's GraphQL path (PLAN.md C-A2). There is no unprefixed `/v1/graphql`. */
+export function graphqlPath(app: AppId): string {
+  return `/v1/${app}/graphql`;
+}
+
+/** The app's bulk frames path (C-A2). */
+export function framesPath(app: AppId): string {
+  return `/v1/${app}/frames`;
+}
+
+/** A worker's app, from its `name` (`inversa-gql:<app>`, `client/threads/boot.ts` workerName). */
+export function appFromWorkerName(name: string | undefined): AppId {
+  const app = name?.split(":")[1];
+  return isAppId(app) ? app : DEFAULT_APP_ID;
+}
+
 export const WS_PROTOCOL = "graphql-transport-ws";
 /** Axum's dev bind (PLAN.md C13). Next does not proxy WebSockets, so dev connects straight to it. */
-export const DEV_WS_URL = "ws://127.0.0.1:4041/v1/graphql";
+export const DEV_WS_ORIGIN = "ws://127.0.0.1:4041";
 
 export type ResolveWsOptions = {
+  /** `NEXT_PUBLIC_INVERSA_WS_URL`: an origin, a URL ending in `/v1/graphql` (the app is put in), or one with `{app}`. */
   explicit?: string;
   dev: boolean;
   location: { protocol: string; host: string };
+  app: AppId;
 };
 
+/** `explicit` with the app in its path. */
+function explicitWsUrl(explicit: string, app: AppId): string {
+  if (explicit.includes("{app}")) return explicit.replaceAll("{app}", app);
+  const trimmed = explicit.replace(/\/+$/, "");
+  const legacy = "/v1/graphql"; // legacy-url: a pre-C-A2 setting, rewritten to the app's path
+  if (trimmed.endsWith(legacy)) return `${trimmed.slice(0, -legacy.length)}${graphqlPath(app)}`;
+  return `${trimmed}${graphqlPath(app)}`;
+}
+
 /** `NEXT_PUBLIC_INVERSA_WS_URL` wins; dev falls back to Axum directly; prod rides the page origin (Caddy). */
-export function resolveWsUrl({ explicit, dev, location }: ResolveWsOptions): string {
-  if (explicit) return explicit;
-  if (dev) return DEV_WS_URL;
-  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${GRAPHQL_HTTP_PATH}`;
+export function resolveWsUrl({ explicit, dev, location, app }: ResolveWsOptions): string {
+  if (explicit) return explicitWsUrl(explicit, app);
+  if (dev) return `${DEV_WS_ORIGIN}${graphqlPath(app)}`;
+  return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${graphqlPath(app)}`;
 }
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;

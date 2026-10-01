@@ -8,14 +8,16 @@ import { statusColor } from "client/globe/layers/missions";
 import { STATION_SOURCES, stationColor } from "client/globe/layers/stations";
 import type { LayerStats } from "client/globe/layers/types";
 import { HATCH_RGBA, HEAT_STOPS, LST_RANGE_C, SST_RANGE_C, TEMP_STOPS, type RampStop } from "client/globe/ramp";
-import { categoryShown, SPECIES_COLORS } from "client/globe/species";
+import { categoryShown } from "client/globe/species";
+import { activeApp } from "client/state/app";
 import { sightingHoursOf, type LayerId, type LayersState, type SpeciesFilterId, type SpeciesId } from "client/state/layers";
 import { isFocusTaxon, taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { windowLabel } from "shared/frames";
-import { CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { hasLayer, speciesIds, type AppConfig } from "shared/apps";
+import { CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, type CategoryId } from "shared/species-categories";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { NETWORK_LABELS, SPECIES_NAMES } from "../tooltip/model";
+import { NETWORK_LABELS } from "../tooltip/model";
 
 const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
 
@@ -89,8 +91,11 @@ export function categoryCounts(breakdown: Readonly<Record<string, number>> | und
   return out;
 }
 
-/** Every legend row, in globe draw order top-down as a reader scans the map: points first, rasters last. */
-export function legendRows(layers: LayersState, stats: readonly LayerStats[] | null, taxa: Readonly<Record<string, TaxonInfo>> = {}): LegendRow[] {
+/**
+ * Every legend row of the active app's layers (C-A3 `layers[]`: carp has no sightings or hotspots row), in globe
+ * draw order top-down as a reader scans the map: points first, rasters last.
+ */
+export function legendRows(layers: LayersState, stats: readonly LayerStats[] | null, taxa: Readonly<Record<string, TaxonInfo>> = {}, app: AppConfig = activeApp()): LegendRow[] {
   const row = (layer: LayerId, rest: Omit<LegendRow, "layer" | "visible" | "count" | "error">): LegendRow => {
     const s = statsFor(stats, layer);
     return { layer, visible: layers.visible[layer] !== false, count: s ? s.count : null, error: s?.error ?? null, ...rest };
@@ -106,15 +111,15 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
       note: `One marker per sighting in the last ${windowLabel(sightingHoursOf(layers))}, its kind's icon in its colour, fading with age. White ring: selected. Red ring: the IDs conflict.`,
       unit: "drawn",
       swatches: [
-        ...SPECIES_IDS.map((id, i) => ({
-          key: id,
-          label: SPECIES_NAMES[i]!,
-          color: SPECIES_COLORS[i]!,
+        ...app.taxa.map((taxon, i) => ({
+          key: speciesIds(app)[i]!,
+          label: taxon.name,
+          color: taxon.color,
           shape: "icon" as const,
-          icon: FOCUS_CATEGORIES[i]!,
+          icon: taxon.category ?? ("other" as const),
           count: part(sightings, String(i + 1)),
-          species: id,
-          on: layers.species[id] !== false,
+          species: speciesIds(app)[i]!,
+          on: layers.species[speciesIds(app)[i]!] !== false,
         })),
         ...CATEGORY_IDS.map((id) => ({
           key: id,
@@ -184,7 +189,7 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
       swatches: [],
       ramp: { css: rampGradient(TEMP_STOPS), min: `${SST_RANGE_C.min} °C`, max: `${SST_RANGE_C.max} °C`, caption: "°C" },
     }),
-  ];
+  ].filter((r) => hasLayer(app, r.layer));
 }
 
 /** The data-gaps row: what the hatching on the rasters and the timeline means. Colours are CSS (theme tokens). */

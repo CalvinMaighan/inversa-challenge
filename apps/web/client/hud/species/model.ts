@@ -7,13 +7,14 @@
  * - `categoryRows`: every category (snakes, lizards, …, plants, other) with its icon colour, count, switch and
  *   its most-seen species, each with its own switch.
  */
-import { colorOfTaxon, categoryShown, SPECIES_COLORS, taxonShown } from "client/globe/species";
+import { colorOfTaxon, categoryShown, taxonShown } from "client/globe/species";
+import { activeApp } from "client/state/app";
 import { type LayersState, type SpeciesFilterId } from "client/state/layers";
 import { isFocusTaxon, taxonCategory, taxonName, type TaxonInfo } from "client/state/taxa";
-import { ANIMAL_CATEGORIES, CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, FOCUS_CATEGORIES, type CategoryId } from "shared/species-categories";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { ANIMAL_CATEGORIES, CATEGORY_COLORS, CATEGORY_IDS, CATEGORY_LABELS, type CategoryId } from "shared/species-categories";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { SPECIES_GUIDE } from "../help/content";
+import { OTHER_GUIDE, speciesGuide } from "../help/content";
 
 const [SIGHTINGS] = LAYER_IDS;
 /** Non-focus animal chips in the bar: the most-seen taxa of the window. A phone shows the first MOBILE_ANIMAL_CHIPS of them. */
@@ -21,7 +22,7 @@ export const TOP_ANIMAL_CHIPS = 6;
 export const MOBILE_ANIMAL_CHIPS = 3;
 /** Species listed under a category in the popover. */
 export const TOP_CATEGORY_SPECIES = 8;
-/** The "Other" chip's key and guide entry (SPECIES_GUIDE's fifth row). */
+/** The "Other" chip's key (its guide entry is OTHER_GUIDE). */
 export const OTHER_CHIP: CategoryId = "other";
 
 /** One chip of the bar: a focus species, a top animal, or the "Other" chip. */
@@ -78,10 +79,14 @@ function seenTaxa(taxa: Readonly<Record<string, TaxonInfo>>, breakdown: Readonly
 
 export function speciesChips(filter: LayersState["species"], taxa: Readonly<Record<string, TaxonInfo>>, breakdown: Readonly<Record<string, number>> | null): ChipModel[] {
   const count = (key: string) => (breakdown ? (breakdown[key] ?? 0) : null);
-  const chips: ChipModel[] = SPECIES_IDS.map((id, i) => {
-    const guide = SPECIES_GUIDE[i]!;
-    return { key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: SPECIES_COLORS[i]!, category: FOCUS_CATEGORIES[i]!, on: filter[id] !== false, count: count(String(i + 1)) };
-  });
+  const app = activeApp();
+  const chips: ChipModel[] = speciesGuide(app)
+    .slice(0, app.taxa.length)
+    .map((guide, i) => {
+      const id = guide.id;
+      const taxon = app.taxa[i]!;
+      return { key: id, target: { kind: "species", id }, name: guide.name, full: guide.full, line: guide.line, color: taxon.color, category: taxon.category ?? OTHER_CHIP, on: filter[id] !== false, count: count(String(i + 1)) };
+    });
   const seen = seenTaxa(taxa, breakdown);
   const animals = seen.filter((s) => s.n > 0 && ANIMAL_CATEGORIES.includes(s.category));
   for (const [rank, { id, n, info, category }] of animals.slice(0, TOP_ANIMAL_CHIPS).entries()) {
@@ -99,7 +104,7 @@ export function speciesChips(filter: LayersState["species"], taxa: Readonly<Reco
       count: breakdown ? n : null,
     });
   }
-  const other = SPECIES_GUIDE[SPECIES_IDS.length]!;
+  const other = OTHER_GUIDE;
   chips.push({
     key: OTHER_CHIP,
     target: { kind: "categories" },

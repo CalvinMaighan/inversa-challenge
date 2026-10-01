@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import { PYTHON_LAYERS, SPECIES_COLORS, selectPython } from "@/tests/client/python-app";
 import { get, init, set } from "@calvinjs/active-state";
 
 import { categoryOfTaxon, isFocusTaxon, TAXA, taxonCategory, taxonName, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { ensureTaxa, normalizeTaxon, putTaxa, taxonIdsOf } from "client/hud/taxa";
 import { categoryRows, firstSentence, speciesChips, TOP_ANIMAL_CHIPS, TOP_CATEGORY_SPECIES } from "client/hud/species/model";
-import { LAYERS } from "client/state/layers";
-import { colorOfTaxon, NEUTRAL_COLOR, SPECIES_COLORS } from "client/globe/species";
+import { colorOfTaxon, NEUTRAL_COLOR } from "client/globe/species";
 import { state } from "client/state";
 import { CATEGORY_ANCESTORS, CATEGORY_COLORS, CATEGORY_IDS, type CategoryId } from "shared/species-categories";
 import type { SightingRecord } from "shared/frames";
+
+selectPython();
 
 init(state);
 
@@ -104,7 +106,7 @@ describe("taxa store (T44)", () => {
   const breakdown = { "1": 0, "2": 0, "3": 5, "4": 0, "10": 40, "11": 20, "12": 300, "13": 9, "14": 8, "15": 7, "16": 6, "17": 5, "18": 4, "19": 3, "20": 2, "21": 1 };
 
   test("the bar's chips: focus pinned first even at 0, the most-seen animals next with their kind's icon and colour, then Other", () => {
-    const chips = speciesChips(LAYERS.defaults.species, taxa, breakdown);
+    const chips = speciesChips(PYTHON_LAYERS.species, taxa, breakdown);
     expect(chips.map((c) => c.key)).toEqual(["python", "tegu", "iguana", "lionfish", "t10", "t11", "t14", "t15", "t16", "t17", "other"]);
     expect(TOP_ANIMAL_CHIPS).toBe(6);
     expect(chips.slice(0, 4).map((c) => c.count)).toEqual([0, 0, 5, 0]);
@@ -118,21 +120,21 @@ describe("taxa store (T44)", () => {
     expect(colorOfTaxon(10, taxa)).toBe(CATEGORY_COLORS.lizards);
     expect(colorOfTaxon(20, taxa)).toBe(NEUTRAL_COLOR);
     // Filters show on the chips: a taxon override, a focus species off, every category off.
-    const filtered = speciesChips({ ...LAYERS.defaults.species, iguana: false, t10: false }, taxa, breakdown);
+    const filtered = speciesChips({ ...PYTHON_LAYERS.species, iguana: false, t10: false }, taxa, breakdown);
     expect(filtered.find((c) => c.key === "iguana")!.on).toBe(false);
     expect(filtered.find((c) => c.key === "t10")!.on).toBe(false);
     const none = Object.fromEntries(CATEGORY_IDS.map((id) => [id, false]));
-    expect(speciesChips({ ...LAYERS.defaults.species, ...none }, taxa, breakdown).find((c) => c.key === "other")!.on).toBe(false);
+    expect(speciesChips({ ...PYTHON_LAYERS.species, ...none }, taxa, breakdown).find((c) => c.key === "other")!.on).toBe(false);
     // Before the globe reports: counts unknown, the four focus chips and Other still there.
-    expect(speciesChips(LAYERS.defaults.species, taxa, null).map((c) => c.key)).toEqual(["python", "tegu", "iguana", "lionfish", "other"]);
-    expect(speciesChips(LAYERS.defaults.species, taxa, null)[0]!.count).toBeNull();
+    expect(speciesChips(PYTHON_LAYERS.species, taxa, null).map((c) => c.key)).toEqual(["python", "tegu", "iguana", "lionfish", "other"]);
+    expect(speciesChips(PYTHON_LAYERS.species, taxa, null)[0]!.count).toBeNull();
     expect(firstSentence("One. Two.")).toBe("One.");
     expect(firstSentence("No end")).toBe("No end");
     expect(firstSentence(null)).toBeNull();
   });
 
   test("the categories popover: every category with its count, switch and most-seen species; unknown taxa and unsplit reptiles under Other", () => {
-    const rows = categoryRows(LAYERS.defaults.species, taxa, breakdown);
+    const rows = categoryRows(PYTHON_LAYERS.species, taxa, breakdown);
     expect(rows.map((r) => r.id)).toEqual([...CATEGORY_IDS]);
     expect(TOP_CATEGORY_SPECIES).toBe(8);
     const by = Object.fromEntries(rows.map((r) => [r.id, r]));
@@ -152,9 +154,9 @@ describe("taxa store (T44)", () => {
     expect(by.other!.species.map((s) => s.name)).toEqual(["Species 20", "Worm lizard"]);
     expect(by.turtles).toMatchObject({ count: 0, species: [] });
     // Overrides and switches show per row.
-    const filtered = categoryRows({ ...LAYERS.defaults.species, plants: true, t10: false }, taxa, breakdown);
+    const filtered = categoryRows({ ...PYTHON_LAYERS.species, plants: true, t10: false }, taxa, breakdown);
     expect(filtered.find((r) => r.id === "plants")!.on).toBe(true);
     expect(filtered.find((r) => r.id === "lizards")!.species[0]!.on).toBe(false);
-    expect(categoryRows(LAYERS.defaults.species, taxa, null).every((r) => r.count === null && r.species.length === 0)).toBe(true);
+    expect(categoryRows(PYTHON_LAYERS.species, taxa, null).every((r) => r.count === null && r.species.length === 0)).toBe(true);
   });
 });

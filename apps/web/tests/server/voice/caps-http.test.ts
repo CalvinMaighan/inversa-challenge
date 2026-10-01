@@ -44,7 +44,7 @@ function mockXai(): MockXai {
 }
 
 const openRequest = (ip = "203.0.113.7") =>
-  new Request("http://localhost/api/voice/session", { method: "POST", headers: { "x-forwarded-for": `${ip}, 10.0.0.1` }, body: "{}" });
+  new Request("http://localhost/api/voice/session?app=python", { method: "POST", headers: { "x-forwarded-for": `${ip}, 10.0.0.1` }, body: "{}" });
 
 async function openOk(registry: VoiceSessionRegistry, ip?: string): Promise<VoiceSessionOpenResponse> {
   const res = await handleOpenSession(openRequest(ip), registry);

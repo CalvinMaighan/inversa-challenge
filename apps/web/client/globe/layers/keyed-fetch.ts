@@ -3,14 +3,16 @@
  * at the cursor on every frame; during playback that is many asks for few distinct buckets, so at most one
  * request is in flight and only the newest wanted bucket is fetched after it.
  */
+import { activeAppId } from "client/state/app";
 
 /**
  * Cache key for a time bucket at the current data revision. The revision moves when the db worker republishes
  * the grid (a window load, or new rows upstream: `framesUpdated`), so live data refetches the bucket instead
- * of serving what the cache held before the rows landed. Scrubbing does not move it.
+ * of serving what the cache held before the rows landed. Scrubbing does not move it. The active app is part of
+ * the key, so right after an app switch the previous app's rows are never served from the cache.
  */
 export function dataKey(bucketMs: number, ctx: { revision(): number }): string {
-  return `${bucketMs}|${ctx.revision()}`;
+  return `${bucketMs}|${ctx.revision()}|${activeAppId()}`;
 }
 
 /** The bucket time a `dataKey` was made from. */

@@ -35,7 +35,7 @@ afterAll(() => {
 
 const agentPost = (ip: string) =>
   agentRoute(new Request("http://localhost/api/agent/stream", { method: "POST", headers: { "x-forwarded-for": `${ip}, 10.0.0.1` }, body: "{not json" }));
-const voicePost = (ip: string) => voiceRoute(new Request("http://localhost/api/voice/session", { method: "POST", headers: { "x-forwarded-for": ip }, body: "{}" }));
+const voicePost = (ip: string) => voiceRoute(new Request("http://localhost/api/voice/session?app=python", { method: "POST", headers: { "x-forwarded-for": ip }, body: "{}" }));
 
 describe("rate limit", () => {
   test("rate limit: /api/agent/stream answers the 11th request from one IP within a minute with 429", async () => {

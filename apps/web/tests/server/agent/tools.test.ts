@@ -13,11 +13,14 @@ import type { TableView } from "@/shared/agent/results";
 import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
 import { startStub } from "@/eval/stub-server";
 import type { AgentStreamEvent } from "@/shared/agent/events";
+import { getApp } from "@/shared/apps";
+
+const PYTHON = getApp("python");
 
 let env: AgentEnv;
 const emitted: AgentStreamEvent[] = [];
-const ctx: CapabilityContext = { now: NOW, emit: (event) => emitted.push(event) };
-const registry = buildAgentRegistry();
+const ctx: CapabilityContext = { app: PYTHON, now: NOW, emit: (event) => emitted.push(event) };
+const registry = buildAgentRegistry(PYTHON);
 const BISCAYNE = { west: -80.35, south: 25.35, east: -80.05, north: 25.9 };
 const HOMESTEAD = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
 
@@ -106,9 +109,9 @@ describe("capability tools", () => {
       ["lionfishes", "lionfish"],
       ["Pterois volitans", "lionfish"],
     ] as const) {
-      expect([name, focusKeyOf(name)]).toEqual([name, key]);
+      expect([name, focusKeyOf(PYTHON, name)]).toEqual([name, key]);
     }
-    for (const name of ["African rock python", "rhinoceros iguana", "brown anole", "Python sebae", ""]) expect([name, focusKeyOf(name)]).toEqual([name, null]);
+    for (const name of ["African rock python", "rhinoceros iguana", "brown anole", "Python sebae", ""]) expect([name, focusKeyOf(PYTHON, name)]).toEqual([name, null]);
     const rows = [
       { id: "9", scientificName: "Anolis distichus", commonName: "Bark Anole", focus: false },
       { id: "5", scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false },
@@ -162,7 +165,9 @@ describe("capability tools", () => {
     const homestead = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
     const output = await run("notes", { bbox: homestead, hours: 24 });
     expect(env.stub.requests.map((request) => request.operationName)).toEqual(["AgentNotes"]);
-    expect(env.stub.requests[0]!.variables).toEqual({ id: "everglades" });
+    // The board is the app's (C-A6), on the app's API (C-A2).
+    expect(env.stub.requests[0]!.variables).toEqual({ id: "python:main" });
+    expect(env.stub.requests[0]!.path).toBe("/v1/python/graphql");
     // Three notes near Homestead inside 24 h, one of them written in the quarter hour after the reference time
     // (the timeline cursor sits on a 15-minute step at the live edge); the Flamingo note is outside the box, the
     // older one outside the window, and the mission note (missionId + body) is not a field note at all.
@@ -216,7 +221,7 @@ describe("capability tools", () => {
   test("geocode and set_view make no GraphQL call", async () => {
     const place = await run("geocode", { place: "the Flamingo visitor center" });
     expect(place.data.name).toBe("Flamingo");
-    expect(place.data.cell).toBe(cellFor(25.1417, -80.9245));
+    expect(place.data.cell).toBe(cellFor(PYTHON, 25.1417, -80.9245));
     await run("set_view", { bbox: BISCAYNE, time: "2026-01-14T12:00:00Z" });
     expect(emitted).toEqual([{ type: "view", bbox: BISCAYNE, time: "2026-01-14T12:00:00.000Z" }]);
     expect(env.stub.requests).toHaveLength(0);
@@ -240,7 +245,7 @@ describe("capability tools", () => {
       expect(urls[0]).toStartWith("https://geocoding-api.open-meteo.com/v1/search?name=Cutler+Bay");
       globalThis.fetch = (async () => Response.json({ results: [{ name: "Cutler", latitude: 40.1, longitude: -100.2 }] })) as unknown as typeof fetch;
       const miss = await registry.execute("geocode", { place: "Cutler Bay" }, ctx);
-      expect(miss).toMatchObject({ ok: false, error: 'No place named "Cutler Bay" inside the operating region' });
+      expect(miss).toMatchObject({ ok: false, error: expect.stringContaining(`No place named "Cutler Bay" inside this app's regions. ${PYTHON.agent.refusal}`) });
     } finally {
       globalThis.fetch = original;
     }
@@ -368,7 +373,7 @@ describe("capability tools", () => {
     const bad = await registry.execute("sightings", { from: "2026-01-15T00:00:00Z", to: "2026-01-14T00:00:00Z" }, ctx);
     expect(bad).toMatchObject({ ok: false, code: "error" });
     const outside = await registry.execute("alerts", { bbox: { west: -100, south: 40, east: -99, north: 41 } }, ctx);
-    expect(outside).toMatchObject({ ok: false, error: expect.stringContaining("outside the operating region") });
+    expect(outside).toMatchObject({ ok: false, error: expect.stringContaining("outside this app's regions (South Florida)") });
   });
 
   test("GraphQL errors surface as tool errors", async () => {
@@ -379,12 +384,12 @@ describe("capability tools", () => {
 
 describe("grid, gazetteer, feeds, cache keys", () => {
   test("cell ids round-trip on the 0.01° grid anchored at 24.3N 83.2W", () => {
-    expect(cellFor(24.3, -83.2)).toBe("0:0");
-    expect(cellFor(25.015, -80.375)).toBe("282:71");
-    const center = cellCenter("282:71")!;
+    expect(cellFor(PYTHON, 24.3, -83.2)).toBe("0:0");
+    expect(cellFor(PYTHON, 25.015, -80.375)).toBe("282:71");
+    const center = cellCenter(PYTHON, "282:71")!;
     expect(center.lat).toBeCloseTo(25.015, 6);
     expect(center.lon).toBeCloseTo(-80.375, 6);
-    expect(cellFor(center.lat, center.lon)).toBe("282:71");
+    expect(cellFor(PYTHON, center.lat, center.lon)).toBe("282:71");
   });
 
   test("gazetteer resolves field names and aliases", () => {

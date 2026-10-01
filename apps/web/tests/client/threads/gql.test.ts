@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import { backoffMs } from "client/threads/gql/backoff";
-import { DEV_WS_URL, postGraphql, resolveWsUrl, SubscriptionClient, type WsLike } from "client/threads/gql/client";
+import { appFromWorkerName, DEV_WS_ORIGIN, framesPath, graphqlPath, postGraphql, resolveWsUrl, SubscriptionClient, type WsLike } from "client/threads/gql/client";
+import { workerName } from "client/threads/boot";
+import { APP_IDS } from "shared/apps";
 import { GqlRpcClient, serveGqlRpc, type GqlHandlers } from "client/threads/gql/protocol";
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
@@ -15,12 +17,32 @@ describe("backoff and urls", () => {
     expect(backoffMs(50)).toBe(30_000);
   });
 
-  test("ws url: explicit, then dev Axum, then the page origin", () => {
+  test("app prefix: ws url: explicit, then dev Axum, then the page origin, always /v1/<app>/graphql", () => {
     const location = { protocol: "https:", host: "ops.example" };
-    expect(resolveWsUrl({ explicit: "ws://x/y", dev: true, location })).toBe("ws://x/y");
-    expect(resolveWsUrl({ dev: true, location })).toBe(DEV_WS_URL);
-    expect(resolveWsUrl({ dev: false, location })).toBe("wss://ops.example/v1/graphql");
-    expect(resolveWsUrl({ dev: false, location: { protocol: "http:", host: "localhost:3050" } })).toBe("ws://localhost:3050/v1/graphql");
+    expect(resolveWsUrl({ explicit: "ws://x:4041/v1/graphql", dev: true, location, app: "lionfish" })).toBe("ws://x:4041/v1/lionfish/graphql");
+    expect(resolveWsUrl({ explicit: "ws://x:4041", dev: true, location, app: "carp" })).toBe("ws://x:4041/v1/carp/graphql");
+    expect(resolveWsUrl({ explicit: "wss://x/api/{app}/ws", dev: true, location, app: "python" })).toBe("wss://x/api/python/ws");
+    expect(resolveWsUrl({ dev: true, location, app: "python" })).toBe(`${DEV_WS_ORIGIN}/v1/python/graphql`);
+    expect(resolveWsUrl({ dev: false, location, app: "carp" })).toBe("wss://ops.example/v1/carp/graphql");
+    expect(resolveWsUrl({ dev: false, location: { protocol: "http:", host: "localhost:3050" }, app: "lionfish" })).toBe("ws://localhost:3050/v1/lionfish/graphql");
+    for (const app of APP_IDS) {
+      for (const url of [resolveWsUrl({ dev: false, location, app }), resolveWsUrl({ dev: true, location, app }), resolveWsUrl({ explicit: "ws://h/v1/graphql", dev: false, location, app })]) {
+        expect(new URL(url).pathname).toBe(`/v1/${app}/graphql`);
+      }
+    }
+  });
+
+  test("app prefix: HTTP and frames paths, and the worker reads its app from its name", () => {
+    expect(graphqlPath("carp")).toBe("/v1/carp/graphql");
+    expect(framesPath("lionfish")).toBe("/v1/lionfish/frames");
+    for (const app of APP_IDS) {
+      expect(appFromWorkerName(workerName("gql", app))).toBe(app);
+      expect(appFromWorkerName(workerName("db", app))).toBe(app);
+    }
+    expect(workerName("db", "python")).toBe("inversa-db:python");
+    // A worker started without a name (an old bundle) serves the default app rather than an unprefixed route.
+    expect(appFromWorkerName(undefined)).toBe("carp");
+    expect(appFromWorkerName("inversa-gql")).toBe("carp");
   });
 
 });

@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
+import { init, set } from "@calvinjs/active-state";
+
+import { state } from "client/state";
+import { APP } from "client/state/app";
+
 
 import { bucketCounts, sparkY } from "client/hud/timeline/sparkline";
 import { formatClocks, isLive } from "client/hud/topbar/clock";
+
+init(state);
 
 describe("sparkline bucketing", () => {
   test("fewer buckets than frames: contiguous, exhaustive, and sums preserved", () => {
@@ -49,9 +56,18 @@ describe("sparkline bucketing", () => {
 
 describe("clocks", () => {
   test("UTC and South Florida local time, with the zone abbreviation", () => {
-    const c = formatClocks(Date.parse("2026-09-30T20:30:05Z"));
+    const c = formatClocks(Date.parse("2026-09-30T20:30:05Z"), "America/New_York");
     expect(c).toEqual({ utc: "20:30:05Z", local: "16:30:05", zone: "EDT", date: "30 SEP" });
-    expect(formatClocks(Date.parse("2026-01-15T12:00:00Z")).zone).toBe("EST");
+    expect(formatClocks(Date.parse("2026-01-15T12:00:00Z"), "America/New_York").zone).toBe("EST");
+  });
+
+  test("active app: local time is the app's zone (carp: Louisiana, python: South Florida)", () => {
+    const at = Date.parse("2026-09-30T20:30:05Z");
+    set(APP, { id: "carp" });
+    expect(formatClocks(at)).toMatchObject({ local: "15:30:05", zone: "CDT" });
+    set(APP, { id: "python" });
+    expect(formatClocks(at)).toMatchObject({ local: "16:30:05", zone: "EDT" });
+    set(APP, APP.defaults);
   });
 
   test("live when the cursor sits on the window end", () => {

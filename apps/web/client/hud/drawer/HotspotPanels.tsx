@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { speciesIds } from "shared/apps";
 
 import styled from "client/styled";
 
@@ -175,7 +176,7 @@ export function BacktestPanel({ initialSpecies, initialDays = 14, onBack }: { in
           </IconButton>
         )}
         <Select aria-label="Species" value={species} onChange={(e) => setSpecies(e.currentTarget.value)}>
-          {SPECIES_IDS.map((s) => (
+          {speciesIds(activeApp()).map((s) => (
             <option key={s} value={s}>
               {s}
             </option>

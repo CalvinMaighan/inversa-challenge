@@ -8,7 +8,7 @@ import { get, set } from "@calvinjs/active-state";
 
 import { categoryOfTaxon, TAXA, type TaxaState, type TaxonInfo } from "client/state/taxa";
 import { gqlRequest, getFrameSightings, onFrameSightings, type FrameSightings } from "client/threads/api";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
 
 export const TAXA_QUERY = `query HudTaxa($ids: [ID!]!) {
   taxa(ids: $ids) { id scientificName commonName focus iconicGroup summary photoUrl pageUrl ancestorIds }
@@ -73,9 +73,9 @@ export async function ensureTaxa(ids: Iterable<number>, request: typeof gqlReque
   }
 }
 
-/** Distinct taxon ids on every published frame, always with the four focus species (their chips are pinned even at 0). */
+/** Distinct taxon ids on every published frame, always with the app's focus species (their chips are pinned even at 0). */
 export function taxonIdsOf(s: FrameSightings): number[] {
-  const out = new Set<number>(SPECIES_IDS.map((_, i) => i + 1));
+  const out = new Set<number>(activeApp().taxa.map((_, i) => i + 1));
   for (let f = 0; f < s.counts.length; f++) for (const r of s.records(f)) out.add(r.taxon);
   return [...out];
 }

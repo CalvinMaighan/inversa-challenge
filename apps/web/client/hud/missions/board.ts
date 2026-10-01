@@ -3,7 +3,8 @@
  * mission form validation, removal counters and totals. No DOM, no workers; `tests/client/hud/missions`
  * runs it under bun.
  */
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { speciesIds } from "shared/apps";
 
 import { cellCenter, type HotspotRef } from "client/hud/drawer/evidence";
 import { type Clock, compare, format } from "client/threads/crdt/hlc";
@@ -12,7 +13,7 @@ import { DELETED_FIELD, type Op } from "client/threads/crdt/types";
 
 export const MISSION_STATUSES = ["planned", "in_progress", "done"] as const;
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
-export type Species = (typeof SPECIES_IDS)[number];
+export type Species = string;
 
 export const MAX_TITLE_CHARS = 120;
 export const MAX_BODY_CHARS = 2_000;
@@ -68,7 +69,7 @@ export function isMissionStatus(v: unknown): v is MissionStatus {
 }
 
 export function isSpecies(v: unknown): v is Species {
-  return typeof v === "string" && (SPECIES_IDS as readonly string[]).includes(v);
+  return typeof v === "string" && speciesIds(activeApp()).includes(v);
 }
 
 /** uuidv7: 48-bit unix ms, version nibble, 74 random bits. Sorts by creation time, like the server's. */
@@ -245,7 +246,7 @@ export function toMission(e: EntityView): Mission | null {
   return {
     id: e.id,
     title: str(f.title, e.id),
-    species: isSpecies(f.species) ? f.species : SPECIES_IDS[0],
+    species: isSpecies(f.species) ? f.species : (speciesIds(activeApp())[0] ?? ""),
     cell,
     lon,
     lat,
@@ -292,7 +293,7 @@ export type Totals = { overall: number; bySpecies: Record<Species, number> };
 
 /** Merged removal totals per species and overall, over live missions. */
 export function totals(missions: readonly Mission[], removals: Readonly<Record<string, number>>): Totals {
-  const bySpecies = Object.fromEntries(SPECIES_IDS.map((s) => [s, 0])) as Record<Species, number>;
+  const bySpecies = Object.fromEntries(speciesIds(activeApp()).map((s) => [s, 0])) as Record<Species, number>;
   let overall = 0;
   for (const m of missions) {
     const n = removals[m.id] ?? 0;

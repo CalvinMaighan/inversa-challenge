@@ -2,8 +2,9 @@
 
 import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
-import { EXAMPLE_QUESTIONS, SPECIES_GUIDE, WELCOME } from "client/hud/help/content";
-import { SPECIES_CHIP_COLORS } from "client/hud/species/SpeciesBar";
+import { useActiveApp } from "client/hud/appselect/use-active-app";
+import { exampleQuestions, speciesGuide, welcome } from "client/hud/help/content";
+import { speciesChipColors } from "client/hud/species/SpeciesBar";
 import type { VoiceState } from "client/state/voice";
 
 import {
@@ -175,6 +176,7 @@ export default function ChatPane({
   onComposerFocus,
   compact = false,
 }: ChatPaneProps) {
+  const app = useActiveApp();
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const closeExpanded = useCallback(() => setExpanded(null), []);
@@ -276,7 +278,20 @@ export default function ChatPane({
       >
         {thread.messages.length === 0 ? (
           // The first-visit hint says the same thing with examples; the empty line is for later visits.
-          showHint ? null : <Empty>Ask about the sightings on the map, or anything about these animals. Answers cite their evidence and fly the globe.</Empty>
+          showHint ? null : (
+            <Empty>
+              {app.kind === "species"
+                ? "Ask about the sightings on the map, or anything about these animals. Answers cite their evidence and fly the globe."
+                : "Ask about the gauges, forecasts and alerts on the map. Answers cite their evidence and fly the globe."}
+              <span data-helper-questions="" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 8 }}>
+                {exampleQuestions(app).map((q) => (
+                  <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
+                    {q}
+                  </HintChip>
+                ))}
+              </span>
+            </Empty>
+          )
         ) : (
           thread.messages.map((turn) =>
             turn.role === "user" ? (
@@ -300,22 +315,24 @@ export default function ChatPane({
       {showHint ? (
         <Hint data-chat-hint="" role="region" aria-label="Welcome">
           <p>
-            <span data-welcome="">{WELCOME}</span>
+            <span data-welcome="">{welcome(app)}</span>
             <IconButton type="button" aria-label="Dismiss hint" onClick={onDismissHint}>
               <CloseIcon />
             </IconButton>
           </p>
-          <ul aria-label="The species on the map">
-            {SPECIES_GUIDE.map((s, i) => (
-              <li key={s.id} data-welcome-species={s.id}>
-                <i style={{ background: SPECIES_CHIP_COLORS[i] }} aria-hidden="true" />
-                <span>
-                  <b>{s.full}</b> — {s.line}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {EXAMPLE_QUESTIONS.map((q) => (
+          {app.kind === "species" ? (
+            <ul aria-label="The species on the map">
+              {speciesGuide(app).map((s, i) => (
+                <li key={s.id} data-welcome-species={s.id}>
+                  <i style={{ background: speciesChipColors()[i] }} aria-hidden="true" />
+                  <span>
+                    <b>{s.full}</b> — {s.line}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {exampleQuestions(app).map((q) => (
             <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
               {q}
             </HintChip>

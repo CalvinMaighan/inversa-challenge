@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { CATALOG_VOCABULARY, CONSTANT_MODULE } from "@/eslint-plugins/inversa/prefer-catalog-constants.mjs";
-import { EVF_SPECIES, QUALITY_CODES } from "shared/frames";
-import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
+import { APP_IDS, LAYER_IDS } from "shared/apps";
+import { QUALITY_CODES } from "shared/frames";
 
 import { ids, lint } from "./lint";
 
@@ -10,23 +10,24 @@ const run = (code: string, filename = "client/hud/Filters.tsx") => lint("prefer-
 
 describe("prefer-catalog-constants", () => {
   test("vocabulary mirrors the shared/ constants", () => {
-    expect(CATALOG_VOCABULARY.SPECIES_IDS).toEqual([...SPECIES_IDS]);
-    expect(CATALOG_VOCABULARY.SPECIES_IDS).toEqual([...EVF_SPECIES]);
+    expect(CATALOG_VOCABULARY.APP_IDS).toEqual([...APP_IDS]);
     expect(CATALOG_VOCABULARY.LAYER_IDS).toEqual([...LAYER_IDS]);
     expect(CATALOG_VOCABULARY.QUALITY_CODES).toEqual([...QUALITY_CODES]);
-    expect(CONSTANT_MODULE).toEqual({ SPECIES_IDS: "shared/voice/ui-tools", LAYER_IDS: "shared/voice/ui-tools", QUALITY_CODES: "shared/frames" });
+    expect(CONSTANT_MODULE).toEqual({ APP_IDS: "shared/apps", LAYER_IDS: "shared/apps", QUALITY_CODES: "shared/frames" });
   });
 
   test("flags a retyped vocabulary literal and names the constant", () => {
     const [message] = run('const s = "python";');
     expect(message?.messageId).toBe("preferConstant");
-    expect(message?.message).toContain('SPECIES_IDS from "shared/voice/ui-tools"');
+    expect(message?.message).toContain('APP_IDS from "shared/apps"');
     expect(ids(run('if (layer === "hotspots") {}'))).toEqual(["preferConstant"]);
     expect(ids(run('const q = ["research", "casual"];', "server/agent/tools.ts"))).toEqual(["preferConstant", "preferConstant"]);
   });
 
   test("allows other strings, capitalised labels and module specifiers", () => {
     expect(ids(run('const label = "Sightings"; const t = "python snake";'))).toEqual([]);
+    // Species are config now (PLAN.md C-A3), not a shared constant.
+    expect(ids(run('const s = "tegu";'))).toEqual([]);
     expect(ids(run('import x from "./hotspots";'))).toEqual([]);
   });
 

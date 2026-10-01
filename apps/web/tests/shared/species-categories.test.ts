@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import { ANIMAL_CATEGORIES, CATEGORY_ANCESTORS, CATEGORY_COLORS, CATEGORY_DEFAULT_ON, CATEGORY_IDS, CATEGORY_LABELS, categoryFromAncestry, FOCUS_CATEGORIES } from "shared/species-categories";
+import { ANIMAL_CATEGORIES, CATEGORY_ANCESTORS, CATEGORY_COLORS, CATEGORY_DEFAULT_ON, CATEGORY_IDS, CATEGORY_LABELS, categoryFromAncestry } from "shared/species-categories";
 import { CATEGORY_ICONS } from "shared/species-icons";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { getApp } from "shared/apps";
 
 /**
  * Ancestries shaped like iNat's `ancestor_ids` (root first: Life 48460, Animalia 1, Chordata 2, …). The deciding
@@ -60,7 +60,7 @@ describe("species categories (T44)", () => {
     expect(CATEGORY_ANCESTORS).toEqual({ snakes: 85553, lizards: 85552, turtles: 39532, crocodilians: 26039, frogs: 20979, birds: 3, mammals: 40151, fish: 47178, snails: 47114, insects: 47158, spiders: 47119, plants: 47126 });
     expect(ANIMAL_CATEGORIES.every((id) => CATEGORY_DEFAULT_ON[id])).toBe(true);
     expect(["insects", "spiders", "plants", "other"].every((id) => !CATEGORY_DEFAULT_ON[id as "other"])).toBe(true);
-    expect(FOCUS_CATEGORIES).toEqual(["snakes", "lizards", "lizards", "fish"]);
-    expect(FOCUS_CATEGORIES.length).toBe(SPECIES_IDS.length);
+    // A focus species' category is its app config's (`taxa[].category`, PLAN.md C-A3).
+    expect(getApp("python").taxa.map((t) => t.category)).toEqual(["snakes", "lizards", "lizards", "fish"]);
   });
 });

@@ -1,9 +1,27 @@
 /**
- * Clock text for the top bar. UTC is the ops reference; "local" is the region's own zone (South Florida,
- * America/New_York), not the viewer's browser zone, so a remote analyst and a field crew read the same time.
+ * Clock text for the top bar. UTC is the ops reference; "local" is the active app's own zone (config
+ * `copy.timezone`: South Florida's America/New_York for python, Louisiana's America/Chicago for carp), not the
+ * viewer's browser zone, so a remote analyst and a field crew read the same time.
  */
+import { activeApp } from "client/state/app";
+import { appTimeZone } from "shared/apps";
 
-export const REGION_TIME_ZONE = "America/New_York";
+/** The active app's local zone. */
+export function regionTimeZone(): string {
+  return appTimeZone(activeApp());
+}
+
+const localFmts = new Map<string, Intl.DateTimeFormat>();
+/** One formatter per use and zone (an app switch changes the zone); `use` names the caller's format. */
+export function zoneFormatter(use: string, zone: string, make: (zone: string) => Intl.DateTimeFormat): Intl.DateTimeFormat {
+  const key = `${use}|${zone}`;
+  let f = localFmts.get(key);
+  if (!f) {
+    f = make(zone);
+    localFmts.set(key, f);
+  }
+  return f;
+}
 
 const utcFmt = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
@@ -12,19 +30,13 @@ const utcFmt = new Intl.DateTimeFormat("en-GB", {
   second: "2-digit",
   hourCycle: "h23",
 });
-const localFmt = new Intl.DateTimeFormat("en-US", {
-  timeZone: REGION_TIME_ZONE,
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-  timeZoneName: "short",
-});
+const clockFmt = (timeZone: string) =>
+  new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "short" });
 const dateFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short" });
 
-export function formatClocks(ms: number): { utc: string; local: string; zone: string; date: string } {
+export function formatClocks(ms: number, zone: string = regionTimeZone()): { utc: string; local: string; zone: string; date: string } {
   const d = new Date(ms);
-  const parts = localFmt.formatToParts(d);
+  const parts = zoneFormatter("clock", zone, clockFmt).formatToParts(d);
   const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
   return {
     utc: `${utcFmt.format(d)}Z`,

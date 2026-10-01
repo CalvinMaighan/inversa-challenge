@@ -4,10 +4,8 @@
  * descriptions and README's UI section: `tests/client/hud/help/content.test.ts` fails when README drifts from
  * this list. Plain data, no React, so docs tooling can import it too.
  */
+import { copyText, taxonKey, type AppConfig } from "shared/apps";
 import { SIGHTING_WINDOW_HOURS, windowLabel } from "shared/frames";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
-
-const [PYTHON, TEGU, IGUANA, LIONFISH] = SPECIES_IDS;
 /** The default window in words ("7 days"); the selector can set 2, 7 or 30 days. */
 export const DEFAULT_WINDOW = windowLabel(SIGHTING_WINDOW_HOURS);
 
@@ -30,7 +28,7 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     id: "species",
     group: "Map",
     control: "Species chips",
-    what: `Top left. Python, tegu, iguana and lionfish first, then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles, frogs, birds, mammals, fish, snails, insects, spiders, plants, …) with a switch each and its most-seen species; insects, spiders and plants are off until you switch them on.`,
+    what: `Top left. The app's focus species first, then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles, frogs, birds, mammals, fish, snails, insects, spiders, plants, …) with a switch each and its most-seen species; insects, spiders and plants are off until you switch them on.`,
   },
   {
     id: "window",
@@ -160,33 +158,45 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
   },
 ];
 
-/** The About popover's first line: what this is, in one plain sentence. */
-export const ABOUT_SENTENCE =
-  "A live map of invasive animals in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.";
+/** The About popover's first line: what this app is, in one plain sentence (its config `copy.about`, else its question). */
+export function aboutSentence(app: AppConfig): string {
+  return copyText(app, "about", app.question);
+}
 
 /** Why the window defaults to a week; shown in About and on the window selector. */
 export const WINDOW_NOTE = `Most people upload sightings a few days after they see them, so the last ${DEFAULT_WINDOW} shows the most.`;
 
-/** First-visit welcome: two sentences at most. */
-export const WELCOME =
-  `Each marker is an invasive animal someone reported in South Florida in the last ${DEFAULT_WINDOW}, drawn as its kind's icon; click one to see what it is. ` +
-  "Filter by species at the top of the map, or ask the agent below.";
+/** First-visit welcome: two sentences at most. A species app talks about markers; a conditions app about gauges. */
+export function welcome(app: AppConfig): string {
+  const where = copyText(app, "region", app.regions.map((r) => r.name).join(", "));
+  if (app.kind === "conditions") {
+    return `Each marker is a river gauge or a weather alert in ${where}; click one to see its readings and forecast. Ask the agent below what changed and what needs review.`;
+  }
+  return (
+    `Each marker is an invasive animal someone reported in ${where} in the last ${windowLabel(app.windows.default)}, drawn as its kind's icon; click one to see what it is. ` +
+    "Filter by species at the top of the map, or ask the agent below."
+  );
+}
 
-/**
- * The species chips: short name, full name and one plain line each. The four focus species, then "Other", the
- * chip that opens every category (snakes, lizards, …, plants; `shared/species-categories.ts`).
- */
-export const SPECIES_GUIDE: readonly { id: string; name: string; full: string; line: string }[] = [
-  { id: PYTHON, name: "Python", full: "Burmese python", line: "giant constrictor eating Everglades wildlife" },
-  { id: TEGU, name: "Tegu", full: "Argentine tegu", line: "big lizard that raids the nests of birds, turtles and alligators" },
-  { id: IGUANA, name: "Iguana", full: "Green iguana", line: "tree-climbing lizard that burrows into seawalls and canal banks" },
-  { id: LIONFISH, name: "Lionfish", full: "Red lionfish", line: "venomous reef fish that eats young native fish" },
-  { id: "other", name: "Other", full: "Every other introduced species", line: "every other non-native species people reported, by kind: snakes, lizards, frogs, birds, fish, plants and more, the most-seen animals as chips" },
-];
+export type SpeciesGuideEntry = { id: string; name: string; full: string; line: string };
 
-/** Example questions for the welcome. Each works against the fixtures and live data. */
-export const EXAMPLE_QUESTIONS: readonly string[] = [
-  "Iguana sightings near Homestead and water levels",
-  "Where should python crews go tonight?",
-  "Any freeze or flood alerts in effect?",
-];
+/** The "Other" chip's entry: every category (snakes, lizards, …, plants; `shared/species-categories.ts`). */
+export const OTHER_GUIDE: SpeciesGuideEntry = {
+  id: "other",
+  name: "Other",
+  full: "Every other introduced species",
+  line: "every other non-native species people reported, by kind: snakes, lizards, frogs, birds, fish, plants and more, the most-seen animals as chips",
+};
+
+/** The species chips: short name, full name and one plain line each. The app's focus species, then "Other". */
+export function speciesGuide(app: AppConfig): SpeciesGuideEntry[] {
+  return [
+    ...app.taxa.map((t) => ({ id: taxonKey(t), name: t.short ?? t.name, full: t.name, line: t.line ?? t.scientific ?? t.name })),
+    OTHER_GUIDE,
+  ];
+}
+
+/** Example questions for the welcome: the app's helper questions (C-A3). */
+export function exampleQuestions(app: AppConfig): readonly string[] {
+  return app.helperQuestions;
+}

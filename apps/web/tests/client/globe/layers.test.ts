@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { PYTHON_LAYERS, selectPython } from "@/tests/client/python-app";
 import { allocFrameGrid } from "@calvinjs/active-state/threads";
 import type { BillboardCollection, GroundPrimitive, LabelCollection, PointPrimitiveCollection } from "cesium";
 
@@ -12,13 +13,14 @@ import { createSightingsLayer, SIGHTING_TRAIL_MS, sightingWindowIndex, trailAlph
 import { createStationsLayer, latestPerStation, stationBreakdown, stationBucket } from "client/globe/layers/stations";
 import { createLstLayer } from "client/globe/layers/env-raster";
 import type { GlobeLayer } from "client/globe/layers/types";
-import { LAYERS } from "client/state/layers";
 import { MISSIONS } from "client/state/missions";
 import type { TaxonInfo } from "client/state/taxa";
 import { ENV_MISSING, SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { fakeContext, fakeMeta, fakeViewer, flush, installDom, smallGrid } from "./fakes";
+
+selectPython();
 
 let restore: () => void;
 beforeAll(() => {
@@ -97,7 +99,7 @@ describe("hotspot heatmap", () => {
     // The C14 cell is on the 0.01° grid; the id carries frame 1's start.
     expect(layer.pickAt!(lon, lat)).toBe(`hotspot:iguana:${Math.floor(20.5 * 2)}:${Math.floor(30.5 * 2)}:${T0 + STEP}`);
     // With iguana filtered out, python's 40 (above the display floor) is what is under the cursor.
-    ctx.state.layers = { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, iguana: false } };
+    ctx.state.layers = { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, iguana: false } };
     layer.update(1, grid);
     expect(layer.pickAt!(lon, lat)).toMatch(/^hotspot:python:/);
     expect(layer.pickAt!(-90, 10)).toBeNull();
@@ -207,7 +209,7 @@ describe("sightings", () => {
   test("duplicates hidden, species filter applied, other taxa follow their category or their own override", () => {
     const records = [rec(), rec({ flags: SIGHTING_FLAG.duplicate }), rec({ taxon: 3 }), rec({ taxon: 42 }), rec({ taxon: 43 })].map((r) => ({ ...r, ageMs: 0 }));
     const taxa = { "42": taxon(42, "lizards"), "43": taxon(43, "plants") };
-    const only = (keys: Record<string, unknown>) => ({ ...LAYERS.defaults.species, ...keys });
+    const only = (keys: Record<string, unknown>) => ({ ...PYTHON_LAYERS.species, ...keys });
     // Python on, lizards on (default): the anole draws, the plant does not.
     expect(visibleRecords(records, only({ tegu: false, iguana: false, lionfish: false }), taxa).map((r) => r.taxon)).toEqual([1, 42]);
     // Lizards off: only the focus python.
@@ -246,7 +248,7 @@ describe("sightings", () => {
     const base = fakeContext({
       meta: fakeMeta(T0, 4),
       sightings: (f) => (f === 3 ? [rec({ id: 1, taxon: 3 }), rec({ id: 2, taxon: 1 }), rec({ id: 3, taxon: 77 })] : []),
-      layers: { ...LAYERS.defaults, species: { ...LAYERS.defaults.species, python: false, birds: false } },
+      layers: { ...PYTHON_LAYERS, species: { ...PYTHON_LAYERS.species, python: false, birds: false } },
       taxa: { byId: { "77": taxon(77, "birds") }, version: 1 },
     });
     const ctx = { ...base, selection: () => "sighting:1" };
@@ -448,7 +450,9 @@ describe("missions", () => {
     ctx.state.missions = { ...ctx.state.missions, lastSeq: 9 };
     layer.update(0, null);
     await flush();
-    expect(asked).toEqual([{ id: "everglades" }, { id: "everglades" }]);
+    // The board of the state's app (C-A6: `<app>:main`).
+    expect(asked).toEqual([{ id: MISSIONS.defaults.boardId }, { id: MISSIONS.defaults.boardId }]);
+    expect(MISSIONS.defaults.boardId).toBe("carp:main");
   });
 });
 

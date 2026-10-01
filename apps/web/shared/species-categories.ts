@@ -126,5 +126,3 @@ export const CATEGORY_COLORS: Record<CategoryId, string> = {
   other: "#b8c0cc",
 };
 
-/** The focus species' categories, in SPECIES_IDS order (python, tegu, iguana, lionfish). */
-export const FOCUS_CATEGORIES: readonly CategoryId[] = ["snakes", "lizards", "lizards", "fish"];

@@ -10,12 +10,19 @@
  *
  * Axum runs with `INVERSA_SOURCES=off` (no pollers: the data is the fixtures, so runs are repeatable) and a
  * random `INGEST_HOOK_SECRET`, so a script can inject rows through the signed hook (PLAN.md C10).
+ *
+ * Apps (PLAN.md C-A1/C-A2): the API serves every app under `/v1/<app>/...` and `/health` lists them. A stack is
+ * opened for one app (`StackOptions.app`, python by default: the fixtures are the Everglades data): `graphql` and
+ * `hook` talk to that app's routes, and the page opens in it (the proxy sends a bare `/` to `/?app=<app>`, as
+ * a link from that app would), so scripts written before the apps keep working.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+import type { AppId } from "../shared/apps";
 
 export const APP_DIR = path.resolve(import.meta.dir, "..");
 export const REPO_DIR = path.resolve(APP_DIR, "../..");
@@ -43,11 +50,15 @@ export type StackOptions = {
    * network; the taxon enrichment runs with it.
    */
   backfillDays?: number;
+  /** The app the page opens in and `graphql`/`hook` talk to (C-A2 `/v1/<app>/...`). Default python. */
+  app?: AppId;
 };
 
 export type Stack = {
   /** The page origin (the front proxy). */
   origin: string;
+  /** The stack's app. */
+  app: AppId;
   /** Axum, direct. */
   api: string;
   /** POST rows (model::Row serde form) through the signed hook; returns the parsed 202 body. */
@@ -132,7 +143,7 @@ type WsData = { upstream: WebSocket; queue: (string | ArrayBuffer)[] };
  * Caddy stand-in: `/v1/*` to Axum (HTTP and WebSocket), `/signal/*` to the signal Worker (prefix stripped),
  * the rest to Next.
  */
-function startProxy(port: number, up: { api: string; next: string; signal: string }) {
+function startProxy(port: number, up: { api: string; next: string; signal: string; app: AppId }) {
   const apiWs = up.api.replace(/^http/, "ws");
   return Bun.serve<WsData>({
     port,
@@ -141,7 +152,12 @@ function startProxy(port: number, up: { api: string; next: string; signal: strin
     idleTimeout: 255,
     async fetch(req, server) {
       const url = new URL(req.url);
-      const toApi = url.pathname.startsWith("/v1/");
+      // A bare page load opens in the stack's app (the hash, never sent, survives the redirect).
+      if (req.method === "GET" && url.pathname === "/" && !url.searchParams.has("app")) {
+        url.searchParams.set("app", up.app);
+        return Response.redirect(url.toString(), 302);
+      }
+      const toApi = url.pathname.startsWith("/v1/") || url.pathname === "/health";
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         if (!toApi) return new Response("no websocket here", { status: 404 });
         const protocols = (req.headers.get("sec-websocket-protocol") ?? "").split(",").map((p) => p.trim()).filter(Boolean);
@@ -206,6 +222,7 @@ function startProxy(port: number, up: { api: string; next: string; signal: strin
 
 export async function startStack(opts: StackOptions): Promise<Stack> {
   const log = (...a: unknown[]) => console.error(`[e2e:${opts.name}]`, ...a);
+  const app: AppId = opts.app ?? "python";
   if (!existsSync(SERVER)) throw new Error("no standalone build; call buildWeb first");
   const dataDir = mkdtempSync(path.join(tmpdir(), `inversa-e2e-${opts.name}-`));
   const secret = randomBytes(24).toString("hex");
@@ -254,7 +271,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
   try {
     const axum = run([API_BIN], REPO_DIR, axumEnv, axumLog);
     const graphql = async <T>(query: string, variables: Record<string, unknown> = {}): Promise<T> => {
-      const res = await fetch(`${api}/v1/graphql`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query, variables }) });
+      const res = await fetch(`${api}/v1/${app}/graphql`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query, variables }) });
       const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
       if (body.errors?.length || body.data === undefined) throw new Error(`graphql: ${JSON.stringify(body.errors ?? body)}`);
       return body.data;
@@ -285,13 +302,13 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     await waitFor("next start", async () => (await fetch(nextOrigin)).ok, next, 60_000, tail);
     await waitFor("wrangler dev", async () => (await fetch(`${signalOrigin}/turn`, { headers: { origin } })).ok, signal, 120_000, tail);
 
-    proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin });
+    proxy = startProxy(proxyPort, { api, next: nextOrigin, signal: signalOrigin, app });
     log(`axum ${api} (data ${dataDir}), next ${nextOrigin}, signal ${signalOrigin}, page origin ${origin}`);
 
     const hookRaw = async (body: string) => {
       const ts = Math.floor(Date.now() / 1000);
       const signature = createHmac("sha256", secret).update(`${ts}.${body}`).digest("hex");
-      const res = await fetch(`${api}/v1/ingest/hook/web`, {
+      const res = await fetch(`${api}/v1/${app}/ingest/hook/web`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-timestamp": String(ts), "x-signature": signature },
         body,
@@ -300,6 +317,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     };
     return {
       origin,
+      app,
       api,
       graphql,
       hookRaw,

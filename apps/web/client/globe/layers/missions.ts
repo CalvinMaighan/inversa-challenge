@@ -6,11 +6,11 @@
  */
 import type { BillboardCollection, LabelCollection } from "cesium";
 
-import { REGION_BBOX } from "client/state/view";
+import { activeApp } from "client/state/app";
+import { cellCentre, primaryRegion } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
-import { EVIDENCE_CELL_DEG } from "../evidence";
 import { createKeyedFetch } from "./keyed-fetch";
 import { createCanvas } from "./raster-surface";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
@@ -50,10 +50,10 @@ export function missionMark(m: GqlMission): MissionMark | null {
   let lon = num(f.lon);
   let lat = num(f.lat);
   if ((lon === null || lat === null) && typeof f.cell === "string") {
-    const match = /^(\d+):(\d+)$/.exec(f.cell);
-    if (match) {
-      lon = REGION_BBOX.west + (Number(match[1]) + 0.5) * EVIDENCE_CELL_DEG;
-      lat = REGION_BBOX.south + (Number(match[2]) + 0.5) * EVIDENCE_CELL_DEG;
+    const centre = cellCentre(primaryRegion(activeApp()), f.cell);
+    if (centre) {
+      lon = centre.lon;
+      lat = centre.lat;
     }
   }
   if (lon === null || lat === null || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;

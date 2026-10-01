@@ -3,13 +3,12 @@ import { set } from "@calvinjs/active-state";
 import { getGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, type SelectionState, parseEvidenceId } from "client/state/selection";
 import { TIME, retime, type TimeState } from "client/state/time";
-import { REGION_BBOX, altitudeToFit } from "client/state/view";
+import { activeApp } from "client/state/app";
+import { altitudeToFit } from "client/state/view";
 import type { AgentStreamEvent, BBox } from "shared/agent/events";
+import { cellCentre, primaryRegion } from "shared/apps";
 
 /** Side effects of agent output on the rest of the app: camera, timeline, selection. */
-
-/** PLAN.md C14: hotspot cells are 0.01° squares counted from the region's south-west corner. */
-export const HOTSPOT_CELL_DEG = 0.01;
 /** Camera height when flying to one cited entity. */
 export const EVIDENCE_ALTITUDE_M = 12_000;
 
@@ -25,10 +24,9 @@ export function evidenceCoordinates(id: string): { lon: number; lat: number } | 
   const col = Number(parts[1]);
   const row = Number(parts[2]);
   if (!Number.isInteger(col) || !Number.isInteger(row) || col < 0 || row < 0) return null;
-  const lon = REGION_BBOX.west + (col + 0.5) * HOTSPOT_CELL_DEG;
-  const lat = REGION_BBOX.south + (row + 0.5) * HOTSPOT_CELL_DEG;
-  if (lon > REGION_BBOX.east || lat > REGION_BBOX.north) return null;
-  return { lon: round6(lon), lat: round6(lat) };
+  // PLAN.md C14: cells counted from the app's (first) region's south-west corner, at its cell size.
+  const centre = cellCentre(primaryRegion(activeApp()), `${col}:${row}`);
+  return centre ? { lon: round6(centre.lon), lat: round6(centre.lat) } : null;
 }
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;

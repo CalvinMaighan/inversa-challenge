@@ -3,14 +3,16 @@
 import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { SPECIES_COLORS } from "client/globe/species";
+import { speciesColors } from "client/globe/species";
 import { isSpeciesFiltered, LAYERS, setSightingHours, setSpeciesVisible, setTaxonVisible, showAllSpecies, showOnlySpecies, showOnlyTaxon, sightingHoursOf, type LayersState } from "client/state/layers";
 import { TAXA, type TaxaState } from "client/state/taxa";
 import styled from "client/styled";
+import { hasLayer } from "shared/apps";
 import { SIGHTING_WINDOW_OPTIONS, windowLabel } from "shared/frames";
 import { CATEGORY_COLORS } from "shared/species-categories";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
+import { useActiveApp } from "../appselect/use-active-app";
 import { WINDOW_NOTE } from "../help/content";
 import { formatCount } from "../legend/model";
 import { useGlobeStats } from "../legend/useGlobeStats";
@@ -22,8 +24,10 @@ import { categoryRows, MOBILE_ANIMAL_CHIPS, speciesChips, type ChipModel } from 
 
 export { firstSentence, MOBILE_ANIMAL_CHIPS, speciesChips, TOP_ANIMAL_CHIPS, type ChipModel } from "./model";
 
-/** Chip colours, indexed like SPECIES_GUIDE: the four focus colours, then the "Other" chip's neutral. */
-export const SPECIES_CHIP_COLORS: readonly string[] = [...SPECIES_COLORS, CATEGORY_COLORS.other];
+/** Chip colours, indexed like `speciesGuide(app)`: the app's focus colours, then the "Other" chip's neutral. */
+export function speciesChipColors(): string[] {
+  return [...speciesColors(), CATEGORY_COLORS.other];
+}
 const [SIGHTINGS] = LAYER_IDS;
 /** A touch held this long shows only that species. */
 const LONG_PRESS_MS = 500;
@@ -282,6 +286,11 @@ function WindowSelect({ hours }: { hours: number }) {
  * agent's view all read.
  */
 export default function SpeciesBar() {
+  // An app without sightings (carp: gauges and alerts) has no species to filter.
+  return hasLayer(useActiveApp(), SIGHTINGS) ? <SpeciesBarBody /> : null;
+}
+
+function SpeciesBarBody() {
   const layers = useActiveState<LayersState>(LAYERS)[0];
   const filter = layers?.species ?? LAYERS.defaults.species;
   const hours = sightingHoursOf(layers);

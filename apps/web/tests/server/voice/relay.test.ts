@@ -12,6 +12,7 @@ import { onTaskEvent } from "client/voice/voice-runtime";
 import type { AgentStreamEvent } from "shared/agent/events";
 import type { AgentRunEvent, AgentRunInput, AgentRunner } from "server/voice/agent-runner";
 import { VoiceBudget } from "server/voice/budget";
+import { getApp } from "shared/apps";
 import { UI_TOOL_NAMES } from "shared/voice/ui-tools";
 import { VoiceSession } from "server/voice/voice-session";
 import type { VoiceServerEvent } from "shared/voice/protocol";
@@ -30,6 +31,7 @@ async function startSession(runner: AgentRunner = idleRunner()): Promise<Harness
   const mock = startMockXai();
   const session = new VoiceSession({
     ip: "127.0.0.1",
+    app: getApp("python"),
     target: { url: mock.url, apiKey: "test-key-not-real" },
     runner,
     budget: new VoiceBudget({ dataDir: mkdtempSync(path.join(tmpdir(), "voice-relay-")), dailyMinutes: 60 }),
@@ -86,7 +88,8 @@ describe("voice relay against a mocked xAI socket", () => {
     expect(session.turn_detection.type).toBe("server_vad");
     expect(session.audio.input.format.rate).toBe(16_000);
     expect(session.audio.output.format.rate).toBe(24_000);
-    expect(session.instructions).toContain("invasive species");
+    expect(session.instructions).toContain(getApp("python").agent.persona);
+    expect(session.instructions).toContain(getApp("python").agent.refusal);
     expect(session.instructions).toContain("Never invent numbers");
     expect(session.tools.map((t) => t.name).sort()).toEqual(
       [...UI_TOOL_NAMES, "spawn_thinking", "get_task_status", "cancel_task", "view_screen"].sort(),
@@ -207,6 +210,7 @@ describe("voice relay against a mocked xAI socket", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
       sessionId: session.id,
+      app: "python",
       question: "How many python sightings near Flamingo this week?",
       view: { camera: { place: "Flamingo" } },
     });
@@ -409,6 +413,7 @@ describe("voice relay against a mocked xAI socket", () => {
     const mock = startMockXai({ rejectSession: "invalid_api_key" });
     const session = new VoiceSession({
       ip: "127.0.0.1",
+      app: getApp("python"),
       target: { url: mock.url, apiKey: "bad" },
       runner: idleRunner(),
       budget: new VoiceBudget({ dataDir: mkdtempSync(path.join(tmpdir(), "voice-relay-")), dailyMinutes: 60 }),

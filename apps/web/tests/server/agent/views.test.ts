@@ -9,6 +9,7 @@ import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime
 import { buildAgentRegistry, NEARBY_DEG } from "@/server/agent/tools/capabilities";
 import { extentOf, MAX_SERIES_POINTS, seriesPoints, viewOf, type ToolViewData } from "@/server/agent/tools/views";
 import { isToolResultData, type CellsView, type SeriesView, type TableView } from "@/shared/agent/results";
+import { getApp } from "@/shared/apps";
 
 /**
  * C17: every data tool's `tool_end.data` carries a `ToolResultData`. These run the real tools against the
@@ -18,8 +19,9 @@ import { isToolResultData, type CellsView, type SeriesView, type TableView } fro
 let stub: Stub;
 let dataDir: string;
 const NOW = new Date(FIXTURE_NOW);
-const ctx: CapabilityContext = { now: NOW, emit: () => {} };
-const registry = buildAgentRegistry();
+const PYTHON = getApp("python");
+const ctx: CapabilityContext = { app: PYTHON, now: NOW, emit: () => {} };
+const registry = buildAgentRegistry(PYTHON);
 const HOMESTEAD = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
 const SHARK_VALLEY = { west: -80.85, south: 25.67, east: -80.68, north: 25.84 };
 
@@ -75,7 +77,7 @@ describe("C17 views per tool", () => {
   });
 
   test("C17 view: sightings with no window widen to 30 days when the last 7 are empty, in one GraphQL call", async () => {
-    const later: CapabilityContext = { now: new Date("2026-01-24T03:00:00Z"), emit: () => {} };
+    const later: CapabilityContext = { app: PYTHON, now: new Date("2026-01-24T03:00:00Z"), emit: () => {} };
     stub.requests.length = 0;
     const { out, view } = await run("sightings", { bbox: HOMESTEAD, species: ["iguana"] }, later);
     expect(stub.requests).toHaveLength(1);

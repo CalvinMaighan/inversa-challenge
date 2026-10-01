@@ -16,9 +16,10 @@ import styled from "client/styled";
 
 import { openEvidence } from "../selection";
 import { Dot, IconButton, Mono, Pill, SectionTitle } from "../primitives";
-import { ago, SPECIES_NAMES } from "../tooltip/model";
+import { ago, speciesNames } from "../tooltip/model";
 import { placeName } from "./model";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { activeApp } from "client/state/app";
+import { speciesIds } from "shared/apps";
 
 const Card = styled.section`
   display: flex;
@@ -64,7 +65,7 @@ export default function NoteCard({ id }: { id: string }) {
   if (!note) return <Muted data-testid="note-card-missing">This note was deleted, or has not reached this browser yet.</Muted>;
   const color = colorOfNode(note.createdBy);
   const at = Date.parse(note.createdAt);
-  const speciesIndex = note.species ? (SPECIES_IDS as readonly string[]).indexOf(note.species) : -1;
+  const speciesIndex = note.species ? speciesIds(activeApp()).indexOf(note.species) : -1;
   return (
     <Card aria-label="Field note" data-testid="note-card" data-note-id={note.id}>
       <SectionTitle>Field note</SectionTitle>
@@ -73,7 +74,7 @@ export default function NoteCard({ id }: { id: string }) {
         <Mono style={{ color }}>{note.callsign || note.createdBy.slice(0, 8)}</Mono>
         <span title={utc(note.createdAt)}>{Number.isFinite(at) ? ago(at, now) : "time unknown"}</span>
         <span>· {placeName(note.lon, note.lat)}</span>
-        {note.species && <Pill $tone="muted">{speciesIndex >= 0 ? SPECIES_NAMES[speciesIndex] : note.species}</Pill>}
+        {note.species && <Pill $tone="muted">{speciesIndex >= 0 ? speciesNames()[speciesIndex] : note.species}</Pill>}
       </Head>
       <Text data-testid="note-card-text">{note.text}</Text>
       <Mono style={{ fontSize: 11, color: "var(--muted)" }}>

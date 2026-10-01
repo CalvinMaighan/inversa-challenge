@@ -23,7 +23,7 @@ import {
   type SightingRecord,
 } from "shared/frames";
 
-import { REGION_BBOX } from "client/state/view";
+import { C4_BBOX } from "client/globe/geometry";
 import type { FrameSightings } from "client/threads/api";
 
 export const FIXTURE_FRAMES = 96;
@@ -85,8 +85,8 @@ export function buildFixtureEvf(frame0Ms: number, frames = FIXTURE_FRAMES, seed 
     frameCount: frames,
     hsCols: 170,
     hsRows: 160,
-    west: REGION_BBOX.west,
-    south: REGION_BBOX.south,
+    west: C4_BBOX.west,
+    south: C4_BBOX.south,
     hsCellDeg: 0.02,
     frame0UnixMs: frame0Ms,
     stepMinutes: FIXTURE_STEP_MINUTES,

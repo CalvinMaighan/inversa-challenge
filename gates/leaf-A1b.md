@@ -2,45 +2,45 @@
 
 Contract: `PLAN.md` "Three-app contract (A0)" C-A3, C-A5, C-A6. You own: `apps/web/shared/apps/**` (new), `apps/web/client/state/app.ts` (new), `apps/web/client/hud/appselect/**` (new), share-link modules (`client/hud/share-link*.ts`, `ShareLinkSync.tsx`), `client/state/layers.ts` and other client modules only where they read `SPECIES_IDS`/`REGION_BBOX`/`LAYER_IDS`/`DEFAULT_BOARD_ID`, `client/threads/{gql,db}` request builders (app prefix), `apps/web/server/agent/{prompt.ts,config.ts,run-turn.ts,tools/*}` and `apps/web/app/api/agent/**` (per-app persona/scope/tools via config), `apps/web/server/voice/**`, `apps/web/shared/voice/ui-tools.ts`, `apps/web/eval/{run.ts,stub-server.ts}` (app param; golden sets are split per app, python keeps its 15), `apps/web/e2e/{stack.ts,dev-stack.ts}` (multi-app env), tests mirroring those files. Do NOT touch `api/**` or `spec/apps/*.json` (A1a owns them; read `spec/apps/app-config.schema.json` once it exists, otherwise code against the field list in contract C-A3 and reconcile at merge). Do not commit, do not push.
 
-- [ ] G1: `shared/apps` loads `spec/apps/*.json` with zod, exports `APP_IDS`, `loadApps()`, `AppConfig`; a conformance test loads all three files; invalid config fails with a typed error. Test name contains `app config`
+- [x] G1: `shared/apps` loads `spec/apps/*.json` with zod, exports `APP_IDS`, `loadApps()`, `AppConfig`; a conformance test loads all three files; invalid config fails with a typed error. Test name contains `app config`
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "app config" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01 in the A1b worktree: ` 16 pass` / ` 0 fail`. tests/shared/apps/schema.test.ts (conformance over every `*.json` in tests/fixtures/apps, and over spec/apps once that directory holds the three files; `loadApps()` frozen and cached; `AppConfigError` with `appId` and `issues[].path` for a missing field, bad bbox, unknown layer, unknown kind, species app without taxa, conditions app without locations, wrong id, incomplete set) and tests/shared/apps/geo.test.ts. spec/apps does not exist in this tree (A1a writes it): `loadApps()` reads the three files through the `app-configs/*` tsconfig alias, which points at tests/fixtures/apps here and must be repointed to `../../spec/apps/*` at merge.
 
-- [ ] G2: active app resolution: `?app=` beats localStorage `inversa.app` beats default `carp`; invalid values fall back to `carp`; localStorage failures are swallowed; tests named `active app`
+- [x] G2: active app resolution: `?app=` beats localStorage `inversa.app` beats default `carp`; invalid values fall back to `carp`; localStorage failures are swallowed; tests named `active app`
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "active app" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01: ` 20 pass` / ` 0 fail`. tests/client/state/app.test.ts (precedence, invalid fall-through, throwing storage on read and write, `v=1` share links resolving python when the URL names no app, the head script run against a fake document), tests/client/state/app-switch.test.ts (what a switch resets and keeps), tests/client/hud/appselect/switch.test.ts (URL, storage, boot normalisation with failing storage), plus per-app clock, data-key, layers and help-copy tests.
 
-- [ ] G3: share link `v=2` carries `app`; `v=1` links still decode (as python); round trip test named `share link app`
+- [x] G3: share link `v=2` carries `app`; `v=1` links still decode (as python); round trip test named `share link app`
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "share link app" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01: ` 5 pass` / ` 0 fail` (tests/client/hud/share-link.test.ts "share link app (v=2)": round trip per app, `v=1` decodes as python, species checked against the link's app, the store writes the active app, a link only turns on the app's layers).
 
-- [ ] G4: every GraphQL/frames/ws request from the client and agent tools carries the app prefix (`/v1/<app>/...`); a test asserts no request URL without it; test named `app prefix`
+- [x] G4: every GraphQL/frames/ws request from the client and agent tools carries the app prefix (`/v1/<app>/...`); a test asserts no request URL without it; test named `app prefix`
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "app prefix" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01: ` 9 pass` / ` 0 fail`. tests/server/agent/app-prefix.test.ts runs every allowlisted tool of each app against the eval stub, which now 404s `/v1/graphql` and unknown apps and records each path: only `/v1/<app>/graphql`; tests/client/threads/gql.test.ts (ws URL in dev, prod and from an old `…/v1/graphql` setting, HTTP and frames paths, worker name → app); tests/client/threads/api.test.ts (`gqlRequest` posts to the active app's path; a source scan finds no `/v1/{graphql,frames,ingest,media}` literal in client, server, shared or app). Live check in the browser: e2e:appselect prints `APPSELECT-PREFIX requests=31 unprefixed=0`.
 
-- [ ] G5: agent: persona, scope text, tool allowlist and refusal text come from the app config; a test per app (use stub configs) proves the system prompt contains that app's scope and not another's, and that an off-allowlist tool is not registered; test named `agent per app`
+- [x] G5: agent: persona, scope text, tool allowlist and refusal text come from the app config; a test per app (use stub configs) proves the system prompt contains that app's scope and not another's, and that an off-allowlist tool is not registered; test named `agent per app`
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "agent per app" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01: ` 12 pass` / ` 0 fail`. tests/server/agent/per-app.test.ts: for carp, lionfish and python the prompt starts with that persona and holds its scope and refusal and none of the other two's; each registry is exactly `agent.tools`; carp has no species tools (calling `hotspots` is `unknown`); a stub config without `backtest` does not register it; an unknown tool name is a config error; lionfish's species enum refuses `python`; a Louisiana bbox gets lionfish's refusal text and passes for carp. tests/server/agent/route.test.ts: the request needs a known `app` and species keys of that app.
 
-- [ ] G6: no `SPECIES_IDS`, `REGION_BBOX` or hard-coded `everglades` board id constant remains in `client/`, `server/`, `shared/` outside `shared/apps` and the python config; `DEFAULT_BOARD_ID` becomes `<app>:main`
+- [x] G6: no `SPECIES_IDS`, `REGION_BBOX` or hard-coded `everglades` board id constant remains in `client/`, `server/`, `shared/` outside `shared/apps` and the python config; `DEFAULT_BOARD_ID` becomes `<app>:main`
   CHECK: grep -rnE "SPECIES_IDS|REGION_BBOX|DEFAULT_BOARD_ID *= *\"everglades\"" apps/web/client apps/web/server apps/web/shared | grep -v "shared/apps" | wc -l
   EXPECT: /^\s*0\s*$/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01 from the repo root: `       0`. `DEFAULT_BOARD_ID = boardIdFor(DEFAULT_APP_ID)` is `carp:main`; the agent's notes tool asks for `<app>:main`.
 
-- [ ] G7: selector popover (HUD species icon button): lists carp, lionfish, python with icon, name, one-line question and a feed-health dot from `/health`; selecting one updates URL, localStorage, config-driven map preset, layers, helper questions and legend; Escape returns focus; keyboard operable; link behaviour matches other chrome popovers. e2e prints `APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=<n>` with switch_ms < 500
+- [x] G7: selector popover (HUD species icon button): lists carp, lionfish, python with icon, name, one-line question and a feed-health dot from `/health`; selecting one updates URL, localStorage, config-driven map preset, layers, helper questions and legend; Escape returns focus; keyboard operable; link behaviour matches other chrome popovers. e2e prints `APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=<n>` with switch_ms < 500
   CHECK: cd apps/web && bun run e2e:appselect 2>&1 | grep APPSELECT
   EXPECT: /APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=([0-9]|[1-9][0-9]|[1-4][0-9][0-9])\b/
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01 on a fresh e2e build: `APPSELECT-PREFIX requests=31 unprefixed=0` / `APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=19`. Earlier runs during the work gave switch_ms 16, 285, 83, 264, 93 and 16 (higher when the globe has loaded and starts its flight in the same frame). The script also checks: health dots match `/health`, the camera settles on lionfish's centre, the layers and 30-day window are lionfish's, the legend title is lionfish's, the hash gains `app=lionfish`, the tab title, a bare reload reopens lionfish with `<html data-app-pending>` set from the head script until AppBoot clears it (`lionfish|true → … → lionfish|false`), an old `#v=1` link opens python, and axe-core finds 0 violations in the open popover (dark, light, phone). The popover is TopBar's `PopoverBox`/`usePopover` (Escape, outside click, focus back to its button), like About and Theme; it has no links of its own.
 
-- [ ] G8: web tests, typecheck and lint pass (state the test count and which tests were rewritten for the seam)
+- [x] G8: web tests, typecheck and lint pass (state the test count and which tests were rewritten for the seam)
   CHECK: bun run --cwd apps/web test 2>&1 | grep -E "^ *[0-9]+ fail" && bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: /^ *0 fail[\s\S]*CLEAN/m
-  EVIDENCE: pending
+  EVIDENCE: run 2026-10-01 from the repo root: ` 0 fail` / `CLEAN`; `Ran 759 tests across 105 files` (baseline 692 in 96). Rewritten for the seam (python became an app, the default is carp): client tests that assumed the Everglades build import tests/client/python-app.ts and call `selectPython()` (globe helpers and layers, voice ui-command-handler, hud simplify, taxa, evidence, legend model, tooltip model, missions board, share-link, agent chat request and effects); state layers/view/missions/index tests (carp defaults, `<app>:main`, the APP key); help content (per-app copy); species-categories (focus categories now live in the python config); server agent prompt, tools, views, route, helpers (`app` on every turn, per-app cells, refusal text), voice relay, caps-http, rate-limit, guards, default-runner (`?app=` on open, per-app tool enums); shared contracts (per-app `toggle_layer`); eslint prefer-catalog-constants (APP_IDS replaces SPECIES_IDS in the vocabulary). New: shared/apps schema and geo, client/state app and app-switch, client/threads api, hud/appselect model and switch, server agent per-app and app-prefix.
 
-- [ ] G9: screenshots (looked at) of the popover open, light and dark, desktop and 375 px mobile: `docs/evidence/appselect-{dark,light,mobile}.png`
-  EVIDENCE: pending
+- [x] G9: screenshots (looked at) of the popover open, light and dark, desktop and 375 px mobile: `docs/evidence/appselect-{dark,light,mobile}.png`
+  EVIDENCE: written by e2e:appselect on 2026-10-01 and looked at: appselect-dark.png (1440×900, carp: three rows with icon, name, one-line question and green/amber/red dots, carp marked current; carp has no species bar; welcome and helper questions are carp's; clock reads CDT), appselect-light.png (1440×900, python current, species bar and python welcome behind), appselect-mobile.png (375×812 at 2×, the popover spans the width inside the gutters, rows readable, nothing clipped).

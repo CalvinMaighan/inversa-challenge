@@ -5,6 +5,7 @@ import {
   type VoiceServerEvent,
   type VoiceSessionOpenResponse,
 } from "shared/voice/protocol";
+import { APP_IDS, getApp, isAppId } from "shared/apps";
 
 import { clientIp } from "../rate-limit";
 import { isVoiceControlMessage } from "./view-state-control";
@@ -32,8 +33,11 @@ const notFound = () => json({ error: "Voice session not found" }, 404);
 /** First `X-Forwarded-For` hop (Caddy sets it), then `X-Real-IP`, else one shared local bucket. */
 export { clientIp };
 
+/** `POST /api/voice/session?app=<id>`: the session runs in that app (persona, tools, scope). */
 export async function handleOpenSession(request: Request, registry: VoiceSessionRegistry): Promise<Response> {
-  const result = await registry.open(clientIp(request));
+  const app = new URL(request.url).searchParams.get("app");
+  if (!isAppId(app)) return json({ error: "unknown_app", apps: APP_IDS }, 404);
+  const result = await registry.open(clientIp(request), getApp(app));
   if (!result.ok) {
     const headers: Record<string, string> = result.retryAfterSeconds ? { "Retry-After": String(result.retryAfterSeconds) } : {};
     return json({ error: result.error }, result.status, headers);

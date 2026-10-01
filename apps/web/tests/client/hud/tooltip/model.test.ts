@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { selectPython } from "@/tests/client/python-app";
 
 import { anchorOf } from "client/globe/hover";
 import { ago, formatReading, placeTooltip, speciesName, tooltipLine, tooltipText } from "client/hud/tooltip/model";
+
+selectPython();
 
 const NOW = Date.parse("2026-09-30T20:40:00Z");
 const MIN = 60_000;

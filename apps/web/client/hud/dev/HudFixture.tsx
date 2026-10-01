@@ -6,10 +6,11 @@ import { allocFrameGrid, writeFrameFromEvf, type FrameGrid } from "@calvinjs/act
 
 import type { FeedState } from "shared/feed-state";
 import { QUALITY_CODES } from "shared/frames";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { APP_IDS, getApp, speciesIds, type AppId } from "shared/apps";
 
 import AgentColumn from "client/agent";
 import { AGENT_CHAT, type AgentChatState } from "client/state/agent";
+import { applyApp } from "client/state/app-switch";
 import { FEEDS } from "client/state/feeds";
 import { SELECTION } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
@@ -24,7 +25,10 @@ import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_
 import FixtureGlobe from "./FixtureGlobe";
 
 const STEP_MS = FIXTURE_STEP_MINUTES * 60_000;
-const [PYTHON, , IGUANA] = SPECIES_IDS;
+/** The fixture is python data: the C4 grid and the four focus species of the python app, in its EVF order. */
+const FIXTURE_APP: AppId = APP_IDS[2];
+const FIXTURE_SPECIES = speciesIds(getApp(FIXTURE_APP));
+const [PYTHON, , IGUANA] = FIXTURE_SPECIES;
 
 const Message = styled.p`
   position: absolute;
@@ -161,7 +165,7 @@ function primeEvidence(frame0Ms: number, hotspotId: string, sightingId: string) 
   primeCache(evidenceKey(hotspotId), hotspot);
   primeCache(evidenceKey(sightingId), sighting);
   primeCache(explainKey(explain.cell, PYTHON, at), explain);
-  for (const species of SPECIES_IDS) for (const days of [7, 14, 30]) primeCache(backtestKey(species, days), backtest(species, days));
+  for (const species of FIXTURE_SPECIES) for (const days of [7, 14, 30]) primeCache(backtestKey(species, days), backtest(species, days));
 }
 
 type Ready = { grid: FrameGrid } | { error: string };
@@ -175,6 +179,7 @@ export default function HudFixture() {
   const [ready, setReady] = useState<Ready | null>(null);
 
   useEffect(() => {
+    applyApp(FIXTURE_APP);
     const to = Math.floor(Date.now() / STEP_MS) * STEP_MS;
     const from = to - (FIXTURE_FRAMES - 1) * STEP_MS;
     let result: Ready;

@@ -1,10 +1,11 @@
 /**
  * @file Keep the domain vocabulary in `shared/`, not sprinkled through the UI and server. Ported from big-value.
  *
- * Species, layer ids and quality codes are contracts: the Rust API writes them into EVF frames and GraphQL, the
- * voice tools validate against them, and the globe keys its layers by them. A species retyped in a filter, a
- * layer id in a toggle, or a quality code in a comparison is a silent divergence waiting to happen. This rule
- * points at the shared constant.
+ * App ids, layer ids and quality codes are contracts: the API routes by app (`/v1/<app>/...`), the voice tools
+ * validate layers, and the globe keys its layers by them. An app id retyped in a check, a layer id in a toggle, or
+ * a quality code in a comparison is a silent divergence waiting to happen. This rule points at the shared
+ * constant. Species are no longer a constant: they are each app's config `taxa` (PLAN.md C-A3), read through
+ * `shared/apps`.
  *
  * Deliberately excluded: evidence kinds ("sighting", "alert", …) and feed health ("down", "stale", …), which
  * collide with ordinary English and would flood the lint output.
@@ -13,9 +14,9 @@ import { sourceAreaForFilename } from "./source-areas.mjs";
 
 /** Mirrors the shared/ lists. `tests/eslint-plugins/inversa/prefer-catalog-constants.test.ts` keeps it honest. */
 export const CATALOG_VOCABULARY = {
-  /** shared/voice/ui-tools.ts SPECIES_IDS (same order as shared/frames.ts EVF_SPECIES) */
-  SPECIES_IDS: ["python", "tegu", "iguana", "lionfish"],
-  /** shared/voice/ui-tools.ts LAYER_IDS */
+  /** shared/apps APP_IDS */
+  APP_IDS: ["carp", "lionfish", "python"],
+  /** shared/apps LAYER_IDS (re-exported by shared/voice/ui-tools) */
   LAYER_IDS: ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"],
   /** shared/frames.ts QUALITY_CODES */
   QUALITY_CODES: ["research", "needs_id", "casual", "curated"],
@@ -23,8 +24,8 @@ export const CATALOG_VOCABULARY = {
 
 /** Where each constant is exported from. */
 export const CONSTANT_MODULE = {
-  SPECIES_IDS: "shared/voice/ui-tools",
-  LAYER_IDS: "shared/voice/ui-tools",
+  APP_IDS: "shared/apps",
+  LAYER_IDS: "shared/apps",
   QUALITY_CODES: "shared/frames",
 };
 

@@ -1,6 +1,7 @@
 import type { z } from "zod";
 
 import type { AgentStreamEvent, BBox, EvidenceKind } from "@/shared/agent/events";
+import type { AppConfig } from "@/shared/apps";
 import type { FeedState } from "@/shared/feed-state";
 
 /**
@@ -26,6 +27,8 @@ export type CapabilityOutput = {
 export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; windowHours?: number; selection: string | null };
 
 export type CapabilityContext = {
+  /** The app the turn runs in: its regions bound every area, its API prefix every query (C-A5). */
+  app: AppConfig;
   signal?: AbortSignal;
   /** Reference time for "now", "tonight", lookbacks: the timeline time, else the wall clock. */
   now: Date;

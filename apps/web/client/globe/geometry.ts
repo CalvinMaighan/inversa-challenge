@@ -1,22 +1,25 @@
 /**
  * Where a frame grid sits on the map. The FrameGrid carries only cell counts; `FrameMeta.geometry` (C16, from
  * the EVF2 header) carries the south-west corner and cell sizes. Without meta the grid is taken to be the C4
- * layout over the C15 region (0.02° hotspot cells, 0.05° environment cells).
+ * layout (south-west corner −83.2, 24.3; 0.02° hotspot cells, 0.05° environment cells).
  */
 import type { GridShape } from "@calvinjs/active-state/threads";
 
-import { REGION_BBOX } from "client/state/view";
 import type { FrameMeta } from "client/threads/api";
 import type { BBox } from "shared/agent/events";
 
 export type GridGeometry = FrameMeta["geometry"];
 
+/** PLAN.md C4's fixed EVF2 layout, the fallback for a header without geometry. */
 export const C4_GEOMETRY: Readonly<GridGeometry> = Object.freeze({
-  west: REGION_BBOX.west,
-  south: REGION_BBOX.south,
+  west: -83.2,
+  south: 24.3,
   hsCellDeg: 0.02,
   envCellDeg: 0.05,
 });
+
+/** The extent of the C4 grid (170 × 160 hotspot cells): what the dev fixtures draw, whatever app is active. */
+export const C4_BBOX: Readonly<BBox> = Object.freeze({ west: -83.2, south: 24.3, east: -79.8, north: 27.5 });
 
 export type GridBounds = { hotspot: BBox; env: BBox };
 

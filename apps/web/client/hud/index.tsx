@@ -6,6 +6,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import { SELECTION } from "client/state/selection";
 import styled from "client/styled";
 
+import AppSelect from "./appselect/AppSelect";
 import EvidenceDrawer from "./drawer/EvidenceDrawer";
 import HelpSheet from "./help/HelpSheet";
 import DetectionOverlay from "./overlay/DetectionOverlay";
@@ -121,6 +122,7 @@ function HudBody({ sync = true }: HudProps) {
       <DetectionOverlay focus={focus} layout={`${drawerOpen}:${helpOpen}`} />
       <GlobeTooltip />
       <TopRow ref={barRef}>
+        <AppSelect />
         <SpeciesBar />
         <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
       </TopRow>

@@ -19,6 +19,7 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./*"],
+      "app-configs/*": ["./tests/fixtures/apps/*"],
       "client": ["./client"],
       "client/*": ["./client/*"],
       "server/*": ["./server/*"],

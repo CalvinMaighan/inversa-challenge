@@ -1,5 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
+import type { AppConfig } from "shared/apps";
+
 import { defaultAgentRunner, type AgentRunner } from "./agent-runner";
 import { IpRateLimiter, VoiceBudget, voiceLimitsFromEnv, type VoiceLimits } from "./budget";
 import { defaultRealtimeTarget, type RealtimeTarget } from "./grok-realtime";
@@ -70,7 +72,7 @@ export class VoiceSessionRegistry {
     }
   }
 
-  async open(ip: string): Promise<OpenResult> {
+  async open(ip: string, app: AppConfig): Promise<OpenResult> {
     const target = this.deps.target();
     if (!target) return { ok: false, status: 503, error: "Voice mode is not configured" };
     if (this.budget.exhausted()) {
@@ -93,6 +95,7 @@ export class VoiceSessionRegistry {
 
     const session = new VoiceSession({
       ip,
+      app,
       target,
       runner: this.deps.runner,
       budget: this.budget,

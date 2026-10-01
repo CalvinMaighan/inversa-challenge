@@ -7,12 +7,12 @@
 
 import { z } from "zod";
 
-import { SPECIES, speciesByKey, type SpeciesKey } from "@/server/agent/tools/evidence";
+import { focusSpecies, type SpeciesKey } from "@/server/agent/tools/evidence";
 import { gql } from "@/server/agent/tools/gql";
 import { MAX_HIGHLIGHT, MAX_VIEW_ROWS, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
 import type { TableView } from "@/shared/agent/results";
-import { SPECIES_IDS } from "@/shared/voice/ui-tools";
+import { taxonKey, type AppConfig } from "@/shared/apps";
 
 export const INAT_AUTOCOMPLETE = "https://api.inaturalist.org/v1/taxa/autocomplete";
 const INAT_TIMEOUT_MS = 8_000;
@@ -51,31 +51,25 @@ export function speciesLabel(taxon: Pick<GqlTaxon, "commonName" | "scientificNam
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
-const [PYTHON, TEGU, IGUANA, LIONFISH] = SPECIES_IDS;
+/**
+ * Other names people use for the app's focus species (lower case, singular), from each taxon's config `aliases`.
+ * A rock python or a rhino iguana is not one.
+ */
+function focusAliases(app: AppConfig): Record<string, SpeciesKey> {
+  const out: Record<string, SpeciesKey> = {};
+  for (const t of app.taxa) for (const alias of t.aliases ?? []) out[norm(alias)] = taxonKey(t);
+  return out;
+}
 
-/** Other names people use for the focus species (lower case, singular). A rock python or a rhino iguana is not one. */
-const FOCUS_ALIASES: Record<string, SpeciesKey> = {
-  "argentine tegu": TEGU,
-  "black and white tegu": TEGU,
-  "argentine black-and-white tegu": TEGU,
-  "burmese python": PYTHON,
-  "green iguana": IGUANA,
-  "red lionfish": LIONFISH,
-  "common lionfish": LIONFISH,
-  "devil firefish": LIONFISH,
-  pterois: LIONFISH,
-  "pterois volitans": LIONFISH,
-  "pterois miles": LIONFISH,
-};
-
-/** The focus key a name means, if any: "python", "burmese pythons", "Python bivittatus", "tegus", "red lionfish" … */
-export function focusKeyOf(name: string): SpeciesKey | null {
+/** The focus key a name means in `app`, if any: "python", "burmese pythons", "Python bivittatus", "tegus", "red lionfish" … */
+export function focusKeyOf(app: AppConfig, name: string): SpeciesKey | null {
   const whole = norm(name);
   const singular = whole.replace(/(es|s)$/, "");
-  for (const s of SPECIES) {
+  const aliases = focusAliases(app);
+  for (const s of focusSpecies(app)) {
     for (const n of [whole, singular]) {
       if (n === s.key || n === norm(s.common) || n === norm(s.scientific) || n === norm(s.scientific).replace(/\/.*$/, "")) return s.key;
-      const alias = FOCUS_ALIASES[n];
+      const alias = aliases[n];
       if (alias) return alias;
     }
   }
@@ -128,7 +122,13 @@ export type ResolvedSpecies = {
  * Species names to taxon ids. Focus keys cost no request; any other name asks Axum's `taxa(q)`, and a name
  * Axum does not know asks iNaturalist what it is called, then Axum again by that name (and iNat id).
  */
-export async function resolveSpecies(names: readonly string[], signal?: AbortSignal, lookup: typeof inatAutocomplete = inatAutocomplete): Promise<ResolvedSpecies> {
+export async function resolveSpecies(
+  names: readonly string[],
+  scope: { app: AppConfig; signal?: AbortSignal },
+  lookup: typeof inatAutocomplete = inatAutocomplete,
+): Promise<ResolvedSpecies> {
+  const { app, signal } = scope;
+  const focus = focusSpecies(app);
   const out: ResolvedSpecies = { taxonIds: [], names: [], unresolved: [] };
   const add = (id: string, label: string) => {
     if (!out.taxonIds.includes(id)) {
@@ -139,13 +139,13 @@ export async function resolveSpecies(names: readonly string[], signal?: AbortSig
   for (const raw of names) {
     const name = raw.trim();
     if (!name) continue;
-    const key = focusKeyOf(name);
+    const key = focusKeyOf(app, name);
     if (key) {
-      const s = speciesByKey(key);
+      const s = focus.find((f) => f.key === key)!;
       add(s.taxonId, s.common.toLowerCase());
       continue;
     }
-    const local = await gql<{ taxa: GqlTaxon[] }>("AgentTaxa", TAXA_QUERY, { q: name }, signal);
+    const local = await gql<{ taxa: GqlTaxon[] }>("AgentTaxa", TAXA_QUERY, { q: name }, scope);
     const found = pickTaxon(name, local.taxa);
     if (found) {
       add(found.id, speciesLabel(found).toLowerCase());
@@ -153,7 +153,7 @@ export async function resolveSpecies(names: readonly string[], signal?: AbortSig
     }
     const hit = await lookup(name, signal);
     if (hit) {
-      const again = await gql<{ taxa: GqlTaxon[] }>("AgentTaxa", TAXA_QUERY, { q: hit.name }, signal);
+      const again = await gql<{ taxa: GqlTaxon[] }>("AgentTaxa", TAXA_QUERY, { q: hit.name }, scope);
       const byInat = again.taxa.find((t) => t.inatTaxonId === String(hit.id)) ?? pickTaxon(hit.name, again.taxa);
       if (byInat) {
         add(byInat.id, speciesLabel(byInat).toLowerCase());
@@ -170,7 +170,7 @@ export const speciesNameSchema = z
   .trim()
   .min(1)
   .max(80)
-  .describe("A species: python | tegu | iguana | lionfish, or any other species' common or scientific name (brown anole, Cuban tree frog, Anolis sagrei).");
+  .describe("A species: one of this app's focus species, or any other species' common or scientific name (brown anole, Cuban tree frog, Anolis sagrei).");
 
 // ---------------------------------------------------------------- species_counts view
 

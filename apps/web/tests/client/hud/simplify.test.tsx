@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { selectPython } from "@/tests/client/python-app";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@emotion/react";
@@ -15,6 +16,8 @@ import { AboutContent, ThemeChoices, TopBarView } from "client/hud/topbar/TopBar
 import { state } from "client/state";
 import { emotionTheme } from "client/themes/theme";
 import { nearestPlace } from "client/voice/gazetteer";
+
+selectPython();
 
 init(state);
 

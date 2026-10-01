@@ -1,6 +1,7 @@
 import { get, set } from "@calvinjs/active-state";
 
 import { SELECTION, TIME, VIEW, VOICE } from "client/state";
+import { activeApp } from "client/state/app";
 import { setLayerVisible, setSpeciesVisible } from "client/state/layers";
 import { parseEvidenceId, type SelectionState } from "client/state/selection";
 import { clampToWindow, TIME_STEP_MINUTES, TIME_WINDOW_DAYS, timeWindow, windowFor, type TimeState } from "client/state/time";
@@ -120,7 +121,7 @@ function apply(command: UiCommand, nowMs: number): boolean {
 }
 
 export function applyUiCommand(event: { name: string; args: unknown }, nowMs = Date.now()): boolean {
-  const command = parseUiCommand(event.name, event.args);
+  const command = parseUiCommand(event.name, event.args, activeApp());
   if (!command) return false;
   const applied = apply(command, nowMs);
   if (applied) set<VoiceState>(VOICE, (prev = VOICE.defaults) => ({ ...prev, lastCommand: command.name }));

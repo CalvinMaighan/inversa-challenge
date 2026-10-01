@@ -9,13 +9,14 @@ import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
 import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
-import { AGENT_SYSTEM_PROMPT, viewContext } from "@/server/agent/prompt";
+import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { dataVersion, fetchFeeds } from "@/server/agent/tools/gql";
 import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
+import { getApp } from "@/shared/apps";
 
 export type RunTurnParams = AgentStreamRequest & {
   /** Client disconnect. Cancels the loop and any in-flight GraphQL call. */
@@ -101,6 +102,11 @@ async function runTurnUnguarded(
   const limits: AgentLimits = { ...AGENT_LIMITS, ...params.limits };
   const now = referenceTime(params);
   const question = params.question.trim();
+  // Persona, scope, tools and API prefix all follow the request's app (C-A5). Sessions and cached answers are
+  // per app too: a carp transcript must never seed a python turn, nor a python answer satisfy a carp question.
+  const app = getApp(params.app);
+  const sessionId = `${app.id}-${params.sessionId}`;
+  const systemPrompt = agentSystemPrompt(app);
   const empty: TurnUsage = { promptTokens: 0, completionTokens: 0, cacheRead: 0 };
   const finish = (result: RunTurnResult): RunTurnResult => {
     onEvent({ type: "done", content: result.content });
@@ -119,14 +125,14 @@ async function runTurnUnguarded(
   }
   if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
 
-  const history = sessionHistory(params.sessionId);
+  const history = sessionHistory(sessionId);
 
   // Cache only standalone questions: a follow-up's meaning depends on the transcript.
   let cacheKey: string | undefined;
   if (params.cache !== false && history.length === 0) {
     try {
-      const version = dataVersion(await fetchFeeds(params.signal));
-      if (version) cacheKey = answerCacheKey(question, version, { bbox: params.view?.bbox, now });
+      const version = dataVersion(await fetchFeeds({ app, signal: params.signal }));
+      if (version) cacheKey = answerCacheKey(question, `${app.id}:${version}`, { bbox: params.view?.bbox, now });
     } catch (error) {
       onEvent({
         type: "debug",
@@ -138,7 +144,7 @@ async function runTurnUnguarded(
   if (hit) {
     onEvent({ type: "debug", text: "answer cache hit" });
     for (const event of hit.events) onEvent(event);
-    appendSessionTurn(params.sessionId, question, hit.content);
+    appendSessionTurn(sessionId, question, hit.content);
     return finish({
       content: hit.content,
       citations: hit.citations,
@@ -155,17 +161,17 @@ async function runTurnUnguarded(
     onEvent(event);
   };
 
-  const registry = params.registry ?? buildAgentRegistry();
+  const registry = params.registry ?? buildAgentRegistry(app);
   const root = await bootHarness();
   const entry = harnessModel(root);
   const endpoint = resolveAgentEndpoint(entry.model);
-  const context = viewContext(params.view, now);
+  const context = viewContext(params.view, now, app);
   const prior = transcript(history);
   emit({
     type: "context",
     windowTokens: endpoint.contextWindow,
     segments: [
-      { label: "system", tokens: estimateTokens(AGENT_SYSTEM_PROMPT) },
+      { label: "system", tokens: estimateTokens(systemPrompt) },
       {
         label: "tools",
         tokens: estimateTokens(registry.list().map((cap) => `${cap.name}\n${cap.description}`).join("\n")),
@@ -184,11 +190,11 @@ async function runTurnUnguarded(
   let handle: Awaited<ReturnType<typeof root.agents.create>>;
   try {
     handle = await root.agents.create({
-      sessionId: SessionId(`${params.sessionId}-${randomUUID()}`),
+      sessionId: SessionId(`${app.id}-${params.sessionId}-${randomUUID()}`),
       agentOptions,
       setup(agentCtx) {
-        agentCtx.systemPrompt.section({ name: "inversa:analyst", order: 0, text: AGENT_SYSTEM_PROMPT });
-        bindCapabilityTools(agentCtx, registry, { signal: turnSignal, now, view: params.view, emit }, ledger);
+        agentCtx.systemPrompt.section({ name: "inversa:analyst", order: 0, text: systemPrompt });
+        bindCapabilityTools(agentCtx, registry, { app, signal: turnSignal, now, view: params.view, emit }, ledger);
         agentCtx.on("agent/request", async (_payload, next) => ({ ...(await next()), ...agentOptions }));
       },
     });
@@ -249,7 +255,7 @@ async function runTurnUnguarded(
         : "The model returned an empty reply.",
     });
   }
-  appendSessionTurn(params.sessionId, question, content);
+  appendSessionTurn(sessionId, question, content);
   const clean = content && !bridge.finishError && !failed && !limitHit;
   if (cacheKey && clean) {
     writeAnswerCache(cacheKey, { events: recorded, content, citations: bridge.citations() });

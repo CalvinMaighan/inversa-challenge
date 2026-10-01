@@ -7,17 +7,15 @@
 
 import { z } from "zod";
 
-import { REGION_BBOX } from "@/server/agent/config";
 import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
-import { evidence, SPECIES_KEYS } from "@/server/agent/tools/evidence";
+import { evidence, speciesKeys } from "@/server/agent/tools/evidence";
 import { gql } from "@/server/agent/tools/gql";
 import { extentOf, MAX_HIGHLIGHT, MAX_VIEW_ROWS, withView, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
 import type { TableView } from "@/shared/agent/results";
+import { boardIdFor, clampToApp, appBBox } from "@/shared/apps";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
-/** One shared board for the region (client/state/missions.ts DEFAULT_BOARD_ID). */
-export const BOARD_ID = "everglades";
 const HOUR_MS = 3_600_000;
 /** Notes are human and sparse: a week by default, up to 90 days back. */
 const DEFAULT_HOURS = 24 * 7;
@@ -51,8 +49,11 @@ export type NoteRow = {
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 
-/** A field note from its merged registers; null for mission notes or rows without text, a place and a time. */
-export function noteRow(n: GqlNote): NoteRow | null {
+/**
+ * A field note from its merged registers; null for mission notes or rows without text, a place and a time. A
+ * species tag that is not one of `focusKeys` (the app's focus species) reads as untagged.
+ */
+export function noteRow(n: GqlNote, focusKeys: readonly string[]): NoteRow | null {
   const f = (typeof n.fields === "object" && n.fields !== null ? n.fields : {}) as Record<string, unknown>;
   if (f._deleted === true) return null;
   const lat = num(f.lat);
@@ -66,7 +67,7 @@ export function noteRow(n: GqlNote): NoteRow | null {
     text,
     lat,
     lon,
-    species: (SPECIES_KEYS as readonly string[]).includes(species) ? species : null,
+    species: focusKeys.includes(species) ? species : null,
     sightingId: str(f.sightingId) || null,
     callsign: str(f.callsign),
     createdBy: str(f.createdBy),
@@ -91,7 +92,7 @@ const timeSchema = z
 
 const notesInput = z.object({
   bbox: bboxSchema.optional(),
-  species: z.enum(SPECIES_KEYS).optional().describe("Only notes tagged with this species."),
+  species: z.string().min(1).max(64).optional().describe("Only notes tagged with this focus species key."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
   hours: z.number().min(1).max(MAX_HOURS).optional().describe("Lookback from `to` (default 168 = 7 days; 'today' is 24)."),
@@ -144,9 +145,8 @@ export function notesView(rows: readonly NoteRow[], bbox: BBox, title: string): 
 }
 
 function resolveBbox(input: BBox | undefined, ctx: CapabilityContext): BBox {
-  const b = input ?? ctx.view?.bbox ?? REGION_BBOX;
-  const clamped = { west: Math.max(b.west, REGION_BBOX.west), south: Math.max(b.south, REGION_BBOX.south), east: Math.min(b.east, REGION_BBOX.east), north: Math.min(b.north, REGION_BBOX.north) };
-  if (clamped.west >= clamped.east || clamped.south >= clamped.north) throw new Error("bbox is outside the operating region (South Florida, 24.3–27.5°N, 83.2–79.8°W)");
+  const clamped = clampToApp(ctx.app, input ?? ctx.view?.bbox ?? appBBox(ctx.app));
+  if (!clamped) throw new Error(`bbox is outside this app's regions (${ctx.app.regions.map((r) => r.name).join(", ")}). ${ctx.app.agent.refusal}`);
   return clamped;
 }
 
@@ -165,8 +165,9 @@ export const notes = {
     const from = input.from ? new Date(input.from) : new Date(to.getTime() - hours * HOUR_MS);
     if (from.getTime() >= to.getTime()) throw new Error("time window is empty: from must be before to");
     const window = { from: from.toISOString(), to: to.toISOString() };
-    const data = await gql<{ board: { notes: GqlNote[] } }>("AgentNotes", NOTES_QUERY, { id: BOARD_ID }, ctx.signal);
-    const all = data.board.notes.map(noteRow).filter((r): r is NoteRow => r !== null);
+    const data = await gql<{ board: { notes: GqlNote[] } }>("AgentNotes", NOTES_QUERY, { id: boardIdFor(ctx.app.id) }, ctx);
+    const keys = speciesKeys(ctx.app);
+    const all = data.board.notes.map((n) => noteRow(n, keys)).filter((r): r is NoteRow => r !== null);
     const rows = selectNotes(all, bbox, window, input.species);
     const shown = rows.slice(0, MAX_MODEL_ROWS);
     const evidenceRows = shown.map((r) => evidence("note", r.id, `${r.callsign || "note"} · ${r.createdAt} · ${r.text.slice(0, 60)}`));

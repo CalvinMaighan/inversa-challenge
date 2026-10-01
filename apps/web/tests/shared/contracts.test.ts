@@ -4,7 +4,9 @@ import { isAgentStreamEvent } from "shared/agent/events";
 import { type FeedState, worstHealth } from "shared/feed-state";
 import { ENV_FLAGGED, ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, isEnvValue, readEvfHeader } from "shared/frames";
 import { isVoiceControlRequest, VOICE_INPUT_SAMPLE_RATE, VOICE_OUTPUT_SAMPLE_RATE } from "shared/voice/protocol";
-import { parseUiCommand, UI_TOOL_NAMES } from "shared/voice/ui-tools";
+import { parseUiCommand, uiToolSchemasFor, UI_TOOL_NAMES } from "shared/voice/ui-tools";
+import { getApp } from "shared/apps";
+import { z } from "zod";
 
 describe("shared contracts", () => {
   test("agent events guard", () => {
@@ -61,9 +63,26 @@ describe("shared contracts", () => {
 
   test("ui tools validate", () => {
     expect(UI_TOOL_NAMES).toEqual(["fly_to", "set_time", "play_timeline", "toggle_layer", "select", "open_evidence"]);
-    expect(parseUiCommand("fly_to", { place: "Flamingo" })?.name).toBe("fly_to");
-    expect(parseUiCommand("fly_to", {})).toBeNull();
-    expect(parseUiCommand("toggle_layer", { layer: "alerts", visible: false })?.name).toBe("toggle_layer");
-    expect(parseUiCommand("rm_rf", {})).toBeNull();
+    const python = getApp("python");
+    expect(parseUiCommand("fly_to", { place: "Flamingo" }, python)?.name).toBe("fly_to");
+    expect(parseUiCommand("fly_to", {}, python)).toBeNull();
+    expect(parseUiCommand("toggle_layer", { layer: "alerts", visible: false }, python)?.name).toBe("toggle_layer");
+    expect(parseUiCommand("rm_rf", {}, python)).toBeNull();
+  });
+
+  test("ui tools: toggle_layer's layer and species enums are the app's (C-A5)", () => {
+    const [carp, lionfish, python] = [getApp("carp"), getApp("lionfish"), getApp("python")];
+    // Carp has no sightings layer and no species.
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: true }, carp)).toBeNull();
+    expect(parseUiCommand("toggle_layer", { layer: "stations", visible: true }, carp)?.name).toBe("toggle_layer");
+    expect(parseUiCommand("toggle_layer", { layer: "alerts", visible: true, species: "python" }, carp)).toBeNull();
+    // Lionfish has one species; python's four are python's.
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "lionfish" }, lionfish)?.name).toBe("toggle_layer");
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "tegu" }, lionfish)).toBeNull();
+    expect(parseUiCommand("toggle_layer", { layer: "lst", visible: true }, lionfish)).toBeNull();
+    expect(parseUiCommand("toggle_layer", { layer: "sightings", visible: false, species: "tegu" }, python)?.name).toBe("toggle_layer");
+    const schema = z.toJSONSchema(uiToolSchemasFor(lionfish).toggle_layer, { io: "input" }) as unknown as { properties: { layer: { enum: string[] }; species: { enum: string[] } } };
+    expect(schema.properties.layer.enum).toEqual([...lionfish.layers]);
+    expect(schema.properties.species.enum).toEqual(["lionfish"]);
   });
 });

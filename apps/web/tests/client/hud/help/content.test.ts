@@ -2,8 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { ABOUT_SENTENCE, EXAMPLE_QUESTIONS, HELP_ENTRIES, HELP_GROUPS, SPECIES_GUIDE, WELCOME, WINDOW_NOTE } from "client/hud/help/content";
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { aboutSentence, exampleQuestions, HELP_ENTRIES, HELP_GROUPS, speciesGuide, welcome, WINDOW_NOTE } from "client/hud/help/content";
+import { APP_IDS, getApp, speciesIds } from "shared/apps";
+
+const PYTHON = getApp("python");
+const WELCOME = welcome(PYTHON);
+const SPECIES_GUIDE = speciesGuide(PYTHON);
+const EXAMPLE_QUESTIONS = exampleQuestions(PYTHON);
 
 const README = readFileSync(path.resolve(import.meta.dir, "../../../../../../README.md"), "utf8");
 
@@ -29,14 +34,27 @@ describe("help sheet content", () => {
     expect(WELCOME.split(/(?<=[.;!?])\s+(?=[A-Z])/).filter(Boolean).length).toBeLessThanOrEqual(2);
     expect(WELCOME).toContain("last 7 days");
     expect(WINDOW_NOTE).toBe("Most people upload sightings a few days after they see them, so the last 7 days shows the most.");
-    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...SPECIES_IDS, "other"]);
+    expect(SPECIES_GUIDE.map((s) => s.id)).toEqual([...speciesIds(PYTHON), "other"]);
     for (const s of SPECIES_GUIDE) expect(s.line.length).toBeGreaterThan(10);
     expect(SPECIES_GUIDE[0]).toMatchObject({ full: "Burmese python", line: "giant constrictor eating Everglades wildlife" });
-    expect(ABOUT_SENTENCE.split(". ").length).toBe(1);
+    for (const id of APP_IDS) expect(aboutSentence(getApp(id)).split(". ").length).toBeLessThanOrEqual(2);
     expect(EXAMPLE_QUESTIONS.length).toBeGreaterThanOrEqual(2);
     expect(EXAMPLE_QUESTIONS.length).toBeLessThanOrEqual(3);
     expect(EXAMPLE_QUESTIONS).toContain("Iguana sightings near Homestead and water levels");
     expect(EXAMPLE_QUESTIONS).toContain("Where should python crews go tonight?");
+  });
+
+  test("active app: welcome, species guide, helper questions and About line are the app's", () => {
+    const carp = getApp("carp");
+    expect(welcome(carp)).toContain("Louisiana demonstration locations");
+    expect(welcome(carp)).not.toContain("invasive animal");
+    expect(speciesGuide(carp).map((s) => s.id)).toEqual(["other"]);
+    expect(exampleQuestions(carp)).toEqual(carp.helperQuestions);
+    expect(aboutSentence(carp)).toContain("cannot tell carp abundance");
+    const lionfish = getApp("lionfish");
+    expect(speciesGuide(lionfish).map((s) => s.id)).toEqual(["lionfish", "other"]);
+    expect(welcome(lionfish)).toContain("last 30 days");
+    for (const id of APP_IDS) expect(new Set(exampleQuestions(getApp(id))).size).toBe(getApp(id).helperQuestions.length);
   });
 
   test("README's UI section names every control the help sheet does", () => {

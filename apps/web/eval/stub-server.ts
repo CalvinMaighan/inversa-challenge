@@ -1,15 +1,20 @@
 /**
  * GraphQL stub for the agent eval and tests. Serves `fixtures/graphql.json`
- * at `POST /v1/graphql`, dispatching on `operationName` and honoring the
+ * at `POST /v1/<app>/graphql` (PLAN.md C-A2; the unprefixed route is gone, and
+ * an unknown app is a 404 `unknown_app`), dispatching on `operationName` and honoring the
  * filter variables (bbox, time window, taxa, quality, params, species) the
  * way Axum's resolvers do, so tool arguments change what comes back.
  */
 
 import fixture from "./fixtures/graphql.json";
 
+import { APP_IDS, isAppId, type AppId } from "@/shared/apps";
+
 type BBox = { west: number; south: number; east: number; north: number };
 type Vars = Record<string, unknown>;
-export type StubRequest = { operationName: string; variables: Vars };
+export type StubRequest = { app: AppId; path: string; operationName: string; variables: Vars };
+
+const GRAPHQL_PATH = /^\/v1\/([^/]+)\/graphql$/;
 
 export const FIXTURE_NOW = fixture.now;
 
@@ -152,11 +157,13 @@ export function startStub(port = 0, options: { legacyFeeds?: boolean } = {}): St
     port,
     async fetch(request) {
       const url = new URL(request.url);
-      if (request.method !== "POST" || url.pathname !== "/v1/graphql") return new Response("not found", { status: 404 });
+      const app = GRAPHQL_PATH.exec(url.pathname)?.[1];
+      if (request.method !== "POST" || app === undefined) return new Response("not found", { status: 404 });
+      if (!isAppId(app)) return Response.json({ error: "unknown_app", apps: APP_IDS }, { status: 404 });
       const body = (await request.json()) as { operationName?: string; query?: string; variables?: Vars };
       const operationName = body.operationName ?? "";
       const variables = body.variables ?? {};
-      requests.push({ operationName, variables });
+      requests.push({ app, path: url.pathname, operationName, variables });
       if (options.legacyFeeds && body.query?.includes("lastFetchRunId")) {
         return Response.json({ data: null, errors: [{ message: 'Unknown field "lastFetchRunId" on type "FeedState".' }] });
       }
@@ -180,5 +187,5 @@ export function startStub(port = 0, options: { legacyFeeds?: boolean } = {}): St
 /** `bun eval/stub-server.ts [port]`: serve the fixtures standalone, e.g. to develop the UI without Axum. */
 if (import.meta.main) {
   const stub = startStub(Number(process.argv[2] ?? 4041));
-  console.log(`fixture GraphQL stub on ${stub.origin}/v1/graphql (fixture time ${FIXTURE_NOW})`);
+  console.log(`fixture GraphQL stub on ${stub.origin}/v1/<app>/graphql (fixture time ${FIXTURE_NOW})`);
 }

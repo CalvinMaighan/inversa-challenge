@@ -4,6 +4,8 @@
  * (drive the globe and timeline) and `citation` (a verified evidence id).
  */
 
+import type { AppId } from "../apps/schema";
+
 export type BBox = { west: number; south: number; east: number; north: number };
 
 export type AgentStreamEvent =
@@ -32,6 +34,8 @@ export type AgentStreamEvent =
 export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest" | "note";
 
 export type AgentStreamRequest = {
+  /** The app the question is asked in (C-A5): persona, tools, scope guard and API prefix. */
+  app: AppId;
   sessionId: string;
   question: string;
   /**

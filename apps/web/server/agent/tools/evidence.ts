@@ -1,24 +1,19 @@
-/** Evidence ids (PLAN.md C14), grid cells and species keys shared by the tools. */
+/** Evidence ids (PLAN.md C14), grid cells and species keys shared by the tools. Regions and species come from the app config (C-A3). */
 
-import { CELL_DEG, REGION_BBOX } from "@/server/agent/config";
 import type { CitableKind, Evidence } from "@/server/agent/runtime/registry";
-import { SPECIES_IDS } from "@/shared/voice/ui-tools";
+import { cellAt, cellCentre, primaryRegion, taxonKey, type AppConfig } from "@/shared/apps";
 
-export type SpeciesKey = (typeof SPECIES_IDS)[number];
-export const SPECIES_KEYS = SPECIES_IDS;
+export type SpeciesKey = string;
 
-const SPECIES_NAMES: Record<SpeciesKey, { common: string; scientific: string }> = {
-  python: { common: "Burmese python", scientific: "Python bivittatus" },
-  tegu: { common: "Argentine black and white tegu", scientific: "Salvator merianae" },
-  iguana: { common: "Green iguana", scientific: "Iguana iguana" },
-  lionfish: { common: "Red lionfish", scientific: "Pterois volitans" },
-};
+export type FocusSpecies = { key: SpeciesKey; taxonId: string; common: string; scientific: string };
 
-/** SPECIES_IDS order is the EVF species order, so `taxa.id` is position + 1 (PLAN.md C4). */
-export const SPECIES = SPECIES_IDS.map((key, index) => ({ key, taxonId: String(index + 1), ...SPECIES_NAMES[key] }));
+/** The app's focus species. Config order is the EVF species order, so `taxa.id` is position + 1 (C-A4). */
+export function focusSpecies(app: AppConfig): FocusSpecies[] {
+  return app.taxa.map((t, index) => ({ key: taxonKey(t), taxonId: String(index + 1), common: t.name, scientific: t.scientific ?? t.name }));
+}
 
-export function speciesByKey(key: SpeciesKey) {
-  return SPECIES.find((species) => species.key === key)!;
+export function speciesKeys(app: AppConfig): SpeciesKey[] {
+  return app.taxa.map(taxonKey);
 }
 
 const EVIDENCE_KINDS = new Set<CitableKind>(["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note"]);
@@ -44,18 +39,11 @@ export function hotspotKey(species: string, cell: string, at: string): string {
   return `${species}:${cell}:${Date.parse(at)}`;
 }
 
-/** Cell id `<col>:<row>` on the 0.01° grid anchored at the region's south-west corner. */
-export function cellFor(lat: number, lon: number): string {
-  const col = Math.floor((lon - REGION_BBOX.west) / CELL_DEG + 1e-9);
-  const row = Math.floor((lat - REGION_BBOX.south) / CELL_DEG + 1e-9);
-  return `${col}:${row}`;
+/** Cell id `<col>:<row>` on the app's grid (its first region, at that region's `cellDeg`; 0.01° for python). */
+export function cellFor(app: AppConfig, lat: number, lon: number): string {
+  return cellAt(primaryRegion(app), lat, lon);
 }
 
-export function cellCenter(cell: string): { lat: number; lon: number } | null {
-  const match = /^(\d+):(\d+)$/.exec(cell);
-  if (!match) return null;
-  return {
-    lon: REGION_BBOX.west + (Number(match[1]) + 0.5) * CELL_DEG,
-    lat: REGION_BBOX.south + (Number(match[2]) + 0.5) * CELL_DEG,
-  };
+export function cellCenter(app: AppConfig, cell: string): { lat: number; lon: number } | null {
+  return cellCentre(primaryRegion(app), cell);
 }

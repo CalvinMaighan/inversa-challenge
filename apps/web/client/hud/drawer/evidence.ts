@@ -6,7 +6,8 @@
 import type { FeedState } from "shared/feed-state";
 
 import { parseEvidenceId } from "client/state/selection";
-import { REGION_BBOX } from "client/state/view";
+import { activeApp } from "client/state/app";
+import { primaryRegion } from "shared/apps";
 import { gqlRequest } from "client/threads/api";
 
 import { FEED_FIELDS, feedLabel, formatLag, normalizeFeedState } from "../topbar/feed-chips";
@@ -195,8 +196,10 @@ export function parseBacktestId(id: string): { species: string; days: number } |
   return m && Number(m[2]) > 0 ? { species: m[1]!, days: Number(m[2]) } : null;
 }
 
+/** Centre of a C14 cell on the active app's grid (its first region's south-west corner, CELL_DEG cells). */
 export function cellCenter(col: number, row: number): { lon: number; lat: number } {
-  return { lon: REGION_BBOX.west + (col + 0.5) * CELL_DEG, lat: REGION_BBOX.south + (row + 0.5) * CELL_DEG };
+  const { bbox } = primaryRegion(activeApp());
+  return { lon: bbox.west + (col + 0.5) * CELL_DEG, lat: bbox.south + (row + 0.5) * CELL_DEG };
 }
 
 export type LinkGroup = "duplicate_of" | "duplicates" | "revisions" | "conflicts" | "related";

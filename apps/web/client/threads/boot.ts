@@ -8,6 +8,11 @@
  * 4. Surfaces the frame grid and sightings: the leader attaches the SAB (or the transferred ArrayBuffer)
  *    from its worker; followers copy a snapshot from the leader. `api.ts` publishes them to UI code.
  *
+ * Threads are per app (PLAN.md C-A5): the workers are named `inversa-gql:<app>` / `inversa-db:<app>` and read
+ * their app from `self.name` (every request they make is `/v1/<app>/...`), the db worker opens that app's own
+ * SQLite file, and the Web Locks election and BroadcastChannel are per app, so two tabs on different apps never
+ * share a leader. Switching apps closes this set and boots the next on first use (`bootThreads`).
+ *
  * Workers are spawned with `new Worker(new URL("./x.worker.ts", import.meta.url), { type: "module" })`,
  * which Next 16 / Turbopack bundles as a separate entry (the e2e script drives `next dev` and proves it).
  * If a bundler ever fails to see the URL, the fallback is a static file in `public/workers/` built by a
@@ -17,11 +22,13 @@ import { get, subscribe } from "@calvinjs/active-state";
 import { hostThread, type ChannelKind, type FrameGrid, type ThreadLink } from "@calvinjs/active-state/threads";
 
 import { state } from "client/state";
+import { activeAppId } from "client/state/app";
 import { TIME, type TimeState } from "client/state/time";
 import type { FrameMeta, FrameSightings } from "client/threads/api";
+import type { AppId } from "shared/apps";
 
 import { attachGrid } from "./db/frames";
-import { createElection, locksAvailable, type Election, type LeaderState } from "./db/leader";
+import { createElection, LOCK_NAME, locksAvailable, type Election, type LeaderState } from "./db/leader";
 import { CHANNEL_NAME, createRouter, type Router } from "./db/proxy";
 import { DbWorkerClient, type DbMethod, type DbParams, type DbResult } from "./db/rpc";
 import { unpackSightings } from "./db/sightings";
@@ -51,7 +58,14 @@ export function detectTransport(): ThreadsTransport {
 
 export type GridPublication = { grid: FrameGrid; meta: FrameMeta };
 
+/** `inversa-gql:carp`: the worker reads its app back from `self.name`. */
+export function workerName(kind: "gql" | "db", app: AppId): string {
+  return `inversa-${kind}:${app}`;
+}
+
 export type Threads = {
+  /** The app these workers serve. */
+  readonly app: AppId;
   readonly transport: ThreadsTransport;
   readonly isolated: boolean;
   readonly gql: GqlRpcClient;
@@ -72,11 +86,15 @@ export type Threads = {
 
 let booted: Threads | null = null;
 
-/** The `Threads` singleton, created on first call. Throws outside a browser. */
-export function bootThreads(): Threads {
-  if (booted) return booted;
+/**
+ * The `Threads` of `app` (the active app by default), created on first call. Asking for another app closes the
+ * current set first. Throws outside a browser.
+ */
+export function bootThreads(app: AppId = activeAppId()): Threads {
+  if (booted && booted.app === app) return booted;
+  booted?.close();
   if (typeof Worker !== "function" || typeof window === "undefined") throw new Error("bootThreads: needs a browser with Worker");
-  booted = createThreads();
+  booted = createThreads(app);
   return booted;
 }
 
@@ -84,7 +102,7 @@ export function threadsBooted(): Threads | null {
   return booted;
 }
 
-function createThreads(): Threads {
+function createThreads(app: AppId): Threads {
   const transport = detectTransport();
   const isolated = (globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated === true;
   const tabId = crypto.randomUUID();
@@ -94,7 +112,7 @@ function createThreads(): Threads {
   let currentGrid: GridPublication | null = null;
   let currentSightings: FrameSightings | null = null;
 
-  const gqlWorker = new Worker(new URL("./gql.worker.ts", import.meta.url), { type: "module", name: "inversa-gql" });
+  const gqlWorker = new Worker(new URL("./gql.worker.ts", import.meta.url), { type: "module", name: workerName("gql", app) });
   gqlWorker.addEventListener("error", (ev) => console.error("[threads] gql worker error", ev.message || ev));
   const gqlLink = hostThread(gqlWorker, state, { transport });
   const gql = new GqlRpcClient(gqlWorker, "m");
@@ -134,7 +152,7 @@ function createThreads(): Threads {
   };
 
   const spawnDb = (): Promise<void> => {
-    const worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module", name: "inversa-db" });
+    const worker = new Worker(new URL("./db.worker.ts", import.meta.url), { type: "module", name: workerName("db", app) });
     dbWorker = worker;
     dbLink = hostThread(worker, state, { transport });
     const client = new DbWorkerClient(worker);
@@ -190,6 +208,7 @@ function createThreads(): Threads {
   const election: Election | null = locksAvailable()
     ? createElection({
         locks: navigator.locks,
+        name: `${LOCK_NAME}:${app}`,
         onChange: (s) => {
           if (s === "leader") dbReady = spawnDb();
         },
@@ -199,7 +218,7 @@ function createThreads(): Threads {
   const isLeader = () => (election ? election.state === "leader" : true);
 
   const router: Router = createRouter({
-    channel: new BroadcastChannel(CHANNEL_NAME),
+    channel: new BroadcastChannel(`${CHANNEL_NAME}:${app}`),
     tabId,
     isLeader,
     local: (method, params) => {
@@ -223,6 +242,7 @@ function createThreads(): Threads {
   window.addEventListener("pagehide", release);
 
   const threads: Threads = {
+    app,
     transport,
     isolated,
     gql,
@@ -261,7 +281,7 @@ function createThreads(): Threads {
       gql.close();
       gqlLink.close();
       gqlWorker.terminate();
-      booted = null;
+      if (booted === threads) booted = null;
     },
   };
   return threads;

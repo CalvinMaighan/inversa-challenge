@@ -1,0 +1,121 @@
+{
+  "id": "carp",
+  "name": "Carp Field Conditions",
+  "icon": "carp",
+  "tagline": "River and weather conditions at Louisiana demonstration locations",
+  "question": "How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today?",
+  "kind": "conditions",
+  "taxa": [],
+  "regions": [
+    {
+      "id": "louisiana",
+      "name": "Louisiana",
+      "bbox": [
+        -94.1,
+        28.9,
+        -88.8,
+        33.1
+      ],
+      "cellDeg": 0.05,
+      "camera": {
+        "lat": 31,
+        "lon": -91.5
+      }
+    }
+  ],
+  "locations": [
+    {
+      "id": "red-river-alexandria",
+      "name": "Red River at Alexandria",
+      "lat": 31.312,
+      "lon": -92.446,
+      "usgs": "07355500",
+      "nwps": "ALXL1",
+      "nws": "LAC079"
+    },
+    {
+      "id": "atchafalaya-simmesport",
+      "name": "Atchafalaya River at Simmesport",
+      "lat": 30.982,
+      "lon": -91.798,
+      "usgs": "07381490",
+      "nwps": "SIML1",
+      "nws": "LAC009"
+    },
+    {
+      "id": "ouachita-monroe",
+      "name": "Ouachita River at Monroe",
+      "lat": 32.497,
+      "lon": -92.121,
+      "usgs": "07370000",
+      "nwps": "MLUL1",
+      "nws": "LAC073"
+    }
+  ],
+  "feeds": [
+    {
+      "source": "usgs",
+      "mode": "poll"
+    },
+    {
+      "source": "nwps",
+      "mode": "poll"
+    },
+    {
+      "source": "nws",
+      "mode": "poll"
+    }
+  ],
+  "score": {
+    "components": [
+      "stage_change",
+      "forecast_crest",
+      "alerts",
+      "freshness"
+    ]
+  },
+  "windows": {
+    "default": 168,
+    "options": [
+      48,
+      168,
+      720
+    ]
+  },
+  "layers": [
+    "stations",
+    "alerts",
+    "missions",
+    "peers",
+    "notes"
+  ],
+  "legend": {
+    "title": "River gauges, forecasts and alerts"
+  },
+  "copy": {
+    "about": "River stage, flow forecasts and weather alerts at Louisiana demonstration locations, with what was known at each moment. It cannot tell carp abundance, catch, access or trip safety.",
+    "region": "Louisiana demonstration locations",
+    "timezone": "America/Chicago"
+  },
+  "helperQuestions": [
+    "Which location had the largest 24 h stage rise?",
+    "Which locations have stale forecasts?",
+    "What did we know yesterday afternoon at Simmesport?"
+  ],
+  "agent": {
+    "persona": "You are the Carp Field Conditions analyst: you help an operations manager review river and weather conditions around candidate carp-removal locations in Louisiana.",
+    "scope": "River stage and flow (USGS observed, NOAA NWPS forecasts) and NWS forecasts and alerts at the Louisiana demonstration locations only. The feeds cannot establish carp abundance, expected catch, legal access or trip safety.",
+    "tools": [
+      "geocode",
+      "conditions",
+      "alerts",
+      "feed_state",
+      "notes",
+      "set_view"
+    ],
+    "refusal": "Carp Field Conditions covers river and weather conditions at the Louisiana demonstration locations only; it cannot say where carp are or how many."
+  },
+  "eval": {
+    "goldenSet": "carp"
+  }
+}

@@ -4,7 +4,8 @@
  */
 import type { GeometryInstance, GroundPolylinePrimitive, GroundPrimitive } from "cesium";
 
-import { REGION_BBOX } from "client/state/view";
+import { activeApp } from "client/state/app";
+import { appBBox } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { cesium } from "../cesium";
@@ -163,7 +164,7 @@ export function createAlertsLayer(ctx: LayerContext): GlobeLayer {
     cacheSize: 72,
     load: (key, signal) =>
       ctx
-        .gql<{ alerts: GqlAlert[] }>(ALERTS_QUERY, { bbox: { ...REGION_BBOX }, at: new Date(alertQueryTime(bucketOfKey(key), Date.now())).toISOString() }, signal)
+        .gql<{ alerts: GqlAlert[] }>(ALERTS_QUERY, { bbox: appBBox(activeApp()), at: new Date(alertQueryTime(bucketOfKey(key), Date.now())).toISOString() }, signal)
         .then((d) => d.alerts),
     onData: (key, alerts) => {
       stats.error = null;

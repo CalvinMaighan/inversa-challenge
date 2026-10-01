@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-
-import { SPECIES_IDS } from "shared/voice/ui-tools";
+import { SPECIES_IDS, selectPython } from "@/tests/client/python-app";
 
 import { parseHotspotId } from "client/hud/drawer/evidence";
 import {
@@ -38,6 +37,8 @@ import { Clock, parse } from "client/threads/crdt/hlc";
 import { applyOps, createState, viewBoard } from "client/threads/crdt/merge";
 import { validateOp } from "client/threads/crdt/merge";
 import type { Op } from "client/threads/crdt/types";
+
+selectPython();
 
 const [PYTHON, TEGU] = SPECIES_IDS;
 const AT = Date.parse("2026-09-30T12:00:00Z");
