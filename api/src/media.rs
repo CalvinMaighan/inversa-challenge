@@ -201,7 +201,7 @@ enum Refusal {
 impl IntoResponse for Refusal {
     fn into_response(self) -> Response {
         let (status, msg) = match self {
-            Refusal::BadId => (StatusCode::BAD_REQUEST, "media id must be a sighting or taxon id (integer)".to_string()),
+            Refusal::BadId => (StatusCode::BAD_REQUEST, "media id must be a sighting id (integer)".to_string()),
             Refusal::NotFound(m) => (StatusCode::NOT_FOUND, m),
             Refusal::Blocked(m) => (StatusCode::FORBIDDEN, format!("blocked: {m}")),
             Refusal::Upstream(m) => (StatusCode::BAD_GATEWAY, format!("upstream: {m}")),
@@ -287,60 +287,25 @@ impl MediaProxy {
     }
 }
 
-/// Which table a media id points at: a sighting's observation photo, or a taxon's default photo (T44).
-#[derive(Clone, Copy)]
-enum Subject {
-    Sighting,
-    Taxon,
-}
-
-impl Subject {
-    fn table(self) -> &'static str {
-        match self {
-            Subject::Sighting => "sightings",
-            Subject::Taxon => "taxa",
-        }
-    }
-
-    fn cache_key(self, id: i64) -> String {
-        match self {
-            Subject::Sighting => format!("media/{id}"),
-            Subject::Taxon => format!("media/taxon/{id}"),
-        }
-    }
-}
-
+/// A sighting's observation photo, cached under `media/<sighting id>`.
 async fn media(state: AppState, Extension(proxy): Extension<Arc<MediaProxy>>, Path((_app, id)): Path<(String, String)>) -> Result<Response, Refusal> {
-    serve(state, proxy, Subject::Sighting, id).await
-}
-
-async fn taxon_media(state: AppState, Extension(proxy): Extension<Arc<MediaProxy>>, Path((_app, id)): Path<(String, String)>) -> Result<Response, Refusal> {
-    serve(state, proxy, Subject::Taxon, id).await
-}
-
-async fn serve(state: AppState, proxy: Arc<MediaProxy>, subject: Subject, id: String) -> Result<Response, Refusal> {
     let id: i64 = id.parse().map_err(|_| Refusal::BadId)?;
-    let key = subject.cache_key(id);
+    let key = format!("media/{id}");
     let cached = state.archive.get(&key).await.ok().and_then(|b| sniff_image(&b).map(|kind| (kind, b)));
     let (kind, bytes) = match cached {
         Some(hit) => hit,
         None => {
-            let table = subject.table();
             let url: Option<Option<String>> = state
                 .obs
                 .read(move |c| {
                     use rusqlite::OptionalExtension;
-                    c.query_row(&format!("select photo_url from {table} where id = ?1"), [id], |r| r.get(0)).optional()
+                    c.query_row("select photo_url from sightings where id = ?1", [id], |r| r.get(0)).optional()
                 })
                 .await
                 .map_err(|e| Refusal::Internal(format!("{e:#}")))?;
-            let what = match subject {
-                Subject::Sighting => "sighting",
-                Subject::Taxon => "taxon",
-            };
             let url = match url {
-                None => return Err(Refusal::NotFound(format!("no {what} {id}"))),
-                Some(None) => return Err(Refusal::NotFound(format!("{what} {id} has no photo"))),
+                None => return Err(Refusal::NotFound(format!("no sighting {id}"))),
+                Some(None) => return Err(Refusal::NotFound(format!("sighting {id} has no photo"))),
                 Some(Some(url)) => url,
             };
             let (kind, bytes) = proxy.fetch(&url).await?;
@@ -369,7 +334,6 @@ pub fn routes() -> Router<AppRegistry> {
 pub fn routes_with(policy: Policy) -> Router<AppRegistry> {
     Router::new()
         .route("/media/{id}", get(media))
-        .route("/media/taxon/{id}", get(taxon_media))
         .layer(Extension(Arc::new(MediaProxy::new(policy))))
 }
 
@@ -457,30 +421,16 @@ mod tests {
         (status, headers, String::from_utf8_lossy(&body).into_owned(), state, id)
     }
 
-    /// T44: a taxon's default photo is served through the same proxy and policy, cached under `media/taxon/<id>`.
+    /// Only sightings have photos: the taxon photo route (T44) is gone, and a bad id is a 400.
     #[tokio::test]
-    async fn taxon_info_media_serves_the_taxon_photo() {
-        let (addr, server) = upstream().await;
+    async fn media_serves_sighting_photos_only() {
         let state = test_state();
-        let url = format!("http://static.inaturalist.org:{}/photo.jpg", addr.port());
-        state.obs.write(move |tx| tx.execute("update taxa set photo_url = ?1 where id = 3", [url])).await.unwrap();
-        let (status, headers, body) = get_media(&state, test_policy(addr.port()), "taxon/3").await;
-        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
-        assert_eq!(body, JPEG);
-        assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
-        assert_eq!(state.archive.get("media/taxon/3").await.unwrap(), JPEG);
-        // No photo, no taxon, bad id.
-        let (status, _, body) = get_media(&state, test_policy(addr.port()), "taxon/1").await;
-        assert_eq!((status, String::from_utf8_lossy(&body).as_ref()), (StatusCode::NOT_FOUND, "taxon 1 has no photo"));
-        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/999").await;
+        let (status, _, _) = get_media(&state, Policy::inaturalist(), "taxon/1").await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/x").await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        // A photo on a host outside the allowlist is refused, as for sightings.
-        state.obs.write(move |tx| tx.execute("update taxa set photo_url = 'https://evil.example.com/photo.jpg' where id = 2", [])).await.unwrap();
-        let (status, _, _) = get_media(&state, test_policy(addr.port()), "taxon/2").await;
-        assert_eq!(status, StatusCode::FORBIDDEN);
-        server.abort();
+        let (status, _, body) = get_media(&state, Policy::inaturalist(), "x").await;
+        assert_eq!((status, String::from_utf8_lossy(&body).as_ref()), (StatusCode::BAD_REQUEST, "media id must be a sighting id (integer)"));
+        let (status, _, body) = get_media(&state, Policy::inaturalist(), "999").await;
+        assert_eq!((status, String::from_utf8_lossy(&body).as_ref()), (StatusCode::NOT_FOUND, "no sighting 999"));
     }
 
     #[tokio::test]

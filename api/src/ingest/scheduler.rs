@@ -108,20 +108,18 @@ fn pending_info(feed: &crate::app::config::FeedCfg) -> SourceInfo {
 }
 
 /// The sources of `state.app`: runnable ones from the push and poll registries, disabled push
-/// sources (missing secrets), hook sources (gated by the secret) and feeds whose adapter is
+/// sources (missing secrets) and feeds whose adapter is
 /// still pending, each with its reason.
 pub fn plan(state: &AppState) -> Plan {
     let app = &state.app;
     let mut runnable = crate::ingest::push::all(&state.config, app);
     runnable.extend(crate::ingest::poll::all(&state.config, app));
 
-    // (info, why it is not running). Hook sources are fed over HTTP, so only the secret gates them.
-    let hook_reason = state.config.ingest_hook_secret.is_none().then(|| "INGEST_HOOK_SECRET not set".to_string());
+    // (info, why it is not running).
     let fetch_reason = (!state.config.sources_enabled).then(|| "INVERSA_SOURCES=off".to_string());
     let mut known: Vec<(SourceInfo, Option<String>)> =
         runnable.iter().map(|s| (s.info(), fetch_reason.clone())).collect();
     known.extend(crate::ingest::push::disabled(&state.config, app).into_iter().map(|(info, reason)| (info, Some(reason))));
-    known.extend(crate::ingest::push::hook::sources(app).iter().map(|s| (s.info(), hook_reason.clone())));
     for feed in app.cfg.feeds.iter().filter(|f| crate::app::config::PENDING_SOURCES.contains(&f.source.as_str())) {
         known.push((pending_info(feed), Some(format!("adapter for {} not implemented yet", feed.source))));
     }
@@ -558,10 +556,6 @@ fn insert_fetch_run(
     Ok(tx.last_insert_rowid())
 }
 
-/// `taxa.ancestor_ids` text: a JSON array of the ids, or null when the adapter knows none.
-pub fn ancestry_json(ids: Option<&[i64]>) -> Option<String> {
-    ids.filter(|ids| !ids.is_empty()).map(|ids| serde_json::to_string(ids).expect("integer list"))
-}
 
 fn valid_coord(lat: f64, lon: f64) -> bool {
     lat.is_finite() && lon.is_finite() && (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)
@@ -726,22 +720,18 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         if let Some(id) = self.taxa.get(name) {
             return Ok(Some(*id));
         }
-        // iNat ids and groups (T44) come from the iNat adapter only; a GBIF or NAS ref never
-        // clears them, and the first adapter to know a value fills it in on an existing row.
+        // The iNat id comes from the iNat adapter only; a GBIF or NAS ref never clears it, and the
+        // first adapter to know it fills it in on an existing row.
         self.tx
             .prepare_cached(
-                "insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group, ancestor_ids) values (?1, ?2, 0, ?3, ?4, ?5)
+                "insert into taxa (scientific_name, common_name, focus, inat_taxon_id) values (?1, ?2, 0, ?3)
                  on conflict(scientific_name) do update set
                    inat_taxon_id = coalesce(taxa.inat_taxon_id, excluded.inat_taxon_id),
-                   iconic_group = coalesce(taxa.iconic_group, excluded.iconic_group),
-                   ancestor_ids = coalesce(taxa.ancestor_ids, excluded.ancestor_ids),
                    common_name = case when taxa.common_name = '' then excluded.common_name else taxa.common_name end
                  where taxa.inat_taxon_id is null and excluded.inat_taxon_id is not null
-                    or taxa.iconic_group is null and excluded.iconic_group is not null
-                    or taxa.ancestor_ids is null and excluded.ancestor_ids is not null
                     or taxa.common_name = '' and excluded.common_name <> ''",
             )?
-            .execute(params![name, t.common_name.trim(), t.inat_taxon_id, t.iconic_group, ancestry_json(t.ancestor_ids.as_deref())])?;
+            .execute(params![name, t.common_name.trim(), t.inat_taxon_id])?;
         let id: i64 =
             self.tx.prepare_cached("select id from taxa where scientific_name = ?1")?.query_row([name], |r| r.get(0))?;
         self.taxa.insert(name.to_string(), id);
@@ -777,6 +767,18 @@ impl<'t, 'c> RowWriter<'t, 'c> {
     fn sighting(&mut self, s: &SightingRow) -> rusqlite::Result<Option<bool>> {
         if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) || self.app.region_of(s.lat, s.lon).is_none() {
             return Ok(None);
+        }
+        // R14: an app stores its own species only. Another taxon is written only over a sighting
+        // already stored, so an ID flip away from the species is kept (and flagged), never lost.
+        let name = s.taxon.scientific_name.trim();
+        if !self.app.taxa.iter().any(|t| t.cfg.scientific_name == name) {
+            let stored: bool = self
+                .tx
+                .prepare_cached("select exists(select 1 from sightings where source_id = ?1 and ext_id = ?2)")?
+                .query_row(params![self.source_id, s.ext_id], |r| r.get(0))?;
+            if !stored {
+                return Ok(None);
+            }
         }
         let Some(taxon_id) = self.taxon(&s.taxon)? else { return Ok(None) };
         let n = self
@@ -938,6 +940,40 @@ impl<'t, 'c> RowWriter<'t, 'c> {
     }
 }
 
+/// A test source whose body is a JSON array of `model::Row`, for pipeline tests that need rows
+/// no real adapter emits.
+#[cfg(test)]
+pub mod testing {
+    use std::time::Duration;
+
+    use async_trait::async_trait;
+
+    use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
+    use crate::model::Row;
+
+    pub struct RowsSource(pub &'static str);
+
+    #[async_trait]
+    impl Source for RowsSource {
+        fn info(&self) -> SourceInfo {
+            SourceInfo {
+                id: self.0,
+                name: "Test rows",
+                homepage: "https://example.test",
+                mode: Mode::Push,
+                cadence: Duration::from_secs(60),
+                max_latency: Duration::from_secs(600),
+            }
+        }
+        async fn fetch(&self, _ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
+            Ok(vec![])
+        }
+        fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
+            Ok(serde_json::from_slice(&raw.bytes)?)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Read as _;
@@ -1011,11 +1047,9 @@ mod tests {
             Row::Sighting(SightingRow {
                 ext_id: "obs-2".into(),
                 taxon: TaxonRef {
-                    scientific_name: "Anolis sagrei".into(),
-                    common_name: "Brown anole".into(),
-                    inat_taxon_id: Some(116461),
-                    iconic_group: Some("Reptilia".into()),
-                    ancestor_ids: Some(vec![48460, 1, 2, 355675, 26036, 26172, 85552, 1563907, 1567779, 200152, 36362]),
+                    scientific_name: "Python bivittatus".into(),
+                    common_name: "Burmese python".into(),
+                    inat_taxon_id: Some(238252),
                 },
                 lat: 25.7,
                 lon: -80.3,
@@ -1101,25 +1135,20 @@ mod tests {
         assert_eq!(out.rows_written, 7);
         assert_eq!(out.window, Some((1_789_999_000_000, 1_790_000_600_000)));
         assert_eq!(out.cursor.as_deref(), Some("cursor-1"));
-        // sightings, taxa (4 seeded + Anolis), stations, readings, alerts, revisions
-        assert_eq!(counts(&state).await, vec![2, 5, 1, 2, 1, 1]);
+        // sightings, taxa (the app's one species), stations, readings, alerts, revisions
+        assert_eq!(counts(&state).await, vec![2, 1, 1, 2, 1, 1]);
 
-        // Focus taxon resolves to its seeded id; the non-focus one is inserted with focus = 0.
-        let (python, anole): (i64, (i64, i64)) = state
+        // Both refs resolve to the seeded focus row, with or without an iNat id.
+        let taxa: Vec<(i64, i64)> = state
             .obs
             .read(|c| {
-                let p = c.query_row("select taxon_id from sightings where ext_id = 'obs-1'", [], |r| r.get(0))?;
-                let a = c.query_row(
-                    "select t.id, t.focus from sightings s join taxa t on t.id = s.taxon_id where s.ext_id = 'obs-2'",
-                    [],
-                    |r| Ok((r.get(0)?, r.get(1)?)),
-                )?;
-                Ok((p, a))
+                let mut st = c.prepare("select s.taxon_id, t.focus from sightings s join taxa t on t.id = s.taxon_id order by s.ext_id")?;
+                let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<rusqlite::Result<Vec<_>>>()?;
+                Ok(rows)
             })
             .await
             .unwrap();
-        assert_eq!(python, 1);
-        assert!(anole.0 > 4 && anole.1 == 0, "{anole:?}");
+        assert_eq!(taxa, [(1, 1), (1, 1)]);
 
         // fetch_run recorded against the raw object.
         let run: (String, i64, Option<i64>, Option<i64>) = state
@@ -1169,7 +1198,7 @@ mod tests {
         assert_eq!(again.rows_written, 0, "{again:?}");
         assert_eq!(again.window, None);
         assert_eq!(again.raw_object_id, out.raw_object_id);
-        assert_eq!(counts(&state).await, vec![2, 5, 1, 2, 1, 1]);
+        assert_eq!(counts(&state).await, vec![2, 1, 1, 2, 1, 1]);
         assert_eq!(count(&state, "raw_objects").await, 1);
         assert_eq!(count(&state, "fetch_runs").await, 2);
         assert!(events.try_recv().is_err());
@@ -1448,7 +1477,7 @@ mod tests {
         let python = test_state();
         let p = plan(&python);
         assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif"]);
-        assert_eq!(p.known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws", "web"]);
+        assert_eq!(p.known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws"]);
 
         let lionfish = crate::app::test_support::test_state_for("lionfish");
         let p = plan(&lionfish);
@@ -1463,7 +1492,7 @@ mod tests {
         let carp = crate::app::test_support::test_state_for("carp");
         let p = plan(&carp);
         assert_eq!(p.runnable_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
-        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws", "web"]);
+        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws"]);
         let nwws = p.known.iter().find(|(i, _)| i.id == "nwws").unwrap();
         assert!(nwws.1.as_deref().unwrap().contains("NWWS_USER"), "registered but down with the reason: {:?}", nwws.1);
 
@@ -1482,7 +1511,7 @@ mod tests {
             .read(|c| c.prepare("select id from sources order by id")?.query_map([], |r| r.get(0))?.collect())
             .await
             .unwrap();
-        assert_eq!(registered, ["coops", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs", "web"]);
+        assert_eq!(registered, ["coops", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs"]);
         let feeds = crate::feed_state::compute(&fake.obs, crate::state::now_ms()).await.unwrap();
         assert!(feeds.iter().all(|f| f.source != "inat"));
     }
@@ -1495,10 +1524,10 @@ mod tests {
         assert!(handles.is_empty());
         let (mode, cadence): (String, i64) = state
             .obs
-            .read(|c| c.query_row("select mode, cadence_s from sources where id = 'web'", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .read(|c| c.query_row("select mode, cadence_s from sources where id = 'inat'", [], |r| Ok((r.get(0)?, r.get(1)?))))
             .await
             .unwrap();
-        assert_eq!(mode, "push");
+        assert_eq!(mode, "poll");
         assert!(cadence > 0);
         // Idempotent at the next boot.
         start(state.clone(), Supervision::default()).await.unwrap();
@@ -1510,7 +1539,7 @@ mod tests {
         );
         assert_eq!(
             count(&state, "sources").await,
-            1 + crate::ingest::push::all(&state.config, &state.app).len() as i64
+            crate::ingest::push::all(&state.config, &state.app).len() as i64
                 + crate::ingest::poll::all(&state.config, &state.app).len() as i64
                 + disabled.len() as i64
         );
@@ -1528,8 +1557,6 @@ mod tests {
             match id.as_str() {
                 "goes19" => assert_eq!(reason, "GOES_SQS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY not set"),
                 "nwws" => assert!(reason.starts_with("NWWS_USER and NWWS_PASS not set"), "{reason}"),
-                // The hook secret is set in tests.
-                "web" => assert_eq!(reason, ""),
                 _ => assert_eq!(reason, "INVERSA_SOURCES=off", "{id}"),
             }
         }

@@ -1,18 +1,15 @@
 //! iNaturalist API v1 poller (T9, PRD §2): every 2 min, at most one request per second.
 //!
-//! Per region of the app, up to two queries over its bbox, both
-//! `order_by=updated_at&order=asc&updated_since=<cursor>`:
-//! - **focus**: the app's focus taxa. `taxon_name` matches a single name only (a comma list
-//!   returns 0 results), so the query uses `taxon_id` with the config's iNat ids
-//!   (`taxa[].inatTaxonId`);
-//! - **introduced**: `introduced=true`, the background layer. Listed in the feed's
-//!   `params.queries`; the python app runs both, Lionfish Watch the focus query only.
+//! Per region of the app, one query over its bbox for the app's species,
+//! `taxon_id=<taxa[].inatTaxonId>&order_by=updated_at&order=asc&updated_since=<cursor>`
+//! (`taxon_name` matches a single name only, so the query uses the iNat id). The background
+//! `introduced=true` query is gone with R14 (K1): an app stores its own species only.
 //!
-//! The persisted cursor is JSON holding every query's position: the flat `{focus, introduced}`
-//! form for a single-region app (unchanged from before the pivot), `{"regions": {<id>: {focus,
-//! introduced}}}` otherwise. `updated_since` is inclusive, so the next request starts at the
-//! newest `updated_at` seen; when a full page all shares one `updated_at`, the walk pages forward
-//! within it instead, so nothing is skipped.
+//! The persisted cursor is JSON holding each region's position: the flat `{focus}` form for a
+//! single-region app (unchanged from before the pivot), `{"regions": {<id>: {focus}}}` otherwise.
+//! `updated_since` is inclusive, so the next request starts at the newest `updated_at` seen; when
+//! a full page all shares one `updated_at`, the walk pages forward within it instead, so nothing
+//! is skipped.
 //!
 //! Identification changes: each identification carries the observation taxon at the time it
 //! was added (`previous_observation_taxon`). Walking them in time order, then ending at the
@@ -171,40 +168,7 @@ impl Source for Inat {
 // Cursor and paging
 // ---------------------------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Query {
-    Focus,
-    Introduced,
-}
-
-impl Query {
-    fn parse(s: &str) -> Option<Query> {
-        match s {
-            "focus" => Some(Query::Focus),
-            "introduced" => Some(Query::Introduced),
-            _ => None,
-        }
-    }
-}
-
-/// The queries an app's `inat` feed runs (`params.queries`; both when unset or empty). The
-/// focus query needs at least one taxon with an iNat id.
-pub fn queries(app: &App) -> Vec<Query> {
-    let listed: Vec<Query> = app
-        .cfg
-        .feed(ID)
-        .and_then(|f| f.params.get("queries"))
-        .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|q| q.as_str().and_then(Query::parse)).collect())
-        .unwrap_or_default();
-    let mut out = if listed.is_empty() { vec![Query::Focus, Query::Introduced] } else { listed };
-    if focus_taxon_ids(app).is_empty() {
-        out.retain(|q| *q != Query::Focus);
-    }
-    out
-}
-
-/// `taxon_id=` list of the focus query: the config's iNat ids, in taxa order.
+/// `taxon_id=` list of the focus query: the config's iNat id.
 pub fn focus_taxon_ids(app: &App) -> Vec<i64> {
     app.taxa.iter().filter_map(|t| t.cfg.inat_taxon_id).collect()
 }
@@ -222,33 +186,16 @@ fn one() -> u32 {
     1
 }
 
-/// Both queries' positions for one region.
+/// One region's position. A stored cursor from before K1 also carries an `introduced` key (the
+/// dropped background query); serde ignores it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegionCursor {
     pub focus: QueryCursor,
-    pub introduced: QueryCursor,
 }
 
 impl RegionCursor {
     fn at(since: &str) -> RegionCursor {
-        RegionCursor {
-            focus: QueryCursor { since: since.to_string(), page: 1 },
-            introduced: QueryCursor { since: since.to_string(), page: 1 },
-        }
-    }
-
-    fn slot(&self, q: Query) -> &QueryCursor {
-        match q {
-            Query::Focus => &self.focus,
-            Query::Introduced => &self.introduced,
-        }
-    }
-
-    fn slot_mut(&mut self, q: Query) -> &mut QueryCursor {
-        match q {
-            Query::Focus => &mut self.focus,
-            Query::Introduced => &mut self.introduced,
-        }
+        RegionCursor { focus: QueryCursor { since: since.to_string(), page: 1 } }
     }
 }
 
@@ -296,8 +243,8 @@ impl Cursor {
 
 pub struct InatPager {
     pub cursor: Cursor,
-    /// (region index, query) pairs still to walk in this run, in order.
-    pending: Vec<(usize, Query)>,
+    /// Region indices still to walk in this run, in order.
+    pending: Vec<usize>,
     boxes: Vec<(String, BBox)>,
     taxon_ids: Vec<i64>,
     per_page: usize,
@@ -305,30 +252,28 @@ pub struct InatPager {
 
 impl InatPager {
     /// Continue from a persisted cursor; a missing or unreadable one starts at `default_since_ms`.
+    /// An app with no iNat taxon id walks nothing.
     pub fn resume(app: &App, cursor: Option<&str>, default_since_ms: i64) -> Self {
         let cursor = Cursor::resume(app, cursor, default_since_ms);
-        let qs = queries(app);
-        let pending = (0..app.regions.len()).flat_map(|r| qs.iter().map(move |q| (r, *q))).collect();
-        InatPager { cursor, pending, boxes: bio::region_boxes(app), taxon_ids: focus_taxon_ids(app), per_page: PER_PAGE }
+        let taxon_ids = focus_taxon_ids(app);
+        let pending = if taxon_ids.is_empty() { Vec::new() } else { (0..app.regions.len()).collect() };
+        InatPager { cursor, pending, boxes: bio::region_boxes(app), taxon_ids, per_page: PER_PAGE }
     }
 
-    fn current(&self) -> Option<(usize, Query, &QueryCursor)> {
-        let (r, q) = *self.pending.first()?;
-        Some((r, q, self.cursor.region(r).slot(q)))
+    fn current(&self) -> Option<(usize, &QueryCursor)> {
+        let r = *self.pending.first()?;
+        Some((r, &self.cursor.region(r).focus))
     }
 }
 
-pub fn query_url(q: Query, c: &QueryCursor, per_page: usize, bbox: &BBox, taxon_ids: &[i64]) -> String {
-    let filter = match q {
-        Query::Focus => format!("taxon_id={}", taxon_ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",")),
-        Query::Introduced => "introduced=true".to_string(),
-    };
+pub fn query_url(c: &QueryCursor, per_page: usize, bbox: &BBox, taxon_ids: &[i64]) -> String {
     format!(
-        "{API}?swlat={}&swlng={}&nelat={}&nelng={}&{filter}&order_by=updated_at&order=asc&updated_since={}&per_page={per_page}&page={}",
+        "{API}?swlat={}&swlng={}&nelat={}&nelng={}&taxon_id={}&order_by=updated_at&order=asc&updated_since={}&per_page={per_page}&page={}",
         bbox.south,
         bbox.west,
         bbox.north,
         bbox.east,
+        taxon_ids.iter().map(i64::to_string).collect::<Vec<_>>().join(","),
         bio::encode(&c.since),
         c.page
     )
@@ -347,16 +292,16 @@ struct Updated {
 
 impl Pager for InatPager {
     fn next_url(&self) -> Option<String> {
-        self.current().map(|(r, q, c)| query_url(q, c, self.per_page, &self.boxes[r].1, &self.taxon_ids))
+        self.current().map(|(r, c)| query_url(c, self.per_page, &self.boxes[r].1, &self.taxon_ids))
     }
 
     fn advance(&mut self, body: &[u8]) -> anyhow::Result<()> {
-        let Some((r, q, c)) = self.current() else { return Ok(()) };
+        let Some((r, c)) = self.current() else { return Ok(()) };
         let since_ms = bio::parse_time_ms(&c.since).unwrap_or(i64::MIN);
         let page: UpdatedPage = serde_json::from_slice(body)?;
         let newest = page.results.iter().filter_map(|o| o.updated_at.as_deref().and_then(bio::parse_time_ms)).max();
         let full = page.results.len() >= self.per_page;
-        let slot = self.cursor.regions[r].1.slot_mut(q);
+        let slot = &mut self.cursor.regions[r].1.focus;
         match newest {
             Some(t) if t > since_ms => *slot = QueryCursor { since: bio::rfc3339_utc(t), page: 1 },
             // A full page stuck on one timestamp: page forward inside it.
@@ -413,8 +358,6 @@ struct Taxon {
     name: String,
     preferred_common_name: Option<String>,
     ancestor_ids: Option<Vec<i64>>,
-    /// iNat's coarse group (Reptilia, Aves, Plantae, Insecta, ...), stored as `taxa.iconic_group`.
-    iconic_taxon_name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -433,7 +376,8 @@ impl Taxon {
         std::iter::once(self.id).chain(self.ancestor_ids.iter().flatten().copied()).collect()
     }
 
-    /// The taxon as stored: focus taxa (and anything below them) collapse to the config's name.
+    /// The taxon as stored: the focus taxon (and anything below it) collapses to the config's name;
+    /// another taxon (only after an ID flip away from the focus taxon) keeps its iNat name.
     fn to_ref(&self, app: &App) -> TaxonRef {
         match bio::taxon_for_inat(app, &self.lineage()) {
             Some(f) => f.taxon_ref(),
@@ -441,8 +385,6 @@ impl Taxon {
                 scientific_name: self.name.clone(),
                 common_name: self.preferred_common_name.clone().unwrap_or_default(),
                 inat_taxon_id: Some(self.id),
-                iconic_group: Some(crate::taxon_info::iconic_group(self.iconic_taxon_name.as_deref()).to_string()),
-                ancestor_ids: self.ancestor_ids.clone(),
             },
         }
     }
@@ -607,61 +549,26 @@ pub(crate) mod tests {
         let rows = normalize(&fixture("inat/focus-p1.json"), &app).unwrap();
         let s = sightings(&rows);
         assert_eq!(s.len(), 12);
-        let lionfish = s.iter().find(|s| s.ext_id == "335508189").unwrap();
-        assert_eq!(lionfish.taxon.scientific_name, "Pterois volitans/miles");
-        assert_eq!(lionfish.quality, Quality::Research);
-        assert_eq!(lionfish.accuracy_m, Some(2.0));
-        assert_eq!(lionfish.observed_at, bio::parse_time_ms("2026-01-11T06:50:00Z").unwrap());
-        assert!((lionfish.lat - 26.5112304039).abs() < 1e-9 && (lionfish.lon + 80.0486087189).abs() < 1e-9);
-        assert_eq!(
-            lionfish.photo_url.as_deref(),
-            Some("https://inaturalist-open-data.s3.amazonaws.com/photos/609511322/medium.jpg")
-        );
-        // Obscured: the public accuracy (29868 m), not the private 3 m.
-        let obscured = s.iter().find(|s| s.ext_id == "339784054").unwrap();
-        assert_eq!(obscured.accuracy_m, Some(29868.0));
+        assert!(s.iter().all(|s| s.taxon.scientific_name == "Python bivittatus"), "the python query returns pythons only");
+        let p = s.iter().find(|s| s.ext_id == "398269828").unwrap();
+        assert_eq!(p.quality, Quality::Research);
+        assert_eq!(p.accuracy_m, Some(4.0));
+        assert_eq!(p.observed_at, bio::parse_time_ms("2026-09-07T03:24:17Z").unwrap());
+        assert_eq!(p.submitted_at, bio::parse_time_ms("2026-09-07T22:53:09Z"));
+        assert!((p.lat - 25.4480633333).abs() < 1e-9 && (p.lon + 80.4646216667).abs() < 1e-9);
+        assert_eq!(p.photo_url.as_deref(), Some("https://inaturalist-open-data.s3.amazonaws.com/photos/730575760/medium.jpg"));
+        // Obscured: the public accuracy (30003 m), not the private 61 m.
+        assert_eq!(s.iter().find(|s| s.ext_id == "182355554").unwrap().accuracy_m, Some(30003.0));
         // Missing accuracy stays missing.
-        assert_eq!(s.iter().find(|s| s.ext_id == "398728771").unwrap().accuracy_m, None);
-        let names: std::collections::BTreeSet<&str> = s.iter().map(|s| s.taxon.scientific_name.as_str()).collect();
-        assert_eq!(names.into_iter().collect::<Vec<_>>(), ["Iguana iguana", "Pterois volitans/miles", "Python bivittatus"]);
-        // Python 50359044-style refinements are not flips; this page has none.
+        assert_eq!(s.iter().find(|s| s.ext_id == "400285342").unwrap().accuracy_m, None);
+        // Python 50359044's refinements are not flips; this page has none.
         assert!(rows.iter().all(|r| !matches!(r, Row::Revision(_))));
 
-        // The lionfish app maps only Pterois to a focus taxon; a python stays its own iNat taxon.
+        // Under the lionfish app a python is not a focus taxon: it keeps its own iNat name and id.
         let lf_rows = normalize(&fixture("inat/focus-p1.json"), &crate::ingest::poll::bio::testing::lionfish()).unwrap();
         let lf = sightings(&lf_rows);
-        assert_eq!(lf.len(), 12, "normalize keeps every observation; the bbox filter is the query's");
-        let python = lf.iter().find(|s| s.taxon.scientific_name == "Python bivittatus").unwrap();
-        assert_eq!(python.taxon.inat_taxon_id, Some(238252));
-        assert!(python.taxon.ancestor_ids.is_some(), "a non-focus taxon keeps its ancestry");
-        assert_eq!(lf.iter().find(|s| s.ext_id == "335508189").unwrap().taxon.ancestor_ids, None, "focus taxon ref");
-    }
-
-    #[test]
-    fn inat_normalize_introduced_fixture_is_background() {
-        let rows = normalize(&fixture("inat/introduced-p1.json"), &python()).unwrap();
-        let s = sightings(&rows);
-        assert_eq!(s.len(), 10);
-        let q: Vec<Quality> = s.iter().map(|s| s.quality).collect();
-        assert!(q.contains(&Quality::Research) && q.contains(&Quality::NeedsId));
-        let c = s.iter().find(|s| s.ext_id == "404195742").unwrap();
-        assert_eq!(c.taxon.scientific_name, "Ctenosaura similis");
-        assert_eq!(c.taxon.common_name, "Black Spiny-tailed Iguana");
-        let revs: Vec<&RevisionRow> = rows
-            .iter()
-            .filter_map(|r| match r {
-                Row::Revision(r) => Some(r),
-                _ => None,
-            })
-            .collect();
-        // Real dispute on 392369238: an ID moved it from Calotropis procera up to the genus
-        // before it was refined to C. gigantea. The coarsening is the flip; the refinement is not.
-        assert_eq!(revs.len(), 1, "{revs:?}");
-        assert_eq!(
-            (revs[0].sighting_ext_id.as_str(), revs[0].old.as_deref(), revs[0].new.as_deref()),
-            ("392369238", Some("Calotropis procera"), Some("Calotropis"))
-        );
-        assert_eq!(s.iter().find(|s| s.ext_id == "392369238").unwrap().taxon.scientific_name, "Calotropis gigantea");
+        assert_eq!(lf.len(), 12, "normalize keeps every observation; the writer stores the app's species only");
+        assert_eq!(lf[0].taxon.inat_taxon_id, Some(238252));
     }
 
     #[test]
@@ -673,8 +580,9 @@ pub(crate) mod tests {
 
     #[test]
     fn inat_revision_from_real_maverick_dispute() {
-        // Real observation 402428460: a maverick ID moved it from Salvator merianae up to
-        // Tupinambinae before the community settled back on Salvator merianae.
+        // Real observation 259939110: a maverick ID called it Pantherophis, the next one moved
+        // it up to Serpentes, then the community settled on Burmese python. The coarsening from
+        // Pantherophis is the flip; the refinement from Serpentes to the python is not.
         let rows = normalize(&fixture("inat/idflip-p1.json"), &python()).unwrap();
         let revs: Vec<&RevisionRow> = rows
             .iter()
@@ -684,11 +592,11 @@ pub(crate) mod tests {
             })
             .collect();
         assert_eq!(revs.len(), 1, "{revs:?}");
-        assert_eq!(revs[0].sighting_ext_id, "402428460");
+        assert_eq!(revs[0].sighting_ext_id, "259939110");
         assert_eq!(revs[0].field, "taxon");
-        assert_eq!(revs[0].old.as_deref(), Some("Salvator merianae"));
-        assert_eq!(revs[0].new.as_deref(), Some("Tupinambinae"));
-        assert!(matches!(&rows[0], Row::Sighting(s) if s.taxon.scientific_name == "Salvator merianae"));
+        assert_eq!(revs[0].old.as_deref(), Some("Pantherophis"));
+        assert_eq!(revs[0].new.as_deref(), Some("Serpentes"));
+        assert!(matches!(&rows[0], Row::Sighting(s) if s.taxon.scientific_name == "Python bivittatus"));
     }
 
     fn inat_page(obs: Vec<serde_json::Value>) -> Vec<u8> {
@@ -716,42 +624,48 @@ pub(crate) mod tests {
             .unwrap()
     }
 
-    /// An identification added after ingest flips a real iguana (398479651) to Ctenosaura
-    /// similis. The flip is built from real payload parts: the observation from the focus page
-    /// and the Ctenosaura taxon object from the introduced page.
+    /// An identification added after ingest flips a real python (398628449) to Python molurus.
+    /// The flip is built from real payload parts: the observation from the focus page and the
+    /// P. molurus taxon object iNat returned as `previous_observation_taxon` on observation
+    /// 387071571 (fetched 2026-10-01). The stored python stays, flagged; a molurus report that
+    /// never was a python is not stored.
     #[tokio::test]
     async fn inat_id_flip_writes_revision_and_conflict() {
         let state = test_state();
         let src = Inat::new(state.app.clone());
         let first = ingest_payload(&state, &src, payload("fixture:focus", fixture("inat/focus-p1.json")), None).await.unwrap();
         assert_eq!(first.rows_written, 12);
-        assert_eq!(conflict_and_taxon(&state, "398479651").await, (0, "Iguana iguana".into()));
+        assert_eq!(conflict_and_taxon(&state, "398628449").await, (0, "Python bivittatus".into()));
 
-        let mut obs = obs_from("inat/focus-p1.json", 398479651);
-        let ctenosaura = obs_from("inat/introduced-p1.json", 404195742)["taxon"].clone();
-        let iguana = obs["taxon"].clone();
+        let molurus = serde_json::json!({
+            "id": 32150, "name": "Python molurus", "rank": "species", "preferred_common_name": "Indian Python",
+            "iconic_taxon_name": "Reptilia", "is_active": true,
+            "ancestor_ids": [48460, 1, 2, 355675, 26036, 26172, 85553, 67532, 32149, 32150]
+        });
+        let mut obs = obs_from("inat/focus-p1.json", 398628449);
+        let python = obs["taxon"].clone();
         obs["identifications"].as_array_mut().unwrap().push(serde_json::json!({
             "id": 999000001,
             "created_at": "2026-09-30T12:00:00-04:00",
             "current": true,
             "category": "leading",
-            "taxon": ctenosaura,
-            "previous_observation_taxon": iguana,
+            "taxon": molurus,
+            "previous_observation_taxon": python,
         }));
-        obs["taxon"] = ctenosaura;
+        obs["taxon"] = molurus.clone();
         obs["updated_at"] = "2026-09-30T12:00:05-04:00".into();
         let flip_bytes = inat_page(vec![obs]);
         let flipped = ingest_payload(&state, &src, payload("fixture:flip", flip_bytes.clone()), None).await.unwrap();
         assert_eq!(flipped.rows_in, 2, "sighting + revision");
         assert_eq!(flipped.rows_written, 2);
 
-        assert_eq!(conflict_and_taxon(&state, "398479651").await, (1, "Ctenosaura similis".into()));
+        assert_eq!(conflict_and_taxon(&state, "398628449").await, (1, "Python molurus".into()));
         let revs: Vec<(String, Option<String>, Option<String>, i64)> = state
             .obs
             .read(|c| {
                 let mut st = c.prepare(
                     "select r.field, r.old, r.new, r.changed_at from sighting_revisions r
-                     join sightings s on s.id = r.sighting_id where s.ext_id = '398479651'",
+                     join sightings s on s.id = r.sighting_id where s.ext_id = '398628449'",
                 )?;
                 let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?;
                 rows.collect()
@@ -762,15 +676,15 @@ pub(crate) mod tests {
             revs,
             vec![(
                 "taxon".to_string(),
-                Some("Iguana iguana".to_string()),
-                Some("Ctenosaura similis".to_string()),
+                Some("Python bivittatus".to_string()),
+                Some("Python molurus".to_string()),
                 bio::parse_time_ms("2026-09-30T12:00:00-04:00").unwrap()
             )]
         );
         // The other sightings on the page are untouched.
         let others: i64 = state
             .obs
-            .read(|c| c.query_row("select count(*) from sightings where conflict = 1 and ext_id != '398479651'", [], |r| r.get(0)))
+            .read(|c| c.query_row("select count(*) from sightings where conflict = 1 and ext_id != '398628449'", [], |r| r.get(0)))
             .await
             .unwrap();
         assert_eq!(others, 0);
@@ -779,6 +693,13 @@ pub(crate) mod tests {
         assert_eq!(again.rows_written, 0);
         let n: i64 = state.obs.read(|c| c.query_row("select count(*) from sighting_revisions", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 1);
+
+        // A molurus observation that was never a python is not this app's species: skipped.
+        let mut stranger = obs_from("inat/focus-p1.json", 400285342);
+        stranger["id"] = 999000002.into();
+        stranger["taxon"] = molurus;
+        let out = ingest_payload(&state, &src, payload("fixture:stranger", inat_page(vec![stranger])), None).await.unwrap();
+        assert_eq!((out.rows_in, out.rows_written, out.rows_skipped), (2, 0, 2), "the sighting and its revision");
     }
 
     #[tokio::test]
@@ -787,7 +708,7 @@ pub(crate) mod tests {
         let src = Inat::new(state.app.clone());
         let a = ingest_payload(&state, &src, payload("fixture:idflip", fixture("inat/idflip-p1.json")), None).await.unwrap();
         assert_eq!((a.rows_in, a.rows_written, a.rows_skipped), (2, 2, 0));
-        assert_eq!(conflict_and_taxon(&state, "402428460").await, (1, "Salvator merianae".into()));
+        assert_eq!(conflict_and_taxon(&state, "259939110").await, (1, "Python bivittatus".into()));
         let b = ingest_payload(&state, &src, payload("fixture:idflip", fixture("inat/idflip-p1.json")), None).await.unwrap();
         assert_eq!(b.rows_written, 0);
         let n: i64 = state.obs.read(|c| c.query_row("select count(*) from sighting_revisions", [], |r| r.get(0))).await.unwrap();
@@ -795,12 +716,13 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn inat_pager_walks_both_queries_and_pages_through_ties() {
+    fn inat_pager_walks_the_species_query_and_pages_through_ties() {
         let app = python();
         let mut p = InatPager::resume(&app, None, bio::parse_time_ms("2026-09-01T00:00:00Z").unwrap());
         p.per_page = 2;
         let url = p.next_url().unwrap();
-        assert!(url.contains("taxon_id=238252,318758,35342,47284"), "{url}");
+        assert!(url.contains("&taxon_id=238252&"), "{url}");
+        assert!(!url.contains("introduced"), "{url}");
         assert!(url.contains("order_by=updated_at&order=asc&updated_since=2026-09-01T00%3A00%3A00Z"), "{url}");
         let b = app.regions[0].bbox();
         assert!(url.contains(&format!("swlat={}&swlng={}&nelat={}&nelng={}", b.south, b.west, b.north, b.east)), "{url}");
@@ -816,27 +738,27 @@ pub(crate) mod tests {
         p.advance(&page(&["2026-09-03T04:00:00Z", "2026-09-03T00:00:00-04:00"])).unwrap();
         assert_eq!(p.cursor.region(0).focus.page, 2);
         assert!(p.next_url().unwrap().ends_with("&page=2"));
-        // Short page: done with focus, onto introduced.
+        // Short page: the walk is done.
         p.advance(&page(&["2026-09-04T00:00:00Z"])).unwrap();
         assert_eq!(p.cursor.region(0).focus, QueryCursor { since: "2026-09-04T00:00:00Z".into(), page: 1 });
-        assert!(p.next_url().unwrap().contains("introduced=true"));
-        p.advance(&page(&[])).unwrap();
         assert_eq!(p.next_url(), None);
-        assert_eq!(p.cursor.region(0).introduced.since, "2026-09-01T00:00:00Z");
 
         // The cursor round-trips, in the flat pre-pivot form for a single-region app.
         let json = p.cursor().unwrap();
-        assert!(json.starts_with("{\"focus\":"), "{json}");
+        assert_eq!(json, r#"{"focus":{"since":"2026-09-04T00:00:00Z","page":1}}"#);
         let resumed = InatPager::resume(&app, Some(&json), 0);
         assert_eq!(resumed.cursor, p.cursor);
+        // A stored cursor from before K1 still carries the dropped `introduced` position: ignored.
+        let legacy = r#"{"focus":{"since":"2026-08-01T00:00:00Z","page":1},"introduced":{"since":"2026-07-01T00:00:00Z","page":3}}"#;
+        let resumed = InatPager::resume(&app, Some(legacy), 0);
+        assert_eq!(resumed.cursor.region(0).focus.since, "2026-08-01T00:00:00Z");
+        assert_eq!(resumed.cursor().unwrap(), r#"{"focus":{"since":"2026-08-01T00:00:00Z","page":1}}"#);
     }
 
-    /// Four regions × the focus query only (Lionfish Watch lists no introduced query), each
-    /// region with its own bbox and cursor, persisted under the region ids.
+    /// Four regions, each with its own bbox and cursor, persisted under the region ids.
     #[test]
     fn inat_pager_walks_every_region_of_a_multi_region_app() {
         let app = lionfish();
-        assert_eq!(queries(&app), [Query::Focus]);
         let mut p = InatPager::resume(&app, None, bio::parse_time_ms("2026-09-01T00:00:00Z").unwrap());
         let mut urls = Vec::new();
         while let Some(url) = p.next_url() {
@@ -848,7 +770,6 @@ pub(crate) mod tests {
             let b = r.bbox();
             assert!(url.contains(&format!("swlat={}&swlng={}&nelat={}&nelng={}", b.south, b.west, b.north, b.east)), "{url}");
             assert!(url.contains("taxon_id=47284&"), "{url}");
-            assert!(!url.contains("introduced"), "{url}");
         }
         let json = p.cursor().unwrap();
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -885,17 +806,16 @@ pub(crate) mod tests {
         bio::parse_time_ms(s).unwrap()
     }
 
-    /// Lionfish taxon only, no `introduced=true`, one pager per area box, 10 min cadence and a
-    /// 90-day first lookback; the python app keeps its 2 min cadence and both queries.
+    /// Lionfish taxon only, one pager per area box, 10 min cadence and a
+    /// 90-day first lookback; the python app keeps its 2 min cadence.
     #[test]
     fn lionfish_inat_query_is_taxon_only_per_area_every_10_min() {
         let app = lionfish();
-        assert_eq!(queries(&app), [Query::Focus], "no introduced=true query (L1)");
         assert_eq!(focus_taxon_ids(&app), [47284], "genus Pterois");
         let mut p = InatPager::resume(&app, None, ms("2026-07-03T00:00:00Z"));
         let mut boxes = Vec::new();
         while let Some(url) = p.next_url() {
-            assert!(url.contains("&taxon_id=47284&") && !url.contains("introduced"), "{url}");
+            assert!(url.contains("&taxon_id=47284&"), "{url}");
             assert!(url.contains("updated_since=2026-07-03T00%3A00%3A00Z"), "{url}");
             boxes.push(url.split("swlat=").nth(1).unwrap().split("&taxon_id").next().unwrap().to_string());
             p.advance(br#"{"results":[]}"#).unwrap();
@@ -911,7 +831,6 @@ pub(crate) mod tests {
         assert!(mirror_catch_up(&app));
         let py = python();
         assert_eq!((cadence(&py), backfill_days(&py), mirror_catch_up(&py)), (Duration::from_secs(120), 30, false));
-        assert_eq!(queries(&py), [Query::Focus, Query::Introduced]);
         // The live-count URL the backfill quotes next to its own count.
         let b = app.regions[0].bbox();
         assert_eq!(

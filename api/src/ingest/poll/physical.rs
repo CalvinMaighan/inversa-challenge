@@ -290,7 +290,7 @@ mod tests {
             gauge("07381490", 30.9825, -91.7983, 500.0),
         ];
         let raw = crate::ingest::poll::physical::testing::recorded("test://scope", "application/json", serde_json::to_vec(&rows).unwrap(), 200, t);
-        let hook = crate::ingest::push::hook::HookSource::web();
+        let hook = crate::ingest::scheduler::testing::RowsSource("rows");
         let out = ingest_payload(&state, &hook, raw, None).await.unwrap();
         assert_eq!(out.rows_in, 10);
         // Skipped: VLSL1 snapshot, the 999 ft point (its snapshot still lands, empty), RRVL1
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(carp["id"], "carp");
         let modes: std::collections::BTreeMap<&str, &str> =
             carp["feeds"].as_array().unwrap().iter().map(|f| (f["source"].as_str().unwrap(), f["mode"].as_str().unwrap())).collect();
-        for (source, mode) in [("usgs", "poll"), ("nwps", "poll"), ("nws-forecast", "poll"), ("nws-alerts", "poll"), ("iem", "poll"), ("nwws", "push"), ("web", "push")] {
+        for (source, mode) in [("usgs", "poll"), ("nwps", "poll"), ("nws-forecast", "poll"), ("nws-alerts", "poll"), ("iem", "poll"), ("nwws", "push")] {
             assert_eq!(modes.get(source), Some(&mode), "{source}: {carp}");
         }
         assert!(!modes.contains_key("nws"), "carp runs nws-alerts, not the python nws id");

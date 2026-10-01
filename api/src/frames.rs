@@ -665,34 +665,32 @@ mod tests {
         body[taxon.idx as usize * layout.hs.cells() + layout.hs.index(col / HS_FACTOR, row / HS_FACTOR)]
     }
 
-    /// The python taxa (4) with the seeded db ids.
+    /// The python app's one taxon with its seeded db id.
     fn taxa() -> Vec<Taxon> {
         python_app().taxa
     }
 
     /// The fixed seed input behind `spec/frames/sample.evf`: a 20 × 10 scoring grid (10 × 5
-    /// hotspot, 4 × 2 environment), three hourly frames from 2025-02-01 00:00 UTC, one sighting
-    /// of each species plus a NAS prior, a duplicate, a conflict and a late record, and four
-    /// stations with mixed valid and flagged readings.
+    /// hotspot, 4 × 2 environment), three hourly frames from 2025-02-01 00:00 UTC, python
+    /// sightings plus a NAS prior, a duplicate, a conflict and a late record, and four stations
+    /// with mixed valid and flagged readings.
     fn golden_input() -> (Snapshot, Layout, Vec<i64>) {
         let layout = Layout::for_grid(Grid { west: -80.5, south: 25.2, cell_deg: 0.01, cols: 20, rows: 10 }).unwrap();
         let grid = layout.grid;
         let t0 = ms(2025, 2, 1, 0);
         let min = 60_000;
-        let pt = |id: i64, taxon_id: i64, col: u32, row: u32, observed_at: i64, prior: bool, quality: u8, flags: u8| {
+        let pt = |id: i64, col: u32, row: u32, observed_at: i64, prior: bool, quality: u8, flags: u8| {
             let (lon, lat) = grid.center(grid.index(col, row));
-            SightingPt { id, taxon_id, lon: lon as f32, lat: lat as f32, col, row, observed_at, prior, quality, flags }
+            SightingPt { id, taxon_id: 1, lon: lon as f32, lat: lat as f32, col, row, observed_at, prior, quality, flags }
         };
         let sightings = vec![
-            pt(1, 1, 2, 2, t0 - 2 * HOUR, false, 0, 0),
-            pt(2, 2, 5, 1, t0 - 3 * DAY, false, 1, 0),
-            pt(3, 3, 6, 4, t0 + 5 * min, false, 0, 0),
-            pt(4, 4, 1, 5, t0 - 10 * DAY, false, 3, 0),
-            pt(5, 1, 17, 0, t0 - 400 * DAY, true, 3, 0),
-            pt(6, 1, 2, 2, t0 + 80 * min, false, 0, FLAG_DUPLICATE),
-            pt(7, 2, 14, 8, t0 + 125 * min, false, 2, FLAG_CONFLICT | FLAG_LATE),
-            pt(8, 4, 3, 3, t0 + 140 * min, false, 2, 0),
-            pt(9, 1, 0, 0, t0 + 170 * min, false, 0, 0),
+            pt(1, 2, 2, t0 - 2 * HOUR, false, 0, 0),
+            pt(3, 10, 8, t0 + 5 * min, false, 0, 0),
+            pt(5, 17, 0, t0 - 400 * DAY, true, 3, 0),
+            pt(6, 2, 2, t0 + 80 * min, false, 0, FLAG_DUPLICATE),
+            pt(7, 14, 8, t0 + 125 * min, false, 2, FLAG_CONFLICT | FLAG_LATE),
+            pt(8, 3, 3, t0 + 140 * min, false, 2, 0),
+            pt(9, 0, 0, t0 + 170 * min, false, 0, 0),
         ];
         let at = |col: u32, row: u32| {
             let (lon, lat) = grid.center(grid.index(col, row));
@@ -702,7 +700,7 @@ mod tests {
         let stations = vec![at(3, 3), at(0, 5), at(2, 2), at(7, 2)];
         let mut readings: [Vec<ReadingPt>; 6] = Default::default();
         let r = |station: u32, observed_at: i64, value: f32| ReadingPt { station, observed_at, value };
-        readings[CondParam::AirC as usize] = vec![r(0, t0 - HOUR, 8.0), r(0, t0 + 80 * min, 11.0)];
+        readings[CondParam::AirC as usize] = vec![r(0, t0 - HOUR, 8.0), r(0, t0 + 80 * min, 26.0)];
         readings[CondParam::WaveM as usize] = vec![r(1, t0 - 30 * min, 0.4)];
         readings[CondParam::WindMs as usize] = vec![r(1, t0 - 30 * min, 3.0), r(1, t0 + 100 * min, 9.5)];
         readings[CondParam::LstC as usize] = vec![r(2, t0 - 20 * min, 12.25), r(3, t0 - 20 * min, f32::NAN)];
@@ -715,7 +713,7 @@ mod tests {
     fn golden_bytes() -> Vec<u8> {
         let (snap, layout, times) = golden_input();
         let mut out = Vec::new();
-        write_header(&mut out, &[layout], 4, times.len() as u32, times[0], STEP_MIN);
+        write_header(&mut out, &[layout], 1, times.len() as u32, times[0], STEP_MIN);
         for (_, body) in build_bodies(&[snap], &[layout], &times, STEP_MS) {
             out.extend_from_slice(&body);
         }
@@ -738,7 +736,7 @@ mod tests {
         let bytes = golden_bytes();
         golden_check("sample.evf", &bytes);
         let app = python_app();
-        let (iguana, lionfish, tegu, python) = (app.taxon("iguana").unwrap(), app.taxon("lionfish").unwrap(), app.taxon("tegu").unwrap(), app.taxon("python").unwrap());
+        let python = app.taxon("python").unwrap();
 
         // The file decodes as documented in apps/web/shared/frames.ts.
         let (_, layout, times) = golden_input();
@@ -751,7 +749,7 @@ mod tests {
                 env: layout.env,
                 frame0: times[0],
                 step_min: 60,
-                species_count: 4,
+                species_count: 1,
                 hotspot_scale: HOTSPOT_SCALE,
                 region_count: 1,
                 regions: vec![(layout.hs, layout.env)],
@@ -759,62 +757,62 @@ mod tests {
         );
         assert_eq!(h.len(), HEADER_BYTES, "a single-region file has no region table");
         assert_eq!((layout.hs.cols, layout.hs.rows, layout.env.cols, layout.env.rows), (10, 5, 4, 2));
-        assert_eq!(layout.hotspot_bytes(4), 200);
-        assert_eq!(layout.lst_offset(4), 200);
-        assert_eq!(layout.sst_offset(4), 216);
-        assert_eq!(layout.sightings_offset(4), 232);
-        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(4, 0) + (1 + 1 + 3) * SIGHTING_BYTES);
+        assert_eq!(layout.hotspot_bytes(1), 50);
+        assert_eq!(layout.lst_offset(1), 50);
+        assert_eq!(layout.sst_offset(1), 66);
+        assert_eq!(layout.sightings_offset(1), 84);
+        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(1, 0) + (1 + 1 + 3) * SIGHTING_BYTES);
         let mut o = HEADER_BYTES;
         let mut counts = Vec::new();
         for frame in 0..3usize {
             let body = &bytes[o..];
-            // Iguana observed 00:05 at (6,4): nothing at 00:00, cold stun (8 °C air) at 01:00,
-            // lifted by the 11 °C reading at 01:20 for the 02:00 frame. u8 = score / 0.01.
+            // Python at (2,2): 8 °C air suppresses (0.3) and the 1 m stage gives 1.2 → 0.36 → 36,
+            // until the 26 °C reading at 01:20 boosts it (1.5 × 1.2 = 1.8) for the 02:00 frame, where the
+            // newer report at (10,8) holds the density peak: 0.9971 × 1.8 → 179.
+            // The whole 2 × 2 hotspot parent shares the max.
+            let warm = frame == 2;
+            assert_eq!(hs_at(&layout, body, python, 2, 2), if warm { 179 } else { 36 }, "frame {frame}");
+            assert_eq!(hs_at(&layout, body, python, 3, 3), if warm { 179 } else { 36 }, "frame {frame}");
+            // The report observed at 00:05 at (10,8): nothing at 00:00, then the newest record
+            // peaks at density 1 under the same conditions.
             let want = match frame {
                 0 => 0,
-                1 => 200,
-                _ => 100,
+                1 => 36,
+                _ => 180,
             };
-            assert_eq!(hs_at(&layout, body, iguana, 6, 4), want, "iguana frame {frame}");
-            // Lionfish at (1,5): calm until the 9.5 m/s wind at 01:40 (0.1 → 10).
-            assert_eq!(hs_at(&layout, body, lionfish, 1, 5), if frame < 2 { 100 } else { 10 }, "frame {frame}");
-            // Tegu in February brumates (0.3 → 30); the whole 2 × 2 parent shares the max.
-            assert_eq!(hs_at(&layout, body, tegu, 5, 1), 30);
-            assert_eq!(hs_at(&layout, body, tegu, 4, 0), 30);
-            // Python at (2,2): 8 °C suppresses (0.3) and the 1 m stage gives 1.2 → 0.36 → 36.
-            assert_eq!(hs_at(&layout, body, python, 2, 2), 36);
-            // The NAS prior at (17,0) is 0.2 of the recent sighting's weight: 0.2 × 0.36 → 7.
-            assert_eq!(hs_at(&layout, body, python, 17, 0), 7);
+            assert_eq!(hs_at(&layout, body, python, 10, 8), want, "frame {frame}");
+            // The NAS prior at (17,0) is 0.2 of the peak weight: 0.2 × 0.36 → 7, then 0.2 × 1.8 → 36.
+            assert_eq!(hs_at(&layout, body, python, 17, 0), if warm { 36 } else { 7 }, "frame {frame}");
             // LST is valid only at the g5 (0,0) pixel: env (0,0) reads 12.25 °C, env (1,1) is out
             // of reach. SST is valid only at g5 (1,0): env (1,0) reads 24 °C, env (3,1) is missing.
-            let lst = layout.lst_offset(4);
+            let lst = layout.lst_offset(1);
             assert_eq!(i16_at(body, lst + layout.env.index(0, 0) * 2), 1225);
             assert_eq!(i16_at(body, lst + layout.env.index(1, 1) * 2), ENV_MISSING);
             // Each pixel's flagged parameter is a gap, not the valid neighbour one g5 cell away
             // (PRD §7: never interpolated).
             assert_eq!(i16_at(body, lst + layout.env.index(1, 0) * 2), ENV_FLAGGED);
-            let sst = layout.sst_offset(4);
+            let sst = layout.sst_offset(1);
             assert_eq!(i16_at(body, sst + layout.env.index(1, 0) * 2), 2400);
             assert_eq!(i16_at(body, sst + layout.env.index(0, 0) * 2), ENV_FLAGGED);
             assert_eq!(i16_at(body, sst + layout.env.index(3, 1) * 2), ENV_MISSING);
-            let n = u32_at(body, layout.sightings_offset(4)) as usize;
+            let n = u32_at(body, layout.sightings_offset(1)) as usize;
             counts.push(n);
-            o += layout.body_len(4, n);
+            o += layout.body_len(1, n);
         }
         assert_eq!(counts, vec![1, 1, 3], "sightings per hourly window");
         assert_eq!(o, bytes.len());
-        // Frame 0's record is the iguana (id 3); frame 1's is the flagged duplicate (id 6).
-        let rec = &bytes[HEADER_BYTES + layout.sightings_offset(4) + 4..];
+        // Frame 0's record is the 00:05 report (id 3); frame 1's is the flagged duplicate (id 6).
+        let rec = &bytes[HEADER_BYTES + layout.sightings_offset(1) + 4..];
         assert_eq!(u32_at(rec, 0), 3);
-        assert_eq!(u16::from_le_bytes([rec[12], rec[13]]), 3);
-        let rec = &bytes[HEADER_BYTES + layout.body_len(4, 1) + layout.sightings_offset(4) + 4..];
+        assert_eq!(u16::from_le_bytes([rec[12], rec[13]]), 1);
+        let rec = &bytes[HEADER_BYTES + layout.body_len(1, 1) + layout.sightings_offset(1) + 4..];
         assert_eq!(u32_at(rec, 0), 6);
         assert_eq!(f32::from_le_bytes(rec[4..8].try_into().unwrap()), layout.grid.center(layout.grid.index(2, 2)).0 as f32);
         assert_eq!(u16::from_le_bytes([rec[12], rec[13]]), 1);
         assert_eq!(rec[14], 0);
         assert_eq!(rec[15], FLAG_DUPLICATE);
         // Frame 2's three records, in observation order: ids 7, 8, 9.
-        let recs = &bytes[HEADER_BYTES + layout.body_len(4, 1) * 2 + layout.sightings_offset(4) + 4..];
+        let recs = &bytes[HEADER_BYTES + layout.body_len(1, 1) * 2 + layout.sightings_offset(1) + 4..];
         assert_eq!((0..3).map(|k| u32_at(recs, k * SIGHTING_BYTES)).collect::<Vec<_>>(), vec![7, 8, 9]);
     }
 
@@ -1010,7 +1008,7 @@ mod tests {
         let layout = app.regions[0].layout;
         assert_eq!(Layout::for_grid(app.regions[0].grid).unwrap(), layout);
         let mut out = Vec::new();
-        write_header(&mut out, &[layout], 4, 7, 1_700_000_000_000, 60);
+        write_header(&mut out, &[layout], 1, 7, 1_700_000_000_000, 60);
         assert_eq!(out.len(), HEADER_BYTES);
         assert_eq!(&out[..4], b"EVF2");
         assert_eq!(u32_at(&out, 4), 7);
@@ -1021,7 +1019,7 @@ mod tests {
         assert_eq!(f64::from_le_bytes(out[32..40].try_into().unwrap()), 0.02);
         assert_eq!(i64::from_le_bytes(out[40..48].try_into().unwrap()), 1_700_000_000_000);
         assert_eq!(u32_at(&out, 48), 60);
-        assert_eq!(u32_at(&out, 52), 4);
+        assert_eq!(u32_at(&out, 52), 1, "one species");
         assert_eq!(u16::from_le_bytes([out[56], out[57]]), 68);
         assert_eq!(u16::from_le_bytes([out[58], out[59]]), 64);
         assert_eq!(f32::from_le_bytes(out[60..64].try_into().unwrap()), 0.05f32);
@@ -1029,14 +1027,14 @@ mod tests {
         assert_eq!(u32_at(&out, 68), 1, "region count");
         let h = read_header(&out).unwrap();
         assert_eq!((h.hs, h.env), (layout.hs, layout.env));
-        // Section offsets on the python layout: 108,800 hotspot bytes, 4,352 env cells.
-        assert_eq!(layout.hotspot_bytes(4), 108_800);
-        assert_eq!(layout.lst_offset(4), 108_800);
-        assert_eq!(layout.sst_offset(4), 108_800 + 8_704);
-        assert_eq!(layout.sightings_offset(4), 108_800 + 17_408);
-        assert_eq!(layout.body_len(4, 0), 126_212);
-        // One taxon (lionfish app) shrinks only the hotspot section.
-        assert_eq!(layout.body_len(1, 0), 27_200 + 17_408 + 4);
+        // Section offsets on the python layout (one taxon): 27,200 hotspot bytes, 4,352 env cells.
+        assert_eq!(layout.hotspot_bytes(1), 27_200);
+        assert_eq!(layout.lst_offset(1), 27_200);
+        assert_eq!(layout.sst_offset(1), 27_200 + 8_704);
+        assert_eq!(layout.sightings_offset(1), 27_200 + 17_408);
+        assert_eq!(layout.body_len(1, 0), 44_612);
+        // Each further taxon would add one hotspot section only.
+        assert_eq!(layout.body_len(2, 0) - layout.body_len(1, 0), 27_200);
         assert!(Layout::for_grid(Grid { cols: 25, ..layout.grid }).is_err());
         assert_eq!(align(1_700_000_123_456, STEP_MS), 1_699_999_200_000);
         assert_eq!(align(-1, STEP_MS), -STEP_MS);
@@ -1075,12 +1073,12 @@ mod tests {
         let db = Db::memory("observations");
         seed_sources(&db).await;
         let app = python_app();
-        let (lionfish, python) = (app.taxon("lionfish").unwrap(), app.taxon("python").unwrap());
+        let python = app.taxon("python").unwrap();
         let layout = app.regions[0].layout;
         let g = layout.grid;
         let t0 = ms(2025, 6, 1, 12);
         let (lon, lat) = g.center(g.index(50, 60));
-        let id = insert_sighting(&db, "inat", 4, lat, lon, t0 + 7 * 60_000, "research", None).await;
+        let id = insert_sighting(&db, "inat", 1, lat, lon, t0 + 7 * 60_000, "research", None).await;
         let bytes = chunk(&db, &app, t0 + 60_000, t0 + 2 * HOUR + 40 * 60_000, 60).await.unwrap();
         let h = read_header(&bytes).unwrap();
         assert_eq!(h.frame_count, 3, "12:00, 13:00, 14:00");
@@ -1088,32 +1086,31 @@ mod tests {
         assert_eq!(h.hs, layout.hs);
         let stored: i64 = db.read(|c| c.query_row("select count(*) from frames", [], |r| r.get(0))).await.unwrap();
         assert_eq!(stored, 3);
-        // Frame 0 carries the sighting; frames 1 and 2 carry none. Lionfish density is 1.0 at
+        // Frame 0 carries the sighting; frames 1 and 2 carry none. Python density is 1.0 at
         // the cell from 13:00 on (observed 12:07 is after the 12:00 frame time).
         let f0 = &bytes[HEADER_BYTES..];
-        assert_eq!(u32_at(f0, layout.sightings_offset(4)), 1);
-        let f1 = &bytes[HEADER_BYTES + layout.body_len(4, 1)..];
-        assert_eq!(u32_at(f1, layout.sightings_offset(4)), 0);
-        assert_eq!(hs_at(&layout, f0, lionfish, 50, 60), 0);
-        assert_eq!(hs_at(&layout, f1, lionfish, 50, 60), 100);
-        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(4, 0) + SIGHTING_BYTES);
+        assert_eq!(u32_at(f0, layout.sightings_offset(1)), 1);
+        let f1 = &bytes[HEADER_BYTES + layout.body_len(1, 1)..];
+        assert_eq!(u32_at(f1, layout.sightings_offset(1)), 0);
+        assert_eq!(hs_at(&layout, f0, python, 50, 60), 0);
+        assert_eq!(hs_at(&layout, f1, python, 50, 60), 100);
+        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(1, 0) + SIGHTING_BYTES);
 
         // Stored bodies are reused: change the row underneath and the chunk still reads the cache.
-        db.write(move |tx| tx.execute("update sightings set taxon_id = 1 where id = ?1", [id])).await.unwrap();
+        db.write(move |tx| tx.execute("update sightings set taxon_id = 4 where id = ?1", [id])).await.unwrap();
         let again = chunk(&db, &app, t0, t0 + 2 * HOUR, 60).await.unwrap();
         assert_eq!(again, bytes);
         // A rebuild refreshes them.
         rebuild(&db, &app, t0, t0 + 2 * HOUR).await.unwrap();
         let fresh = chunk(&db, &app, t0, t0 + 2 * HOUR, 60).await.unwrap();
         assert_ne!(fresh, bytes);
-        let f1 = &fresh[HEADER_BYTES + layout.body_len(4, 1)..];
-        assert_eq!(hs_at(&layout, f1, python, 50, 60), 100);
-        assert_eq!(hs_at(&layout, f1, lionfish, 50, 60), 0);
+        let f1 = &fresh[HEADER_BYTES + layout.body_len(1, 1)..];
+        assert_eq!(hs_at(&layout, f1, python, 50, 60), 0, "the row is no longer this app's species");
         // A 15-minute chunk is built on the fly with its own sighting window and not stored.
         let fine = chunk(&db, &app, t0, t0 + 2 * HOUR, 15).await.unwrap();
         assert_eq!(read_header(&fine).unwrap().frame_count, 9);
-        assert_eq!(u32_at(&fine[HEADER_BYTES..], layout.sightings_offset(4)), 1);
-        assert_eq!(u32_at(&fine[HEADER_BYTES + layout.body_len(4, 1)..], layout.sightings_offset(4)), 0);
+        assert_eq!(u32_at(&fine[HEADER_BYTES..], layout.sightings_offset(1)), 1);
+        assert_eq!(u32_at(&fine[HEADER_BYTES + layout.body_len(1, 1)..], layout.sightings_offset(1)), 0);
         let stored: i64 = db.read(|c| c.query_row("select count(*) from frames", [], |r| r.get(0))).await.unwrap();
         assert_eq!(stored, 3);
         assert!(chunk(&db, &app, t0, t0 + 800 * HOUR, 60).await.is_err(), "over the chunk cap");
@@ -1151,9 +1148,9 @@ mod tests {
         assert_eq!(h.step_min, 60);
         assert_eq!(h.frame0, t0);
         assert_eq!((h.hs.cols, h.hs.rows, h.env.cols, h.env.rows), (170, 160, 68, 64));
-        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(4, 0) + SIGHTING_BYTES);
+        assert_eq!(bytes.len(), HEADER_BYTES + 3 * layout.body_len(1, 0) + SIGHTING_BYTES);
         assert!(gz.len() < bytes.len() / 10, "gzip {} of {} raw", gz.len(), bytes.len());
-        assert_eq!(hs_at(&layout, &bytes[HEADER_BYTES + layout.body_len(4, 1)..], python, 80, 90), 100);
+        assert_eq!(hs_at(&layout, &bytes[HEADER_BYTES + layout.body_len(1, 1)..], python, 80, 90), 100);
 
         // 15-minute frames for a short window; bad input is a 400.
         let fine = format!("/v1/python/frames?from={}&to={}&step=15", t0, t0 + HOUR);
@@ -1182,7 +1179,7 @@ mod tests {
         let now = now_ms();
         let g = state.app.regions[0].grid;
         let (lon, lat) = g.center(g.index(200, 150));
-        insert_sighting(&state.obs, "inat", 2, lat, lon, now - 2 * HOUR, "research", None).await;
+        insert_sighting(&state.obs, "inat", 1, lat, lon, now - 2 * HOUR, "research", None).await;
         let mut rx = state.hub.subscribe();
         spawn_builder_with(state.clone(), Duration::from_millis(100));
         tokio::task::yield_now().await;
@@ -1278,7 +1275,7 @@ mod tests {
 
         let started = std::time::Instant::now();
         let mut raw = Vec::new();
-        write_header(&mut raw, &[layout], 4, 0, t_start, STEP_MIN);
+        write_header(&mut raw, &[layout], app.taxa.len(), 0, t_start, STEP_MIN);
         let mut frames = 0usize;
         let mut zlib_bytes = 0usize;
         let mut batch_start = t_start;

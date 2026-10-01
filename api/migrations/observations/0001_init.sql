@@ -34,15 +34,13 @@ create table fetch_runs (
 create index fetch_runs_source_time on fetch_runs(source_id, fetched_at);
 
 create table taxa (
-  id integer primary key,                   -- 1 python, 2 tegu, 3 iguana, 4 lionfish; >4 background
+  id integer primary key,                   -- 1 python, 4 lionfish (the apps' species)
   scientific_name text not null unique,
   common_name text not null,
   focus integer not null default 0
 );
 insert into taxa (id, scientific_name, common_name, focus) values
   (1, 'Python bivittatus', 'Burmese python', 1),
-  (2, 'Salvator merianae', 'Argentine black and white tegu', 1),
-  (3, 'Iguana iguana', 'Green iguana', 1),
   (4, 'Pterois volitans/miles', 'Lionfish', 1);
 
 create table sightings (

@@ -35,8 +35,7 @@
     { "source": "nws-alerts", "mode": "poll", "name": "NWS alerts API (Louisiana)", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": { "area": "LA", "offices": ["KLIX", "KSHV", "KLCH", "KJAN"], "senders": ["NWS New Orleans LA", "NWS Shreveport LA", "NWS Lake Charles LA", "NWS Jackson MS"], "sameCodes": [] } },
     { "source": "nws-forecast", "mode": "poll", "name": "NWS gridpoint forecast", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": {} },
     { "source": "iem", "mode": "poll", "name": "IEM HML river forecast archive (Iowa State)", "homepage": "https://mesonet.agron.iastate.edu/request/hml.php", "params": { "days": 30 } },
-    { "source": "nwws", "mode": "push", "params": { "offices": ["KLCH", "KLIX", "KSHV"] } },
-    { "source": "web", "mode": "push", "params": {} }
+    { "source": "nwws", "mode": "push", "params": { "offices": ["KLCH", "KLIX", "KSHV"] } }
   ],
   "score": {
     "label": "Needs review (reasons listed per location; not a risk score)",

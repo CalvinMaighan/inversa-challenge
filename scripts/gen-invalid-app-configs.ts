@@ -30,13 +30,11 @@ const cases: [string, string, (c: J) => void][] = [
     c.taxa[0].scientific = c.taxa[0].scientificName;
     delete c.taxa[0].scientificName;
   }],
-  ["taxa.category-unknown", "python", (c) => (c.taxa[0].category = "dragons")],
-  ["taxa.short-blank", "python", (c) => (c.taxa[1].short = " ")],
+  ["taxa.short-blank", "python", (c) => (c.taxa[0].short = " ")],
   ["taxa.aliases-blank", "python", (c) => (c.taxa[0].aliases = ["burmese python", ""])],
-  ["taxa.iconicGroup-null", "python", (c) => (c.taxa[0].iconicGroup = null)],
   ["taxa.inatTaxonId-zero", "python", (c) => (c.taxa[0].inatTaxonId = 0)],
   ["taxa.rules-unknown", "python", (c) => (c.taxa[0].rules = "dragon")],
-  ["taxa.id-duplicate", "python", (c) => (c.taxa[1].id = "python")],
+  ["taxa.more-than-one", "python", (c) => c.taxa.push({ ...c.taxa[0], id: "python-2", scientificName: "Python bivittatus 2" })],
   ["taxa.color-not-hex", "lionfish", (c) => (c.taxa[0].color = "purple")],
   ["regions.empty", "python", (c) => (c.regions = [])],
   ["regions.bbox-object", "python", (c) => {

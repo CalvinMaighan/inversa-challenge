@@ -14,87 +14,15 @@
       "aliases": [
         "burmese python"
       ],
-      "category": "snakes",
       "scientificName": "Python bivittatus",
       "inatTaxonId": 238252,
       "inatLineageIds": [],
       "gbifKey": 4820533,
       "nasGenus": "Python",
       "nasSpecies": "bivittatus",
-      "iconicGroup": "Reptilia",
       "color": "#e4572e",
       "halfLifeDays": 21,
       "rules": "python"
-    },
-    {
-      "id": "tegu",
-      "name": "Argentine black and white tegu",
-      "short": "Tegu",
-      "line": "big lizard that raids the nests of birds, turtles and alligators",
-      "aliases": [
-        "argentine tegu",
-        "black and white tegu",
-        "argentine black-and-white tegu"
-      ],
-      "category": "lizards",
-      "scientificName": "Salvator merianae",
-      "inatTaxonId": 318758,
-      "inatLineageIds": [],
-      "gbifKey": 5227370,
-      "nasGenus": "Salvator",
-      "nasSpecies": "merianae",
-      "iconicGroup": "Reptilia",
-      "color": "#f3a712",
-      "halfLifeDays": 14,
-      "rules": "tegu"
-    },
-    {
-      "id": "iguana",
-      "name": "Green iguana",
-      "short": "Iguana",
-      "line": "tree-climbing lizard that burrows into seawalls and canal banks",
-      "aliases": [
-        "green iguana"
-      ],
-      "category": "lizards",
-      "scientificName": "Iguana iguana",
-      "inatTaxonId": 35342,
-      "inatLineageIds": [],
-      "gbifKey": 2459658,
-      "nasGenus": "Iguana",
-      "nasSpecies": "iguana",
-      "iconicGroup": "Reptilia",
-      "color": "#5bc0be",
-      "halfLifeDays": 14,
-      "rules": "iguana"
-    },
-    {
-      "id": "lionfish",
-      "name": "Lionfish",
-      "short": "Lionfish",
-      "line": "venomous reef fish that eats young native fish",
-      "aliases": [
-        "red lionfish",
-        "common lionfish",
-        "devil firefish",
-        "pterois",
-        "pterois volitans",
-        "pterois miles"
-      ],
-      "category": "fish",
-      "scientificName": "Pterois volitans/miles",
-      "inatTaxonId": 47284,
-      "inatLineageIds": [
-        47280,
-        123459
-      ],
-      "gbifKey": 2334432,
-      "nasGenus": "Pterois",
-      "nasSpecies": null,
-      "iconicGroup": "Actinopterygii",
-      "color": "#a06cd5",
-      "halfLifeDays": 60,
-      "rules": "lionfish"
     }
   ],
   "regions": [],
@@ -103,12 +31,7 @@
     {
       "source": "inat",
       "mode": "poll",
-      "params": {
-        "queries": [
-          "focus",
-          "introduced"
-        ]
-      }
+      "params": {}
     },
     {
       "source": "nas",
@@ -159,7 +82,15 @@
     {
       "source": "usgs",
       "mode": "poll",
-      "params": {}
+      "params": {
+        "api": "ogc",
+        "parameters": [
+          "00065",
+          "62614",
+          "62615",
+          "00010"
+        ]
+      }
     },
     {
       "source": "ndbc",
@@ -194,11 +125,6 @@
       "source": "nwws",
       "mode": "push",
       "params": {}
-    },
-    {
-      "source": "web",
-      "mode": "push",
-      "params": {}
     }
   ],
   "score": {
@@ -208,19 +134,19 @@
         "id": "density",
         "label": "Recent sightings",
         "weight": 1,
-        "description": "Kernel density of recent sightings, half-life per species; NAS and GBIF history as a static prior."
+        "description": "Kernel density of recent python sightings (21-day half-life); NAS and GBIF history as a static prior."
       },
       {
         "id": "activity",
         "label": "Activity rules",
         "weight": 1,
-        "description": "Temperature, season and cold-stun rules per species."
+        "description": "Air and land-surface temperature rules for python activity."
       },
       {
         "id": "access",
         "label": "Crew access",
         "weight": 1,
-        "description": "Levee stage for pythons, sea state for lionfish."
+        "description": "Levee and canal stage for crew access."
       }
     ]
   },
@@ -291,10 +217,10 @@
     "notes": "Field notes pinned to the map."
   },
   "copy": {
-    "about": "A live map of invasive animals in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.",
+    "about": "A live map of Burmese python reports in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.",
     "region": "South Florida",
     "timezone": "America/New_York",
-    "legendTitle": "Invasive animals reported in South Florida",
+    "legendTitle": "Burmese pythons reported in South Florida",
     "title": "Everglades Ops",
     "shortTitle": "Everglades",
     "sightingsNote": "Sightings are reports, not abundance: more observers mean more reports.",
@@ -303,13 +229,13 @@
   "helperQuestions": [
     "Where were pythons reported in the last 7 days?",
     "Which cells rank highest for a removal crew tonight, and why?",
-    "Did the cold snap change iguana activity?",
+    "Did the cold snap change python activity?",
     "Which feeds are stale right now?",
     "Where does this hotspot score come from?"
   ],
   "agent": {
-    "persona": "You are the operations analyst for Everglades invasive-species removal crews. You answer from the stored sightings, readings, alerts and hotspot scores of South Florida, cite every number, and state feed freshness.",
-    "scope": "Burmese python, Argentine tegu, green iguana and lionfish in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5).",
+    "persona": "You are the operations analyst for Everglades python removal crews. You answer from the stored sightings, readings, alerts, forecasts and hotspot scores of South Florida, cite every number, and state feed freshness.",
+    "scope": "Burmese python in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5). No other species is tracked here.",
     "tools": [
       "geocode",
       "sightings",
@@ -319,11 +245,15 @@
       "hotspots",
       "explain_cell",
       "backtest",
+      "weather_forecast",
       "feed_state",
+      "source_info",
+      "evidence",
+      "team_board",
       "notes",
       "set_view"
     ],
-    "refusal": "This app covers Burmese python, tegu, green iguana and lionfish in South Florida and the Keys. Switch to Lionfish Watch for the Caribbean or to Carp for Louisiana rivers."
+    "refusal": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys; it tracks no other species. Switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers."
   },
   "eval": {
     "goldenSet": "python"

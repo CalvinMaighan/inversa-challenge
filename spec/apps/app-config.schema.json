@@ -9,14 +9,15 @@
   "properties": {
     "id": { "type": "string", "enum": ["carp", "lionfish", "python"], "description": "App id; also the route prefix (/v1/{id}/...), the data dir (<INVERSA_DATA_DIR>/{id}) and the room prefix ({id}:main)." },
     "name": { "$ref": "#/$defs/text" },
-    "icon": { "$ref": "#/$defs/text", "description": "Icon id in apps/web/shared/species-icons.ts." },
+    "icon": { "$ref": "#/$defs/text", "description": "Icon id in apps/web/shared/app-icons.ts." },
     "tagline": { "$ref": "#/$defs/text" },
     "question": { "$ref": "#/$defs/text", "description": "The one question the app answers (docs/APPS.md)." },
     "kind": { "type": "string", "enum": ["species", "conditions"], "description": "species: hotspot grid, frames, taxa. conditions: readings, forecast snapshots and alerts per location; no hotspot grid." },
     "provisional": { "type": "boolean", "description": "True while the app's locations/regions are placeholders awaiting a data proof." },
     "taxa": {
       "type": "array",
-      "description": "Focus taxa in frame order (TaxonIdx = position). Empty for conditions apps.",
+      "maxItems": 1,
+      "description": "The focus taxon of a species app (TaxonIdx 0 in frames); empty for conditions apps. One species per app.",
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -27,17 +28,15 @@
           "short": { "$ref": "#/$defs/text", "description": "Chip label (\"Python\"); the name when absent." },
           "line": { "$ref": "#/$defs/text", "description": "One plain line for the welcome guide." },
           "aliases": { "type": "array", "items": { "$ref": "#/$defs/text" }, "description": "Other names people use for it, matched lower case by the agent." },
-          "category": { "type": "string", "enum": ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"], "description": "Category icon (apps/web/shared/species-categories.ts CATEGORY_IDS)." },
           "scientificName": { "$ref": "#/$defs/text", "description": "Matches taxa.scientific_name (unique) in observations.db." },
           "inatTaxonId": { "type": "integer", "minimum": 1 },
           "inatLineageIds": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "description": "Further iNat taxon ids that collapse to this taxon (e.g. the species under a genus)." },
           "gbifKey": { "type": "integer", "minimum": 1, "description": "GBIF backbone key; matched against speciesKey and genusKey." },
           "nasGenus": { "$ref": "#/$defs/text" },
           "nasSpecies": { "type": ["string", "null"], "description": "NAS species epithet; null matches any species of the genus." },
-          "iconicGroup": { "$ref": "#/$defs/text" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
           "halfLifeDays": { "type": "number", "exclusiveMinimum": 0 },
-          "rules": { "type": "string", "enum": ["python", "tegu", "iguana", "lionfish"], "description": "Named activity/access rule set in api/src/hotspot/rules.rs." }
+          "rules": { "type": "string", "enum": ["python", "lionfish"], "description": "Named activity/access rule set in api/src/hotspot/rules.rs." }
         }
       }
     },
@@ -117,7 +116,7 @@
         "additionalProperties": false,
         "required": ["source", "mode"],
         "properties": {
-          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps", "openmeteo-marine", "goes19-sst", "nws-alerts", "nws-forecast", "iem"] },
+          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "crw", "nwps", "openmeteo-marine", "goes19-sst", "nws-alerts", "nws-forecast", "iem"] },
           "mode": { "type": "string", "enum": ["push", "poll"] },
           "name": { "type": "string" },
           "homepage": { "type": "string" },

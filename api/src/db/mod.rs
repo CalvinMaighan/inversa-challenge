@@ -22,6 +22,7 @@ const OBSERVATIONS: &[(&str, &str)] = &[
     ("0008_lionfish_ingest", include_str!("../../migrations/observations/0008_lionfish_ingest.sql")),
     ("0009_discharge", include_str!("../../migrations/observations/0009_discharge.sql")),
     ("0010_low_water", include_str!("../../migrations/observations/0010_low_water.sql")),
+    ("0011_one_species", include_str!("../../migrations/observations/0011_one_species.sql")),
 ];
 const TEAM: &[(&str, &str)] = &[
     ("0001_init", include_str!("../../migrations/team/0001_init.sql")),
@@ -399,7 +400,9 @@ mod tests {
     async fn migrations_apply_and_seed_taxa() {
         let db = Db::memory("observations");
         let n: i64 = db.read(|c| c.query_row("select count(*) from taxa where focus = 1", [], |r| r.get(0))).await.unwrap();
-        assert_eq!(n, 4);
+        assert_eq!(n, 2, "python and lionfish");
+        let cols: Vec<String> = db.read(|c| c.prepare("select name from pragma_table_info('taxa') order by cid")?.query_map([], |r| r.get(0))?.collect()).await.unwrap();
+        assert_eq!(cols, ["id", "scientific_name", "common_name", "focus", "inat_taxon_id"], "the T44 enrichment columns are gone");
         let team = Db::memory("team");
         let n: i64 = team.read(|c| c.query_row("select count(*) from ops", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 0);

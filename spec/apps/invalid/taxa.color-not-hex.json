@@ -19,7 +19,6 @@
         "pterois volitans",
         "pterois miles"
       ],
-      "category": "fish",
       "scientificName": "Pterois volitans/miles",
       "inatTaxonId": 47284,
       "inatLineageIds": [
@@ -29,7 +28,6 @@
       "gbifKey": 2334432,
       "nasGenus": "Pterois",
       "nasSpecies": null,
-      "iconicGroup": "Actinopterygii",
       "color": "purple",
       "halfLifeDays": 60,
       "rules": "lionfish"
@@ -38,6 +36,7 @@
   "regions": [
     {
       "id": "fl-keys",
+      "code": "fl",
       "name": "Florida Keys / South Florida",
       "bbox": [
         -83.2,
@@ -54,6 +53,7 @@
     },
     {
       "id": "mx-caribbean",
+      "code": "mx",
       "name": "Mexican Caribbean",
       "bbox": [
         -87.9,
@@ -70,6 +70,7 @@
     },
     {
       "id": "belize",
+      "code": "bz",
       "name": "Belize",
       "bbox": [
         -88.5,
@@ -87,6 +88,7 @@
     },
     {
       "id": "co-caribbean",
+      "code": "co",
       "name": "Colombian Caribbean",
       "bbox": [
         -81.8,
@@ -109,9 +111,9 @@
       "source": "inat",
       "mode": "poll",
       "params": {
-        "queries": [
-          "focus"
-        ]
+        "cadenceMinutes": 10,
+        "backfillDays": 90,
+        "mirrorCatchUp": true
       }
     },
     {
@@ -125,7 +127,11 @@
       "source": "nas",
       "mode": "poll",
       "params": {
-        "state": null
+        "state": null,
+        "global": true,
+        "pageLimit": 4000,
+        "parallelPages": 4,
+        "cadenceDays": 7
       }
     },
     {
@@ -162,73 +168,63 @@
       }
     },
     {
-      "source": "openmeteo",
+      "source": "openmeteo-marine",
       "mode": "poll",
+      "name": "Open-Meteo Marine",
+      "homepage": "https://open-meteo.com/en/docs/marine-weather-api",
       "params": {
-        "stepDeg": 0.25,
-        "marine": [
-          "wave_height",
-          "wave_period",
-          "ocean_current_velocity",
-          "ocean_current_direction"
-        ]
+        "stepDeg": 0.5,
+        "forecastHours": 72,
+        "waveModel": "meteofrance_wave",
+        "currentModel": "meteofrance_currents",
+        "metaCheckMinutes": 15
       }
     },
     {
       "source": "ndbc",
       "mode": "poll",
       "params": {
-        "note": "Florida only; no sea-temperature buoys in the other areas"
+        "bulk": true,
+        "note": "latest_obs.txt; only Florida has sea-temperature buoys inside the areas"
       }
     },
     {
-      "source": "coops",
-      "mode": "poll",
-      "params": {
-        "note": "Florida only"
-      }
-    },
-    {
-      "source": "goes19",
+      "source": "goes19-sst",
       "mode": "push",
+      "name": "GOES-19 SST (full disk)",
       "params": {
         "products": [
           "ABI-L2-SSTF"
         ]
       }
-    },
-    {
-      "source": "web",
-      "mode": "push",
-      "params": {}
     }
   ],
   "score": {
-    "label": "Survey priority (four components shown separately; no single risk percent)",
+    "label": "Survey priority (four components shown separately; rankScore is a weighted mean that only orders cells; no single risk percent)",
     "components": [
       {
         "id": "recentReports",
         "label": "Recent reports",
         "weight": 1,
-        "description": "iNaturalist records by observed date in the window; sightings are not abundance."
+        "description": "Kernel-weighted independent reports by observed date (60-day half-life; research grade 1, other grades 0.5; NAS/GBIF history 0.2 prior; duplicates and GBIF copies of iNat never counted), normalised to the region maximum. Sightings are not abundance; unknown when the region has no report."
       },
       {
         "id": "idQuality",
         "label": "Identification quality",
         "weight": 1,
-        "description": "Research grade share and duplicate handling (GBIF copies of iNat are not corroboration)."
+        "description": "Share of nearby recent reports that are research grade with positional accuracy under the cell size. Unknown without reports."
       },
       {
         "id": "heatStress",
         "label": "Reef heat stress",
         "weight": 1,
-        "description": "NOAA CRW DHW (accumulated) and bleaching alert level (current). Context, not proof of lionfish damage."
+        "description": "NOAA CRW at the cell: DHW (accumulated, /8) and bleaching alert level (current, /4), combined by max, both shown. Context, not proof of lionfish damage; unknown when missing, stale beyond 72 h."
       },
       {
         "id": "completeness",
         "label": "Data completeness",
-        "weight": 1,
-        "description": "Feed freshness and coverage gaps (NAS stale outside Florida, no buoys outside Florida)."
+        "weight": 0,
+        "description": "Report freshness, CRW state, NAS coverage (stale outside Florida), buoy coverage (none outside Florida), thin-region flag. Lowers confidence, never the rank: its weight is ignored."
       }
     ]
   },
@@ -249,7 +245,7 @@
     {
       "id": "hotspots",
       "label": "Survey priority",
-      "defaultOn": false
+      "defaultOn": true
     },
     {
       "id": "sst",
@@ -307,7 +303,11 @@
     "shortTitle": "Lionfish",
     "sightingsNote": "Sightings are not abundance: more reports can mean more observers; no reports can mean no sampling.",
     "scopeNote": "Lionfish in four areas: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean.",
-    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown."
+    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown.",
+    "heatNote": "Heat stress is context, not proof of damage: it says how hot the reef has been, not what lionfish did there.",
+    "priorityNote": "Survey priority orders places to look first from four separate components. It is not a risk or a probability.",
+    "lagNote": "Divers often upload days or years after a dive: in the L1 data proof (2026-10-01) the median lag was 5 days and 24 of 74 recent iNaturalist records were uploaded more than 30 days late. Counting by observed date puts each report on the day of the dive; by submitted date, on the day it reached iNaturalist.",
+    "replayNote": "Known at that time: reports submitted by then, the CRW product of that day, and the survey priority computed from what was submitted by then."
   },
   "helperQuestions": [
     "Show recent lionfish reports near reefs with elevated heat stress in Belize.",
@@ -327,7 +327,12 @@
       "conditions",
       "hotspots",
       "explain_cell",
+      "reef_heat",
+      "marine_forecast",
       "feed_state",
+      "source_info",
+      "evidence",
+      "team_board",
       "notes",
       "set_view"
     ],

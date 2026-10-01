@@ -290,52 +290,37 @@ pub struct Taxon {
     pub scientific_name: String,
     pub common_name: String,
     pub focus: bool,
-    /// iNaturalist taxon id (T44); null for taxa only GBIF or NAS have reported.
+    /// iNaturalist taxon id; null for taxa only GBIF or NAS have reported.
     pub inat_taxon_id: Option<ID>,
-    /// Reptilia, Amphibia, Aves, Mammalia, Actinopterygii, Mollusca, Insecta, Arachnida, Plantae, Fungi or other.
-    pub iconic_group: Option<String>,
-    /// Plain text, at most two sentences, from the taxon's Wikipedia summary.
-    pub summary: Option<String>,
-    /// Same-origin copy of the taxon's default photo (`/v1/media/taxon/<id>`).
-    pub photo_url: Option<String>,
     /// The taxon's page at iNaturalist, for a new-tab link.
     pub page_url: Option<String>,
-    /// iNat ancestor taxon ids, root first (the web app derives the category: snakes, lizards, ...). Null when unknown.
-    pub ancestor_ids: Option<Vec<ID>>,
 }
 
-/// `taxa.ancestor_ids` JSON text to ids; unreadable text reads as unknown.
-pub fn ancestry_from_db(text: Option<String>) -> Option<Vec<ID>> {
-    let ids: Vec<i64> = serde_json::from_str(text?.as_str()).ok()?;
-    Some(ids.into_iter().map(|n| ID(n.to_string())).collect())
+/// A taxon's page at iNaturalist.
+pub fn inat_page_url(inat_taxon_id: i64) -> String {
+    format!("https://www.inaturalist.org/taxa/{inat_taxon_id}")
 }
 
 impl Taxon {
     /// Column order of [`Taxon::COLUMNS`] in a `select` over `taxa t`.
-    pub const COLUMNS: &'static str =
-        "t.id, t.scientific_name, t.common_name, t.focus, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url, t.ancestor_ids";
+    pub const COLUMNS: &'static str = "t.id, t.scientific_name, t.common_name, t.focus, t.inat_taxon_id";
 
-    /// Read the nine [`Taxon::COLUMNS`] starting at `at`.
+    /// Read the five [`Taxon::COLUMNS`] starting at `at`.
     pub fn from_row(r: &rusqlite::Row<'_>, at: usize) -> rusqlite::Result<Taxon> {
         let id: i64 = r.get(at)?;
         let inat: Option<i64> = r.get(at + 4)?;
-        let photo: Option<String> = r.get(at + 7)?;
         Ok(Taxon {
             id: ID(id.to_string()),
             scientific_name: r.get(at + 1)?,
             common_name: r.get(at + 2)?,
             focus: r.get(at + 3)?,
             inat_taxon_id: inat.map(|n| ID(n.to_string())),
-            iconic_group: r.get(at + 5)?,
-            summary: r.get(at + 6)?,
-            photo_url: photo.map(|_| format!("/v1/media/taxon/{id}")),
-            page_url: inat.map(crate::taxon_info::page_url),
-            ancestor_ids: ancestry_from_db(r.get(at + 8)?),
+            page_url: inat.map(inat_page_url),
         })
     }
 }
 
-/// Sightings of one taxon in a window (T44 `speciesCounts`).
+/// Sightings of the app's species in a window (`speciesCounts`).
 #[derive(Debug, Clone, SimpleObject)]
 pub struct SpeciesCount {
     pub taxon: Taxon,

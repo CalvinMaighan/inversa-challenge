@@ -791,7 +791,7 @@ pub mod testkit {
             .timestamp_millis()
     }
 
-    /// The python app with its taxa resolved to the migration's seeded ids (1-4, config order),
+    /// The python app with its taxon resolved to the migration's seeded id 1,
     /// for tests that open a bare `Db::memory("observations")` instead of an `AppState`.
     pub fn python_app() -> App {
         let mut app = App::builtin("python").unwrap();
@@ -885,9 +885,7 @@ pub mod testkit {
 mod tests {
     use super::testkit::*;
     use super::*;
-    use crate::hotspot::rules::{
-        IGUANA_COLD_STUN_BOOST, LIONFISH_NO_ACCESS, PYTHON_COLD_SUPPRESS, PYTHON_WARM_BOOST, TEGU_BRUMATION_SUPPRESS,
-    };
+    use crate::hotspot::rules::{LIONFISH_NO_ACCESS, PYTHON_COLD_SUPPRESS, PYTHON_WARM_BOOST};
 
     /// A 40 × 30 grid off the south-west corner of the region.
     const G: Grid = Grid { west: -81.0, south: 25.0, cell_deg: 0.01, cols: 40, rows: 30 };
@@ -910,27 +908,37 @@ mod tests {
         Snapshot::load(db, &python_app().taxa, grid, from, to).await.unwrap()
     }
 
+    /// The lionfish app with its taxon resolved to the seeded id 4.
+    fn lionfish_app() -> App {
+        let mut app = App::builtin("lionfish").unwrap();
+        app.taxa[0].taxon_id = 4;
+        app
+    }
+
     #[tokio::test]
     async fn hotspot_density_kernel_and_decay() {
         let db = db().await;
         let app = python_app();
+        let python = app.taxon("python").unwrap();
         let t = ms(2025, 7, 10, 12);
         let (lat, lon) = at_cell(10, 10);
-        // Tegu at (10,10) now, another at (30,10) one half-life (14 d) earlier: weights 1 and 0.5.
-        insert_sighting(&db, "inat", 2, lat, lon, t - HOUR, "research", None).await;
+        // Python at (10,10) now, another at (30,10) one half-life (21 d) earlier: weights 1 and 0.5.
+        insert_sighting(&db, "inat", 1, lat, lon, t - HOUR, "research", None).await;
         let (lat2, lon2) = at_cell(30, 10);
-        insert_sighting(&db, "inat", 2, lat2, lon2, t - HOUR - 14 * DAY, "research", None).await;
+        insert_sighting(&db, "inat", 1, lat2, lon2, t - HOUR - 21 * DAY, "research", None).await;
+        // A lionfish row in the same database is another app's species: not loaded.
+        let (lat3, lon3) = at_cell(20, 20);
+        insert_sighting(&db, "inat", 4, lat3, lon3, t - HOUR, "research", None).await;
         let snap = load(&db, G, t, t + 1).await;
-        let d = snap.density(app.taxon("tegu").unwrap(), t);
+        let d = snap.density(python, t);
         assert_eq!(d[G.index(10, 10)], 1.0);
         assert!((d[G.index(11, 10)] - kernel_at(1, 0)).abs() < 1e-5, "one cell east: exp(-1/8)");
         assert!((d[G.index(12, 12)] - kernel_at(2, 2)).abs() < 1e-5);
         assert_eq!(d[G.index(17, 10)], 0.0, "outside 3 sigma");
-        let w1 = 0.5f64.powf(HOUR as f64 / (14.0 * DAY as f64));
-        let w2 = 0.5f64.powf((HOUR + 14 * DAY) as f64 / (14.0 * DAY as f64));
+        let w1 = 0.5f64.powf(HOUR as f64 / (21.0 * DAY as f64));
+        let w2 = 0.5f64.powf((HOUR + 21 * DAY) as f64 / (21.0 * DAY as f64));
         assert!((d[G.index(30, 10)] - (w2 / w1) as f32).abs() < 1e-5, "one half-life old: half weight");
-        // Python sees nothing.
-        assert!(snap.density(app.taxon("python").unwrap(), t).iter().all(|&v| v == 0.0));
+        assert_eq!(d[G.index(20, 20)], 0.0, "the lionfish row adds nothing");
     }
 
     #[tokio::test]
@@ -955,46 +963,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hotspot_iguana_cold_stun() {
-        let db = db().await;
-        let app = python_app();
-        let iguana = app.taxon("iguana").unwrap();
-        let t = ms(2025, 1, 22, 11);
-        let (lat, lon) = at_cell(20, 15);
-        insert_sighting(&db, "inat", 3, lat, lon, t - 2 * HOUR, "research", None).await;
-        let st = insert_station(&db, "nws", "KMIA", lat + 0.02, lon, "grid").await;
-        insert_readings(&db, vec![(st, "air_c", Some(7.5), t - HOUR)]).await;
-        let snap = load(&db, G, t, t + 1).await;
-        let idx = G.index(20, 15);
-        let scores = snap.score_grid(iguana, t);
-        assert_eq!(scores[idx], 1.0 * IGUANA_COLD_STUN_BOOST * 1.0);
-        let ex = snap.explain_cell(iguana, t, idx);
-        assert_eq!(ex.score, IGUANA_COLD_STUN_BOOST);
-        let stun = ex.terms.iter().find(|x| x.name == "activity.iguana_cold_stun_easy_capture_window").unwrap();
-        assert_eq!(stun.value, IGUANA_COLD_STUN_BOOST);
-        assert!(stun.rationale.contains("easy capture window"));
-        // Product of the terms equals the score.
-        let product: f32 = ex.terms.iter().map(|x| x.value).product();
-        assert!((product - ex.score).abs() < 1e-6);
-        // A warm reading later removes the boost.
-        insert_readings(&db, vec![(st, "air_c", Some(24.0), t + HOUR)]).await;
-        let snap = load(&db, G, t + 2 * HOUR, t + 2 * HOUR + 1).await;
-        let ex = snap.explain_cell(iguana, t + 2 * HOUR, idx);
-        let stun = ex.terms.iter().find(|x| x.name.ends_with("cold_stun_easy_capture_window")).unwrap();
-        assert_eq!(stun.value, 1.0);
-    }
-
-    #[tokio::test]
     async fn hotspot_lionfish_no_access_waves() {
         let db = db().await;
-        let app = python_app();
-        let lionfish = app.taxon("lionfish").unwrap();
+        let app = lionfish_app();
+        let lionfish = &app.taxa[0];
         let t = ms(2025, 8, 3, 15);
         let (lat, lon) = at_cell(8, 8);
         insert_sighting(&db, "inat", 4, lat, lon, t - 3 * HOUR, "research", None).await;
         let buoy = insert_station(&db, "ndbc", "41114", lat - 0.03, lon + 0.05, "buoy").await;
         insert_readings(&db, vec![(buoy, "wave_m", Some(2.1), t - HOUR), (buoy, "wind_ms", Some(4.0), t - HOUR)]).await;
-        let snap = load(&db, G, t, t + 1).await;
+        let snap = Snapshot::load(&db, &app.taxa, G, t, t + 1).await.unwrap();
         let idx = G.index(8, 8);
         let scores = snap.score_grid(lionfish, t);
         assert!((scores[idx] - LIONFISH_NO_ACCESS).abs() < 1e-6, "rough seas: 1.0 × 1.0 × 0.1");
@@ -1003,9 +981,12 @@ mod tests {
         assert_eq!(sea.value, LIONFISH_NO_ACCESS);
         let base = ex.terms.iter().find(|x| x.name == "activity.lionfish_year_round").unwrap();
         assert_eq!(base.value, 1.0);
+        // Product of the terms equals the score.
+        let product: f32 = ex.terms.iter().map(|x| x.value).product();
+        assert!((product - ex.score).abs() < 1e-6);
         // Calm seas an hour later: full access.
         insert_readings(&db, vec![(buoy, "wave_m", Some(0.6), t + HOUR)]).await;
-        let snap = load(&db, G, t + HOUR, t + HOUR + 1).await;
+        let snap = Snapshot::load(&db, &app.taxa, G, t + HOUR, t + HOUR + 1).await.unwrap();
         let scores = snap.score_grid(lionfish, t + HOUR);
         assert!((scores[idx] - 1.0).abs() < 1e-6);
     }
@@ -1040,22 +1021,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hotspot_tegu_brumation_and_ranking() {
+    async fn hotspot_python_ranking_and_bbox() {
         let db = db().await;
         let app = python_app();
-        let tegu = app.taxon("tegu").unwrap();
+        let python = app.taxon("python").unwrap();
         let t = ms(2025, 11, 20, 9);
         let (lat_a, lon_a) = at_cell(5, 5);
         let (lat_b, lon_b) = at_cell(35, 25);
-        insert_sighting(&db, "inat", 2, lat_a, lon_a, t - HOUR, "research", None).await;
-        insert_sighting(&db, "inat", 2, lat_b, lon_b, t - HOUR - 14 * DAY, "research", None).await;
+        insert_sighting(&db, "inat", 1, lat_a, lon_a, t - HOUR, "research", None).await;
+        insert_sighting(&db, "inat", 1, lat_b, lon_b, t - HOUR - 21 * DAY, "research", None).await;
         let snap = load(&db, G, t, t + 1).await;
-        let s = snap.score_grid(tegu, t);
+        // No temperature or stage data: both rules are neutral, so the score is the density.
+        let s = snap.score_grid(python, t);
         let (ia, ib) = (G.index(5, 5), G.index(35, 25));
-        assert!((s[ia] - TEGU_BRUMATION_SUPPRESS).abs() < 1e-6);
-        let ratio = 0.5f64.powf((HOUR + 14 * DAY) as f64 / (14.0 * DAY as f64))
-            / 0.5f64.powf(HOUR as f64 / (14.0 * DAY as f64));
-        assert!((s[ib] - TEGU_BRUMATION_SUPPRESS * ratio as f32).abs() < 1e-5);
+        assert!((s[ia] - 1.0).abs() < 1e-6);
+        let ratio = 0.5f64.powf((HOUR + 21 * DAY) as f64 / (21.0 * DAY as f64)) / 0.5f64.powf(HOUR as f64 / (21.0 * DAY as f64));
+        assert!((s[ib] - ratio as f32).abs() < 1e-5);
         let top = snap.top_cells(&s, None, 3);
         assert_eq!(top[0].cell, "5:5");
         assert!(top[0].score >= top[1].score && top[1].score >= top[2].score);
@@ -1063,33 +1044,33 @@ mod tests {
         let top = snap.top_cells(&s, Some(&east_only), 5);
         assert_eq!(top[0].cell, "35:25");
         assert!(top.iter().all(|c| c.lon >= -80.8));
-        // May: no brumation.
+        // Before either report: nothing to rank.
         let t_may = ms(2025, 5, 20, 9);
         let snap = load(&db, G, t_may, t_may + 1).await;
-        assert!(snap.score_grid(tegu, t_may).iter().all(|&v| v == 0.0), "nothing observed before May");
+        assert!(snap.score_grid(python, t_may).iter().all(|&v| v == 0.0), "nothing observed before May");
     }
 
     #[tokio::test]
     async fn hotspot_public_entry_points() {
         let db = db().await;
         let app = python_app();
-        let lionfish = app.taxon("lionfish").unwrap();
+        let python = app.taxon("python").unwrap();
         let t = ms(2025, 6, 1, 12);
         let g = app.regions[0].grid;
         let idx = g.index(120, 100);
         let (lon, lat) = g.center(idx);
-        insert_sighting(&db, "inat", 4, lat, lon, t - HOUR, "research", None).await;
-        let cells = hotspots(&db, &app, lionfish, t, app.hull().into(), Some(5)).await.unwrap();
+        insert_sighting(&db, "inat", 1, lat, lon, t - HOUR, "research", None).await;
+        let cells = hotspots(&db, &app, python, t, app.hull().into(), Some(5)).await.unwrap();
         assert_eq!(cells.len(), 5);
         assert_eq!(cells[0].cell, "120:100");
         assert_eq!(cells[0].score, 1.0);
-        let ex = explain(&db, &app, "120:100", lionfish, t).await.unwrap();
+        let ex = explain(&db, &app, "120:100", python, t).await.unwrap();
         assert_eq!(ex.score, 1.0);
-        assert!(ex.terms.iter().any(|x| x.name == "access.lionfish_sea_state" && x.rationale.starts_with("no data")));
-        assert!(explain(&db, &app, "999:1", lionfish, t).await.is_err());
+        assert!(ex.terms.iter().any(|x| x.name == "access.python_levee_stage" && x.rationale.starts_with("no data")));
+        assert!(explain(&db, &app, "999:1", python, t).await.is_err());
         // A box touching no region ranks nothing.
         let far = BBox { west: 0.0, south: 0.0, east: 1.0, north: 1.0 };
-        assert!(hotspots(&db, &app, lionfish, t, far, Some(5)).await.unwrap().is_empty());
+        assert!(hotspots(&db, &app, python, t, far, Some(5)).await.unwrap().is_empty());
     }
 
     /// Two regions: each gets its own snapshot, cells carry the region id, and the merged
@@ -1097,8 +1078,7 @@ mod tests {
     #[tokio::test]
     async fn hotspot_multi_region_cells_carry_region_ids() {
         let db = db().await;
-        let mut app = App::builtin("lionfish").unwrap();
-        app.taxa[0].taxon_id = 4;
+        let app = lionfish_app();
         let lionfish = &app.taxa[0];
         let t = ms(2025, 6, 1, 12);
         let (fl, mx) = (app.region("fl-keys").unwrap(), app.region("mx-caribbean").unwrap());

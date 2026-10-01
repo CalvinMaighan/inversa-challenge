@@ -303,7 +303,7 @@ mod tests {
         let py = &body["apps"][2];
         assert_eq!(py["kind"], "species");
         assert_eq!(py["regions"], json!(["everglades"]));
-        assert_eq!(py["taxa"], json!(["python", "tegu", "iguana", "lionfish"]));
+        assert_eq!(py["taxa"], json!(["python"]));
         let feeds = py["feeds"].as_array().unwrap();
         assert_eq!(feeds.len(), 8, "the seeded sources: {py}");
         assert!(feeds.iter().all(|f| f["source"].is_string() && f["state"].is_string() && f["mode"].is_string()), "{py}");
@@ -350,10 +350,10 @@ mod tests {
         seed_sources(&lionfish.obs).await;
         let mut lionfish_events = lionfish.hub.subscribe();
         let t = ms(2026, 6, 1, 12);
-        // A lionfish sighting in the Keys, written through python's pipeline.
+        // A python sighting in the Everglades box (which overlaps lionfish's Keys region), written in python.
         let g = python.app.regions[0].grid;
         let (lon, lat) = g.center(g.index(100, 100));
-        let id = insert_sighting(&python.obs, "inat", 4, lat, lon, t, "research", None).await;
+        let id = insert_sighting(&python.obs, "inat", 1, lat, lon, t, "research", None).await;
         python.hub.publish(crate::realtime::Event::RowsWritten { from: t, to: t });
 
         let window = format!("from: \"{}\", to: \"{}\"", iso(t - HOUR), iso(t + HOUR));
@@ -372,7 +372,7 @@ mod tests {
         let py_bytes = crate::frames::chunk(&python.obs, &python.app, t, t, 60).await.unwrap();
         let lf_bytes = crate::frames::chunk(&lionfish.obs, &lionfish.app, t, t, 60).await.unwrap();
         let py_layout = python.app.regions[0].layout;
-        let n = u32::from_le_bytes(py_bytes[crate::frames::HEADER_BYTES + py_layout.sightings_offset(4)..][..4].try_into().unwrap());
+        let n = u32::from_le_bytes(py_bytes[crate::frames::HEADER_BYTES + py_layout.sightings_offset(1)..][..4].try_into().unwrap());
         assert_eq!(n, 1);
         let lf_header = crate::frames::read_header(&lf_bytes).unwrap();
         let fl = lionfish.app.region("fl-keys").unwrap().layout;
@@ -420,7 +420,7 @@ mod tests {
         assert_eq!(focus, ["Pterois volitans/miles"]);
         assert_eq!(lf.app.taxa[0].taxon_id, 4);
         let py = registry.get("python").unwrap();
-        assert_eq!(py.app.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1, 2, 3, 4]);
+        assert_eq!(py.app.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1]);
         assert!(registry.get("carp").is_none());
         drop(registry);
         let _ = std::fs::remove_dir_all(&dir);

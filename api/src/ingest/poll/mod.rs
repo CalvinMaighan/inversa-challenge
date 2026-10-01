@@ -61,12 +61,36 @@ mod tests {
         let mut feeds: Vec<&str> = app["feeds"].as_array().unwrap().iter().map(|f| f["source"].as_str().unwrap()).collect();
         feeds.sort_unstable();
         assert_eq!(feeds, LIONFISH_FEEDS, "{app}");
-        for gone in ["nws", "nwws", "coops", "openmeteo", "goes19", "usgs", "web"] {
+        for gone in ["nws", "nwws", "coops", "openmeteo", "goes19", "usgs"] {
             assert!(!feeds.contains(&gone), "{gone}");
         }
 
         // The python app keeps every adapter it had (shared code, its own params).
         let python = test_state_for("python");
-        assert_eq!(plan(&python).known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws", "web"]);
+        assert_eq!(plan(&python).known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws"]);
+    }
+
+    /// R14/G4 (K1): no adapter runs for nobody. Every source id an adapter registers (runnable,
+    /// or disabled with its reason) is listed by at least one app's `feeds[]`, every feed of every
+    /// app has an adapter, and the registry equals the schema's source list.
+    #[tokio::test]
+    async fn sources_all_used() {
+        use std::collections::BTreeSet;
+        let mut registered = BTreeSet::new();
+        for id in crate::app::config::APP_IDS {
+            let state = test_state_for(id);
+            let known = plan(&state).known_ids();
+            for f in &state.app.cfg.feeds {
+                assert!(known.contains(&f.source.as_str()), "{id}: feed {} has no adapter", f.source);
+            }
+            for k in &known {
+                assert!(state.app.cfg.has_feed(k), "{id}: {k} registered but not in its feeds");
+            }
+            registered.extend(known);
+        }
+        let listed: BTreeSet<&str> = crate::app::config::SOURCES.iter().map(|(id, _)| *id).collect();
+        assert_eq!(registered, listed, "every known source id is used by an app");
+        assert!(crate::app::config::PENDING_SOURCES.is_empty(), "no feed waits for an adapter");
+        assert!(!listed.contains("web"), "the web hook source serves no app");
     }
 }

@@ -141,24 +141,19 @@ impl StationKind {
     }
 }
 
-/// Taxon by name. Focus taxa have fixed ids 1-4 (migration seed); others are upserted by name.
-/// `inat_taxon_id` and `iconic_group` (T44) are known to the iNat adapter only; other adapters
-/// leave them `None` and the row writer keeps whatever the row already has.
+/// Taxon by name. The apps' species have fixed ids (1 python, 4 lionfish; migration seed); a
+/// taxon an ID flip moves a stored sighting to is upserted by name. `inat_taxon_id` is known
+/// to the iNat adapter only; other adapters leave it `None` and the row writer keeps whatever
+/// the row already has.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TaxonRef {
     pub scientific_name: String,
     pub common_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inat_taxon_id: Option<i64>,
-    /// iNat iconic taxon: Reptilia, Amphibia, Aves, Mammalia, Actinopterygii, Mollusca, Insecta,
-    /// Arachnida, Plantae, Fungi or other.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub iconic_group: Option<String>,
-    /// iNat `ancestor_ids`, root first; the web app derives the category (snakes, lizards, ...) from it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ancestor_ids: Option<Vec<i64>>,
 }
 
+#[cfg(test)]
 impl TaxonRef {
     pub fn named(scientific_name: impl Into<String>, common_name: impl Into<String>) -> TaxonRef {
         TaxonRef { scientific_name: scientific_name.into(), common_name: common_name.into(), ..TaxonRef::default() }

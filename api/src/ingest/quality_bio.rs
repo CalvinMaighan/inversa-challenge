@@ -321,9 +321,8 @@ mod tests {
     use crate::model::{Quality, Row, SightingRow, TaxonRef};
     use crate::state::AppState;
 
-    const INAT_LIONFISH: &str = "335508189";
-    const GBIF_MIRROR: &str = "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656";
-    const NAS_LIONFISH: &str = "1936573";
+    const INAT_PYTHON: &str = "398269828";
+    const GBIF_MIRROR: &str = "50c9509d-22c7-4a22-a47d-8c48425ef4a7:398269828:6550750302";
 
     async fn ingest(state: &AppState, src: &dyn Source, name: &str) {
         let out = ingest_payload(state, src, payload(&format!("fixture:{name}"), fixture(name)), None).await.unwrap();
@@ -348,16 +347,17 @@ mod tests {
     }
 
     fn assert_real_links(l: &HashMap<(String, String), (i64, Option<i64>)>) {
-        let (inat_id, inat_canon) = *get(l, "inat", INAT_LIONFISH);
+        let (inat_id, inat_canon) = *get(l, "inat", INAT_PYTHON);
         assert_eq!(inat_canon, None, "iNat is the canonical record");
         assert_eq!(get(l, "gbif", GBIF_MIRROR).1, Some(inat_id), "GBIF mirror links to iNat");
-        assert_eq!(get(l, "nas", NAS_LIONFISH).1, Some(inat_id), "NAS record links to the earliest (iNat) sighting");
-        // 339784054 is in both the iNat and GBIF pages.
-        let (obscured_id, _) = *get(l, "inat", "339784054");
-        assert_eq!(get(l, "gbif", "50c9509d-22c7-4a22-a47d-8c48425ef4a7:339784054:6162994368").1, Some(obscured_id));
-        // Nothing else is linked: 2 GBIF mirrors + 1 NAS record.
+        // The obscured 398628449 is in both the iNat and GBIF pages.
+        let (obscured_id, _) = *get(l, "inat", "398628449");
+        assert_eq!(get(l, "gbif", "50c9509d-22c7-4a22-a47d-8c48425ef4a7:398628449:6552862202").1, Some(obscured_id));
+        // Nothing else is linked: the 8 GBIF mirrors whose iNat original is on the page. The NAS
+        // python records (February to May 2026) match no iNat or GBIF record in time.
         let linked: Vec<_> = l.iter().filter(|(_, (_, c))| c.is_some()).map(|(k, _)| k.clone()).collect();
-        assert_eq!(linked.len(), 3, "{linked:?}");
+        assert_eq!(linked.len(), 8, "{linked:?}");
+        assert!(linked.iter().all(|(src, _)| src == "gbif"), "{linked:?}");
     }
 
     #[tokio::test]
@@ -365,7 +365,6 @@ mod tests {
         let state = test_state();
         ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
         ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
-        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
         ingest(&state, &Nas::new(state.app.clone()), "nas/python-2026-p1.json").await;
         assert_real_links(&links(&state).await);
     }
@@ -373,17 +372,14 @@ mod tests {
     #[tokio::test]
     async fn quality_bio_links_real_fixtures_in_reverse_arrival_order() {
         let state = test_state();
-        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
         ingest(&state, &Nas::new(state.app.clone()), "nas/python-2026-p1.json").await;
         ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
         let before = links(&state).await;
-        // NAS 1936573 first matches the GBIF mirror (same instant, same point) ...
-        assert_eq!(get(&before, "nas", NAS_LIONFISH).1, Some(get(&before, "gbif", GBIF_MIRROR).0));
+        // No iNat original yet: every GBIF mirror stands alone ...
+        assert!(before.values().all(|(_, c)| c.is_none()), "{before:?}");
         ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
-        let l = links(&state).await;
-        // ... and moves to the iNat sighting when it arrives: the GBIF mirror now resolves to
-        // iNat, and NAS follows the earliest candidate to its canonical root.
-        assert_real_links(&l);
+        // ... and resolves to the iNat sighting when it arrives.
+        assert_real_links(&links(&state).await);
     }
 
     /// Minimal constructed rows for the NAS edges (no real record sits 49 m from another).
@@ -441,10 +437,12 @@ mod tests {
                 row("near-early", "Python bivittatus", 25.5 + 20.0 / m_per_deg_lat, -80.5, t - 3_600_000),
                 row("far", "Python bivittatus", 25.6 + 60.0 / m_per_deg_lat, -80.6, t),
                 row("late", "Python bivittatus", 25.7, -80.7, t + NAS_WINDOW_MS + 60_000),
-                row("other-taxon", "Iguana iguana", 25.8, -80.8, t),
+                row("other-taxon", "Python bivittatus", 25.8, -80.8, t),
             ],
         )
         .await;
+        // An ID flip moves "other-taxon" to another species (stored: the python was).
+        write(&state, "inat", vec![row("other-taxon", "Python molurus", 25.8, -80.8, t)]).await;
         write(
             &state,
             "nas",
@@ -476,9 +474,9 @@ mod tests {
         let state = test_state();
         ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
         ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
-        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/python-2026-p1.json").await;
         let before = links(&state).await;
-        for (src, name) in [("gbif", "gbif/modified-p1.json"), ("nas", "nas/pterois-2026-p1.json"), ("inat", "inat/focus-p1.json")] {
+        for (src, name) in [("gbif", "gbif/modified-p1.json"), ("nas", "nas/python-2026-p1.json"), ("inat", "inat/focus-p1.json")] {
             let s: Box<dyn Source> = match src {
                 "gbif" => Box::new(Gbif::new(state.app.clone())),
                 "nas" => Box::new(Nas::new(state.app.clone())),

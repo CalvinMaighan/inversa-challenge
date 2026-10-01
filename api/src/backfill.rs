@@ -328,25 +328,6 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         out
     };
 
-    // Taxon cards (T44): the fixtures replay a recorded /v1/taxa page; a network run asks iNat for every
-    // taxon the walk added. Enrichment failing never fails the backfill (the API retries it in the background).
-    let enriched = if args.fixtures {
-        let mut n = 0;
-        for entry in std::fs::read_dir(fixtures_root().join("inat")).context("fixtures/inat")? {
-            let path = entry?.path();
-            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if name.starts_with("taxa-") && name.ends_with(".json") {
-                n += crate::taxon_info::apply_page(&target, &std::fs::read(&path)?).await?;
-            }
-        }
-        n
-    } else {
-        crate::taxon_info::enrich(&target).await.unwrap_or_else(|e| {
-            eprintln!("taxa: enrichment incomplete: {e:#}");
-            0
-        })
-    };
-    println!("taxa: enriched {enriched} with iNat names, groups, summaries and photos");
 
     // Frames first, so rows from payloads that did normalize are rendered even if some failed.
     // A conditions app has no frames.
@@ -871,14 +852,14 @@ mod tests {
         let ti = ingest_fixtures(&state, &i, &root).await.unwrap();
         let tn = ingest_fixtures(&state, &n, &root).await.unwrap();
         let tg = ingest_fixtures(&state, &g, &root).await.unwrap();
-        // 12 focus + 10 introduced + 1 flip observation, plus two real revisions (the tegu
-        // maverick dispute and the Calotropis coarsening).
-        assert_eq!((ti.payloads, ti.rows_in, ti.rows_written, ti.errors), (3, 25, 25, 0));
-        assert_eq!((tn.payloads, tn.rows_in, tn.rows_written), (4, 31, 31));
+        // 12 python observations + 1 ID-dispute observation, plus its one real revision (the
+        // maverick Pantherophis ID coarsened to Serpentes).
+        assert_eq!((ti.payloads, ti.rows_in, ti.rows_written, ti.errors), (2, 14, 14, 0));
+        assert_eq!((tn.payloads, tn.rows_in, tn.rows_written), (1, 20, 20));
         assert_eq!((tg.payloads, tg.rows_in, tg.rows_written), (1, 20, 20));
-        assert_eq!(measure(&state, inat::ID).await.unwrap(), Measured { sightings: 23, revisions: 2, conflicts: 2, linked: 0, ..Default::default() });
-        assert_eq!(measure(&state, nas::ID).await.unwrap(), Measured { sightings: 31, revisions: 0, conflicts: 0, linked: 1, ..Default::default() });
-        assert_eq!(measure(&state, gbif::ID).await.unwrap(), Measured { sightings: 20, revisions: 0, conflicts: 0, linked: 2, ..Default::default() });
+        assert_eq!(measure(&state, inat::ID).await.unwrap(), Measured { sightings: 13, revisions: 1, conflicts: 1, linked: 0, ..Default::default() });
+        assert_eq!(measure(&state, nas::ID).await.unwrap(), Measured { sightings: 20, revisions: 0, conflicts: 0, linked: 0, ..Default::default() });
+        assert_eq!(measure(&state, gbif::ID).await.unwrap(), Measured { sightings: 20, revisions: 0, conflicts: 0, linked: 9, ..Default::default() });
 
         for src in [&i as &dyn Source, &n, &g] {
             let again = ingest_fixtures(&state, src, &root).await.unwrap();
@@ -892,33 +873,32 @@ mod tests {
         assert!(run(lf.clone(), &s(&["--fixtures", "--app", "python"])).await.unwrap_err().to_string().contains("--app python"));
         let ids: Vec<&str> = fixture_sources(&lf).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["ndbc", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
-        assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 23, "python's database is untouched");
+        assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 13, "python's database is untouched");
     }
 
     /// The recorded cold snap of 30 Jan - 3 Feb 2026 (see the scene's fetch.sh and
     /// docs/demo-script.md): real iNat, Open-Meteo archive, USGS and NWS Miami/Key West payloads.
     #[tokio::test]
     async fn scene_cold_snap() {
-        use crate::hotspot::rules::IGUANA_COLD_STUN_BOOST;
+        use crate::hotspot::rules::PYTHON_COLD_SUPPRESS;
         use crate::hotspot::score::{explain, testkit::ms, Explain};
 
         let state = test_state();
-        let iguana = state.app.taxon("iguana").unwrap().clone();
-        let iguana_id = iguana.taxon_id;
+        let python = state.app.taxon("python").unwrap().clone();
         let dir = fixtures_root().join("scenes").join("cold-snap-2026-02-01");
         let scene = ingest_scene(&state, &dir).await.unwrap();
         let (from, to) = scene.window;
         assert_eq!((from, to), (ms(2026, 1, 30, 0), ms(2026, 2, 4, 0)));
         let ids: Vec<&str> = scene.tallies.iter().map(|(id, _)| *id).collect();
         assert_eq!(ids, ["inat", "openmeteo", "usgs", "nwws"]);
-        // Measured: 141 iNat observations, all green iguana (one filed as the nominate subspecies);
-        // no python, tegu or lionfish reports in the bbox those days. Open-Meteo 182 grid
-        // points x 3 variables x 120 h plus the marine points; USGS 15-minute series; 21 NPW products.
+        // Measured: no Burmese python report in the bbox those days (iNat, re-recorded
+        // 2026-10-01). Open-Meteo 182 grid points x 3 variables x 120 h plus the marine points;
+        // USGS 15-minute series; 21 NPW products.
         let rows_in: Vec<(&str, usize, usize, usize)> =
             scene.tallies.iter().map(|(id, t)| (*id, t.payloads, t.rows_in, t.errors)).collect();
-        assert_eq!(rows_in, [("inat", 1, 141, 0), ("openmeteo", 2, 95_520, 0), ("usgs", 2, 71_167, 0), ("nwws", 21, 110, 0)]);
+        assert_eq!(rows_in, [("inat", 1, 0, 0), ("openmeteo", 2, 95_520, 0), ("usgs", 2, 71_167, 0), ("nwws", 21, 110, 0)]);
         let counts = measure_window(&state, from, to).await.unwrap();
-        assert_eq!(counts, WindowCounts { sightings: 138, readings: 165_951, air_below_10c: 5_328, alerts: 42 });
+        assert_eq!(counts, WindowCounts { sightings: 0, readings: 165_951, air_below_10c: 5_328, alerts: 42 });
         assert!(counts.air_below_10c > 0, "no sub-10 °C air readings in the window");
 
         // The NWS Miami products of the night of 31 Jan - 1 Feb.
@@ -935,40 +915,23 @@ mod tests {
             assert!(events.iter().any(|x| x == e), "{e} missing from {events:?}");
         }
 
-        // Cell 292:142 (25.725 N, 80.275 W, Coral Gables / South Miami): iguana reports on the
-        // cold morning of 1 Feb, from 15:40 UTC (10:40 EST) on.
+        // Cell 292:142 (25.725 N, 80.275 W, Coral Gables / South Miami) on the cold noon of 1 Feb
+        // and after the rebound on 3 Feb: the python activity rule follows the air temperature.
         let cell = "292:142";
-        let (region, idx) = state.app.parse_cell(cell).unwrap();
-        let (lon, lat) = region.grid.center(idx);
         let (cold, warm) = (ms(2026, 2, 1, 17), ms(2026, 2, 3, 19));
-        let sightings_before_cold: i64 = state
-            .obs
-            .read(move |c| {
-                c.query_row(
-                    "select count(*) from sightings where taxon_id = ?1 and observed_at >= ?2 and observed_at < ?3
-                       and lat >= ?4 and lat < ?5 and lon >= ?6 and lon < ?7",
-                    rusqlite::params![iguana_id, ms(2026, 2, 1, 5), cold, lat - 0.005, lat + 0.005, lon - 0.005, lon + 0.005],
-                    |r| r.get(0),
-                )
-            })
-            .await
-            .unwrap();
-        assert_eq!(sightings_before_cold, 3);
-
         let term = |ex: &Explain, name: &str| ex.terms.iter().find(|t| t.name == name).cloned().unwrap();
-        let stun = "activity.iguana_cold_stun_easy_capture_window";
+        let rule = "activity.python_warm_temperature";
 
-        // 12:00 EST on 1 Feb: the nearest Open-Meteo archive point (25.675 N, 80.325 W) reads 7.0 °C.
-        let at_cold = explain(&state.obs, &state.app, cell, &iguana, cold).await.unwrap();
-        assert!(term(&at_cold, "density").value > 0.0);
-        assert!(term(&at_cold, stun).value > 1.0);
-        assert_eq!(term(&at_cold, stun).value, IGUANA_COLD_STUN_BOOST);
+        // 12:00 EST on 1 Feb: the nearest Open-Meteo archive point (25.675 N, 80.325 W) reads 7.0 °C,
+        // below 15 °C, so pythons hole up (0.3x). No reports, so no density.
+        let at_cold = explain(&state.obs, &state.app, cell, &python, cold).await.unwrap();
+        assert_eq!(term(&at_cold, "density").value, 0.0);
+        assert_eq!(term(&at_cold, rule).value, PYTHON_COLD_SUPPRESS);
         assert!(term(&at_cold, "conditions").rationale.starts_with("air_c 7.0,"), "{:?}", term(&at_cold, "conditions"));
 
-        // 14:00 EST on 3 Feb, after the rebound: 19.1 °C, no stun window, same reports.
-        let at_warm = explain(&state.obs, &state.app, cell, &iguana, warm).await.unwrap();
-        assert!(term(&at_warm, "density").value > 0.0, "the 1 Feb reports still weigh on 3 Feb");
-        assert_eq!(term(&at_warm, stun).value, 1.0);
+        // 14:00 EST on 3 Feb: 19.1 °C, between the cold and warm bands (1x).
+        let at_warm = explain(&state.obs, &state.app, cell, &python, warm).await.unwrap();
+        assert_eq!(term(&at_warm, rule).value, 1.0);
         assert!(term(&at_warm, "conditions").rationale.starts_with("air_c 19.1,"), "{:?}", term(&at_warm, "conditions"));
 
         // Replaying the scene again changes nothing. Sightings and readings are untouched; each

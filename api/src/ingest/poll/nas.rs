@@ -8,9 +8,9 @@
 //! feed's `params.state` (`FL` for the python app; null for Lionfish Watch, whose regions lie
 //! outside the US, since NAS has no bbox parameter); `normalize` keeps only the app's regions.
 //!
-//! Measured on 2026-09-30: NAS holds Python (9,329 FL records) and Pterois (7,026) but returns
-//! nothing for Salvator or Iguana (its lizard list is Varanus only). The two genera are still
-//! queried, so records appear if NAS adds them.
+//! Measured on 2026-09-30: NAS holds Python (9,329 FL records) and Pterois (7,026). The python
+//! app asks for genus Python and keeps Burmese python records only (other Python species in
+//! the answer are dropped by `normalize`, R14).
 //!
 //! Records carry a calendar date only (`year`/`month`/`day`); they are placed at Eastern noon.
 //! Records without a day are skipped: they cannot be placed on the 15-minute timeline or
@@ -225,10 +225,6 @@ struct Record {
     key: i64,
     genus: Option<String>,
     species: Option<String>,
-    #[serde(rename = "scientificName")]
-    scientific_name: Option<String>,
-    #[serde(rename = "commonName")]
-    common_name: Option<String>,
     #[serde(rename = "decimalLatitude")]
     lat: Option<f64>,
     #[serde(rename = "decimalLongitude")]
@@ -238,14 +234,11 @@ struct Record {
     day: Option<u32>,
 }
 
+/// The app's species, or `None` for any other (R14: an app stores its own species only).
 fn taxon(r: &Record, app: &App) -> Option<TaxonRef> {
     let genus = r.genus.as_deref().unwrap_or("").trim();
     let species = r.species.as_deref().unwrap_or("").trim();
-    if let Some(f) = bio::taxon_for_nas(app, genus, species) {
-        return Some(f.taxon_ref());
-    }
-    let name = r.scientific_name.as_deref().map(str::trim).filter(|n| !n.is_empty())?;
-    Some(TaxonRef::named(name, r.common_name.clone().unwrap_or_default()))
+    bio::taxon_for_nas(app, genus, species).map(|f| f.taxon_ref())
 }
 
 /// Pure: one search page to rows, the app's regions only, day-precision dates only.
@@ -298,37 +291,41 @@ mod tests {
         assert_eq!(python.len(), 20, "all 20 recorded python records are in the bbox with full dates");
         assert!(python.iter().all(|s| s.taxon.scientific_name == "Python bivittatus" && s.quality == Quality::Curated));
 
-        let lionfish = sightings(&fixture("nas/pterois-2026-p1.json"));
-        assert_eq!(lionfish.len(), 11);
-        let s = lionfish.iter().find(|s| s.ext_id == "1936573").unwrap();
-        assert_eq!(s.taxon.scientific_name, "Pterois volitans/miles");
-        assert_eq!(s.observed_at, bio::parse_time_ms("2026-01-11T12:00:00-05:00").unwrap());
-        assert_eq!((s.lat, s.lon, s.accuracy_m), (26.51123, -80.04861, None));
-
-        assert!(sightings(&fixture("nas/salvator-2026-p1.json")).is_empty());
-        assert!(sightings(&fixture("nas/iguana-2026-p1.json")).is_empty());
-        // Lionfish Watch keeps the Florida Pterois records (its fl-keys region) and nothing of the python page as a focus taxon.
+        // The python app stores pythons only: the Florida Pterois page yields nothing.
+        assert!(sightings(&fixture("nas/pterois-2026-p1.json")).is_empty());
+        // Lionfish Watch keeps the Florida Pterois records (its fl-keys region) and none of the python page.
         let lf = super::super::bio::testing::lionfish();
         let rows = normalize(&fixture("nas/pterois-2026-p1.json"), &lf).unwrap();
         assert_eq!(rows.len(), 11);
-        let rows = normalize(&fixture("nas/python-2026-p1.json"), &lf).unwrap();
-        assert!(rows.iter().all(|r| matches!(r, Row::Sighting(s) if s.taxon.scientific_name == "Python bivittatus" && s.taxon.inat_taxon_id.is_none())));
+        let s = rows
+            .iter()
+            .find_map(|r| match r {
+                Row::Sighting(s) if s.ext_id == "1936573" => Some(s),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(s.taxon.scientific_name, "Pterois volitans/miles");
+        assert_eq!(s.observed_at, bio::parse_time_ms("2026-01-11T12:00:00-05:00").unwrap());
+        assert_eq!((s.lat, s.lon, s.accuracy_m), (26.51123, -80.04861, None));
+        assert!(normalize(&fixture("nas/python-2026-p1.json"), &lf).unwrap().is_empty());
     }
 
     #[test]
-    fn nas_normalize_drops_out_of_region_and_undated() {
-        let page = serde_json::json!({ "count": 3, "endOfRecords": "true", "results": [
-            // Real record 1724805 (Apalachicola, outside the bbox).
-            { "key": 1724805, "genus": "Pterois", "species": "volitans/miles", "scientificName": "Pterois volitans/miles",
+    fn nas_normalize_drops_out_of_region_undated_and_other_species() {
+        let page = serde_json::json!({ "count": 4, "endOfRecords": "true", "results": [
+            // Apalachicola, outside the bbox.
+            { "key": 1724805, "genus": "Python", "species": "bivittatus", "scientificName": "Python bivittatus",
               "decimalLatitude": 29.67368, "decimalLongitude": -84.83114, "year": 2024, "month": 1, "day": 13 },
-            { "key": 32088, "genus": "Pterois", "species": "volitans/miles", "scientificName": "Pterois volitans/miles",
+            { "key": 32088, "genus": "Python", "species": "bivittatus", "scientificName": "Python bivittatus",
               "decimalLatitude": 25.730323, "decimalLongitude": -80.222855, "year": 1992, "month": 8, "day": null },
             { "key": 7, "genus": "Python", "species": "sebae", "scientificName": "Python sebae", "commonName": "African rock python",
+              "decimalLatitude": 25.7, "decimalLongitude": -80.4, "year": 2025, "month": 2, "day": 3 },
+            { "key": 8, "genus": "Python", "species": "bivittatus", "scientificName": "Python bivittatus", "commonName": "Burmese python",
               "decimalLatitude": 25.7, "decimalLongitude": -80.4, "year": 2025, "month": 2, "day": 3 }
         ]});
         let s = sightings(&serde_json::to_vec(&page).unwrap());
-        assert_eq!(s.len(), 1);
-        assert_eq!(s[0].taxon, TaxonRef::named("Python sebae", "African rock python"));
+        assert_eq!(s.len(), 1, "the genus query also returns other Python species; only the Burmese python is kept");
+        assert_eq!((s[0].ext_id.as_str(), s[0].taxon.scientific_name.as_str()), ("8", "Python bivittatus"));
     }
 
     #[test]
@@ -349,7 +346,7 @@ mod tests {
             p.advance(br#"{"endOfRecords":"true","results":[]}"#).unwrap();
             urls += 1;
         }
-        assert_eq!(urls, 2 + 7, "4 genera x 2 years, one extra page for Python 2025");
+        assert_eq!(urls, 2 + 1, "1 genus x 2 years, one extra page for 2025");
         assert_eq!(p.cursor(), None);
         // Lionfish Watch: one genus, no state filter (NAS has no bbox parameter; normalize filters).
         let p = NasPager::new(&lionfish(), 2026, 2026);
@@ -357,7 +354,7 @@ mod tests {
             p.next_url().unwrap(),
             "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Pterois&year=2026&offset=0&limit=500"
         );
-        assert_eq!(genera(&python()), ["Python", "Salvator", "Iguana", "Pterois"]);
+        assert_eq!(genera(&python()), ["Python"]);
     }
 
     // ---- Lionfish Watch (L4, gates/leaf-L4.md G3) ----

@@ -11,7 +11,7 @@
     {
       "source": "inat",
       "file": "inat/focus-p1.json.gz",
-      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252,318758,35342,47284&d1=2026-01-30&d2=2026-02-03&order_by=id&order=asc&per_page=200",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&d1=2026-01-30&d2=2026-02-03&order_by=id&order=asc&per_page=200",
       "content_type": "application/json"
     },
     {

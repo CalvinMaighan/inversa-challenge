@@ -36,8 +36,6 @@ pub struct RuleSet {
 /// Multipliers, kept as named constants so the tests can hand-compute expectations.
 pub const PYTHON_WARM_BOOST: f32 = 1.5;
 pub const PYTHON_COLD_SUPPRESS: f32 = 0.3;
-pub const IGUANA_COLD_STUN_BOOST: f32 = 2.0;
-pub const TEGU_BRUMATION_SUPPRESS: f32 = 0.3;
 pub const LIONFISH_NO_ACCESS: f32 = 0.1;
 pub const LIONFISH_MAX_WAVE_M: f32 = 1.2;
 pub const LIONFISH_MAX_WIND_MS: f32 = 8.0;
@@ -53,15 +51,6 @@ fn python_temperature(c: &Conditions) -> Option<f32> {
     } else {
         1.0
     })
-}
-
-fn iguana_cold_stun(c: &Conditions) -> Option<f32> {
-    let t = c.air_c?;
-    Some(if t < 10.0 { IGUANA_COLD_STUN_BOOST } else { 1.0 })
-}
-
-fn tegu_brumation(c: &Conditions) -> Option<f32> {
-    Some(if c.month >= 10 || c.month <= 2 { TEGU_BRUMATION_SUPPRESS } else { 1.0 })
 }
 
 fn lionfish_baseline(_c: &Conditions) -> Option<f32> {
@@ -83,10 +72,6 @@ fn python_levee_stage(c: &Conditions) -> Option<f32> {
     Some((1.5 - 0.3 * stage).clamp(PYTHON_ACCESS_MIN, PYTHON_ACCESS_MAX))
 }
 
-fn land_access(_c: &Conditions) -> Option<f32> {
-    Some(1.0)
-}
-
 static PYTHON_ACTIVITY: [Rule; 1] = [Rule {
     name: "python_warm_temperature",
     applies: python_temperature,
@@ -99,20 +84,6 @@ static PYTHON_ACCESS: [Rule; 1] = [Rule {
     applies: python_levee_stage,
     rationale: "Levee and canal-bank patrols reach more ground when water stage is low; the \
                 multiplier falls 0.3 per metre of stage, capped between 0.6 and 1.2.",
-}];
-
-static IGUANA_ACTIVITY: [Rule; 1] = [Rule {
-    name: "iguana_cold_stun_easy_capture_window",
-    applies: iguana_cold_stun,
-    rationale: "Green iguanas go torpid below about 10 °C air temperature and drop from trees: \
-                an easy capture window, so the cell is boosted 2×.",
-}];
-
-static TEGU_ACTIVITY: [Rule; 1] = [Rule {
-    name: "tegu_brumation",
-    applies: tegu_brumation,
-    rationale: "Argentine tegus brumate from October through February in South Florida; \
-                sightings and trap success fall, so those months are suppressed to 0.3×.",
 }];
 
 static LIONFISH_ACTIVITY: [Rule; 1] = [Rule {
@@ -128,16 +99,8 @@ static LIONFISH_ACCESS: [Rule; 1] = [Rule {
                 keeps boats in port, so the cell drops to 0.1×.",
 }];
 
-static LAND_ACCESS: [Rule; 1] = [Rule {
-    name: "land_access",
-    applies: land_access,
-    rationale: "Land species: crews can reach any cell by road or airboat; no access penalty.",
-}];
-
-pub static RULE_SETS: [RuleSet; 4] = [
+pub static RULE_SETS: [RuleSet; 2] = [
     RuleSet { name: "python", activity: &PYTHON_ACTIVITY, access: &PYTHON_ACCESS },
-    RuleSet { name: "tegu", activity: &TEGU_ACTIVITY, access: &LAND_ACCESS },
-    RuleSet { name: "iguana", activity: &IGUANA_ACTIVITY, access: &LAND_ACCESS },
     RuleSet { name: "lionfish", activity: &LIONFISH_ACTIVITY, access: &LIONFISH_ACCESS },
 ];
 
@@ -166,7 +129,7 @@ mod tests {
     #[test]
     fn rules_have_rationale() {
         let rules = all_rules();
-        assert_eq!(rules.len(), 8);
+        assert_eq!(rules.len(), 4);
         for (set, rule) in rules {
             assert!(!rule.name.trim().is_empty(), "{set} rule without a name");
             assert!(rule.rationale.trim().len() >= 40, "{set} {} has no real rationale", rule.name);
@@ -177,21 +140,17 @@ mod tests {
             assert!(std::ptr::eq(ruleset(s.name).unwrap(), s));
         }
         assert!(ruleset("dragon").is_none());
-        assert_eq!(names(), ["python", "tegu", "iguana", "lionfish"]);
+        assert_eq!(names(), ["python", "lionfish"]);
     }
 
     #[test]
     fn hotspot_rules_no_data_is_neutral() {
         let none = Conditions { month: 6, ..Default::default() };
         assert_eq!((PYTHON_ACTIVITY[0].applies)(&none), None);
-        assert_eq!((IGUANA_ACTIVITY[0].applies)(&none), None);
         assert_eq!((LIONFISH_ACCESS[0].applies)(&none), None);
         assert_eq!((PYTHON_ACCESS[0].applies)(&none), None);
         assert_eq!(multiplier(&PYTHON_ACTIVITY, &none), 1.0);
         assert_eq!(multiplier(&LIONFISH_ACCESS, &none), 1.0);
-        // Month is always known.
-        assert_eq!((TEGU_ACTIVITY[0].applies)(&Conditions { month: 12, ..Default::default() }), Some(0.3));
-        assert_eq!((TEGU_ACTIVITY[0].applies)(&Conditions { month: 5, ..Default::default() }), Some(1.0));
     }
 
     #[test]
@@ -202,8 +161,6 @@ mod tests {
         assert_eq!(multiplier(&PYTHON_ACTIVITY, &c(18.0)), 1.0);
         // LST fills in when air is missing.
         assert_eq!(multiplier(&PYTHON_ACTIVITY, &Conditions { lst_c: Some(30.0), month: 7, ..Default::default() }), 1.5);
-        assert_eq!(multiplier(&IGUANA_ACTIVITY, &c(8.0)), 2.0);
-        assert_eq!(multiplier(&IGUANA_ACTIVITY, &c(10.0)), 1.0);
         let sea = |wave: f32, wind: f32| Conditions { wave_m: Some(wave), wind_ms: Some(wind), month: 7, ..Default::default() };
         assert_eq!(multiplier(&LIONFISH_ACCESS, &sea(0.5, 3.0)), 1.0);
         assert_eq!(multiplier(&LIONFISH_ACCESS, &sea(2.0, 3.0)), 0.1);

@@ -99,8 +99,9 @@ mod tests {
         let (lon, lat) = g.center(idx);
         assert!((lon - (g.west + 12.5 * 0.01)).abs() < 1e-9);
         assert!((lat - (g.south + 7.5 * 0.01)).abs() < 1e-9);
-        assert_eq!(app.taxon("Lionfish").map(|t| t.id()), Some("lionfish"));
+        assert_eq!(app.taxon("Python").map(|t| t.id()), Some("python"));
         assert_eq!(app.taxon("manatee"), None);
-        assert_eq!(app.taxon("iguana").unwrap().idx, 2);
+        assert_eq!(app.taxon("python bivittatus").unwrap().idx, 0);
+        assert_eq!(app.taxon("lionfish"), None);
     }
 }

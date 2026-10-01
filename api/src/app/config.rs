@@ -29,7 +29,7 @@ pub const DEFAULT_APP: &str = "carp";
 /// `openmeteo` and `goes19` (L4). The carp (conditions) sources are `usgs` (shared with python,
 /// OGC API), `nwps`, `nws-alerts` (the `nws` poller scoped to `area=LA` and matched to sites),
 /// `nws-forecast` (gridpoint) and `iem` (HML archive backfill) (C4).
-pub const SOURCES: [(&str, Mode); 18] = [
+pub const SOURCES: [(&str, Mode); 17] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
     ("gbif", Mode::Poll),
@@ -40,7 +40,6 @@ pub const SOURCES: [(&str, Mode); 18] = [
     ("openmeteo", Mode::Poll),
     ("goes19", Mode::Push),
     ("nwws", Mode::Push),
-    ("web", Mode::Push),
     ("crw", Mode::Poll),
     ("nwps", Mode::Poll),
     ("openmeteo-marine", Mode::Poll),
@@ -133,11 +132,6 @@ impl BBox {
     }
 }
 
-/// Species category ids of `taxa[].category` (`apps/web/shared/species-categories.ts` `CATEGORY_IDS`,
-/// the schema's enum; the conformance tests hold all three equal).
-pub const CATEGORIES: [&str; 13] =
-    ["snakes", "lizards", "turtles", "crocodilians", "frogs", "birds", "mammals", "fish", "snails", "insects", "spiders", "plants", "other"];
-
 /// IANA zones `copy.timezone` may name (the schema's enum): the zones of the regions the apps can
 /// cover. A closed list, so Rust (no tz database) and the web (`Intl`) accept the same files.
 pub const TIMEZONES: [&str; 18] = [
@@ -185,9 +179,6 @@ pub struct TaxonCfg {
     /// Other names people use for it, matched lower case.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
-    /// Category icon id (one of [`CATEGORIES`]).
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub category: Option<String>,
     pub scientific_name: String,
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     pub inat_taxon_id: Option<i64>,
@@ -200,8 +191,6 @@ pub struct TaxonCfg {
     /// `null` (or absent) matches any species of the genus.
     #[serde(default)]
     pub nas_species: Option<String>,
-    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    pub iconic_group: Option<String>,
     pub color: String,
     pub half_life_days: f64,
     /// Name of the activity/access rule set (`hotspot::rules::ruleset`).
@@ -460,8 +449,9 @@ impl AppConfig {
             (Some(r), _) => r.validate()?,
             _ => {}
         }
-        if self.taxa.len() > u8::MAX as usize {
-            return Err("more than 255 taxa".into());
+        // R14: one species per app (the frames still index taxa, so the format stays general).
+        if self.taxa.len() > 1 {
+            return Err(format!("taxa lists {} species; an app tracks one", self.taxa.len()));
         }
         let mut seen = HashSet::new();
         let mut names = HashSet::new();
@@ -473,18 +463,13 @@ impl AppConfig {
                 return Err(format!("duplicate taxon id {:?}", t.id));
             }
             blank(&format!("taxon {:?}: name", t.id), &t.name)?;
-            for (what, v) in [("short", &t.short), ("line", &t.line), ("nasGenus", &t.nas_genus), ("iconicGroup", &t.iconic_group)] {
+            for (what, v) in [("short", &t.short), ("line", &t.line), ("nasGenus", &t.nas_genus)] {
                 if let Some(v) = v {
                     blank(&format!("taxon {:?}: {what}", t.id), v)?;
                 }
             }
             if t.aliases.iter().any(|a| a.trim().is_empty()) {
                 return Err(format!("taxon {:?}: aliases has an empty name", t.id));
-            }
-            if let Some(c) = &t.category {
-                if !CATEGORIES.contains(&c.as_str()) {
-                    return Err(format!("taxon {:?}: category {c:?} is not one of {}", t.id, CATEGORIES.join(", ")));
-                }
             }
             if t.inat_taxon_id.is_some_and(|k| k < 1) || t.gbif_key.is_some_and(|k| k < 1) || t.inat_lineage_ids.iter().any(|&k| k < 1) {
                 return Err(format!("taxon {:?}: iNat and GBIF keys must be positive", t.id));
@@ -703,8 +688,6 @@ impl Taxon {
             scientific_name: self.cfg.scientific_name.clone(),
             common_name: self.cfg.name.clone(),
             inat_taxon_id: self.cfg.inat_taxon_id,
-            iconic_group: self.cfg.iconic_group.clone(),
-            ancestor_ids: None,
         }
     }
 }
@@ -773,26 +756,50 @@ impl App {
     }
 
     /// Sync the `taxa` table with the config and learn each taxon's `taxa.id`: config taxa are
-    /// upserted by scientific name with `focus = 1`; every other row loses focus. Runs on the
-    /// database's first connection, before any reader or writer starts.
+    /// upserted by scientific name with `focus = 1`; every other row loses focus. Then the rows of
+    /// every other taxon go (R14: an app stores its own species only), except a sighting whose
+    /// taxon history names the app's species: an ID flip away from it stays, flagged, for review.
+    /// Runs on the database's first connection, before any reader or writer starts.
     pub fn resolve_taxa(&mut self, conn: &Connection) -> rusqlite::Result<()> {
         let mut upsert = conn.prepare(
-            "insert into taxa (scientific_name, common_name, focus, inat_taxon_id, iconic_group) values (?1, ?2, 1, ?3, ?4)
+            "insert into taxa (scientific_name, common_name, focus, inat_taxon_id) values (?1, ?2, 1, ?3)
              on conflict(scientific_name) do update set focus = 1,
                inat_taxon_id = coalesce(taxa.inat_taxon_id, excluded.inat_taxon_id),
-               iconic_group = coalesce(taxa.iconic_group, excluded.iconic_group),
                common_name = case when taxa.common_name = '' then excluded.common_name else taxa.common_name end",
         )?;
         let mut select = conn.prepare("select id from taxa where scientific_name = ?1")?;
         for t in &mut self.taxa {
-            upsert.execute(rusqlite::params![t.cfg.scientific_name, t.cfg.name, t.cfg.inat_taxon_id, t.cfg.iconic_group])?;
+            upsert.execute(rusqlite::params![t.cfg.scientific_name, t.cfg.name, t.cfg.inat_taxon_id])?;
             t.taxon_id = select.query_row([&t.cfg.scientific_name], |r| r.get(0))?;
         }
         let names = serde_json::to_string(&self.taxa.iter().map(|t| t.cfg.scientific_name.as_str()).collect::<Vec<_>>())
             .expect("string list");
         conn.execute(
             "update taxa set focus = 0 where focus = 1 and scientific_name not in (select value from json_each(?1))",
-            [names],
+            [&names],
+        )?;
+        conn.execute_batch(
+            "create temp table if not exists purge_sightings (id integer primary key); delete from temp.purge_sightings;",
+        )?;
+        conn.execute(
+            "insert into temp.purge_sightings (id)
+             select s.id from sightings s join taxa t on t.id = s.taxon_id
+             where t.focus = 0 and not exists (
+               select 1 from sighting_revisions r where r.sighting_id = s.id and r.field = 'taxon'
+                 and (r.old in (select value from json_each(?1)) or r.new in (select value from json_each(?1))))",
+            [&names],
+        )?;
+        let purged: i64 = conn.query_row("select count(*) from temp.purge_sightings", [], |r| r.get(0))?;
+        if purged > 0 {
+            // Stored frames may carry the purged records; they rebuild on demand.
+            conn.execute("delete from frames", [])?;
+        }
+        conn.execute_batch(
+            "delete from sighting_revisions where sighting_id in (select id from temp.purge_sightings);
+             update sightings set canonical_id = null where canonical_id in (select id from temp.purge_sightings);
+             delete from sightings where id in (select id from temp.purge_sightings);
+             delete from taxa where focus = 0 and id not in (select taxon_id from sightings);
+             drop table temp.purge_sightings;",
         )?;
         Ok(())
     }
@@ -881,12 +888,12 @@ mod tests {
         assert_eq!(all.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), APP_IDS);
         let python = App::builtin("python").unwrap();
         assert_eq!(python.cfg.kind, AppKind::Species);
-        assert_eq!(python.taxa.iter().map(|t| t.id()).collect::<Vec<_>>(), ["python", "tegu", "iguana", "lionfish"]);
+        assert_eq!(python.taxa.iter().map(|t| t.id()).collect::<Vec<_>>(), ["python"]);
         assert_eq!(python.regions.len(), 1);
         let g = python.regions[0].grid;
         assert_eq!((g.cols, g.rows, g.cell_deg), (340, 320, 0.01));
         assert_eq!((python.regions[0].layout.hs.cols, python.regions[0].layout.env.rows), (170, 64));
-        assert!(python.cfg.has_feed("goes19") && python.cfg.has_feed("web"));
+        assert!(python.cfg.has_feed("goes19") && !python.cfg.has_feed("web"));
 
         let lionfish = App::builtin("lionfish").unwrap();
         assert_eq!(lionfish.regions.iter().map(|r| r.id()).collect::<Vec<_>>(), ["fl-keys", "mx-caribbean", "belize", "co-caribbean"]);
@@ -909,7 +916,7 @@ mod tests {
         assert_eq!(carp.cfg.locations.len(), 8);
         assert!(carp.cfg.locations.iter().all(|l| l.usgs.is_some() && l.nwps.is_some() && l.nws_grid.is_some() && !l.nws_zones.is_empty()));
         assert_eq!(carp.cfg.camera_presets.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["all-sites", "atchafalaya"]);
-        for feed in ["usgs", "nwps", "nws-alerts", "nws-forecast", "iem", "nwws", "web"] {
+        for feed in ["usgs", "nwps", "nws-alerts", "nws-forecast", "iem", "nwws"] {
             assert!(carp.cfg.has_feed(feed), "{feed}");
         }
         assert_eq!(python.cell_id(&python.regions[0], python.regions[0].grid.index(12, 7)), "12:7");
@@ -952,7 +959,7 @@ mod tests {
                 v["regions"][0]["bbox"][2] = w;
             }, "west < east"),
             (&|v| v["taxa"][0]["rules"] = serde_json::json!("dragon"), "unknown rules"),
-            (&|v| v["taxa"][1]["id"] = serde_json::json!("python"), "duplicate taxon id"),
+            (&|v| { let t = v["taxa"][0].clone(); v["taxa"].as_array_mut().unwrap().push(t) }, "an app tracks one"),
             (&|v| v["feeds"][0]["source"] = serde_json::json!("twitter"), "not a known source"),
             (&|v| v["feeds"][0]["mode"] = serde_json::json!("push"), "runs in mode"),
             (&|v| v["windows"]["defaultHours"] = serde_json::json!(5), "defaultHours"),
@@ -1007,7 +1014,7 @@ mod tests {
         let list = |v: &serde_json::Value| v.as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert_eq!(list(&p["id"]["enum"]), APP_IDS);
         assert_eq!(list(&p["feeds"]["items"]["properties"]["source"]["enum"]), SOURCES.iter().map(|s| s.0).collect::<Vec<_>>());
-        assert_eq!(list(&p["taxa"]["items"]["properties"]["category"]["enum"]), CATEGORIES);
+        assert_eq!(p["taxa"]["maxItems"].as_u64(), Some(1), "one species per app");
         assert_eq!(list(&p["taxa"]["items"]["properties"]["rules"]["enum"]), rules::names());
         assert_eq!(list(&p["copy"]["properties"]["timezone"]["enum"]), TIMEZONES);
         assert_eq!(p["helperQuestions"]["maxItems"].as_u64(), Some(MAX_HELPER_QUESTIONS as u64));
@@ -1022,34 +1029,81 @@ mod tests {
 
     #[test]
     fn app_config_taxon_matching_and_refs() {
-        let app = App::builtin("python").unwrap();
-        let lionfish = app.taxon("lionfish").unwrap();
+        let lf = App::builtin("lionfish").unwrap();
+        let lionfish = lf.taxon("lionfish").unwrap();
         assert!(lionfish.matches_inat([123459, 47284]) && lionfish.matches_inat([47280]) && !lionfish.matches_inat([1]));
         assert!(lionfish.matches_gbif(Some(2334433), Some(2334432)) && !lionfish.matches_gbif(Some(1), Some(2)));
         assert!(lionfish.matches_nas("Pterois", "volitans/miles") && lionfish.matches_nas("Pterois", "miles"));
+        let app = App::builtin("python").unwrap();
+        assert_eq!(app.taxon("lionfish"), None, "Everglades Ops tracks the python only");
         let python = app.taxon("Python bivittatus").unwrap();
         assert!(python.matches_nas("Python", "bivittatus") && !python.matches_nas("Python", "sebae"));
+        assert!(python.matches_inat([238252]) && !python.matches_inat([47284]));
+        assert!(python.matches_gbif(Some(4820533), None) && !python.matches_gbif(Some(2334432), Some(2334432)));
         assert_eq!(python.taxon_ref().common_name, "Burmese python");
         assert_eq!(python.rules().name, "python");
-        assert_eq!(app.taxon("TEGU").map(|t| t.idx), Some(1));
+        assert_eq!(app.taxon("PYTHON").map(|t| t.idx), Some(0));
         assert_eq!(app.taxon("1"), None, "db ids resolve only after resolve_taxa");
+    }
+
+    fn migrated() -> Connection {
+        let mut conn = Connection::open_in_memory().unwrap();
+        crate::db::configure(&conn).unwrap();
+        crate::db::migrate(&mut conn, "observations").unwrap();
+        conn
+    }
+
+    fn ids(conn: &Connection, sql: &str) -> Vec<i64> {
+        conn.prepare(sql).unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap()
     }
 
     #[test]
     fn app_config_resolves_taxa_against_the_seeded_db() {
-        let mut conn = Connection::open_in_memory().unwrap();
-        crate::db::migrate(&mut conn, "observations").unwrap();
+        // A fresh database seeds the two species taxa only: 1 python, 4 lionfish.
+        let conn = migrated();
+        assert_eq!(ids(&conn, "select id from taxa order by id"), [1, 4]);
         let mut app = App::builtin("lionfish").unwrap();
         app.resolve_taxa(&conn).unwrap();
         assert_eq!(app.taxa[0].taxon_id, 4, "the seeded lionfish row");
-        let focus: Vec<i64> =
-            conn.prepare("select id from taxa where focus = 1 order by id").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
-        assert_eq!(focus, [4], "python, tegu and iguana lose focus in the lionfish app");
+        assert_eq!(ids(&conn, "select id from taxa order by id"), [4], "the python row goes from the lionfish database");
         assert_eq!(app.taxon("4").map(|t| t.id()), Some("lionfish"));
+
+        let conn = migrated();
         let mut python = App::builtin("python").unwrap();
         python.resolve_taxa(&conn).unwrap();
-        assert_eq!(python.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1, 2, 3, 4]);
-        let n: i64 = conn.query_row("select count(*) from taxa where focus = 1", [], |r| r.get(0)).unwrap();
-        assert_eq!(n, 4);
+        assert_eq!(python.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1]);
+        assert_eq!(ids(&conn, "select id from taxa"), [1]);
+    }
+
+    /// R14: a python database from before the pivot holds lionfish and background taxa. Their
+    /// sightings go at boot; a python record whose ID flipped to another taxon stays for review.
+    #[test]
+    fn app_config_resolve_purges_other_species_rows() {
+        let conn = migrated();
+        conn.execute_batch(
+            "insert into sources (id, name, homepage, mode, cadence_s, max_latency_s) values ('inat', 'iNaturalist', 'x', 'poll', 600, 3600);
+             insert into frames (frame_at, payload, built_at) values (0, x'00', 0);
+             insert into taxa (id, scientific_name, common_name, focus) values (7, 'Python', '', 0), (8, 'Boa constrictor', '', 0);
+             insert into sightings (id, source_id, ext_id, taxon_id, lat, lon, observed_at, quality, ingested_at) values
+               (1, 'inat', 'py', 1, 25.5, -80.5, 0, 'research', 0),
+               (2, 'inat', 'lf', 4, 24.6, -81.4, 0, 'research', 0),
+               (3, 'inat', 'flip', 7, 25.5, -80.5, 0, 'needs_id', 0),
+               (4, 'inat', 'boa', 8, 25.5, -80.5, 0, 'research', 0);
+             update sightings set canonical_id = 2 where id = 1;
+             insert into sighting_revisions (sighting_id, changed_at, field, old, new) values
+               (3, 0, 'taxon', 'Python bivittatus', 'Python'), (2, 0, 'quality', 'needs_id', 'research');",
+        )
+        .unwrap();
+        let mut python = App::builtin("python").unwrap();
+        python.resolve_taxa(&conn).unwrap();
+        assert_eq!(ids(&conn, "select id from sightings order by id"), [1, 3], "lionfish and boa rows purged, the flip kept");
+        assert_eq!(ids(&conn, "select id from taxa order by id"), [1, 7]);
+        assert_eq!(ids(&conn, "select count(*) from sightings where canonical_id is not null"), [0]);
+        assert_eq!(ids(&conn, "select sighting_id from sighting_revisions"), [3]);
+        assert_eq!(ids(&conn, "select count(*) from frames"), [0], "stored frames rebuild without the purged records");
+        // Idempotent: a second boot purges nothing and keeps the rebuilt frames.
+        conn.execute("insert into frames (frame_at, payload, built_at) values (0, x'00', 0)", []).unwrap();
+        python.resolve_taxa(&conn).unwrap();
+        assert_eq!(ids(&conn, "select count(*) from frames"), [1]);
     }
 }

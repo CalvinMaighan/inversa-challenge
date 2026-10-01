@@ -179,7 +179,7 @@
       "hlc": "1700000000119:2:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 40,
       "nodeId": "d"
@@ -395,7 +395,7 @@
       "hlc": "1700000000919:0:b",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 42,
       "nodeId": "b"
@@ -548,7 +548,7 @@
       "hlc": "1700000000357:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 36,
       "nodeId": "c"
@@ -741,7 +741,7 @@
       "hlc": "1700000000240:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 15,
       "nodeId": "c"
@@ -751,7 +751,7 @@
       "hlc": "1700000000237:1:b",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 26,
       "nodeId": "b"
@@ -821,7 +821,7 @@
       "hlc": "1700000000645:1:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 32,
       "nodeId": "c"
@@ -831,7 +831,7 @@
       "hlc": "1700000000357:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 36,
       "nodeId": "c"
@@ -841,7 +841,7 @@
       "hlc": "1700000000494:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 0,
       "nodeId": "c"
@@ -861,7 +861,7 @@
       "hlc": "1700000000509:1:b",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 24,
       "nodeId": "b"
@@ -911,7 +911,7 @@
       "hlc": "1700000000311:0:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 0,
       "nodeId": "d"
@@ -1034,7 +1034,7 @@
       "hlc": "1700000000704:0:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 23,
       "nodeId": "d"
@@ -1074,7 +1074,7 @@
       "hlc": "1700000000343:2:a",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 6,
       "nodeId": "a"
@@ -1270,7 +1270,7 @@
       "hlc": "1700000000983:0:a",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 30,
       "nodeId": "a"
@@ -1536,7 +1536,7 @@
       "hlc": "1700000000246:1:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 3,
       "nodeId": "c"
@@ -1566,7 +1566,7 @@
       "hlc": "1700000000508:2:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 33,
       "nodeId": "d"
@@ -1676,7 +1676,7 @@
       "hlc": "1700000000919:0:b",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 42,
       "nodeId": "b"
@@ -1799,7 +1799,7 @@
       "hlc": "1700000000615:2:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 37,
       "nodeId": "d"
@@ -1869,7 +1869,7 @@
       "hlc": "1700000000656:0:a",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 11,
       "nodeId": "a"
@@ -1892,7 +1892,7 @@
       "hlc": "1700000000653:1:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 14,
       "nodeId": "d"
@@ -1962,7 +1962,7 @@
       "hlc": "1700000000290:2:d",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 43,
       "nodeId": "d"
@@ -2025,7 +2025,7 @@
       "hlc": "1700000000089:2:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 34,
       "nodeId": "c"
@@ -2431,7 +2431,7 @@
       "hlc": "1700000000369:2:a",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 7,
       "nodeId": "a"
@@ -2735,10 +2735,10 @@
       }
     ],
     "removals": {
-      "iguana": 133,
+      "python-hatchling": 133,
       "lionfish": 98,
       "python": 164,
-      "tegu": 129
+      "python-adult": 129
     }
   }
 }

@@ -302,34 +302,28 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 .prepare_cached(
                     "select s.id, s.source_id, s.ext_id, s.taxon_id, t.scientific_name, t.common_name, s.lat, s.lon,
                             s.accuracy_m, s.observed_at, s.quality, s.photo_url, s.raw_object_id, s.canonical_id,
-                            s.conflict, s.ingested_at, t.inat_taxon_id, t.iconic_group, t.summary_plain, t.photo_url, t.focus,
-                            t.ancestor_ids, s.submitted_at
+                            s.conflict, s.ingested_at, t.inat_taxon_id, t.focus, s.submitted_at
                      from sightings s join taxa t on t.id = s.taxon_id where s.id = ?1",
                 )?
                 .query_row([sid], |r| {
                     let taxon_id: i64 = r.get(3)?;
                     let inat_id: Option<i64> = r.get(16)?;
-                    let ancestry: Option<Vec<i64>> = r.get::<_, Option<String>>(21)?.and_then(|t| serde_json::from_str(&t).ok());
                     Ok((
                         json!({
                             "id": r.get::<_, i64>(0)?.to_string(),
                             "source": r.get::<_, String>(1)?,
                             "extId": r.get::<_, String>(2)?,
-                            // Taxon info (T44) rides in the record so the card needs no second request.
+                            // The taxon rides in the record so the card needs no second request.
                             "taxon": {"id": taxon_id.to_string(), "scientificName": r.get::<_, String>(4)?,
-                                      "commonName": r.get::<_, String>(5)?, "focus": r.get::<_, bool>(20)?,
+                                      "commonName": r.get::<_, String>(5)?, "focus": r.get::<_, bool>(17)?,
                                       "inatTaxonId": inat_id.map(|n| n.to_string()),
-                                      "iconicGroup": r.get::<_, Option<String>>(17)?,
-                                      "summary": r.get::<_, Option<String>>(18)?,
-                                      "photoUrl": r.get::<_, Option<String>>(19)?.map(|_| format!("/v1/media/taxon/{taxon_id}")),
-                                      "pageUrl": inat_id.map(crate::taxon_info::page_url),
-                                      "ancestorIds": ancestry},
+                                      "pageUrl": inat_id.map(crate::graphql::types::inat_page_url)},
                             "lat": r.get::<_, f64>(6)?,
                             "lon": r.get::<_, f64>(7)?,
                             "accuracyM": r.get::<_, Option<f64>>(8)?,
                             "observedAt": iso(r.get(9)?),
                             // When the record reached its source (iNat upload); can lag years (L4).
-                            "submittedAt": iso_opt(r.get(22)?),
+                            "submittedAt": iso_opt(r.get(18)?),
                             "quality": r.get::<_, String>(10)?,
                             "photoUrl": r.get::<_, Option<String>>(11)?,
                             // Same-origin copy for pages under COEP (`media.rs`).
@@ -1239,16 +1233,16 @@ mod tests {
     async fn evidence_sighting_with_gbif_duplicate_and_revision() {
         let state = test_state();
         seed_sources(&state.obs).await;
-        let inat_payload = br#"{"total_results":1,"results":[{"id":398479651,"taxon":{"name":"Ctenosaura similis"}}]}"#;
+        let inat_payload = br#"{"total_results":1,"results":[{"id":398628449,"taxon":{"name":"Python molurus"}}]}"#;
         let (raw, run) = archive_raw(&state, "inat", "raw/inat/2026/09/21/a.json.gz", inat_payload, OBSERVED + 60_000).await;
-        let inat = insert_sighting(&state, "inat", "398479651", 3, Some(raw), None).await;
-        let gbif = insert_sighting(&state, "gbif", "50c9509d:398479651:4411", 3, None, Some(inat)).await;
+        let inat = insert_sighting(&state, "inat", "398628449", 1, Some(raw), None).await;
+        let gbif = insert_sighting(&state, "gbif", "50c9509d:398628449:4411", 1, None, Some(inat)).await;
         state
             .obs
             .write(move |tx| {
                 tx.execute(
                     "insert into sighting_revisions (sighting_id, changed_at, field, old, new)
-                     values (?1, ?2, 'taxon', 'Iguana iguana', 'Ctenosaura similis')",
+                     values (?1, ?2, 'taxon', 'Python bivittatus', 'Python molurus')",
                     params![inat, OBSERVED + 3_600_000],
                 )?;
                 tx.execute("update sightings set conflict = 1 where id = ?1", [inat])
@@ -1258,14 +1252,14 @@ mod tests {
 
         let ev = evidence(&state, &format!("sighting:{inat}")).await.unwrap();
         assert_eq!(ev.kind, "sighting");
-        assert_eq!(ev.record["extId"], "398479651");
+        assert_eq!(ev.record["extId"], "398628449");
         assert_eq!(ev.record["conflict"], true);
         assert_eq!(
             ev.record["revisions"],
-            json!([{"changedAt": iso(OBSERVED + 3_600_000), "field": "taxon", "old": "Iguana iguana", "new": "Ctenosaura similis"}])
+            json!([{"changedAt": iso(OBSERVED + 3_600_000), "field": "taxon", "old": "Python bivittatus", "new": "Python molurus"}])
         );
         // Raw payload came back from the archive, gunzipped and parsed.
-        assert_eq!(ev.raw.as_ref().unwrap()["results"][0]["id"], 398479651);
+        assert_eq!(ev.raw.as_ref().unwrap()["results"][0]["id"], 398628449);
         assert_eq!(ev.raw_key.as_deref(), Some("raw/inat/2026/09/21/a.json.gz"));
         assert_eq!(ev.source_url.as_deref(), Some("https://api.example.test/inat"));
         assert_eq!(ev.fetched_at.map(|t| t.0), Some(OBSERVED + 60_000));
@@ -1290,11 +1284,12 @@ mod tests {
         assert!(ev.raw.is_none() && ev.raw_key.is_none());
 
         // A duplicate naming another taxon is also a conflict.
-        let tegu = insert_sighting(&state, "nas", "nas-1", 2, None, Some(inat)).await;
+        state.obs.write(|tx| tx.execute("insert into taxa (id, scientific_name, common_name) values (7, 'Python molurus', 'Indian python')", [])).await.unwrap();
+        let other = insert_sighting(&state, "nas", "nas-1", 7, None, Some(inat)).await;
         let ev = evidence(&state, &format!("sighting:{inat}")).await.unwrap();
         let rels: Vec<(String, &str)> = ev.links.iter().map(|l| (l.id.to_string(), l.relation.as_str())).collect();
-        assert!(rels.contains(&(format!("sighting:{tegu}"), "duplicates")), "{rels:?}");
-        assert!(rels.contains(&(format!("sighting:{tegu}"), "conflict")), "{rels:?}");
+        assert!(rels.contains(&(format!("sighting:{other}"), "duplicates")), "{rels:?}");
+        assert!(rels.contains(&(format!("sighting:{other}"), "conflict")), "{rels:?}");
         assert!(!rels.contains(&(format!("sighting:{gbif}"), "conflict")), "{rels:?}");
     }
 
@@ -1316,15 +1311,15 @@ mod tests {
             .unwrap();
 
         let (raw, run) = archive_raw(&state, "inat", "raw/inat/2026/09/30/p.json.gz", b"{}", OBSERVED).await;
-        let inat = insert_sighting(&state, "inat", "335508189", 4, Some(raw), None).await;
-        let gbif = insert_sighting(&state, "gbif", "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656", 4, None, Some(inat)).await;
+        let inat = insert_sighting(&state, "inat", "398269828", 1, Some(raw), None).await;
+        let gbif = insert_sighting(&state, "gbif", "50c9509d-22c7-4a22-a47d-8c48425ef4a7:398269828:6550750302", 1, None, Some(inat)).await;
         let nas = insert_sighting(&state, "nas", "1936189", 1, None, None).await;
         let ev = evidence(&state, &format!("sighting:{inat}")).await.unwrap();
-        assert_eq!(page(&ev).as_deref(), Some("https://www.inaturalist.org/observations/335508189"));
+        assert_eq!(page(&ev).as_deref(), Some("https://www.inaturalist.org/observations/398269828"));
         // The API URL stays in sourceUrl.
         assert_eq!(ev.source_url.as_deref(), Some("https://api.example.test/inat"));
         let ev = evidence(&state, &format!("sighting:{gbif}")).await.unwrap();
-        assert_eq!(page(&ev).as_deref(), Some("https://www.gbif.org/occurrence/6130701656"));
+        assert_eq!(page(&ev).as_deref(), Some("https://www.gbif.org/occurrence/6550750302"));
         let ev = evidence(&state, &format!("sighting:{nas}")).await.unwrap();
         assert_eq!(page(&ev).as_deref(), Some("https://nas.er.usgs.gov/queries/SpecimenViewer.aspx?SpecimenID=1936189"));
 

@@ -6,7 +6,7 @@
     { "id": "op-0113", "hlc": "1700000000100:2:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lon", "value": -80.9237, "nodeId": "a" },
     { "id": "op-0114", "hlc": "1700000000100:3:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdBy", "value": "a", "nodeId": "a" },
     { "id": "op-0115", "hlc": "1700000000100:4:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdAt", "value": "2026-09-30T12:00:00.000Z", "nodeId": "a" },
-    { "id": "op-0116", "hlc": "1700000000110:0:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "text", "value": "Iguana carcass on the levee", "nodeId": "b" },
+    { "id": "op-0116", "hlc": "1700000000110:0:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "text", "value": "Python carcass on the levee", "nodeId": "b" },
     { "id": "op-0117", "hlc": "1700000000110:1:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "lat", "value": 25.4553, "nodeId": "b" },
     { "id": "op-0118", "hlc": "1700000000110:2:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "lon", "value": -80.4902, "nodeId": "b" },
     { "id": "op-0119", "hlc": "1700000000110:3:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "sightingId", "value": "7", "nodeId": "b" },
@@ -18,7 +18,7 @@
     "missions": {},
     "notes": {
       "fn2": {
-        "text": "Iguana carcass on the levee",
+        "text": "Python carcass on the levee",
         "lat": 25.4553,
         "lon": -80.4902,
         "sightingId": "7"

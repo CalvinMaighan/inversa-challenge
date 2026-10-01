@@ -8,7 +8,7 @@
       "entity": "note",
       "entityId": "n1",
       "field": "body",
-      "value": "Saw two tegus near L-31N",
+      "value": "Saw two pythons near L-31N",
       "nodeId": "a"
     },
     {
@@ -31,7 +31,7 @@
       "entity": "note",
       "entityId": "n1",
       "field": "body",
-      "value": "Saw three tegus near L-31N",
+      "value": "Saw three pythons near L-31N",
       "nodeId": "b"
     },
     {
@@ -42,7 +42,7 @@
       "entityId": "n1",
       "field": "tags",
       "value": [
-        "tegu",
+        "python",
         "canal"
       ],
       "nodeId": "a"
@@ -85,13 +85,13 @@
     "missions": {},
     "notes": {
       "n1": {
-        "body": "Saw three tegus near L-31N",
+        "body": "Saw three pythons near L-31N",
         "pin": {
           "lon": -80.5,
           "lat": 25.4
         },
         "tags": [
-          "tegu",
+          "python",
           "canal"
         ]
       },

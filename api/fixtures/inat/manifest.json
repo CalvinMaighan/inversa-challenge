@@ -1,17 +1,13 @@
 {
-  "recorded_at": "2026-09-30T20:40:00Z",
+  "recorded_at": "2026-10-01T13:40:00Z",
   "files": [
     {
       "file": "focus-p1.json",
-      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252,318758,35342,47284&order_by=updated_at&order=asc&updated_since=2026-09-09T12:30:00Z&per_page=12"
-    },
-    {
-      "file": "introduced-p1.json",
-      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&introduced=true&order_by=updated_at&order=asc&updated_since=2026-09-29T12:00:00Z&per_page=10"
+      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&order_by=updated_at&order=asc&updated_since=2026-09-09T12:30:00Z&per_page=12"
     },
     {
       "file": "idflip-p1.json",
-      "url": "https://api.inaturalist.org/v1/observations?id=402428460"
+      "url": "https://api.inaturalist.org/v1/observations?id=259939110"
     }
   ]
 }

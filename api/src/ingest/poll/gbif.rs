@@ -217,9 +217,6 @@ struct Occurrence {
     occurrence_status: Option<String>,
     species_key: Option<i64>,
     genus_key: Option<i64>,
-    species: Option<String>,
-    scientific_name: Option<String>,
-    vernacular_name: Option<String>,
     media: Option<Vec<Media>>,
 }
 
@@ -247,12 +244,9 @@ pub fn mirrored_inat_id(ext_id: &str) -> Option<&str> {
     (!catalog.is_empty()).then_some(catalog)
 }
 
+/// The app's species, or `None` for any other (R14: an app stores its own species only).
 fn taxon(o: &Occurrence, app: &App) -> Option<TaxonRef> {
-    if let Some(f) = bio::taxon_for_gbif(app, o.species_key, o.genus_key) {
-        return Some(f.taxon_ref());
-    }
-    let name = o.species.as_deref().or(o.scientific_name.as_deref()).map(str::trim).filter(|n| !n.is_empty())?;
-    Some(TaxonRef::named(name, o.vernacular_name.clone().unwrap_or_default()))
+    bio::taxon_for_gbif(app, o.species_key, o.genus_key).map(|f| f.taxon_ref())
 }
 
 /// `eventDate` to unix ms: a single instant or day, or a range that stays within one day.
@@ -325,29 +319,20 @@ mod tests {
     fn gbif_normalize_fixture() {
         let s = sightings(&fixture("gbif/modified-p1.json"));
         assert_eq!(s.len(), 20);
-        let mirror = s.iter().find(|s| s.ext_id.ends_with(":6130701656")).unwrap();
-        assert_eq!(mirror.ext_id, "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656");
-        assert_eq!(mirrored_inat_id(&mirror.ext_id), Some("335508189"));
-        assert_eq!(mirror.taxon.scientific_name, "Pterois volitans/miles");
+        assert!(s.iter().all(|s| s.taxon.scientific_name == "Python bivittatus"));
+        let mirror = s.iter().find(|s| s.ext_id.ends_with(":6550750302")).unwrap();
+        assert_eq!(mirror.ext_id, "50c9509d-22c7-4a22-a47d-8c48425ef4a7:398269828:6550750302");
+        assert_eq!(mirrored_inat_id(&mirror.ext_id), Some("398269828"));
         assert_eq!(mirror.quality, Quality::Research);
-        assert_eq!(mirror.accuracy_m, Some(2.0));
-        // Same instant iNat reports for observation 335508189.
-        assert_eq!(mirror.observed_at, bio::parse_time_ms("2026-01-11T01:50:00-05:00").unwrap());
+        assert_eq!(mirror.accuracy_m, Some(4.0));
+        // Same instant iNat reports for observation 398269828 (GBIF re-publishes it as naive local time).
+        assert_eq!(mirror.observed_at, bio::parse_time_ms("2026-09-07T03:24:17Z").unwrap());
         assert_eq!(
             mirror.photo_url.as_deref(),
-            Some("https://inaturalist-open-data.s3.amazonaws.com/photos/609511322/original.jpg")
+            Some("https://inaturalist-open-data.s3.amazonaws.com/photos/730575760/original.jpg")
         );
-        // Date-only eventDate lands at Eastern noon.
-        let day = s.iter().find(|s| s.ext_id.ends_with(":6251984586")).unwrap();
-        assert_eq!(day.observed_at, bio::parse_time_ms("2026-05-02T12:00:00-04:00").unwrap());
-        assert_eq!(day.taxon.scientific_name, "Iguana iguana");
-        // Under the lionfish app only Pterois collapses to a focus taxon; the iguana keeps its GBIF name.
-        let rows = normalize(&fixture("gbif/modified-p1.json"), &lionfish()).unwrap();
-        let iguana = rows.iter().find_map(|r| match r {
-            Row::Sighting(s) if s.ext_id.ends_with(":6251984586") => Some(s),
-            _ => None,
-        });
-        assert_eq!(iguana.unwrap().taxon.inat_taxon_id, None, "not a focus ref");
+        // Lionfish Watch stores lionfish only: the python page yields nothing there.
+        assert!(normalize(&fixture("gbif/modified-p1.json"), &lionfish()).unwrap().is_empty());
     }
 
     #[test]
@@ -357,22 +342,30 @@ mod tests {
         assert_eq!(inat_mirror_prefix("7"), "50c9509d-22c7-4a22-a47d-8c48425ef4a7:7:");
         assert_eq!(event_ms("2020-01-01/2020-01-01"), bio::parse_time_ms("2020-01-01"));
         assert_eq!(event_ms("2020-01-01/2020-12-31"), None);
+        // A date-only eventDate lands at Eastern noon.
+        assert_eq!(event_ms("2026-05-02"), bio::parse_time_ms("2026-05-02T12:00:00-04:00"));
     }
 
     #[test]
-    fn gbif_normalize_skips_absent_and_imprecise() {
+    fn gbif_normalize_skips_absent_imprecise_and_other_species() {
         let page = serde_json::json!({ "results": [
             { "key": 1, "datasetKey": "x", "decimalLatitude": 25.0, "decimalLongitude": -80.5, "eventDate": "2024-03-01",
               "occurrenceStatus": "ABSENT", "speciesKey": PYTHON_KEY },
             { "key": 2, "datasetKey": "x", "decimalLatitude": 25.0, "decimalLongitude": -80.5, "eventDate": "2024-03",
               "speciesKey": PYTHON_KEY },
             { "key": 3, "datasetKey": "x", "catalogNumber": "UF 1", "decimalLatitude": 25.0, "decimalLongitude": -80.5,
+              "eventDate": "2024-03-01T10:00:00Z", "speciesKey": PYTHON_KEY },
+            { "key": 4, "datasetKey": "x", "catalogNumber": "UF 2", "decimalLatitude": 25.0, "decimalLongitude": -80.5,
               "eventDate": "2024-03-01T10:00:00Z", "speciesKey": 2334433, "genusKey": PTEROIS_GENUS_KEY }
         ]});
-        let s = sightings(&serde_json::to_vec(&page).unwrap());
-        assert_eq!(s.len(), 1);
+        let bytes = serde_json::to_vec(&page).unwrap();
+        let s = sightings(&bytes);
+        assert_eq!(s.len(), 1, "absent, month-only and the lionfish record are skipped");
         assert_eq!((s[0].ext_id.as_str(), s[0].quality), ("x:UF 1:3", Quality::Curated));
-        assert_eq!(s[0].taxon.scientific_name, "Pterois volitans/miles", "P. miles maps to the lionfish taxon");
+        assert_eq!(s[0].taxon.scientific_name, "Python bivittatus");
+        // Under Lionfish Watch the P. miles record (species key under the Pterois genus) is its species.
+        let rows = normalize(&bytes, &lionfish()).unwrap();
+        assert!(matches!(&rows[..], [Row::Sighting(s)] if s.ext_id == "x:UF 2:4" && s.taxon.scientific_name == "Pterois volitans/miles"), "{rows:?}");
     }
 
     #[test]
@@ -386,7 +379,7 @@ mod tests {
             url,
             format!(
                 "https://api.gbif.org/v1/occurrence/search?decimalLatitude={},{}&decimalLongitude={},{}\
-                 &taxonKey=4820533&taxonKey=5227370&taxonKey=2459658&taxonKey=2334432&occurrenceStatus=PRESENT\
+                 &taxonKey=4820533&occurrenceStatus=PRESENT\
                  &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=300&offset=0",
                 b.south, b.north, b.west, b.east
             )

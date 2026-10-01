@@ -8,7 +8,7 @@
       "entity": "mission",
       "entityId": "m1",
       "field": "title",
-      "value": "Tegu trapline",
+      "value": "Python trapline",
       "nodeId": "a"
     },
     {
@@ -28,7 +28,7 @@
       "entity": "mission",
       "entityId": "m1",
       "field": "title",
-      "value": "Tegu trapline (b edit)",
+      "value": "Python trapline (b edit)",
       "nodeId": "b"
     },
     {
@@ -38,7 +38,7 @@
       "entity": "mission",
       "entityId": "m2",
       "field": "title",
-      "value": "Iguana survey",
+      "value": "Python survey",
       "nodeId": "a"
     },
     {
@@ -65,7 +65,7 @@
   "expected": {
     "missions": {
       "m2": {
-        "title": "Iguana survey"
+        "title": "Python survey"
       }
     },
     "notes": {},

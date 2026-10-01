@@ -276,41 +276,16 @@ impl QueryRoot {
         Ok(rows)
     }
 
-    /// Distinct sightings per taxon inside `bbox` observed in `from..=to`, most first. `groups` keeps
-    /// taxa whose `iconicGroup` is listed (`other` also matches taxa with no group); `top` defaults to 50.
+    /// Distinct sightings of the app's species inside `bbox` observed in `from..=to` (R14: other
+    /// taxa are not counted). `top` defaults to 50.
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
-    async fn species_counts(
-        &self,
-        ctx: &Context<'_>,
-        bbox: BBox,
-        from: Time,
-        to: Time,
-        groups: Option<Vec<String>>,
-        top: Option<i32>,
-    ) -> Result<Vec<SpeciesCount>> {
+    async fn species_counts(&self, ctx: &Context<'_>, bbox: BBox, from: Time, to: Time, top: Option<i32>) -> Result<Vec<SpeciesCount>> {
         bbox.validate(&app_state(ctx).app)?;
         check_window(from, to)?;
         let top = top.unwrap_or(DEFAULT_SPECIES_TOP);
         if !(1..=MAX_TAXA as i32).contains(&top) {
             return Err(format!("`top` must be 1..={MAX_TAXA}").into());
         }
-        let groups = groups
-            .map(|gs| {
-                gs.iter()
-                    .map(|g| {
-                        crate::taxon_info::GROUPS
-                            .iter()
-                            .find(|known| known.eq_ignore_ascii_case(g.trim()))
-                            .map(|k| k.to_string())
-                            .ok_or_else(|| {
-                                async_graphql::Error::new(format!("unknown group {g:?}; expected one of {}", crate::taxon_info::GROUPS.join(", ")))
-                            })
-                    })
-                    .collect::<Result<Vec<String>>>()
-            })
-            .transpose()?;
-        let other = groups.as_ref().is_some_and(|g| g.iter().any(|g| g == "other"));
-        let groups = json_list(groups);
         let rows = app_state(ctx)
             .obs
             .read(move |c| {
@@ -320,17 +295,17 @@ impl QueryRoot {
                      where s.observed_at between ?1 and ?2
                        and s.lat between ?3 and ?4 and s.lon between ?5 and ?6
                        and s.canonical_id is null
-                       and (?7 is null or t.iconic_group in (select value from json_each(?7)) or (?8 and t.iconic_group is null))
+                       and t.focus = 1
                      group by t.id
                      order by n desc, t.id
-                     limit ?9",
+                     limit ?7",
                     Taxon::COLUMNS
                 ))?;
-                let rows = st.query_map(params![from.0, to.0, bbox.south, bbox.north, bbox.west, bbox.east, groups, other, top as i64], |r| {
+                let rows = st.query_map(params![from.0, to.0, bbox.south, bbox.north, bbox.west, bbox.east, top as i64], |r| {
                     Ok(SpeciesCount {
                         taxon: Taxon::from_row(r, 0)?,
-                        count: r.get::<_, i64>(9)? as i32,
-                        latest_sighting_id: r.get::<_, Option<i64>>(10)?.map(|id| ID(id.to_string())),
+                        count: r.get::<_, i64>(5)? as i32,
+                        latest_sighting_id: r.get::<_, Option<i64>>(6)?.map(|id| ID(id.to_string())),
                     })
                 })?;
                 rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -878,9 +853,10 @@ mod tests {
     fn species_ids_accept_names_and_taxon_ids() {
         let app = crate::hotspot::score::testkit::python_app();
         assert_eq!(species(&app, &ID("python".into())).unwrap().id(), "python");
-        assert_eq!(species(&app, &ID("4".into())).unwrap().id(), "lionfish");
-        assert!(species(&app, &ID("otter".into())).unwrap_err().message.contains("python, tegu, iguana, lionfish"));
-        assert_eq!(taxon_ids(&app, &[ID("tegu".into()), ID("7".into())]).unwrap(), [2, 7]);
+        assert_eq!(species(&app, &ID("1".into())).unwrap().id(), "python");
+        assert!(species(&app, &ID("4".into())).is_err(), "lionfish is not a species of Everglades Ops");
+        assert!(species(&app, &ID("otter".into())).unwrap_err().message.contains("python, or taxon id 1"));
+        assert_eq!(taxon_ids(&app, &[ID("python".into()), ID("7".into())]).unwrap(), [1, 7]);
         let lf = crate::ingest::poll::bio::testing::lionfish();
         assert!(species(&lf, &ID("python".into())).is_err(), "not a taxon of Lionfish Watch");
         assert_eq!(species(&lf, &ID("4".into())).unwrap().id(), "lionfish");

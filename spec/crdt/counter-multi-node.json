@@ -46,7 +46,7 @@
       "hlc": "1700000000300:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 12,
       "nodeId": "c"
@@ -56,7 +56,7 @@
       "hlc": "1700000000100:0:a",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "iguana",
+      "entityId": "python-hatchling",
       "field": "count",
       "value": 1,
       "nodeId": "a"
@@ -78,7 +78,7 @@
     "messages": [],
     "removals": {
       "python": 20,
-      "iguana": 13,
+      "python-hatchling": 13,
       "lionfish": 0
     }
   }

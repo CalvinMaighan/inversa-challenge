@@ -166,10 +166,10 @@ mod tests {
         insert_sighting(&db, "inat", 1, lat_a, lon_a, d0 + 9 * HOUR, "research", None).await;
         insert_sighting(&db, "inat", 1, lat_b, lon_b, d0 + 10 * HOUR, "research", None).await;
         insert_sighting(&db, "gbif", 1, lat_a, lon_a, d0 + 9 * HOUR, "research", Some(3)).await;
-        // Day 1: one next to A (hit, inside the kernel) and a tegu (other species, ignored).
+        // Day 1: one next to A (hit, inside the kernel) and a lionfish row (another app's species, ignored).
         let (lon_c, lat_c) = g.center(g.index(102, 101));
         insert_sighting(&db, "inat", 1, lat_c, lon_c, d0 + DAY + HOUR, "research", None).await;
-        insert_sighting(&db, "inat", 2, lat_b, lon_b, d0 + DAY + HOUR, "research", None).await;
+        insert_sighting(&db, "inat", 4, lat_b, lon_b, d0 + DAY + HOUR, "research", None).await;
         // Day 2: nothing.
         let bt = backtest_until(&db, &app, python, 3, d0 + 3 * DAY).await.unwrap();
         assert_eq!(bt.baseline, 0.1);
@@ -182,7 +182,7 @@ mod tests {
         assert!((bt.hit_rate - 2.0 / 3.0).abs() < 1e-9);
         assert_eq!((bt.horizon_days, bt.evaluated, bt.hits, bt.insufficient_regions.len(), bt.note), (1, 3, 2, 0, None));
         // No sightings at all: a measured zero, not an error.
-        let empty = backtest_until(&db, &app, app.taxon("lionfish").unwrap(), 2, d0 + 3 * DAY).await.unwrap();
+        let empty = backtest_until(&db, &app, python, 2, d0 - 10 * DAY).await.unwrap();
         assert_eq!(empty.hit_rate, 0.0);
         assert!(empty.per_day.iter().all(|d| d.sightings == 0));
         assert!(backtest_until(&db, &app, python, 0, d0).await.is_err());

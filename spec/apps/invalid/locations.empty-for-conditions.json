@@ -5,12 +5,11 @@
   "tagline": "River and weather conditions around candidate carp-removal locations, Louisiana",
   "question": "How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today?",
   "kind": "conditions",
-  "provisional": true,
   "taxa": [],
   "regions": [
     {
       "id": "louisiana",
-      "name": "Louisiana rivers (provisional)",
+      "name": "Louisiana rivers",
       "bbox": [
         -94,
         28.9,
@@ -19,19 +18,47 @@
       ],
       "cellDeg": 0.01,
       "camera": {
-        "lat": 30.9,
-        "lon": -91.4,
+        "lat": 31.1,
+        "lon": -91.1,
         "heightM": 650000
       }
     }
   ],
   "locations": [],
+  "cameraPresets": [
+    {
+      "id": "all-sites",
+      "name": "All sites",
+      "lat": 31.1,
+      "lon": -91.1,
+      "zoom": 7.5
+    },
+    {
+      "id": "atchafalaya",
+      "name": "Atchafalaya Basin (L'CARP)",
+      "lat": 30.35,
+      "lon": -91.55,
+      "zoom": 8.5,
+      "locations": [
+        "atchafalaya-simmesport",
+        "atchafalaya-krotz-springs",
+        "atchafalaya-butte-la-rose",
+        "atchafalaya-morgan-city"
+      ]
+    }
+  ],
   "feeds": [
     {
       "source": "usgs",
       "mode": "poll",
+      "name": "USGS Water Data (OGC API, continuous)",
+      "homepage": "https://api.waterdata.usgs.gov/docs/ogcapi/",
       "params": {
-        "note": "sites come from locations[].usgs once C1 lands"
+        "api": "ogc",
+        "parameters": [
+          "00065",
+          "00060"
+        ]
       }
     },
     {
@@ -40,17 +67,17 @@
       "name": "NOAA National Water Prediction Service",
       "homepage": "https://water.noaa.gov",
       "params": {
-        "gauges": [
-          "BTRL1",
-          "ALXL1",
-          "SMML1",
-          "MONL1"
+        "fastWindowUtc": [
+          12,
+          18
         ]
       }
     },
     {
-      "source": "nws",
+      "source": "nws-alerts",
       "mode": "poll",
+      "name": "NWS alerts API (Louisiana)",
+      "homepage": "https://www.weather.gov/documentation/services-web-api",
       "params": {
         "area": "LA",
         "offices": [
@@ -69,9 +96,31 @@
       }
     },
     {
-      "source": "web",
-      "mode": "push",
+      "source": "nws-forecast",
+      "mode": "poll",
+      "name": "NWS gridpoint forecast",
+      "homepage": "https://www.weather.gov/documentation/services-web-api",
       "params": {}
+    },
+    {
+      "source": "iem",
+      "mode": "poll",
+      "name": "IEM HML river forecast archive (Iowa State)",
+      "homepage": "https://mesonet.agron.iastate.edu/request/hml.php",
+      "params": {
+        "days": 30
+      }
+    },
+    {
+      "source": "nwws",
+      "mode": "push",
+      "params": {
+        "offices": [
+          "KLCH",
+          "KLIX",
+          "KSHV"
+        ]
+      }
     }
   ],
   "score": {
@@ -144,9 +193,9 @@
     }
   ],
   "legend": {
-    "locations": "Demonstration locations until Inversa supplies operating areas.",
-    "alerts": "NWS products in effect at the cursor time.",
-    "stations": "Observed stage and discharge (USGS) with forecast issuance times (NWPS).",
+    "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP is reported as active in the Atchafalaya Basin (LDWF).",
+    "alerts": "NWS products in effect at the cursor time; \"no active alerts\" shows the time of the last check.",
+    "stations": "Observed stage and discharge (USGS, cfs) with NWPS forecast issuance times. Flood categories use NWPS stage; flow is always labelled with its source.",
     "missions": "Areas the team has claimed or finished.",
     "peers": "Teammates on the board right now.",
     "notes": "Field notes pinned to the map."
@@ -158,7 +207,7 @@
     "legendTitle": "River gauges, forecasts and alerts",
     "title": "Carp Field Conditions",
     "shortTitle": "Carp",
-    "scopeNote": "Louisiana river locations (demonstration set).",
+    "scopeNote": "Louisiana river locations (demonstration set, Atchafalaya Basin first).",
     "boundaryNote": "These feeds cannot establish carp abundance, expected catch, legal access or trip safety."
   },
   "helperQuestions": [
@@ -169,19 +218,40 @@
     "Which locations have stale forecasts?"
   ],
   "agent": {
-    "persona": "You are the field-conditions analyst for carp removal operations in Louisiana. You report observed and forecast river conditions per location, keep observation, issuance, valid and ingestion times apart, and never claim carp abundance or catch.",
-    "scope": "River stage, discharge, forecasts and weather alerts at the demonstration locations in Louisiana.",
+    "persona": "You are the field-conditions analyst for carp removal operations in Louisiana (L'CARP, run by Inversa, reported active in the Atchafalaya Basin for silver, grass, bighead and black carp). You report observed and forecast river conditions per demonstration location and which of them should be flagged for review, keep observation, issuance, valid and ingestion times apart, label every number with its source and unit, answer 'what was known at time T' from the data known then, and never claim carp abundance, catch, legal access or trip safety.",
+    "scope": "River stage, discharge, NWPS forecasts and flood categories, NWS weather forecasts and alerts, review status and the team board at the eight Louisiana demonstration locations (Atchafalaya at Simmesport, Krotz Springs, Butte La Rose and Morgan City; Mississippi at Baton Rouge; Red at Alexandria; Ouachita at Monroe; Pearl near Bogalusa), live or as of a past time.",
     "tools": [
-      "geocode",
-      "conditions",
+      "site_status",
+      "river_readings",
+      "river_forecast",
+      "forecast_verify",
+      "review_history",
+      "weather_forecast",
       "alerts",
       "feed_state",
+      "source_info",
+      "evidence",
       "notes",
+      "team_board",
       "set_view"
     ],
-    "refusal": "Carp Field Conditions covers river and weather conditions at the Louisiana demonstration locations only. It cannot estimate carp abundance, expected catch, legal access or trip safety."
+    "refusal": "Carp Field Conditions covers river and weather conditions at the eight Louisiana demonstration locations only (L'CARP targets silver, grass, bighead and black carp in the Atchafalaya Basin). It cannot estimate carp abundance, expected catch, legal access or trip safety, and it has no data for other rivers, regions or species (Burmese pythons are the Python app's, in the Everglades)."
   },
   "eval": {
     "goldenSet": "carp"
+  },
+  "review": {
+    "stageRiseFt": 2,
+    "tidalSites": [
+      "MCGL1"
+    ],
+    "tidalStageRiseFt": 3,
+    "forecastHorizonHours": 72,
+    "rapidRiseFtPer24h": 2,
+    "tidalRapidRiseFtPer24h": 3,
+    "staleObservationHours": 6,
+    "staleForecastHours": 36,
+    "conflictFt": 1,
+    "flowConflictRatio": 1.5
   }
 }

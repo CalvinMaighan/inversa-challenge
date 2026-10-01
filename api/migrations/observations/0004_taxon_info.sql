@@ -16,6 +16,4 @@ create index taxa_inat on taxa(inat_taxon_id);
 create index taxa_group on taxa(iconic_group);
 
 update taxa set inat_taxon_id = 238252, iconic_group = 'Reptilia' where id = 1;
-update taxa set inat_taxon_id = 318758, iconic_group = 'Reptilia' where id = 2;
-update taxa set inat_taxon_id = 35342, iconic_group = 'Reptilia' where id = 3;
 update taxa set inat_taxon_id = 47284, iconic_group = 'Actinopterygii' where id = 4;

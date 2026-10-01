@@ -27,10 +27,10 @@ mkdir -p inat openmeteo usgs nws/raw nws/iem
 entry() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" >> .manifest.tsv; }
 get() { curl -fsS --retry 8 --retry-delay 10 -A "$UA" "$@"; }
 
-# --- iNaturalist: the four focus taxa (Python bivittatus 238252, Salvator merianae 318758,
-# Iguana iguana 35342, genus Pterois 47284) observed in the region bbox on the window's days.
-# One page holds the whole window (141 observations, ~10.6 MB raw).
-INAT="https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252,318758,35342,47284&d1=$FROM_DAY&d2=$TO_DAY&order_by=id&order=asc&per_page=200"
+# --- iNaturalist: the app's one species (Python bivittatus 238252) observed in the region bbox on
+# the window's days. Re-recorded 2026-10-01 when the app narrowed to one species: 0 observations
+# in the window; the empty page is kept so the replay says so from real data.
+INAT="https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&d1=$FROM_DAY&d2=$TO_DAY&order_by=id&order=asc&per_page=200"
 get "$INAT" | gzip -n > inat/focus-p1.json.gz
 total=$(gzip -dc inat/focus-p1.json.gz | jq '.total_results')
 got=$(gzip -dc inat/focus-p1.json.gz | jq '.results | length')

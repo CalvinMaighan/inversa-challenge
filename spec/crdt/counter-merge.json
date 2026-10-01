@@ -56,7 +56,7 @@
       "hlc": "1700000000100:0:c",
       "boardId": "b1",
       "entity": "removal",
-      "entityId": "tegu",
+      "entityId": "python-adult",
       "field": "count",
       "value": 7,
       "nodeId": "c"
@@ -68,7 +68,7 @@
     "messages": [],
     "removals": {
       "python": 5,
-      "tegu": 7
+      "python-adult": 7
     }
   }
 }

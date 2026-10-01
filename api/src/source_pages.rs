@@ -276,7 +276,7 @@ pub fn source_facts(source: &str) -> Option<SourceFacts> {
             cadence: "Every 10 min with If-None-Match (a conditional GET).",
             expected_latency: "Upload to index takes minutes, plus up to 10 min, plus up to 5 min of CDN cache.",
             rate_limit: "At most 100 requests a minute; asks for 60 a minute and under 10,000 a day.",
-            coverage: "The app's focus taxa inside its regions.",
+            coverage: "The app's species inside its regions.",
             limits: &["Community identifications can change; changes are kept as revisions.", "Where people look, not how many animals there are."],
             why_poll: Some("The API has no hook; its subscriptions follow one observation or project for a signed-in user."),
         },
@@ -290,7 +290,7 @@ pub fn source_facts(source: &str) -> Option<SourceFacts> {
             cadence: "Daily, over a modified-date window.",
             expected_latency: "Days to weeks of index lag, plus up to 24 h.",
             rate_limit: "No published hard limit; responses are cached for 600 s.",
-            coverage: "The app's focus taxa inside its regions.",
+            coverage: "The app's species inside its regions.",
             limits: &["Re-ingests iNaturalist weekly; those copies link to the iNaturalist sighting and are never counted twice."],
             why_poll: Some("The occurrence API has no webhook or callback; download notices are email only."),
         },
@@ -391,20 +391,6 @@ pub fn source_facts(source: &str) -> Option<SourceFacts> {
             rate_limit: "One session per account.",
             coverage: "Products from the app's NWS offices.",
             limits: &["Needs NWWS-OI credentials; without them the feed shows as down with the reason."],
-            why_poll: None,
-        },
-        "web" => SourceFacts {
-            publisher: "This service (signed ingest hook)",
-            api_url: "/v1/<app>/ingest/hook/web",
-            page_url: "/v1/<app>/ingest/hook/web",
-            licence: "As supplied by the sender.",
-            attribution: "Records posted through the signed hook.",
-            doi: None,
-            cadence: "Push: as rows are posted.",
-            expected_latency: "As the sender posts.",
-            rate_limit: "2 MB per request; signed, 300 s replay window.",
-            coverage: "Whatever the sender posts.",
-            limits: &["Not an upstream feed."],
             why_poll: None,
         },
         _ => return None,
@@ -634,17 +620,17 @@ mod tests {
     #[test]
     fn source_page_url_inat_observation() {
         let ids = sighting_ids(inat::normalize(&fixture("inat/focus-p1.json"), &python()).unwrap());
-        assert_eq!(ids[0], "335508189");
-        assert_eq!(source_page_url("inat", &ids[0]).as_deref(), Some("https://www.inaturalist.org/observations/335508189"));
+        assert_eq!(ids[0], "398628449");
+        assert_eq!(source_page_url("inat", &ids[0]).as_deref(), Some("https://www.inaturalist.org/observations/398628449"));
         assert!(ids.iter().all(|id| source_page_url("inat", id).is_some()));
     }
 
     #[test]
     fn source_page_url_gbif_occurrence_from_composite_ext_id() {
         let ids = sighting_ids(gbif::normalize(&fixture("gbif/modified-p1.json"), &python()).unwrap());
-        let mirror = ids.iter().find(|id| id.ends_with(":6130701656")).unwrap();
-        assert_eq!(mirror, "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656");
-        assert_eq!(source_page_url("gbif", mirror).as_deref(), Some("https://www.gbif.org/occurrence/6130701656"));
+        let mirror = ids.iter().find(|id| id.ends_with(":6550750302")).unwrap();
+        assert_eq!(mirror, "50c9509d-22c7-4a22-a47d-8c48425ef4a7:398269828:6550750302");
+        assert_eq!(source_page_url("gbif", mirror).as_deref(), Some("https://www.gbif.org/occurrence/6550750302"));
         // Catalog numbers with spaces or colons do not matter: the key is the last part.
         assert_eq!(source_page_url("gbif", "x:UF 1:3:42").as_deref(), Some("https://www.gbif.org/occurrence/42"));
         assert!(ids.iter().all(|id| source_page_url("gbif", id).is_some()));
@@ -717,7 +703,7 @@ mod tests {
     }
 
     #[test]
-    fn source_page_url_null_for_modelled_grid_goes_and_hooks() {
+    fn source_page_url_null_for_modelled_grid_and_goes() {
         use crate::ingest::poll::physical::testing::{fixture_str, recorded};
         let url = fixture_str("openmeteo/forecast.url");
         let raw = recorded(url.trim(), "application/json", fixture("openmeteo/forecast.json"), 200, 1_790_800_000_000);
@@ -725,7 +711,6 @@ mod tests {
         assert!(!grid.is_empty());
         assert!(grid.iter().all(|id| source_page_url("openmeteo", id).is_none()));
         assert_eq!(source_page_url("goes19", "g5:1234"), None);
-        assert_eq!(source_page_url("web", "web-1"), None);
     }
 
     #[test]

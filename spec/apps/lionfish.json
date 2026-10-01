@@ -12,14 +12,12 @@
       "short": "Lionfish",
       "line": "venomous reef fish that eats young native fish",
       "aliases": ["red lionfish", "common lionfish", "devil firefish", "pterois", "pterois volitans", "pterois miles"],
-      "category": "fish",
       "scientificName": "Pterois volitans/miles",
       "inatTaxonId": 47284,
       "inatLineageIds": [47280, 123459],
       "gbifKey": 2334432,
       "nasGenus": "Pterois",
       "nasSpecies": null,
-      "iconicGroup": "Actinopterygii",
       "color": "#a06cd5",
       "halfLifeDays": 60,
       "rules": "lionfish"
@@ -63,7 +61,7 @@
   ],
   "locations": [],
   "feeds": [
-    { "source": "inat", "mode": "poll", "params": { "queries": ["focus"], "cadenceMinutes": 10, "backfillDays": 90, "mirrorCatchUp": true } },
+    { "source": "inat", "mode": "poll", "params": { "cadenceMinutes": 10, "backfillDays": 90, "mirrorCatchUp": true } },
     { "source": "gbif", "mode": "poll", "params": { "dedupeAgainst": "inat" } },
     { "source": "nas", "mode": "poll", "params": { "state": null, "global": true, "pageLimit": 4000, "parallelPages": 4, "cadenceDays": 7 } },
     { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },

@@ -24,8 +24,8 @@ use crate::state::AppState;
 
 const HOUR: i64 = 3_600_000;
 const DAY: i64 = 24 * HOUR;
-/// The python app's four taxa.
-const TAXA: usize = 4;
+/// The python app's one taxon.
+const TAXA: usize = 1;
 
 /// The python app's region (its one region), as a GraphQL `BBox` variable.
 fn region(state: &AppState) -> Value {
@@ -328,20 +328,20 @@ async fn e2e_fixture_pipeline() {
         .unwrap();
     assert_eq!(rest, chunk, "REST and GraphQL serve the same frames");
 
-    // 9. hotspots for iguana at its newest sighting.
-    let iguana_at = int(
+    // 9. hotspots for the python at its newest sighting.
+    let python_at = int(
         &state,
-        "select max(observed_at) from sightings where taxon_id = 3",
+        "select max(observed_at) from sightings where taxon_id = 1",
     )
     .await;
     let data = gql(
         &state,
-        "query($at: Time!, $b: BBox!) { hotspots(species: \"iguana\", at: $at, bbox: $b, top: 20) { species cells { cell score } } }",
-        json!({"at": iso(iguana_at), "b": region(&state)}),
+        "query($at: Time!, $b: BBox!) { hotspots(species: \"python\", at: $at, bbox: $b, top: 20) { species cells { cell score } } }",
+        json!({"at": iso(python_at), "b": region(&state)}),
     )
     .await;
     let cells = data["hotspots"]["cells"].as_array().unwrap();
-    assert!(!cells.is_empty(), "iguana hotspots at {}", iso(iguana_at));
+    assert!(!cells.is_empty(), "python hotspots at {}", iso(python_at));
     assert!(cells.iter().all(|c| c["score"].as_f64().unwrap() > 0.0));
 }
 
@@ -349,29 +349,38 @@ async fn e2e_fixture_pipeline() {
 // T27: the five data-quality cases of PRD §7, end to end
 // ---------------------------------------------------------------------------------------------
 
-/// POST rows (model::Row serde form) through the signed hook route, as a pushing producer does.
-async fn hook(state: &AppState, rows: &Value) -> (StatusCode, Value) {
-    use hmac::{Hmac, Mac};
-    let body = rows.to_string().into_bytes();
-    let secret = state.config.ingest_hook_secret.clone().expect("tests configure a hook secret");
-    let ts = crate::state::now_ms() / 1000;
-    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).unwrap();
-    mac.update(format!("{ts}.").as_bytes());
-    mac.update(&body);
-    let res = router_for(state)
-        .oneshot(
-            Request::post("/v1/python/ingest/hook/web")
-                .header(header::CONTENT_TYPE, "application/json")
-                .header("x-timestamp", ts.to_string())
-                .header("x-signature", hex::encode(mac.finalize().into_bytes()))
-                .body(Body::from(body))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    let status = res.status();
-    let bytes = res.into_body().collect().await.unwrap().to_bytes();
-    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+/// A pushing producer for the cases no recorded payload covers (an old observation, a satellite
+/// pixel next to a buoy): rows in `model::Row` serde form through the real ingest pipeline, from
+/// a push source with a 24 h max latency.
+struct Pushed;
+
+#[async_trait::async_trait]
+impl crate::ingest::source::Source for Pushed {
+    fn info(&self) -> crate::ingest::source::SourceInfo {
+        crate::ingest::source::SourceInfo {
+            id: "pushed",
+            name: "Test push source",
+            homepage: "https://example.test",
+            mode: crate::ingest::source::Mode::Push,
+            cadence: std::time::Duration::from_secs(3600),
+            max_latency: std::time::Duration::from_secs(24 * 3600),
+        }
+    }
+    async fn fetch(&self, _ctx: &crate::ingest::source::FetchCtx<'_>) -> anyhow::Result<Vec<crate::ingest::source::RawPayload>> {
+        Ok(vec![])
+    }
+    fn normalize(&self, raw: &crate::ingest::source::RawPayload) -> anyhow::Result<Vec<crate::model::Row>> {
+        Ok(serde_json::from_slice(&raw.bytes)?)
+    }
+}
+
+/// Push `rows` through the pipeline; returns the rows written.
+async fn push(state: &AppState, rows: &Value) -> usize {
+    let raw = crate::ingest::poll::inat::tests::payload("test:push", rows.to_string().into_bytes());
+    let raw = crate::ingest::source::RawPayload { fetched_at: crate::state::now_ms(), ..raw };
+    let out = crate::ingest::scheduler::ingest_payload(state, &Pushed, raw, None).await.unwrap();
+    assert!(out.error.is_none(), "{out:?}");
+    out.rows_written
 }
 
 /// `feeds`, keyed by source.
@@ -432,7 +441,7 @@ async fn sightings_near(state: &AppState, lat: f64, lon: f64, at: i64) -> Vec<Va
 ///   pixel 2 km from a buoy reading 2.4 °C warmer;
 /// - **late:** NAS and GBIF records stored long after they were observed.
 ///
-/// `backfill --fixtures` carries the GOES, iNat, NAS, GBIF and NDBC payloads; the signed hook
+/// `backfill --fixtures` carries the GOES, iNat, NAS, GBIF and NDBC payloads; a test push source
 /// carries the pushed rows; the scheduler runs the real NDBC poller for the failed fetch.
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_quality_cases() {
@@ -440,16 +449,15 @@ async fn e2e_quality_cases() {
     crate::backfill::run(state.clone(), &["--fixtures".to_string()]).await.unwrap();
     let now = crate::state::now_ms();
 
-    // --- stale: `web` (max latency 24 h) receives an observation made 3 days ago ---------------
+    // --- stale: a push source (max latency 24 h) receives an observation made 3 days ago ---------
     let rows = json!([{"Sighting": {
         "ext_id": "t27-stale-1",
         "taxon": {"scientific_name": "Python bivittatus", "common_name": "Burmese python"},
         "lat": 25.76, "lon": -80.77, "accuracy_m": 10.0, "observed_at": now - 3 * DAY, "quality": "curated", "photo_url": null
     }}]);
-    let (status, out) = hook(&state, &rows).await;
-    assert_eq!((status, out["rowsWritten"].as_i64()), (StatusCode::ACCEPTED, Some(1)), "{out}");
+    assert_eq!(push(&state, &rows).await, 1);
     let feeds = feeds_by_source(&state).await;
-    let web = &feeds["web"];
+    let web = &feeds["pushed"];
     assert_eq!(web["state"], "STALE", "{web}");
     assert!(web["lagSeconds"].as_i64().unwrap() >= 3 * 86_400 - 5, "{web}");
     assert!(web["note"].as_str().unwrap().contains("max latency is 1d"), "{web}");
@@ -644,11 +652,10 @@ async fn e2e_quality_cases() {
         "station": {"ext_id": "t27-sst-pixel", "name": "SST pixel 2 km north of the buoy", "lat": blat + 0.018, "lon": blon, "kind": "goes_cell"},
         "param": "sst_c", "value": buoy_c + 2.4, "flag": "ok", "observed_at": pixel_at, "origin": "satellite"
     }}]);
-    let (status, out) = hook(&state, &rows).await;
-    assert_eq!(status, StatusCode::ACCEPTED, "{out}");
+    assert_eq!(push(&state, &rows).await, 2, "station + reading");
     let pixel_station: i64 = state
         .obs
-        .read(|c| c.query_row("select id from stations where source_id = 'web' and ext_id = 't27-sst-pixel'", [], |r| r.get(0)))
+        .read(|c| c.query_row("select id from stations where source_id = 'pushed' and ext_id = 't27-sst-pixel'", [], |r| r.get(0)))
         .await
         .unwrap();
     let buoy_id = format!("reading:{buoy_station}:sst_c:{buoy_at}:measured");
@@ -671,7 +678,7 @@ async fn e2e_quality_cases() {
         .iter()
         .map(|r| (r["station"]["source"].as_str().unwrap(), r["origin"].as_str().unwrap()))
         .collect();
-    assert!(origins.contains(&("ndbc", "MEASURED")) && origins.contains(&("web", "SATELLITE")), "{origins:?}");
+    assert!(origins.contains(&("ndbc", "MEASURED")) && origins.contains(&("pushed", "SATELLITE")), "{origins:?}");
 
     // --- late: NAS and GBIF records stored long after they were observed -------------------------
     for source in ["nas", "gbif"] {

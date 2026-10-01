@@ -2,9 +2,8 @@
 //! delivery step of docs/ingest-modes.md "Emitter design").
 //!
 //! The body is the raw provider payload, exactly as fetched; the hook runs the named adapter's
-//! pure `normalize` over it. `{source}` is the app's `web` hook source (a JSON array of
-//! `model::Row`) or any poll adapter the app runs (`nwps` takes a stageflow body, `inat` an
-//! observations page, ...). Headers:
+//! pure `normalize` over it. `{source}` is any poll adapter the app runs (`nwps` takes a
+//! stageflow body, `inat` an observations page, ...). Headers:
 //!
 //! - `X-Timestamp`: unix seconds; more than [`MAX_SKEW_SECS`] from now is rejected (the replay
 //!   window: a captured request cannot be replayed after it);
@@ -30,9 +29,7 @@
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
-use async_trait::async_trait;
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path};
 use axum::http::{HeaderMap, StatusCode};
@@ -44,11 +41,9 @@ use rusqlite::{params, OptionalExtension};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::app::config::App;
 use crate::app::AppRegistry;
 use crate::ingest::scheduler::{ingest_payload, RunStatus};
-use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
-use crate::model::Row;
+use crate::ingest::source::{RawPayload, Source};
 use crate::state::AppState;
 
 pub const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
@@ -58,66 +53,12 @@ pub fn routes() -> Router<AppRegistry> {
     Router::new().route("/ingest/hook/{source}", post(receive)).layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 
-/// Hook-only sources for `app` (its `feeds[]` must list `web`). Upserted into `sources` at boot
-/// by the scheduler; they have no fetch loop.
-pub fn sources(app: &App) -> Vec<Arc<dyn Source>> {
-    if app.cfg.has_feed("web") {
-        vec![Arc::new(HookSource::web())]
-    } else {
-        Vec::new()
-    }
-}
-
-/// The adapter that normalizes a delivery for `source_id`: the hook-only `web` source or one of
-/// the app's poll adapters. Push adapters (GOES, NWWS) need credentials to exist at all and
-/// deliver in-process, so they are not offered here.
+/// The adapter that normalizes a delivery for `source_id`: one of the app's poll adapters. Push
+/// adapters (GOES, NWWS) need credentials to exist at all and deliver in-process, so they are
+/// not offered here. (The generic `web` source, a JSON array of rows that no feed ever posted,
+/// went with K1.)
 fn delivery_source(state: &AppState, source_id: &str) -> Option<Arc<dyn Source>> {
-    sources(&state.app)
-        .into_iter()
-        .chain(crate::ingest::poll::all(&state.config, &state.app))
-        .find(|s| s.info().id == source_id)
-}
-
-/// Generic push source fed only through the hook. The body is a JSON array of `model::Row` in
-/// its serde form, e.g. `[{"Sighting": {...}}, {"Reading": {...}}]`.
-pub struct HookSource {
-    info: SourceInfo,
-}
-
-impl HookSource {
-    pub fn web() -> Self {
-        HookSource {
-            info: SourceInfo {
-                id: "web",
-                name: "Signed web hook",
-                homepage: "/v1/<app>/ingest/hook/web",
-                mode: Mode::Push,
-                cadence: Duration::from_secs(60 * 60),
-                max_latency: Duration::from_secs(24 * 60 * 60),
-            },
-        }
-    }
-}
-
-#[async_trait]
-impl Source for HookSource {
-    fn info(&self) -> SourceInfo {
-        self.info.clone()
-    }
-
-    fn min_interval(&self) -> Duration {
-        Duration::ZERO
-    }
-
-    /// Hook sources are pushed to; there is nothing to fetch.
-    async fn fetch(&self, _ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
-        Ok(Vec::new())
-    }
-
-    fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
-        let rows: Vec<Row> = serde_json::from_slice(&raw.bytes)?;
-        Ok(rows)
-    }
+    crate::ingest::poll::all(&state.config, &state.app).into_iter().find(|s| s.info().id == source_id)
 }
 
 fn error(status: StatusCode, message: impl Into<String>) -> Response {
@@ -249,7 +190,7 @@ mod tests {
 
     use super::*;
     use crate::app::test_support::{router_for, test_app, test_state, test_state_for};
-    use crate::model::{Quality, SightingRow, TaxonRef};
+
 
     const SECRET: &str = "test-hook-secret";
 
@@ -260,19 +201,17 @@ mod tests {
         hex::encode(mac.finalize().into_bytes())
     }
 
+    /// One real Burmese python observation (398269828) as an iNat observations page: the raw body
+    /// an emitter would deliver for `inat`.
+    fn page(id: i64) -> Vec<u8> {
+        let full: serde_json::Value = serde_json::from_slice(&crate::ingest::poll::inat::tests::fixture("inat/focus-p1.json")).unwrap();
+        let mut obs = full["results"].as_array().unwrap().iter().find(|o| o["id"] == 398269828).unwrap().clone();
+        obs["id"] = id.into();
+        serde_json::to_vec(&serde_json::json!({ "total_results": 1, "page": 1, "per_page": 200, "results": [obs] })).unwrap()
+    }
+
     fn body() -> Vec<u8> {
-        serde_json::to_vec(&vec![Row::Sighting(SightingRow {
-            ext_id: "web-1".into(),
-            taxon: TaxonRef::named("Salvator merianae", "Tegu"),
-            lat: 25.9,
-            lon: -80.4,
-            accuracy_m: Some(5.0),
-            observed_at: 1_790_000_000_000,
-            submitted_at: None,
-            quality: Quality::Curated,
-            photo_url: None,
-        })])
-        .unwrap()
+        page(398269828)
     }
 
     fn request_to(app: &str, source: &str, ts: Option<i64>, sig: Option<String>, body: Vec<u8>) -> Request<Body> {
@@ -314,7 +253,7 @@ mod tests {
     async fn ingest_hook_valid_signature_202_then_duplicate_200() {
         let (app, state) = test_app();
         let b = body();
-        let res = app.clone().oneshot(signed("web", &b)).await.unwrap();
+        let res = app.clone().oneshot(signed("inat", &b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::ACCEPTED);
         let out = json(res).await;
         assert_eq!(out["status"], "ok");
@@ -322,26 +261,24 @@ mod tests {
         let (taxon, quality): (i64, String) = state
             .obs
             .read(|c| {
-                c.query_row("select taxon_id, quality from sightings where source_id = 'web' and ext_id = 'web-1'", [], |r| {
+                c.query_row("select taxon_id, quality from sightings where source_id = 'inat' and ext_id = '398269828'", [], |r| {
                     Ok((r.get(0)?, r.get(1)?))
                 })
             })
             .await
             .unwrap();
-        assert_eq!((taxon, quality.as_str()), (2, "curated"));
+        assert_eq!((taxon, quality.as_str()), (1, "research"));
 
-        let res = app.clone().oneshot(signed("web", &b)).await.unwrap();
+        let res = app.clone().oneshot(signed("inat", &b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
         let dup = json(res).await;
         assert_eq!((dup["status"].as_str(), dup["duplicate"].as_bool()), (Some("duplicate"), Some(true)), "{dup}");
         assert_eq!(dup["idempotencyKey"], hex::encode(Sha256::digest(&b)));
         assert_eq!(dup["fetchRunId"], out["fetchRunId"].to_string());
-        assert_eq!(count(&state, "select count(*) from fetch_runs where source_id = 'web'").await, 1, "the repeat wrote no run");
-        assert_eq!(count(&state, "select count(*) from raw_objects where source_id = 'web'").await, 1);
+        assert_eq!(count(&state, "select count(*) from fetch_runs where source_id = 'inat'").await, 1, "the repeat wrote no run");
+        assert_eq!(count(&state, "select count(*) from raw_objects where source_id = 'inat'").await, 1);
         // A different body is a new delivery.
-        let mut other: serde_json::Value = serde_json::from_slice(&b).unwrap();
-        other[0]["Sighting"]["ext_id"] = "web-2".into();
-        let res = app.oneshot(signed("web", &serde_json::to_vec(&other).unwrap())).await.unwrap();
+        let res = app.oneshot(signed("inat", &page(398269829))).await.unwrap();
         assert_eq!(res.status(), StatusCode::ACCEPTED);
     }
 
@@ -352,7 +289,7 @@ mod tests {
         let b = body();
         let ts = now();
         let req = |key: String| {
-            Request::post("/v1/python/ingest/hook/web")
+            Request::post("/v1/python/ingest/hook/inat")
                 .header("x-timestamp", ts.to_string())
                 .header("x-signature", sign(SECRET, ts, &b))
                 .header("x-idempotency-key", key)
@@ -371,11 +308,11 @@ mod tests {
     async fn ingest_hook_concurrent_duplicates_ingest_once() {
         let (app, state) = test_app();
         let b = body();
-        let (a, c) = tokio::join!(app.clone().oneshot(signed("web", &b)), app.clone().oneshot(signed("web", &b)));
+        let (a, c) = tokio::join!(app.clone().oneshot(signed("inat", &b)), app.clone().oneshot(signed("inat", &b)));
         let mut codes = [a.unwrap().status(), c.unwrap().status()];
         codes.sort();
         assert_eq!(codes, [StatusCode::OK, StatusCode::ACCEPTED]);
-        assert_eq!(count(&state, "select count(*) from fetch_runs where source_id = 'web'").await, 1);
+        assert_eq!(count(&state, "select count(*) from fetch_runs where source_id = 'inat'").await, 1);
     }
 
     /// The raw provider body goes through the named adapter: an NWPS stageflow document for
@@ -426,18 +363,18 @@ mod tests {
             None,
         ];
         for sig in cases {
-            let res = app.clone().oneshot(request("web", Some(ts), sig.clone(), b.clone())).await.unwrap();
+            let res = app.clone().oneshot(request("inat", Some(ts), sig.clone(), b.clone())).await.unwrap();
             assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "{sig:?}");
         }
         // Signature over a different body (the HMAC covers the raw bytes).
-        let res = app.clone().oneshot(request("web", Some(ts), Some(sign(SECRET, ts, b"[]")), b.clone())).await.unwrap();
+        let res = app.clone().oneshot(request("inat", Some(ts), Some(sign(SECRET, ts, b"[]")), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
         let mut spaced = b.clone();
         spaced.push(b' ');
-        let res = app.clone().oneshot(request("web", Some(ts), Some(sign(SECRET, ts, &b)), spaced)).await.unwrap();
+        let res = app.clone().oneshot(request("inat", Some(ts), Some(sign(SECRET, ts, &b)), spaced)).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "one trailing byte breaks the signature");
         // Missing timestamp.
-        let res = app.oneshot(request("web", None, Some(sign(SECRET, ts, &b)), b)).await.unwrap();
+        let res = app.oneshot(request("inat", None, Some(sign(SECRET, ts, &b)), b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(count(&state, "select count(*) from raw_objects").await, 0, "nothing archived for rejected requests");
     }
@@ -448,15 +385,15 @@ mod tests {
         let (app, _) = test_app();
         let b = body();
         let old = now() - 301;
-        let res = app.clone().oneshot(request("web", Some(old), Some(sign(SECRET, old, &b)), b.clone())).await.unwrap();
+        let res = app.clone().oneshot(request("inat", Some(old), Some(sign(SECRET, old, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(json(res).await["error"], "stale X-Timestamp");
         let future = now() + 301;
-        let res = app.clone().oneshot(request("web", Some(future), Some(sign(SECRET, future, &b)), b.clone())).await.unwrap();
+        let res = app.clone().oneshot(request("inat", Some(future), Some(sign(SECRET, future, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
         // Inside the window is fine.
         let recent = now() - 250;
-        let res = app.oneshot(request("web", Some(recent), Some(sign(SECRET, recent, &b)), b)).await.unwrap();
+        let res = app.oneshot(request("inat", Some(recent), Some(sign(SECRET, recent, &b)), b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::ACCEPTED);
     }
 
@@ -467,7 +404,7 @@ mod tests {
         config.ingest_hook_secret = None;
         state.config = Arc::new(config);
         let app = router_for(&state);
-        let res = app.oneshot(signed("web", &body())).await.unwrap();
+        let res = app.oneshot(signed("inat", &body())).await.unwrap();
         assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
@@ -481,16 +418,15 @@ mod tests {
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
         let res = app.clone().oneshot(request("crw", Some(ts), Some(sign("wrong", ts, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED, "404 only after authentication");
-        let res = app.clone().oneshot(request_to("otter", "web", Some(ts), Some(sign(SECRET, ts, &b)), b.clone())).await.unwrap();
+        let res = app.clone().oneshot(request_to("otter", "inat", Some(ts), Some(sign(SECRET, ts, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
         assert_eq!(json(res).await["error"], "unknown_app");
-        // An app whose config lists no `web` feed has no hook-only source.
+        // A source the app's config does not list is not offered.
         let mut v: serde_json::Value = serde_json::from_str(crate::app::config::builtin_json("python").unwrap()).unwrap();
-        v["feeds"].as_array_mut().unwrap().retain(|f| f["source"] != "web");
+        v["feeds"].as_array_mut().unwrap().retain(|f| f["source"] != "inat");
         let cfg = crate::app::config::AppConfig::parse("nohook.json", &v.to_string()).unwrap();
         let state = crate::state::AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
-        assert!(sources(&state.app).is_empty());
-        let res = router_for(&state).oneshot(request("web", Some(ts), Some(sign(SECRET, ts, &b)), b)).await.unwrap();
+        let res = router_for(&state).oneshot(request("inat", Some(ts), Some(sign(SECRET, ts, &b)), b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 
@@ -498,12 +434,12 @@ mod tests {
     async fn ingest_hook_invalid_rows_422_and_recorded() {
         let (app, state) = test_app();
         let b = br#"[{"Sighting": {"ext_id": "x"}}]"#.to_vec();
-        let res = app.oneshot(signed("web", &b)).await.unwrap();
+        let res = app.oneshot(signed("inat", &b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(json(res).await["status"], "error");
         let status: String = state
             .obs
-            .read(|c| c.query_row("select status from fetch_runs where source_id = 'web'", [], |r| r.get(0)))
+            .read(|c| c.query_row("select status from fetch_runs where source_id = 'inat'", [], |r| r.get(0)))
             .await
             .unwrap();
         assert_eq!(status, "error");
@@ -513,7 +449,7 @@ mod tests {
     async fn ingest_hook_body_over_2mb_413() {
         let (app, _) = test_app();
         let b = vec![b' '; MAX_BODY_BYTES + 1];
-        let res = app.oneshot(signed("web", &b)).await.unwrap();
+        let res = app.oneshot(signed("inat", &b)).await.unwrap();
         assert_eq!(res.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 }
