@@ -10,7 +10,6 @@ import { THEME } from "client/state/theme";
 import { retime, TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { frameIndexAt, type FrameSightings } from "client/threads/api";
-import { LAYER_IDS } from "shared/voice/ui-tools";
 
 import { Dot, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
 import { formatClocks, isLive } from "../topbar/clock";
@@ -19,8 +18,6 @@ import { stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
 import { filteredCounts } from "./sparkline";
 import { useFrameGrid, useFrameSightings } from "./use-frame-grid";
-
-const [SIGHTINGS] = LAYER_IDS;
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32] as const;
 
