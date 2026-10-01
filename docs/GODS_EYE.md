@@ -100,3 +100,16 @@ Where a pasted key goes:
 - Values are never returned by any route, never logged, never in a screenshot (the paste field is `type=password`).
 
 Registry rows (only keys this app really uses): Google Maps, Cesium ion, AISStream, OpenRouter, xAI voice, AWS for GOES push, NWWS.
+
+## Later leaves (GE6-GE9) and what shipped
+
+| Leaf | Scope | Notes |
+|---|---|---|
+| GE6 | place search and nearby boat ramps | Bottom-bar Search (Places API (New) text search with the browser key, local list and Photon without a key); "Boat ramps and marinas nearby" in the sighting card; `docs/places.md` |
+| GE7 | integration | one scope circle, framing inside the circle, Layers popover, one carp time cursor, agent `toggle_layer`, `set_look` and `vessels` tool |
+| GE8 | zoom | `+` and `-` (keys `+`, `-`, `Home`), a log-scale altitude slider with place-scale labels, Reset view, Fit sightings, 300 ms eased steps, wheel about 20 percent per notch, double click zooms to the point, ground guard (30 m with 3D tiles, 400 m on flat imagery), oblique tilt below about 5 km with Google 3D and a one-time "3D city view" hint, pinch on touch |
+| GE9 | spacing, Look, scope, credit | one 12 px unit (`--gap-m`, `GUTTER_PX`) on the stage chrome, Look as the third icon in the top-right cluster with a right-aligned popover, the map window as three independent controls (shape circle, oval, rounded or frame; size 30 to 100 percent; soft edge), the Cesium, Google and Esri attribution in one row in the chat card header |
+
+GC2 amendment: the look keys are `LOOK`, `SCOPE_ON`, `SCOPE_FEATHER`, plus `SCOPE_SHAPE` and `SCOPE_SIZE` (GE9), registered in `client/state/look.ts`; the share link carries `look`, `scope`, `feather`, `shape`, `size`.
+
+Known limits: the scope switch has no effect below 768 px (the circle exists on the stage layout only); radar, cloud and lightning sources keep about 7 hours, so far back on the 30-day timeline they show their oldest frame, labelled; Google 3D needs a key whose referrer list includes the page's origin (a different local port gets `API_KEY_HTTP_REFERRER_BLOCKED`).
