@@ -2,7 +2,8 @@
 
 import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
-import { EXAMPLE_QUESTIONS, FIRST_VISIT_HINT } from "client/hud/help/content";
+import { EXAMPLE_QUESTIONS, SPECIES_GUIDE, WELCOME } from "client/hud/help/content";
+import { SPECIES_CHIP_COLORS } from "client/hud/species/SpeciesBar";
 import type { VoiceState } from "client/state/voice";
 
 import {
@@ -275,7 +276,7 @@ export default function ChatPane({
       >
         {thread.messages.length === 0 ? (
           // The first-visit hint says the same thing with examples; the empty line is for later visits.
-          showHint ? null : <Empty>Ask about sightings, hotspots, conditions or alerts in view. Answers cite their evidence and fly the globe.</Empty>
+          showHint ? null : <Empty>Ask about the sightings on the map, or anything about these animals. Answers cite their evidence and fly the globe.</Empty>
         ) : (
           thread.messages.map((turn) =>
             turn.role === "user" ? (
@@ -297,13 +298,23 @@ export default function ChatPane({
       </Thread>
       {expanded && thread.messages.some((m) => m.id === expanded) ? <ExpandedPanels turnId={expanded} onClose={closeExpanded} /> : null}
       {showHint ? (
-        <Hint data-chat-hint="" aria-label="Example questions">
+        <Hint data-chat-hint="" role="region" aria-label="Welcome">
           <p>
-            <span>{FIRST_VISIT_HINT}</span>
+            <span data-welcome="">{WELCOME}</span>
             <IconButton type="button" aria-label="Dismiss hint" onClick={onDismissHint}>
               <CloseIcon />
             </IconButton>
           </p>
+          <ul aria-label="The species on the map">
+            {SPECIES_GUIDE.map((s, i) => (
+              <li key={s.id} data-welcome-species={s.id}>
+                <i style={{ background: SPECIES_CHIP_COLORS[i] }} aria-hidden="true" />
+                <span>
+                  <b>{s.full}</b> — {s.line}
+                </span>
+              </li>
+            ))}
+          </ul>
           {EXAMPLE_QUESTIONS.map((q) => (
             <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
               {q}

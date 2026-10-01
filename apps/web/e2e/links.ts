@@ -135,7 +135,17 @@ async function main() {
     if (process.env.LINKS_SHOT) await page.screenshot({ path: process.env.LINKS_SHOT });
     await scan(page, seen, "drawer");
 
-    // 3. Help sheet.
+    // 3. Status popover (about, data sources, expert layers, help) when the build has one, with its sections open.
+    const popover = page.locator(POPOVER_BUTTON).first();
+    if ((await popover.count()) > 0 && (await popover.isVisible())) {
+      await popover.click();
+      await page.waitForTimeout(500);
+      for (const section of await page.locator("[data-testid=status-popover] details > summary").all()) await section.click();
+      await page.waitForTimeout(300);
+      await scan(page, seen, "status popover");
+    } else log("status popover: not in this build");
+
+    // 4. Help sheet: on the bar in older builds, inside the status popover since T41.
     const help = page.locator("[data-testid=help-button]");
     if (await help.isVisible()) {
       await help.click();
@@ -143,15 +153,6 @@ async function main() {
       await scan(page, seen, "help sheet");
       await page.keyboard.press("Escape");
     } else log("help sheet: no visible [data-testid=help-button] in this build");
-
-    // 4. Status popover (feeds, theme, focus, help) when the build has one.
-    const popover = page.locator(POPOVER_BUTTON).first();
-    if ((await popover.count()) > 0 && (await popover.isVisible())) {
-      await popover.click();
-      await page.waitForTimeout(500);
-      await scan(page, seen, "status popover");
-      await page.keyboard.press("Escape");
-    } else log("status popover: not in this build");
 
     // 5. Cesium credits and the "Data attribution" lightbox.
     const expand = page.locator(".cesium-credit-expand-link").first();

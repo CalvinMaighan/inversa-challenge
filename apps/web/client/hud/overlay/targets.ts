@@ -13,6 +13,16 @@ import type { HudSelection } from "../selection";
 export const MAX_CITATIONS = 8;
 /** Plus up to this many ids the latest agent answer highlighted (PLAN.md C17). */
 export const MAX_HIGHLIGHT = 50;
+/** Text labels: the selection, the hovered row and citations only, at most this many (the rest are bare brackets). */
+export const MAX_LABELS = 12;
+
+/** Targets that get a text label, strongest first: selected, hovered and cited ones, capped at MAX_LABELS. */
+export function labelledTargets<T extends Pick<Target, "selected" | "cited" | "hovered" | "priority">>(targets: readonly T[]): T[] {
+  return targets
+    .filter((t) => t.selected || t.cited || t.hovered)
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, MAX_LABELS);
+}
 
 export type Target = {
   id: string;
@@ -78,7 +88,8 @@ export function wantedTargets(
   const agentLabel = (id: string) => byId.get(id)?.label || undefined;
   if (selectedId) push(selectedId, targetLabel(selectedId, cites.find(([id]) => id === selectedId)?.[1] || agentLabel(selectedId)), "selected");
   for (const [id, label] of cites) push(id, targetLabel(id, label), "cited");
-  for (const t of shown) push(t.id, targetLabel(t.id, t.label || undefined), "highlight");
+  // Station readings are context, not finds: bracketed only when cited, selected or hovered (T41).
+  for (const t of shown) if (parseEvidenceId(t.id)?.kind !== "reading") push(t.id, targetLabel(t.id, t.label || undefined), "highlight");
   if (hover) push(hover.id, targetLabel(hover.id, hover.label || undefined), "highlight");
   return list;
 }

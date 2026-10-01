@@ -5,12 +5,13 @@
  */
 import { severityColor } from "client/globe/layers/alerts";
 import { statusColor } from "client/globe/layers/missions";
-import { OTHER_TAXA_KEY } from "client/globe/layers/sightings";
+import { OTHER_TAXA_KEY } from "client/globe/species";
+import { SIGHTING_WINDOW_HOURS } from "shared/frames";
 import { STATION_SOURCES, stationColor } from "client/globe/layers/stations";
 import type { LayerStats } from "client/globe/layers/types";
 import { HATCH_RGBA, HEAT_STOPS, LST_RANGE_C, SST_RANGE_C, TEMP_STOPS, type RampStop } from "client/globe/ramp";
 import { OTHER_TAXON_COLOR, SPECIES_COLORS } from "client/globe/species";
-import type { LayerId, LayersState, SpeciesId } from "client/state/layers";
+import type { LayerId, LayersState, SpeciesFilterId, SpeciesId } from "client/state/layers";
 import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { NETWORK_LABELS, OTHER_SPECIES_NAME, SPECIES_NAMES } from "../tooltip/model";
@@ -27,7 +28,7 @@ export type LegendSwatch = {
   /** What the layer draws of this kind right now; null when the layer does not count it separately. */
   count: number | null;
   /** Species sub-rows toggle through `setSpeciesVisible`. */
-  species?: SpeciesId;
+  species?: SpeciesFilterId;
   /** Species filter state, for species sub-rows. */
   on?: boolean;
 };
@@ -83,7 +84,7 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
   return [
     row(SIGHTINGS, {
       label: "Sightings",
-      note: "One dot per report in the last 24 h, fading with age. Red ring: the IDs conflict.",
+      note: `One dot per sighting in the last ${SIGHTING_WINDOW_HOURS} hours, fading with age. Red ring: the IDs conflict.`,
       unit: "drawn",
       swatches: [
         ...SPECIES_IDS.map((id, i) => ({
@@ -95,7 +96,7 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
           species: id,
           on: layers.species[id] !== false,
         })),
-        { key: OTHER_TAXA_KEY, label: OTHER_SPECIES_NAME, color: OTHER_TAXON_COLOR, shape: "dot", count: part(sightings, OTHER_TAXA_KEY) },
+        { key: OTHER_TAXA_KEY, label: OTHER_SPECIES_NAME, color: OTHER_TAXON_COLOR, shape: "dot", count: part(sightings, OTHER_TAXA_KEY), species: OTHER_TAXA_KEY, on: layers.species.other !== false },
       ],
     }),
     row(STATIONS, {

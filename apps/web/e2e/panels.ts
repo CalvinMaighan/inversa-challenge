@@ -10,8 +10,8 @@
  * after the fixtures were recorded, so the default 30-day TIME window holds them.
  *
  * Assertions are on what the answer shows, never on the model's wording: a table panel with rows, a series
- * panel with lines, one bracket per highlighted entity (capped at 50), a camera move, and a row click that
- * opens the evidence drawer on the real Axum record. Last line:
+ * panel with lines, one bracket per highlighted entity (capped at 50; station readings only when cited, T41), a
+ * camera move, and a row click that opens the evidence drawer on the real Axum record. Last line:
  *
  *   PANELS table=<rows> series=<lines> brackets=<n> drawer=1
  *
@@ -45,6 +45,8 @@ const API_PORT = process.env.E2E_API_PORT ? Number(process.env.E2E_API_PORT) : p
 const API_ORIGIN = `http://127.0.0.1:${API_PORT}`;
 const ANSWER_TIMEOUT_MS = 240_000;
 const MAX_BRACKETS = 50;
+/** The HUD labels and brackets the newest this many citations (client/hud/overlay/targets MAX_CITATIONS). */
+const MAX_CITATIONS = 8;
 
 const log = (...args: unknown[]) => console.error("[e2e:panels]", ...args);
 
@@ -149,15 +151,21 @@ function freePort(): number {
 
 const cameraOf = (url: string) => new URL(url).hash.match(/[#&]c=([^&]+)/)?.[1] ?? null;
 
-/** Distinct highlight ids the answer's data tools returned that can sit on the globe, capped like the HUD. */
+/**
+ * Distinct highlight ids the answer's data tools returned that the HUD brackets, capped like the HUD: ones that
+ * can sit on the globe, and (T41) station readings only when the answer cites them among its newest 8 citations.
+ */
 function highlightOf(events: AgentStreamEvent[]): string[] {
+  const cited = new Set<string>();
+  const citations = events.flatMap((e) => (e.type === "citation" ? [e.id] : []));
+  for (let i = citations.length - 1; i >= 0 && cited.size < MAX_CITATIONS; i--) cited.add(citations[i]!);
   const ids = new Set<string>();
   for (const e of events) {
     if (e.type !== "tool_end" || !e.ok) continue;
     const hl = (e.data as { highlight?: unknown } | undefined)?.highlight;
     if (Array.isArray(hl)) for (const id of hl) if (typeof id === "string" && !/^(fetch|backtest):/.test(id)) ids.add(id);
   }
-  return [...ids].slice(0, MAX_BRACKETS);
+  return [...ids].slice(0, MAX_BRACKETS).filter((id) => !id.startsWith("reading:") || cited.has(id));
 }
 
 async function overlay(page: Page): Promise<{ drawn: number; highlight: number; targets: number }> {

@@ -1,377 +1,392 @@
 "use client";
 
-import { useEffect, useRef, useState, type Ref } from "react";
-import { get } from "@calvinjs/active-state";
+import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import type { FeedState } from "shared/feed-state";
 
-import { getGlobe } from "client/globe/api";
 import { FEEDS } from "client/state/feeds";
 import { THEME } from "client/state/theme";
-import { TIME, type TimeState } from "client/state/time";
-import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
-import { Dot, Icon, IconButton, Mono, MOBILE, COMPACT_PANE, NARROW_PANE, Pill, Surface, useIsMobile } from "../primitives";
-import { formatClocks, isLive } from "./clock";
-import { formatLatLon, unproject } from "./coords";
-import { feedChip, feedSummary } from "./feed-chips";
+import LegendBody from "../legend/LegendPanel";
+import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
+import { ABOUT_SENTENCE } from "../help/content";
+import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
+import { freshnessLines } from "./freshness";
 
-const Bar = styled(Surface)`
+/** The two icon buttons, pinned to the top right of the HUD's top row (which keeps room for them). */
+const Bar = styled.header`
   position: absolute;
-  top: max(var(--gap-s), env(safe-area-inset-top));
-  left: max(var(--gap-m), env(safe-area-inset-left));
-  right: max(var(--gap-m), env(safe-area-inset-right));
-  min-height: 40px;
+  top: 0;
+  right: 0;
   display: flex;
-  align-items: center;
-  gap: var(--gap-m);
-  padding: 5px var(--gap-s) 5px var(--gap-m);
-  border-radius: var(--radius-m);
-  z-index: 4;
-
-  ${COMPACT_PANE} {
-    flex-wrap: wrap;
-    row-gap: 6px;
-    gap: var(--gap-s);
-  }
-
-  ${MOBILE} {
-    left: var(--gap-s);
-    right: var(--gap-s);
-    flex-wrap: wrap;
-    row-gap: 6px;
-    gap: var(--gap-s);
-  }
-`;
-
-const Brand = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  font: 700 12px / 1 var(--font-mono);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  white-space: nowrap;
-`;
-
-/** The padding (taken back by the margin) leaves room for focus rings inside the scroll box, which clips. */
-const Chips = styled.ul<{ $wrap?: boolean }>`
-  display: flex;
-  flex-wrap: ${(p) => (p.$wrap ? "wrap" : "nowrap")};
   gap: 6px;
-  flex: 1;
-  min-width: 0;
-  margin: -4px;
-  padding: 4px;
-  list-style: none;
-  overflow-x: ${(p) => (p.$wrap ? "visible" : "auto")};
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
-
-  ${COMPACT_PANE} {
-    order: 10;
-    flex-basis: 100%;
-  }
-
-  ${MOBILE} {
-    order: 10;
-    flex-basis: 100%;
-  }
 `;
 
-const FeedToggle = styled(Pill.withComponent("button"))`
-  height: 26px;
-  cursor: pointer;
-`;
-
-const ChipIcon = styled.span`
+const Round = styled(Surface.withComponent("button"))`
+  position: relative;
   display: inline-flex;
-  color: var(--muted);
-  svg {
-    width: 11px;
-    height: 11px;
-    transition: transform 120ms ease;
-  }
-  &[data-open] svg {
-    transform: rotate(90deg);
-  }
-`;
-
-const Readouts = styled.div`
-  display: flex;
   align-items: center;
-  gap: var(--gap-m);
-  margin-left: auto;
-  font-size: 12px;
-  white-space: nowrap;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--text);
+  cursor: pointer;
 
-  ${MOBILE} {
-    order: 2;
-    gap: var(--gap-s);
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover,
+  &[aria-expanded="true"] {
+    border-color: var(--hud-line);
+  }
+
+  /* Feed health: a small dot on the about button, in the colour of the worst feed. */
+  > span {
+    position: absolute;
+    top: 3px;
+    right: 3px;
   }
 `;
 
-const Label = styled.span`
-  color: var(--muted);
-  font: 600 10px / 1 var(--font-mono);
-  letter-spacing: 0.08em;
-  margin-right: 4px;
-`;
-
-const HideOnPhone = styled.span`
-  ${NARROW_PANE} {
-    display: none;
-  }
-
-  ${MOBILE} {
-    display: none;
-  }
-`;
-
-const Segmented = styled.div`
-  display: inline-flex;
+const Popover = styled.div`
+  position: absolute;
+  /* The HUD row lets the pointer through to the globe; the popover takes it back. */
+  pointer-events: auto;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 9;
+  width: min(340px, calc(100cqw - 2 * var(--gap-m)));
+  max-height: calc(100cqh - 140px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--gap-m);
   border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  overflow: hidden;
-  button {
-    border: 0;
-    border-radius: 0;
-    height: 26px;
-  }
-  /* The group clips to its rounded border: draw the ring inside the button. */
-  button:focus-visible {
+  border-radius: var(--radius-m);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font: 400 13px / 1.45 var(--font-ui);
+  scrollbar-width: thin;
+
+  &:focus-visible {
     outline-offset: -2px;
   }
+
+  > p {
+    margin: 0 0 var(--gap-s);
+  }
+
+  details {
+    margin-top: var(--gap-s);
+    border-top: 1px solid var(--border);
+    padding-top: var(--gap-s);
+  }
+
+  summary {
+    cursor: pointer;
+    color: var(--muted);
+    font: 600 12px / 1.6 var(--font-ui);
+  }
+
+  ${MOBILE} {
+    width: calc(100cqw - 2 * var(--gap-s));
+  }
 `;
 
-function LiveBadge() {
-  const mode = useActiveState<TimeState, "live" | "replay" | "playing">(TIME, (t) =>
-    t.playing ? "playing" : isLive(t, Date.now()) ? "live" : "replay",
-  )[0];
-  const live = mode === "live";
-  return (
-    <Pill $tone={live ? "ok" : "warn"} data-testid="hud-live" aria-live="polite">
-      <Dot $tone={live ? "ok" : "warn"} $pulse={live || mode === "playing"} />
-      {live ? "LIVE" : mode === "playing" ? "REPLAY ▸" : "REPLAY"}
-    </Pill>
-  );
-}
+const Fresh = styled.ul`
+  margin: 0 0 var(--gap-s);
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12.5px;
+`;
+
+const Row = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-s);
+`;
+
+const FeedList = styled.ul`
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    grid-template-columns: 9px 1fr auto auto;
+    align-items: center;
+    column-gap: 7px;
+  }
+
+  b {
+    font: 600 12px / 1.3 var(--font-mono);
+  }
+
+  small {
+    color: var(--muted);
+    font: 400 11px / 1.3 var(--font-mono);
+    white-space: nowrap;
+  }
+
+  p {
+    grid-column: 2 / -1;
+    margin: 0 0 3px;
+    color: var(--muted);
+    font-size: 11.5px;
+  }
+`;
+
+const Choices = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  button {
+    justify-content: flex-start;
+    width: 100%;
+    height: 32px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+  }
+`;
 
 /**
- * Phones: one summary pill (worst state, how many feeds are off nominal) that expands the full chip list,
- * wrapped, instead of a row that scrolls sideways.
+ * A button with a popover under it. Esc (inside the popover) or a click outside closes it; Esc and the
+ * popover's own actions hand focus back to the button.
  */
-function FeedChipsPhone({ list }: { list: FeedState[] }) {
+function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>) {
   const [open, setOpen] = useState(false);
-  const summary = feedSummary(list);
+  useEffect(() => {
+    if (!open) return;
+    popRef.current?.focus({ preventScroll: true });
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node | null;
+      if (t && !popRef.current?.contains(t) && !triggerRef.current?.contains(t)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [open, popRef, triggerRef]);
+  const close = () => {
+    setOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
+  };
+  return { open, toggle: () => setOpen((v) => !v), close };
+}
+
+function PopoverBox({ id, label, testId, popRef, onClose, children }: { id: string; label: string; testId: string; popRef: RefObject<HTMLDivElement | null>; onClose: () => void; children: ReactNode }) {
   return (
-    <>
-      <FeedToggle
-        type="button"
-        $tone={summary.tone}
-        aria-expanded={open}
-        aria-controls="hud-feed-chips"
-        onClick={() => setOpen((v) => !v)}
-        data-testid="hud-feeds-toggle"
-      >
-        <Dot $tone={summary.tone} $pulse={summary.state === "down"} />
-        FEEDS {list.length - summary.degraded}/{list.length} OK
-        <ChipIcon data-open={open ? "" : undefined}>
-          <Icon name="chevron" />
-        </ChipIcon>
-      </FeedToggle>
-      {open && <ChipList list={list} id="hud-feed-chips" wrap />}
-    </>
+    <Popover
+      ref={popRef}
+      id={id}
+      role="dialog"
+      aria-label={label}
+      tabIndex={-1}
+      data-testid={testId}
+      data-hud-obstacle=""
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      {children}
+    </Popover>
   );
 }
 
-function ChipList({ list, id, wrap }: { list: FeedState[]; id?: string; wrap?: boolean }) {
-  const summary = feedSummary(list);
+/** Technical feed health, worst first, each with its lag and, off nominal, the server's note. */
+function Feeds({ list }: { list: FeedState[] }) {
+  if (list.length === 0) return <p>No feed state received yet.</p>;
   return (
-    <Chips id={id} $wrap={wrap} aria-label={`Feeds: ${summary.degraded} of ${list.length} not nominal`}>
-      {list.map((feed) => {
+    <FeedList aria-label="Feeds">
+      {sortFeedsForStatus(list).map((feed) => {
         const chip = feedChip(feed);
         return (
-          <li key={chip.source}>
-            <Pill
-              $tone={chip.tone}
-              title={chip.title}
-              data-feed={chip.source}
-              data-state={chip.state}
-              tabIndex={0}
-              // The row scrolls sideways; bring a chip reached by Tab fully into it, ring included.
-              onFocus={(e) => e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" })}
-            >
-              <Dot $tone={chip.tone} $pulse={chip.state === "down"} />
-              {chip.label}
-              <ChipIcon role="img" aria-label={chip.mode}>
-                <Icon name={chip.mode} />
-              </ChipIcon>
-              <span style={{ opacity: 0.75 }}>{chip.lag}</span>
-            </Pill>
+          <li key={chip.source} title={chip.title} data-feed={chip.source} data-state={chip.state}>
+            <Dot $tone={chip.tone} />
+            <b>{chip.label}</b>
+            <small>
+              {chip.state} · {chip.mode}
+            </small>
+            <small>{chip.lag}</small>
+            {chip.state !== "nominal" && feed.note ? <p>{feed.note}</p> : null}
           </li>
         );
       })}
-    </Chips>
+    </FeedList>
   );
 }
 
-function FeedChips() {
-  const [feeds] = useActiveState<FeedState[]>(FEEDS);
-  const phone = useIsMobile();
-  const list = feeds ?? [];
-  if (list.length === 0) {
-    return (
-      <Chips aria-label="Feeds">
-        <li>
-          <Pill $tone="muted" title="No feed state received yet">
-            FEEDS —
-          </Pill>
-        </li>
-      </Chips>
-    );
-  }
-  return phone ? <FeedChipsPhone list={list} /> : <ChipList list={list} />;
-}
-
-function Clocks() {
-  const replayAt = useActiveState<TimeState, string | null>(TIME, (t) => (isLive(t, Date.now()) && !t.playing ? null : (t.at ?? t.to)))[0];
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (replayAt) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [replayAt]);
-  const c = formatClocks(replayAt ? Date.parse(replayAt) : now);
+function About({ list, focus, onFocus, helpOpen, onHelp }: ChromeProps & { list: FeedState[] }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const pop = usePopover(triggerRef, popRef);
+  const id = useId();
+  const summary = feedSummary(list);
+  const label =
+    list.length === 0
+      ? "About this map and its data"
+      : `About this map and its data: ${summary.degraded === 0 ? "every data source running normally" : `${summary.degraded} of ${list.length} data sources delayed or down`}`;
   return (
     <>
-      <span data-testid="hud-clock-utc">
-        <Label>{c.date}</Label>
-        <Mono>{c.utc}</Mono>
-      </span>
-      <HideOnPhone>
-        <Label>{c.zone}</Label>
-        <Mono>{c.local}</Mono>
-      </HideOnPhone>
+      <Round
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={pop.open ? id : undefined}
+        aria-label={label}
+        title={label}
+        data-testid="status-button"
+        data-health={list.length === 0 ? "unknown" : summary.state}
+        onClick={pop.toggle}
+      >
+        <Icon name="info" />
+        {list.length > 0 && summary.degraded > 0 ? <Dot $tone={summary.tone} /> : null}
+      </Round>
+      {pop.open ? (
+        <PopoverBox id={id} label="About this map" testId="status-popover" popRef={popRef} onClose={pop.close}>
+          <AboutContent
+            list={list}
+            focus={focus}
+            onFocus={onFocus}
+            helpOpen={helpOpen}
+            onHelp={() => {
+              pop.close();
+              onHelp(!helpOpen);
+            }}
+          />
+        </PopoverBox>
+      ) : null}
     </>
   );
 }
 
-/**
- * Cursor lat/lon. Listens on the window (the globe receives the pointer, the HUD layer passes it through),
- * solves once per animation frame, and writes the text straight into the DOM: moving the mouse never
- * re-renders React.
- */
-function CursorReadout() {
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    let frame = 0;
-    let x = 0;
-    let y = 0;
-    const solve = () => {
-      frame = 0;
-      const el = ref.current;
-      const globe = getGlobe();
-      if (!el) return;
-      if (!globe) {
-        el.textContent = "—";
-        return;
-      }
-      const view = get<ViewState>(VIEW) ?? VIEW.defaults;
-      // project() is in canvas pixels; the globe pane sits right of the chat column, so offset the pointer.
-      const origin = document.querySelector("[data-globe]")?.getBoundingClientRect();
-      const hit = unproject((lon, lat) => globe.project(lon, lat), x - (origin?.left ?? 0), y - (origin?.top ?? 0), { lon: view.lon, lat: view.lat });
-      el.textContent = hit ? formatLatLon(hit) : "—";
-    };
-    const onMove = (e: PointerEvent) => {
-      x = e.clientX;
-      y = e.clientY;
-      if (!frame) frame = requestAnimationFrame(solve);
-    };
-    window.addEventListener("pointermove", onMove, { passive: true });
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      if (frame) cancelAnimationFrame(frame);
-    };
-  }, []);
-  return (
-    <HideOnPhone>
-      <Label>CURSOR</Label>
-      <Mono ref={ref} data-testid="hud-cursor">
-        —
-      </Mono>
-    </HideOnPhone>
-  );
-}
-
-function ThemeSwitch() {
-  const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
-  return (
-    <Segmented role="radiogroup" aria-label="Theme">
-      {THEME_MODES.map((m) => (
-        <IconButton key={m} type="button" role="radio" aria-checked={mode === m} $active={mode === m} onClick={() => setMode(m)} title={`${m} theme`}>
-          {m === "tactical" ? "tac" : m}
-        </IconButton>
-      ))}
-    </Segmented>
-  );
-}
-
-/** "?": after the readouts on wide screens; on phones it shares the first row with the LIVE badge. */
-const HelpButton = styled(IconButton)`
-  ${MOBILE} {
-    order: 1;
-    margin-left: auto;
-  }
-`;
-
-export default function TopBar({
+/** What the About popover holds: what this is, freshness, Focus, Help, the data sources and the expert layers. */
+export function AboutContent({
+  list,
+  nowMs,
   focus,
   onFocus,
   helpOpen,
   onHelp,
-  barRef,
 }: {
+  list: FeedState[];
+  /** Wall clock for "checked 6 min ago"; taken when the popover opens unless given (tests). */
+  nowMs?: number;
   focus: boolean;
   onFocus: (next: boolean) => void;
   helpOpen: boolean;
-  onHelp: (open: boolean) => void;
-  /** The bar's element, so the HUD can keep panels below however many rows it wraps to. */
-  barRef?: Ref<HTMLElement>;
+  onHelp: () => void;
 }) {
+  const [expert, setExpert] = useState(false);
+  const [now] = useState(() => nowMs ?? Date.now());
   return (
-    <Bar as="header" ref={barRef as Ref<HTMLDivElement>} data-hud-obstacle="" data-testid="hud-topbar">
-      <Brand>
-        <HideOnPhone>Everglades Ops</HideOnPhone>
-        <LiveBadge />
-      </Brand>
-      <FeedChips />
-      <Readouts>
-        <CursorReadout />
-        <Clocks />
+    <>
+      <p>{ABOUT_SENTENCE}</p>
+      <Fresh aria-label="Data freshness">
+        {freshnessLines(list, now).map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </Fresh>
+      <Row>
         <IconButton type="button" $active={focus} aria-pressed={focus} onClick={() => onFocus(!focus)} title="Focus: dim everything outside the selection">
           <Icon name="focus" />
-          <HideOnPhone>Focus</HideOnPhone>
+          Focus
         </IconButton>
-        <ThemeSwitch />
-      </Readouts>
-      <HelpButton
+        <IconButton type="button" $active={helpOpen} title="Help: what every control does" data-help-button="" data-testid="help-button" onClick={onHelp}>
+          <Icon name="help" />
+          Help
+        </IconButton>
+      </Row>
+      <details data-testid="data-sources">
+        <summary>Data sources</summary>
+        <Feeds list={list} />
+      </details>
+      <details data-testid="expert-data" onToggle={(e) => setExpert(e.currentTarget.open)}>
+        <summary data-testid="layers-button">More data (for experts)</summary>
+        {expert ? <LegendBody active /> : null}
+      </details>
+    </>
+  );
+}
+
+const THEME_LABELS: Record<ThemeModeId, string> = { light: "Light", dark: "Dark", tactical: "Tactical" };
+
+function Theme({ mode, onPick }: { mode: ThemeModeId; onPick: (mode: ThemeModeId) => void }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const pop = usePopover(triggerRef, popRef);
+  const id = useId();
+  return (
+    <>
+      <Round
+        ref={triggerRef}
         type="button"
-        $active={helpOpen}
-        aria-expanded={helpOpen}
-        aria-label="Help: what every control does"
-        title="Help: what every control does"
-        data-help-button=""
-        data-testid="help-button"
-        onClick={() => onHelp(!helpOpen)}
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={pop.open ? id : undefined}
+        aria-label="Theme"
+        title="Theme"
+        data-testid="theme-button"
+        onClick={pop.toggle}
       >
-        <Icon name="help" />
-      </HelpButton>
+        <Icon name="theme" />
+      </Round>
+      {pop.open ? (
+        <PopoverBox id={id} label="Theme" testId="theme-popover" popRef={popRef} onClose={pop.close}>
+          <ThemeChoices mode={mode} onPick={onPick} />
+        </PopoverBox>
+      ) : null}
+    </>
+  );
+}
+
+export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mode: ThemeModeId) => void }) {
+  return (
+    <Choices role="radiogroup" aria-label="Theme">
+      {THEME_MODES.map((m) => (
+        <IconButton key={m} type="button" role="radio" aria-checked={mode === m} $active={mode === m} onClick={() => onPick(m)}>
+          {THEME_LABELS[m]}
+        </IconButton>
+      ))}
+    </Choices>
+  );
+}
+
+/**
+ * The globe pane's chrome (T41): two icon buttons, top right, and no text until one opens. About (ⓘ, with a dot
+ * in the colour of the worst feed when a source is delayed) holds what this is, how fresh the data is in plain
+ * words, Focus, Help, the technical feed list under "Data sources" and the expert layers under "More data (for
+ * experts)". Theme holds light, dark and tactical.
+ */
+export default function TopBar(props: ChromeProps) {
+  const [feeds] = useActiveState<FeedState[]>(FEEDS);
+  const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
+  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} />;
+}
+
+type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
+
+/** The chrome over plain props (the stores are read by TopBar), so it renders anywhere, tests included. */
+export function TopBarView({ feeds, mode, onTheme, ...props }: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void }) {
+  return (
+    <Bar data-testid="hud-topbar">
+      <About list={feeds} {...props} />
+      <Theme mode={mode} onPick={onTheme} />
     </Bar>
   );
 }

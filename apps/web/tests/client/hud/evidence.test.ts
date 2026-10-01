@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatLatLon, unproject } from "client/hud/topbar/coords";
 import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
 import { isDrawerOpen } from "client/hud/selection";
@@ -150,40 +149,5 @@ describe("targets and selection", () => {
     expect(isDrawerOpen({ evidenceId: "sighting:1" })).toBe(true);
     expect(isDrawerOpen({ evidenceId: "sighting:1", drawerOpen: false })).toBe(false);
     expect(isDrawerOpen(undefined)).toBe(false);
-  });
-});
-
-describe("cursor coordinates", () => {
-  test("unproject inverts an affine projection and a curved one", () => {
-    const affine = (lon: number, lat: number) => ({ x: 500 + (lon + 80.9) * 400, y: 400 - (lat - 25.9) * 450 });
-    const hit = unproject(affine, 812, 133, { lon: -80.9, lat: 25.9 })!;
-    const back = affine(hit.lon, hit.lat);
-    expect(Math.hypot(back.x - 812, back.y - 133)).toBeLessThan(0.25);
-
-    // Orthographic globe centred on the camera: strongly non-linear toward the limb.
-    const R = 3000;
-    const lon0 = -81;
-    const lat0 = 26;
-    const rad = Math.PI / 180;
-    const ortho = (lon: number, lat: number) => {
-      const cosc = Math.sin(lat0 * rad) * Math.sin(lat * rad) + Math.cos(lat0 * rad) * Math.cos(lat * rad) * Math.cos((lon - lon0) * rad);
-      if (cosc < 0) return null;
-      return {
-        x: 600 + R * Math.cos(lat * rad) * Math.sin((lon - lon0) * rad),
-        y: 400 - R * (Math.cos(lat0 * rad) * Math.sin(lat * rad) - Math.sin(lat0 * rad) * Math.cos(lat * rad) * Math.cos((lon - lon0) * rad)),
-      };
-    };
-    const target = { lon: -60, lat: 40 };
-    const p = ortho(target.lon, target.lat)!;
-    const solved = unproject(ortho, p.x, p.y, { lon: lon0, lat: lat0 })!;
-    expect(solved.lon).toBeCloseTo(target.lon, 3);
-    expect(solved.lat).toBeCloseTo(target.lat, 3);
-    // Off the globe (the sky): no answer.
-    expect(unproject(ortho, 600 + R * 2, 400, { lon: lon0, lat: lat0 })).toBeNull();
-  });
-
-  test("lat/lon formatting", () => {
-    expect(formatLatLon({ lat: 25.7617, lon: -80.1918 })).toBe("25.7617°N 80.1918°W");
-    expect(formatLatLon({ lat: -1.5, lon: 2.25 }, 2)).toBe("1.50°S 2.25°E");
   });
 });

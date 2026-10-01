@@ -34,7 +34,8 @@ export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot
 export type AgentStreamRequest = {
   sessionId: string;
   question: string;
-  view?: { bbox: BBox; time: string; layers: string[]; selection: string | null };
+  /** `species`: the globe's species filter keys still shown, sent only when the filter hides some. */
+  view?: { bbox: BBox; time: string; layers: string[]; species?: string[]; selection: string | null };
 };
 
 export const AGENT_STREAM_CONTENT_TYPE = "application/x-ndjson";

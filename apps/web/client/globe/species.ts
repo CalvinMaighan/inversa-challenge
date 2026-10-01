@@ -38,3 +38,13 @@ export function enabledSpecies(filter: Readonly<Record<string, unknown>> | undef
   });
   return out;
 }
+
+/** Whether a layer shows taxa outside the focus species: the filter's `other` key, off while the layer is pinned. */
+export function otherTaxaShown(filter: Readonly<Record<string, unknown>> | undefined, layerId?: string): boolean {
+  const pinned = layerId === undefined ? undefined : filter?.[layerId];
+  if (typeof pinned === "string" && (SPECIES_IDS as readonly string[]).includes(pinned)) return false;
+  return filter?.[OTHER_TAXA_KEY] !== false;
+}
+
+/** Filter and breakdown key for sightings of taxa outside the four focus species. */
+export const OTHER_TAXA_KEY = "other";

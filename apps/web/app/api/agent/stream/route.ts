@@ -5,6 +5,7 @@ import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/mo
 import { isValidSessionId } from "@/server/agent/session";
 import { rateLimited } from "@/server/rate-limit";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
+import { SPECIES_IDS } from "@/shared/voice/ui-tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z.object({
       bbox,
       time: z.string().refine((value) => Number.isFinite(Date.parse(value)), "time must be ISO 8601"),
       layers: z.array(z.string().max(64)).max(64),
+      species: z.array(z.enum([...SPECIES_IDS, "other"])).max(8).optional(),
       selection: z.string().max(256).nullable(),
     })
     .optional(),

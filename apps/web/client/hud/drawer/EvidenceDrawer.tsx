@@ -5,6 +5,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 
 import ExternalLink from "client/external-link";
 import { SELECTION } from "client/state/selection";
+import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import Panel from "../Panel";
@@ -14,6 +15,7 @@ import { feedChip, formatLag } from "../topbar/feed-chips";
 import { evidenceBadges, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
+import { plainSummary } from "./summary";
 import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
 
@@ -246,8 +248,85 @@ function Record({ evidence }: { evidence: Evidence }) {
   );
 }
 
+const KIND_TITLES: Record<string, string> = {
+  sighting: "Sighting",
+  reading: "Station reading",
+  alert: "Weather alert",
+  hotspot: "Hotspot",
+  backtest: "How well hotspots did",
+  fetch: "Data fetch",
+};
+
+const Lead = styled.section`
+  margin-bottom: var(--gap-m);
+
+  h3 {
+    margin: 0 0 4px;
+    font: 600 16px / 1.3 var(--font-ui);
+    color: var(--text);
+  }
+
+  p {
+    margin: 0;
+    color: var(--muted);
+    font: 400 13px / 1.45 var(--font-ui);
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    max-height: 220px;
+    margin-top: var(--gap-s);
+    object-fit: cover;
+    border-radius: var(--radius-s);
+    border: 1px solid var(--border);
+  }
+`;
+
+const Expert = styled.details`
+  border-top: 1px solid var(--border);
+  padding-top: var(--gap-s);
+
+  > summary {
+    margin-bottom: var(--gap-s);
+    color: var(--muted);
+    font: 600 12px / 1.6 var(--font-ui);
+    cursor: pointer;
+  }
+`;
+
+/** Everything technical, collapsed: the id, links, source, lag, the normalized record and the raw payload. */
+export function ExpertDetails({ id, evidence }: { id: string | null; evidence: Evidence | null }) {
+  return (
+    <Expert data-testid="drawer-expert">
+      <summary>Details for experts</summary>
+      <Section>
+        <Mono style={{ fontSize: 12, overflowWrap: "anywhere" }} data-testid="hud-drawer-id">
+          {id}
+        </Mono>
+      </Section>
+      {evidence ? <Record evidence={evidence} /> : null}
+    </Expert>
+  );
+}
+
+/** The plain-language lead: what, where, when, how sure, and the photo when there is one. */
+export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evidence; atMs: number }) {
+  const s = plainSummary(kind, evidence.record, atMs);
+  if (!s) return null;
+  return (
+    <Lead aria-label="Summary" data-testid="evidence-summary">
+      <h3>{s.title}</h3>
+      {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
+      {/* eslint-disable-next-line @next/next/no-img-element -- same-origin media proxy (/v1/media), already sized and cached; the image optimizer would fetch it again */}
+      {s.photo ? <img src={s.photo} alt={`Photo: ${s.title}`} loading="lazy" /> : null}
+    </Lead>
+  );
+}
+
 /**
- * Evidence drawer (PRD §3 flow 2): opens on `SELECTION.evidenceId` and shows the normalized record, the raw
+ * Evidence drawer (PRD §3 flow 2): a plain-language lead (T41) and the publisher link up top; under "Details for
+ * experts", the id, the normalized record, the raw
  * payload as fetched, source link, fetch time, ingest lag, feed state, and duplicate / revision / conflict
  * links. Hotspot evidence adds the explain panel, and the backtest panel is one click from it.
  */
@@ -257,6 +336,8 @@ export default function EvidenceDrawer() {
   const id = open ? selection!.evidenceId! : null;
   const [backtestFor, setBacktestFor] = useState<string | null>(null);
   const state = useLoad(id, () => loadEvidence(id!));
+  // Ages read against the time cursor, so a replayed record says how old it was then.
+  const atMs = Date.parse(useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? TIME.defaults.to);
   const kind = id ? id.slice(0, id.indexOf(":")) : "";
   const hotspot = id ? parseHotspotId(id) : null;
   const backtest = id ? parseBacktestId(id) : null;
@@ -268,11 +349,7 @@ export default function EvidenceDrawer() {
       open={open}
       onClose={closeDrawer}
       width={400}
-      title={
-        <>
-          Evidence · <span style={{ color: "var(--text)" }}>{kind}</span>
-        </>
-      }
+      title={KIND_TITLES[kind] ?? "Record"}
       tabLabel="Evidence"
       actions={
         <>
@@ -284,11 +361,7 @@ export default function EvidenceDrawer() {
       }
       data-testid="hud-drawer"
     >
-      <Section>
-        <Mono style={{ fontSize: 12, overflowWrap: "anywhere" }} data-testid="hud-drawer-id">
-          {id}
-        </Mono>
-      </Section>
+      {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
       {hotspot && (
         <Section>
           {showBacktest ? (
@@ -312,7 +385,7 @@ export default function EvidenceDrawer() {
           </IconButton>
         </Note>
       )}
-      {state.status === "ready" && <Record evidence={state.data} />}
+      <ExpertDetails id={id} evidence={state.status === "ready" ? state.data : null} />
     </Panel>
   );
 }

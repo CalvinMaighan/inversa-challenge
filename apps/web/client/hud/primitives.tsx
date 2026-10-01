@@ -123,7 +123,7 @@ export const SectionTitle = styled.h3`
 `;
 
 /** Inline SVG icons: strokes in currentColor, 16 px box. */
-export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" | "layers" | "help" }) {
+export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" | "layers" | "help" | "info" | "theme" }) {
   const paths: Record<typeof name, ReactNode> = {
     play: <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none" />,
     pause: (
@@ -147,6 +147,19 @@ export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "liv
     chevron: <path d="m6 3.5 4.5 4.5L6 12.5" />,
     external: <path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V13H3V5h3.5" />,
     layers: <path d="M8 2 14 5.2 8 8.4 2 5.2zM2.5 8 8 11 13.5 8M2.5 10.8 8 13.8l5.5-3" />,
+    info: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M8 7.2v4" />
+        <circle cx="8" cy="4.9" r="0.45" fill="currentColor" />
+      </>
+    ),
+    theme: (
+      <>
+        <circle cx="8" cy="8" r="6.2" />
+        <path d="M8 1.8a6.2 6.2 0 0 1 0 12.4z" fill="currentColor" stroke="none" />
+      </>
+    ),
     help: (
       <>
         <circle cx="8" cy="8" r="6.2" />

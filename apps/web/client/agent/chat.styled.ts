@@ -500,6 +500,36 @@ export const Hint = styled.div`
 
   p span {
     flex: 1;
+    color: var(--text);
+  }
+
+  ul {
+    flex: 1 1 100%;
+    display: grid;
+    gap: 2px;
+    margin: 2px 0 4px;
+    padding: 0;
+    list-style: none;
+  }
+
+  li {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  li i {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 1px solid #0b0d12;
+    transform: translateY(1px);
+  }
+
+  li b {
+    color: var(--text);
+    font-weight: 600;
   }
 `;
 

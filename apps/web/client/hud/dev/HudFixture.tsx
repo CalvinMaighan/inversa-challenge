@@ -20,7 +20,6 @@ import AppShell from "client/ui/AppShell";
 import { backtestKey, evidenceKey, explainKey, primeCache, type Backtest, type Evidence, type HotspotExplain } from "../drawer/evidence";
 import Hud from "../index";
 import type { HudSelection } from "../selection";
-import { alertRows } from "../Sync";
 import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "./fixture";
 import FixtureGlobe from "./FixtureGlobe";
 
@@ -167,7 +166,7 @@ type Ready = { grid: FrameGrid } | { error: string };
 
 /**
  * Dev route body: builds 96 synthetic EVF2 frames, copies their fixed parts into a SAB frame grid, publishes
- * it (and the per-frame sighting counts) the way the db worker would, seeds feeds, alerts and a selection,
+ * it (and the per-frame sighting counts) the way the db worker would, seeds feeds and a selection,
  * and mounts the real `Hud` over a flat stand-in globe.
  */
 export default function HudFixture() {
@@ -196,11 +195,6 @@ export default function HudFixture() {
       // Start on the cloud deck so the page opens on a hatched frame.
       set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, from: iso(from), to: iso(to), at: iso(from + (FIXTURE_SCRIPT.cloud[0] + 4) * STEP_MS), playing: false }));
       set<FeedState[]>(FEEDS, feeds(Date.now()));
-      alertRows.set([
-        { id: "nws-freeze-1", event: "Freeze Warning", severity: "Severe", headline: "Freeze Warning for inland Miami-Dade", onset: iso(from + 8 * STEP_MS), expires: iso(from + 36 * STEP_MS) },
-        { id: "nws-sca-1", event: "Small Craft Advisory", severity: "Moderate", headline: "Small Craft Advisory, Florida Keys", onset: iso(from + 20 * STEP_MS), expires: iso(from + 70 * STEP_MS) },
-        { id: "nws-flood-1", event: "Flood Advisory", severity: "Minor", headline: null, onset: iso(from + 82 * STEP_MS), expires: null },
-      ]);
       const hotspotId = `hotspot:${PYTHON}:230:125:${from + 40 * STEP_MS}`;
       const sightingId = "sighting:48213";
       primeEvidence(from, hotspotId, sightingId);

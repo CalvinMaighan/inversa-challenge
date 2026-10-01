@@ -178,7 +178,8 @@ async function main() {
     const selection = (await page.evaluate(() => window.__inversa!.state("SELECTION"))) as { evidenceId: string; drawerOpen: boolean };
     if (!selection.drawerOpen || selection.evidenceId !== id) fail(`SELECTION after the click: ${JSON.stringify(selection)}`);
     const record = drawer.locator('section[aria-label="Normalized record"]');
-    await record.waitFor({ timeout: 30_000 });
+    // The record sits under "Details for experts" (T41), collapsed: attached, not visible.
+    await record.waitFor({ state: "attached", timeout: 30_000 });
     const { evidence } = await stack.graphql<{ evidence: { id: string; kind: string; record: Record<string, unknown> } }>(
       "query($id: ID!) { evidence(id: $id) { id kind record } }",
       { id },

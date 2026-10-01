@@ -50,7 +50,7 @@ async function opsPage(browser: Browser, origin: string, errors: Errors) {
   // The globe is up and its grid layer has drawn a frame of the published grid. (At the live edge the fixture
   // sightings, days old, are not in the current frame, so the point count may be 0 there.) Then let any late
   // request settle before the error count.
-  await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "hotspots")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+  await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
   await page.waitForTimeout(3_000);
   const snap = await page.evaluate(() => ({ ...window.__inversa!.snapshot(), layers: window.__inversa!.globe()?.layers }));
   await context.close();

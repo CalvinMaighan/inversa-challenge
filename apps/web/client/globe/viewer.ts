@@ -32,6 +32,8 @@ import { browserQuotaStore } from "./quota";
 const VIEW_WRITE_DEBOUNCE_MS = 250;
 const DEFAULT_FLIGHT_S = 1.6;
 const BACKGROUND = "#07090d";
+/** Side of the square `pick` searches, CSS px. */
+const PICK_PX = 9;
 const GLOBE_BASE = "#0d1b2a";
 
 export type GlobeDiagnostics = {
@@ -111,6 +113,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     sightings: (i) => (frameSightings && i >= 0 && i < frameSightings.counts.length ? frameSightings.records(i) : []),
     revision: () => revision,
     layers: () => ({ ...LAYERS.defaults, ...get<LayersState>(LAYERS) }),
+    selection: () => get<SelectionState>(SELECTION)?.evidenceId ?? null,
     missions: () => ({ ...MISSIONS.defaults, ...get<MissionsState>(MISSIONS) }),
     peers: () => get<Peer[]>(PEERS) ?? [],
     gql: (query, variables, signal) => gqlRequest(query, variables, signal),
@@ -172,6 +175,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     }),
   );
   disposers.push(subscribe(MISSIONS, scheduleRefresh));
+  disposers.push(subscribe(SELECTION, scheduleRefresh));
   disposers.push(subscribe(PEERS, scheduleRefresh));
 
   // Grid version: Atomics.waitAsync where it exists; elsewhere a slow poll (the ring fallback polls every ms).
@@ -318,7 +322,8 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
 
   /** Raw id under a point: a primitive's id, or a raster cell resolved through its layer. */
   const pickId = (x: number, y: number): string | null => {
-    const picked = scene.pick(new Cartesian2(x, y)) as { id?: unknown; primitive?: { id?: unknown } } | undefined;
+    // A 9 px pick square (Cesium's default is 3) makes small dots easy to hit.
+    const picked = scene.pick(new Cartesian2(x, y), PICK_PX, PICK_PX) as { id?: unknown; primitive?: { id?: unknown } } | undefined;
     const raw = typeof picked?.id === "string" ? picked.id : typeof picked?.primitive?.id === "string" ? picked.primitive.id : null;
     if (raw && !raw.startsWith(RASTER_PICK_PREFIX)) return raw;
     const at = globePoint(x, y);

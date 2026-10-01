@@ -87,6 +87,12 @@ export function evfFrameBytes(h: EvfHeader, sightingCount: number): number {
   return evfFrameLayout(h).sightingsOffset + 4 + sightingCount * SIGHTING_RECORD_BYTES;
 }
 
+/**
+ * Sightings window: the globe draws, the species bar counts and the agent's view means every sighting in the
+ * trailing SIGHTING_WINDOW_HOURS ending at the time cursor.
+ */
+export const SIGHTING_WINDOW_HOURS = 48;
+
 /** One decoded EVF2 sighting record. `id` is `sightings.id`, citable as `sighting:<id>` (C14). */
 export type SightingRecord = {
   id: number;

@@ -10,12 +10,14 @@
  *   1. the chat column is visible at load, left, full height; the globe fills the pane to its right; the top
  *      bar, timeline and legend sit inside the globe pane (bounding boxes); the column's edge resizes it and the
  *      width survives to the next visit; the first-visit hint offers example questions and stays dismissed;
- *   2. Layers: the legend opens, its counts come from the globe's own layer stats, and its switches change
- *      LAYERS and the globe layer (stations off → disabled, 0 drawn; on → drawn again; a species filter);
+ *   2. Layers (About → More data, T41): the legend opens, its counts come from the globe's own layer stats, and
+ *      its switches change LAYERS and the globe layer (stations start off → on, drawn; off → disabled; on again;
+ *      a species switch, which the species chip follows);
  *   3. a hover over a known station (from Axum's own readings) shows its tooltip with the station name;
  *   4. the Missions tab switches, and a team message sent from a second browser lights its unread dot;
- *   5. the "?" sheet lists every control; Esc closes it;
- *   6. light, dark and tactical: column, legend and help text keep ≥ 4.5:1 contrast.
+ *   5. the help sheet (About → Help) lists every control; Esc closes it;
+ *   6. light, dark and tactical (from the theme button): column, legend, About, species chips and help text keep
+ *      ≥ 4.5:1 contrast.
  * Phone 375×812:
  *   7. the globe is full screen, the column is a sheet collapsed to the composer; a tap and a drag on the handle
  *      move it to half and full height and back.
@@ -51,6 +53,21 @@ type LayerStat = { id: string; enabled: boolean; count: number; breakdown?: Reco
 
 async function box(page: Page, selector: string): Promise<Box> {
   return (await page.locator(selector).first().boundingBox()) ?? fail(`${selector} has no box`);
+}
+
+/** About (ⓘ) → More data (for experts): the Layers legend. */
+async function openLegend(page: Page): Promise<void> {
+  await page.click('[data-testid="status-button"]');
+  await page.locator('[data-testid="status-popover"]').waitFor();
+  await page.click('[data-testid="layers-button"]');
+  await page.locator('[data-testid="layers-legend"]').waitFor();
+}
+
+/** About (ⓘ) → Help. */
+async function openHelp(page: Page): Promise<void> {
+  await page.click('[data-testid="status-button"]');
+  await page.click('[data-testid="help-button"]');
+  await page.locator('[data-testid="help-sheet"]').waitFor();
 }
 
 async function layerStat(page: Page, id: string): Promise<LayerStat | null> {
@@ -146,7 +163,8 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
   const globe = await box(page, "[data-globe]");
   const topbar = await box(page, '[data-testid="hud-topbar"]');
   const timeline = await box(page, '[data-testid="hud-timeline"]');
-  const layersButton = await box(page, '[data-testid="layers-button"]');
+  // T41: the Layers legend lives in the About popover; its button sits top right with the theme button.
+  const layersButton = await box(page, '[data-testid="status-button"]');
   log(`column ${JSON.stringify(column)} globe ${JSON.stringify(globe)}`);
   if (column.x !== 0 || column.y !== 0 || Math.abs(column.height - 900) > 1 || Math.abs(column.width - 420) > 1) fail(`chat column ${JSON.stringify(column)}, want 0,0 420×900`);
   if (Math.abs(globe.x - (column.x + column.width)) > 1 || Math.abs(globe.x + globe.width - 1440) > 1 || Math.abs(globe.height - 900) > 1) fail(`globe ${JSON.stringify(globe)} does not fill the pane right of the column`);
@@ -198,13 +216,18 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
   if (Math.abs((await box(page, "[data-chat-column]")).width - 420) > 1) fail("column did not return to 420 px");
   log("resize 420 → 500 (drag) → 560 (End) → 360 (Home), kept for the next visit; hint stays dismissed");
 
-  // 2. Layers legend: counts from the globe's stats, switches drive LAYERS and the layer.
-  await page.waitForFunction((id) => (window.__inversa?.globe()?.layers.find((l) => l.id === id)?.count ?? 0) > 0, STATIONS, { timeout: LOAD_TIMEOUT_MS });
-  await page.click('[data-testid="layers-button"]');
+  // 2. Layers legend (About → More data): counts from the globe's stats, switches drive LAYERS and the layer.
+  // Stations start off (sightings first); the legend's switch turns them on.
   const legend = page.locator('[data-testid="layers-legend"]');
-  await legend.waitFor();
+  await openLegend(page);
   const legendBox = await box(page, '[data-testid="layers-legend"]');
   if (legendBox.x < globe.x || legendBox.x + legendBox.width > 1440) fail(`legend ${JSON.stringify(legendBox)} is not inside the globe pane`);
+  if ((await page.textContent('[data-testid="legend-count-stations"]'))?.trim() !== "off") fail("stations are not off at load");
+  await page.click('[data-testid="legend-toggle-stations"]');
+  await page.waitForFunction((id) => {
+    const l = window.__inversa?.globe()?.layers.find((x) => x.id === id);
+    return (window.__inversa?.state("LAYERS") as { visible: Record<string, boolean> }).visible[id] === true && l?.enabled === true && l.count > 0;
+  }, STATIONS, { timeout: LOAD_TIMEOUT_MS });
   const stationsBefore = (await layerStat(page, STATIONS))!;
   await page.waitForFunction(
     (n) => document.querySelector('[data-testid="legend-count-stations"]')?.textContent?.startsWith(String(n)) ?? false,
@@ -228,17 +251,24 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
     const l = window.__inversa?.globe()?.layers.find((x) => x.id === id);
     return (window.__inversa?.state("LAYERS") as { visible: Record<string, boolean> }).visible[id] === true && l?.enabled === true && l.count > 0;
   }, STATIONS);
+  // A species switch: the layer stops drawing that species (the breakdown still counts it, for the chips).
   await page.click(`[data-testid="legend-species-${IGUANA}"]`);
   await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === false, IGUANA);
-  await page.waitForFunction((s) => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.breakdown?.[s] ?? -1) === 0, IGUANA);
+  await page.waitForFunction((s) => {
+    const l = window.__inversa?.globe()?.layers.find((x) => x.id === "sightings");
+    const b = l?.breakdown ?? {};
+    return !!l && l.count === Object.entries(b).reduce((n, [k, v]) => (k === s ? n : n + v), 0);
+  }, IGUANA);
+  if ((await page.getAttribute(`[data-species-chip="${IGUANA}"]`, "aria-pressed")) !== "false") fail("the species chip did not follow the legend's switch");
   await page.click(`[data-testid="legend-species-${IGUANA}"]`);
   await page.waitForFunction((s) => (window.__inversa?.state("LAYERS") as { species: Record<string, boolean> }).species[s] === true, IGUANA);
   const after = await layersState(page);
   if (!after.visible[STATIONS] || after.species[IGUANA] !== true) fail(`LAYERS after toggles ${JSON.stringify(after)}`);
   const sightingsStat = await layerStat(page, SIGHTINGS);
-  log(`legend toggles: stations off/on, iguana off/on; sightings ${JSON.stringify(sightingsStat?.breakdown)}`);
+  log(`legend toggles: stations on/off/on, iguana off/on; sightings ${JSON.stringify(sightingsStat?.breakdown)}`);
   result.legend = "ok";
-  await page.click('[data-testid="layers-button"]');
+  await page.keyboard.press("Escape");
+  await legend.waitFor({ state: "detached" });
 
   // 3. Hover a known station: one Axum reported in the 2 h before the cursor, flown to through a share link.
   const at = (await page.evaluate(() => (window.__inversa!.state("TIME") as { at: string }).at)) as string;
@@ -314,37 +344,42 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
   log("Missions tab switches; a teammate's message lit and then cleared its dot");
   result.tabs = "ok";
 
-  // 5. Help sheet: every control, Esc closes.
-  await page.click('[data-testid="help-button"]');
+  // 5. Help sheet (from About): every control, Esc closes.
+  await openHelp(page);
   const help = page.locator('[data-testid="help-sheet"]');
-  await help.waitFor();
   const entries = await help.locator("[data-help-entry]").count();
   if (entries < 20) fail(`help sheet lists ${entries} controls`);
-  for (const id of ["feeds", "live", "focus", "theme", "play", "step", "speed", "date", "layers", "agent-tab", "missions-tab", "mic", "citations", "drawer", "share"]) {
+  for (const id of ["species", "about", "feeds", "live", "focus", "theme", "play", "speed", "date", "layers", "agent-tab", "missions-tab", "mic", "citations", "drawer", "share"]) {
     if (!(await help.locator(`[data-help-entry="${id}"]`).count())) fail(`help sheet has no ${id} entry`);
   }
   await page.keyboard.press("Escape");
   await help.waitFor({ state: "detached" });
   log(`help sheet: ${entries} controls`);
 
-  // 6. Themes: readable column, legend and help in each mode.
+  // 6. Themes (from the theme button): readable column, legend, popover and help in each mode.
   const themes: string[] = [];
-  await page.click('[data-testid="layers-button"]');
-  await legend.waitFor();
   for (const [mode, label] of [
-    ["light", "light"],
-    ["dark", "dark"],
-    ["tactical", "tac"],
+    ["light", "Light"],
+    ["dark", "Dark"],
+    ["tactical", "Tactical"],
   ] as const) {
+    await page.click('[data-testid="theme-button"]');
     await page.getByRole("radio", { name: label, exact: true }).click();
+    await page.keyboard.press("Escape");
     await page.waitForTimeout(250);
-    await page.click('[data-testid="help-button"]');
-    await help.waitFor();
+    await openLegend(page);
+    const legendRatios = {
+      legend: await contrast(page, '[data-legend-layer="stations"] span', '[data-testid="status-popover"]'),
+      legendNote: await contrast(page, '[data-legend-layer="stations"] p', '[data-testid="status-popover"]'),
+      about: await contrast(page, '[data-testid="status-popover"] > p', '[data-testid="status-popover"]'),
+    };
+    await page.keyboard.press("Escape");
+    await openHelp(page);
     const ratios = {
       column: await contrast(page, "[data-chat-column] [data-tab]", "[data-chat-column]"),
       composer: await contrast(page, '[data-chat-column] [aria-label="Question"]', "[data-chat-column]"),
-      legend: await contrast(page, '[data-legend-layer="stations"] span', '[data-testid="layers-legend"]'),
-      legendNote: await contrast(page, '[data-legend-layer="stations"] p', '[data-testid="layers-legend"]'),
+      ...legendRatios,
+      chips: await contrast(page, '[data-species-chip][aria-pressed="true"]', '[data-testid="species-bar"]'),
       help: await contrast(page, "[data-help-entry] dd", '[data-testid="help-sheet"]'),
     };
     await page.keyboard.press("Escape");
@@ -352,7 +387,9 @@ async function desktop(browser: Browser, stack: Stack, errors: string[]): Promis
     log(`${mode}: ${Object.entries(ratios).map(([k, r]) => `${k}=${r.toFixed(2)}`).join(" ")}`);
     themes.push(`${mode}=${low.length ? `low(${low.map(([k, r]) => `${k}:${r.toFixed(2)}`).join(",")})` : "ok"}`);
   }
-  await page.getByRole("radio", { name: "dark", exact: true }).click();
+  await page.click('[data-testid="theme-button"]');
+  await page.getByRole("radio", { name: "Dark", exact: true }).click();
+  await page.keyboard.press("Escape");
   result.themes = themes.join(" ");
   await context.close();
   return result;
