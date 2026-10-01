@@ -918,20 +918,14 @@ const backtest = (species: SpeciesSchema) => ({
 
 const FEEDS_ONLY_QUERY = "query AgentFeedState { feeds { ...FeedFields } }";
 
-const feedStateInput = z.object({
-  feed: z.string().min(2).max(40).optional().describe("One feed id (inat, gbif, nas, crw, openmeteo, ndbc, goes19, nws, usgs, ...) when the question is about that feed only. Omit for every feed."),
-});
-
+// One call returns every feed: a per-feed parameter made the model loop once per feed and hit the turn limit (AG2).
 const feedState = {
   name: "feed_state",
-  description: "Freshness of every data feed, or of one feed (nominal, lagging, stale, down), with newest observation and last fetch times, citable as fetch markers.",
-  inputSchema: feedStateInput,
-  async execute(input: z.infer<typeof feedStateInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
+  description: "Freshness of every data feed in one call (nominal, lagging, stale, down), with newest observation and last fetch times, citable as fetch markers. Call it once; it has no arguments.",
+  inputSchema: z.object({}),
+  async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
-    const asked = given(input.feed)?.toLowerCase();
-    const feeds = asked ? data.feeds.filter((f) => f.source === asked || f.source.startsWith(`${asked}-`) || asked.startsWith(`${f.source}-`) || asked.includes(f.source)) : data.feeds;
-    if (asked && feeds.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${data.feeds.map((f) => f.source).join(", ")}).`);
-    const out = output({ asOf: ctx.now.toISOString(), ...(asked ? { feed: feeds.map((f) => f.source) } : {}), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], feeds, feeds.length);
+    const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
 };

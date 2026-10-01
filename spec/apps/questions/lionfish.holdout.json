@@ -11,6 +11,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "population forbids: the negated form still matched when a possessive sat between the negation and the noun (\"whether Belize's lionfish population is growing\"); the lookbehind now exempts a negation word anywhere earlier in the sentence (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "lh-replay-ranking-month-ago: the span phrase took only \"month\" or \"30 days\"; \"30-day\" and \"four weeks\" name the same span, so the pattern now takes those spellings too (1 pattern; the same spelling fix the main sets got)."
     }
   ],
   "questions": [
@@ -920,7 +925,7 @@
         "minCitations": 1,
         "phrases": [
           "heuristic",
-          "(month|30 days)",
+          "(month|30[- ]days?|four weeks)",
           "(then|at the time|differ|changed|same)"
         ]
       },
