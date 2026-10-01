@@ -7,6 +7,7 @@
 //! check.
 
 pub mod backtest;
+pub mod lionfish;
 pub mod rules;
 pub mod score;
 

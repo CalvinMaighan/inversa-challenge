@@ -128,12 +128,12 @@ pub fn quality_code(q: &str) -> u8 {
 }
 
 /// Gaussian stencil, (2R+1)², zero outside the 3σ disc.
-struct Kernel {
+pub(super) struct Kernel {
     w: Vec<f32>,
 }
 
 impl Kernel {
-    fn new() -> Kernel {
+    pub(super) fn new() -> Kernel {
         let n = (2 * KERNEL_RADIUS + 1) as usize;
         let mut w = vec![0f32; n * n];
         for dy in -KERNEL_RADIUS..=KERNEL_RADIUS {
@@ -148,7 +148,7 @@ impl Kernel {
         Kernel { w }
     }
 
-    fn splat(&self, grid: &Grid, acc: &mut [f32], col: u32, row: u32, weight: f32) {
+    pub(super) fn splat(&self, grid: &Grid, acc: &mut [f32], col: u32, row: u32, weight: f32) {
         let n = 2 * KERNEL_RADIUS + 1;
         let (cols, rows) = (grid.cols as i32, grid.rows as i32);
         for dy in -KERNEL_RADIUS..=KERNEL_RADIUS {
@@ -233,6 +233,9 @@ pub struct Snapshot {
     readings: [Vec<ReadingPt>; 6],
     kernel: Kernel,
     nearest_cache: NearestCache,
+    /// Component scoring for apps `lionfish::enabled` (set by `load_app`); frames then carry
+    /// `rankScore` instead of density × rules.
+    pub lionfish: Option<Arc<super::lionfish::Index>>,
 }
 
 impl Snapshot {
@@ -281,6 +284,27 @@ impl Snapshot {
             readings,
             kernel,
             nearest_cache: Mutex::new(HashMap::new()),
+            lionfish: None,
+        }
+    }
+
+    /// [`Snapshot::load`] for one of the app's regions, with the lionfish component index when
+    /// the app scores by components (`lionfish::enabled`).
+    pub async fn load_app(db: &Db, app: &App, region: &crate::app::config::Region, from: i64, to: i64) -> anyhow::Result<Snapshot> {
+        let mut snap = Snapshot::load(db, &app.taxa, region.grid, from, to).await?;
+        if super::lionfish::enabled(app) {
+            let taxon = app.taxa.first().ok_or_else(|| anyhow::anyhow!("app {} has no taxon", app.id()))?;
+            snap.lionfish = Some(Arc::new(super::lionfish::Index::load(db, app, region, taxon, from, to).await?));
+        }
+        Ok(snap)
+    }
+
+    /// The frame grid of `taxon` at `at` given the conditions: `rankScore` for a component app,
+    /// density × activity × access otherwise.
+    pub fn score_at(&self, taxon: &Taxon, at: i64, cond: &CondFrame) -> Vec<f32> {
+        match &self.lionfish {
+            Some(index) => index.frame(at, crate::ingest::quality_bio::DateBasis::Submitted, index.weights).rank(),
+            None => self.apply_rules(taxon, self.density(taxon, at), cond),
         }
     }
 

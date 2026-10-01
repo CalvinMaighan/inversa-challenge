@@ -68,12 +68,12 @@
     { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } }
   ],
   "score": {
-    "label": "Survey priority (four components shown separately; no single risk percent)",
+    "label": "Survey priority (four components shown separately; rankScore is a weighted mean that only orders cells; no single risk percent)",
     "components": [
-      { "id": "recentReports", "label": "Recent reports", "weight": 1, "description": "iNaturalist records by observed date in the window; sightings are not abundance." },
-      { "id": "idQuality", "label": "Identification quality", "weight": 1, "description": "Research grade share and duplicate handling (GBIF copies of iNat are not corroboration)." },
-      { "id": "heatStress", "label": "Reef heat stress", "weight": 1, "description": "NOAA CRW DHW (accumulated) and bleaching alert level (current). Context, not proof of lionfish damage." },
-      { "id": "completeness", "label": "Data completeness", "weight": 1, "description": "Feed freshness and coverage gaps (NAS stale outside Florida, no buoys outside Florida)." }
+      { "id": "recentReports", "label": "Recent reports", "weight": 1, "description": "Kernel-weighted independent reports by observed date (60-day half-life; research grade 1, other grades 0.5; NAS/GBIF history 0.2 prior; duplicates and GBIF copies of iNat never counted), normalised to the region maximum. Sightings are not abundance; unknown when the region has no report." },
+      { "id": "idQuality", "label": "Identification quality", "weight": 1, "description": "Share of nearby recent reports that are research grade with positional accuracy under the cell size. Unknown without reports." },
+      { "id": "heatStress", "label": "Reef heat stress", "weight": 1, "description": "NOAA CRW at the cell: DHW (accumulated, /8) and bleaching alert level (current, /4), combined by max, both shown. Context, not proof of lionfish damage; unknown when missing, stale beyond 72 h." },
+      { "id": "completeness", "label": "Data completeness", "weight": 0, "description": "Report freshness, CRW state, NAS coverage (stale outside Florida), buoy coverage (none outside Florida), thin-region flag. Lowers confidence, never the rank: its weight is ignored." }
     ]
   },
   "windows": { "defaultHours": 720, "optionsHours": [168, 720, 2160] },

@@ -14,13 +14,14 @@ use rusqlite::params;
 
 use super::types::{
     Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, ForecastVerification, ForecastView, FrameChunk,
-    HotspotCell, HotspotExplain, HotspotGrid, HotspotTerm, Message, Mission, Op, Param, Quality, Reading, ReadingFlag,
-    ReadingOrigin, Sighting, SiteStatus, SpeciesCount, Station, Taxon, Time,
+    HotspotBasis, HotspotCell, HotspotExplain, HotspotGrid, HotspotTerm, HotspotWeightsInput, Message, Mission, Op, Param,
+    Quality, Reading, ReadingFlag, ReadingOrigin, Sighting, SiteStatus, SpeciesCount, Station, Taxon, Time,
 };
 use super::{app_state, now_ms};
 use crate::app::config::{App, Taxon as AppTaxon};
 use crate::db::Db;
-use crate::hotspot;
+use crate::hotspot::{self, lionfish};
+use crate::ingest::quality_bio::DateBasis;
 use crate::{crdt, feed_state, forecast, frames};
 
 pub struct QueryRoot;
@@ -437,9 +438,23 @@ impl QueryRoot {
         })
     }
 
-    /// Top cells of `species` at `at` inside `bbox` (default 100, at most 5000).
+    /// Top cells of `species` at `at` inside `bbox` (default 100, at most 5000). Component apps
+    /// (Lionfish Watch) rank by `rankScore` and fill `components`, `heat` and `fieldWindow`;
+    /// `region` limits to one region, `weights` overrides the config's rank weights for this
+    /// query, `basis` picks what the frame knew (default SUBMITTED).
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
-    async fn hotspots(&self, ctx: &Context<'_>, species: ID, at: Time, bbox: BBox, top: Option<i32>) -> Result<HotspotGrid> {
+    #[allow(clippy::too_many_arguments)]
+    async fn hotspots(
+        &self,
+        ctx: &Context<'_>,
+        species: ID,
+        at: Time,
+        bbox: BBox,
+        top: Option<i32>,
+        region: Option<ID>,
+        weights: Option<HotspotWeightsInput>,
+        basis: Option<HotspotBasis>,
+    ) -> Result<HotspotGrid> {
         let app = hotspot_app(ctx)?;
         bbox.validate(app)?;
         let sp = self::species(app, &species)?;
@@ -448,26 +463,72 @@ impl QueryRoot {
                 return Err(format!("`top` must be 1..={MAX_HOTSPOT_TOP}").into());
             }
         }
+        let top = top.map_or(hotspot::score::DEFAULT_TOP, |t| t as usize);
         let area = hotspot::score::BBox { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north };
-        let cells = hotspot::score::hotspots(&app_state(ctx).obs, app, sp, at.0, area, top.map(|t| t as usize)).await?;
+        if lionfish::enabled(app) {
+            let region = region_arg(app, region.as_ref())?;
+            let (weights, basis) = lionfish_args(app, weights, basis)?;
+            let cells = lionfish::hotspots(&app_state(ctx).obs, app, sp, at.0, area, top, region.as_deref(), weights, basis).await?;
+            return Ok(HotspotGrid {
+                species: ID(sp.id().into()),
+                at,
+                cells: cells.into_iter().map(HotspotCell::from_lionfish).collect(),
+                weights: Some(weights.into()),
+                basis: Some(basis.into()),
+            });
+        }
+        if region.is_some() || weights.is_some() || basis.is_some() {
+            return Err(format!("app {} scores density × rules: `region`, `weights` and `basis` apply to component apps only", app.id()).into());
+        }
+        let cells = hotspot::score::hotspots(&app_state(ctx).obs, app, sp, at.0, area, Some(top)).await?;
         Ok(HotspotGrid {
             species: ID(sp.id().into()),
             at,
             cells: cells
                 .into_iter()
-                .map(|c| HotspotCell { cell: ID(c.cell), lat: c.lat, lon: c.lon, score: c.score as f64 })
+                .map(|c| HotspotCell {
+                    cell: ID(c.cell),
+                    lat: c.lat,
+                    lon: c.lon,
+                    score: c.score as f64,
+                    region_id: None,
+                    rank_score: None,
+                    thin: None,
+                    components: None,
+                    heat: None,
+                    field_window: None,
+                })
                 .collect(),
+            weights: None,
+            basis: None,
         })
     }
 
     /// Each term of the score of one scoring cell (`<col>:<row>`, or `<region>:<col>:<row>` in a
-    /// multi-region app; C14).
+    /// multi-region app; C14). Component apps return every component with its records, dates and
+    /// the honesty caveats.
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
-    async fn explain_cell(&self, ctx: &Context<'_>, cell: ID, species: ID, at: Time) -> Result<HotspotExplain> {
+    async fn explain_cell(
+        &self,
+        ctx: &Context<'_>,
+        cell: ID,
+        species: ID,
+        at: Time,
+        weights: Option<HotspotWeightsInput>,
+        basis: Option<HotspotBasis>,
+    ) -> Result<HotspotExplain> {
         let app = hotspot_app(ctx)?;
         let sp = self::species(app, &species)?;
         if app.parse_cell(&cell).is_none() {
             return Err(format!("bad cell id {:?}; expected {}", cell.as_str(), app.cell_shape()).into());
+        }
+        if lionfish::enabled(app) {
+            let (weights, basis) = lionfish_args(app, weights, basis)?;
+            let ex = lionfish::explain(&app_state(ctx).obs, app, &cell, sp, at.0, weights, basis).await?;
+            return Ok(HotspotExplain::from_lionfish(ID(sp.id().into()), at, ex));
+        }
+        if weights.is_some() || basis.is_some() {
+            return Err(format!("app {} scores density × rules: `weights` and `basis` apply to component apps only", app.id()).into());
         }
         let ex = hotspot::score::explain(&app_state(ctx).obs, app, &cell, sp, at.0).await?;
         Ok(HotspotExplain {
@@ -480,6 +541,16 @@ impl QueryRoot {
                 .into_iter()
                 .map(|t| HotspotTerm { name: t.name, value: t.value as f64, rationale: t.rationale })
                 .collect(),
+            region_id: None,
+            rank_score: None,
+            thin: None,
+            components: None,
+            heat: None,
+            field_window: None,
+            weights: None,
+            basis: None,
+            caveats: Vec::new(),
+            credit: None,
         })
     }
 
@@ -616,8 +687,41 @@ pub fn backtest_out(b: hotspot::backtest::Backtest) -> Backtest {
             .into_iter()
             .map(|d| BacktestDay { day: Time(d.day), sightings: d.sightings as i32, hits: d.hits as i32 })
             .collect(),
+        horizon_days: b.horizon_days as i32,
+        evaluated: b.evaluated as i32,
+        hits: b.hits as i32,
+        insufficient_regions: b.insufficient_regions.into_iter().map(ID).collect(),
+        note: b.note,
     }
 }
+
+/// A component app's `region` argument: one of its region ids.
+fn region_arg(app: &App, region: Option<&ID>) -> Result<Option<String>> {
+    match region {
+        None => Ok(None),
+        Some(id) => match app.region(id.as_str()) {
+            Some(r) => Ok(Some(r.id().to_string())),
+            None => Err(format!(
+                "unknown region {:?} for app {}; expected one of {}",
+                id.as_str(),
+                app.id(),
+                app.regions.iter().map(|r| r.id()).collect::<Vec<_>>().join(", ")
+            )
+            .into()),
+        },
+    }
+}
+
+/// Rank weights (config, overridden per query) and the date basis (default SUBMITTED).
+fn lionfish_args(app: &App, weights: Option<HotspotWeightsInput>, basis: Option<HotspotBasis>) -> Result<(lionfish::Weights, DateBasis)> {
+    let base = lionfish::Weights::from_app(app);
+    let weights = match weights {
+        Some(w) => base.with(w.recent_reports, w.id_quality, w.heat_stress).map_err(|e| async_graphql::Error::new(e.to_string()))?,
+        None => base,
+    };
+    Ok((weights, basis.map_or(DateBasis::Submitted, Into::into)))
+}
+
 
 /// Ops of `board_id` with `seq > after_seq` from `team.db`, oldest first, at most [`OPS_PAGE`].
 pub async fn ops_after(team: &Db, board_id: String, after_seq: i64) -> anyhow::Result<Vec<Op>> {
