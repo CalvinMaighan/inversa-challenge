@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import ExternalLink from "client/external-link";
+import CachedImage from "client/media/CachedImage";
 import { SELECTION } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
@@ -433,8 +434,8 @@ export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evid
         </p>
       ) : null}
       {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
-      {/* eslint-disable-next-line @next/next/no-img-element -- same-origin media proxy (/v1/media), already sized and cached; the image optimizer would fetch it again */}
-      {s.photo ? <img src={s.photo} alt={`Photo: ${s.title}`} loading="lazy" data-testid="evidence-photo" /> : null}
+      {/* Same-origin media proxy (/v1/<app>/media/<id>) through the local media cache (client/media). */}
+      {s.photo ? <CachedImage src={s.photo} alt={`Photo: ${s.title}`} data-testid="evidence-photo" /> : null}
       {sp?.about ? (
         <p className="about" data-testid="species-about">
           {sp.about}

@@ -166,3 +166,19 @@ Actions → `deploy` → Run workflow with `release_run_id` = the run id of the 
 
 - Databases are not rolled back: a release older than the three-app pivot cannot read the per-app layout (`deploy/README.md` "Multi-app migration").
 - To restore data from before a bad write: on the VM, stop `inversa-litestream inversa-api`, move the app's `<db>.db*` aside and run `litestream restore -config /opt/inversa/deploy/litestream.yml -timestamp <RFC3339> /var/lib/inversa/<app>/<db>.db` as `inversa`, then start both units.
+
+## 14. Globe keys: Google 3D, Cesium ion, AISStream (Developer panel)
+
+The Developer button (a key, top right of the globe) opens "Power up the globe": one row per key in `apps/web/shared/keys.ts`, a green dot when set, a GET KEY link to the page below, and a password field for each missing key. Nothing there needs the agent; each key is optional.
+
+| Key | Get it | What it unlocks | Where it goes |
+|---|---|---|---|
+| Google Maps (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) | <https://developers.google.com/maps/documentation/tile/get-api-key>: a Google Cloud project with billing, enable **Map Tiles API**, create an API key, restrict it to HTTP referrers `https://inversa.calvinmaighan.dev/*` and `http://localhost:3050/*`, and to the Map Tiles API | the photorealistic 3D planet, loaded straight from Google before the ion route | browser: paste it in the panel (that browser only), or set it in Doppler `prd` before the release build (it is inlined at build time) |
+| Cesium ion (`NEXT_PUBLIC_CESIUM_ION_TOKEN`) | <https://ion.cesium.com/tokens>: a token with the default asset scopes; add assets 1 (World Terrain), 2 (Bing aerial) and 2275207 (Google Photorealistic 3D Tiles) to My Assets | real terrain, sharper aerial imagery, and Google 3D through ion when there is no Google key | browser, as above |
+| AISStream (`AISSTREAM_API_KEY`) | <https://aisstream.io/apikeys>: sign in with GitHub, create a key | live ships for carp and lionfish | server: Doppler `prd` (`doppler secrets set AISSTREAM_API_KEY`), or the panel under `bun run dev` |
+| OpenRouter, xAI, AWS GOES, NWWS | sections 4, 7 and 8, and <https://console.x.ai/> for `XAI_API_KEY` | the agent, voice, GOES push, NWWS push | server, as above |
+
+- Browser keys run in the visitor's browser, so anyone can read them: the referrer and API restriction is what protects the Google key and its bill.
+- Google bills Map Tiles per root-tileset request after a monthly free allowance. Check the current price at <https://developers.google.com/maps/billing-and-pricing/pricing> before enabling billing (the price was not verified here), and set a budget alert in Google Cloud Billing. The app caps each browser at 1,000 direct sessions a month (editable in the panel's Google row) and drops to ion, then keyless imagery, at 90 % of that cap.
+- Local development: server keys pasted in the panel go to `data/local-keys.env` (git-ignored, mode 0600) and `bun run dev` restarts the API and web with them. A key already in the shell or Doppler wins and shows CONFIGURED EXTERNALLY. In production the panel shows the `doppler secrets set NAME` command instead.
+- Without any of these the globe still works on keyless Esri imagery.

@@ -78,6 +78,12 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     what: "Top right. Light, dark or tactical (green on black). Your choice is remembered.",
   },
   {
+    id: "developer",
+    group: "Map",
+    control: "Developer (key)",
+    what: "Top right. Power up the globe: every API key the map can use, which are set, and where to get the rest. Browser keys stay in this browser.",
+  },
+  {
     id: "help",
     group: "Map",
     control: "Help",

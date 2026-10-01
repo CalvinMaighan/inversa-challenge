@@ -18,6 +18,8 @@ import { TIME, type TimeState } from "client/state/time";
 import { VIEW } from "client/state/view";
 import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
 import { prefersReducedMotion } from "client/motion";
+import { activeAppId } from "client/state/app";
+import { browserKey } from "client/keys";
 
 import { registerGlobe, type GeoPoint, type GlobeApi } from "./api";
 import { cesium } from "./cesium";
@@ -25,6 +27,7 @@ import { posesDiffer, shouldFly, viewFromPose, type CameraPose, type ViewSyncSta
 import { frameForTime } from "./frame-index";
 import { createRenderGovernor, type GovernorDiagnostics } from "./governor";
 import { installImagery, type ImageryState } from "./imagery";
+import { GOOGLE_3D_ZONES } from "./ladder";
 import { createLayers, type GlobeLayer, type GlobeViewer, type LayerContext, type LayerStats } from "./layers";
 import { MISSION_ID_PREFIX } from "./layers/missions";
 import { RASTER_PICK_PREFIX } from "./layers/types";
@@ -228,13 +231,17 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   );
 
   // ---- imagery ------------------------------------------------------------------------------------------
+  // Browser keys (shared/keys.ts): the Developer panel's localStorage value first, then the build env.
   const imagery = installImagery(widget, {
-    ionToken: process.env.NEXT_PUBLIC_CESIUM_ION_TOKEN,
+    ionToken: browserKey("cesium-ion"),
+    googleKey: browserKey("google-maps"),
+    zones: () => GOOGLE_3D_ZONES[activeAppId()],
     quotaStore: browserQuotaStore(),
     requestRender: () => governor.request(),
     onChange: (s) => {
       container.dataset.imagery = s.base ?? "none";
       container.dataset.google3d = s.google3d;
+      container.dataset.imageryRoute = s.plan.route;
     },
   });
   disposers.push(() => imagery.destroy());

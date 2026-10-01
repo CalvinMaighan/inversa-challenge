@@ -14,7 +14,7 @@ import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
 import { aboutSentence, WINDOW_NOTE } from "../help/content";
-import DeveloperSlot from "../shell/DeveloperSlot";
+import DeveloperPanel from "../developer/DeveloperPanel";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
@@ -405,7 +405,7 @@ function DeveloperIcon() {
   );
 }
 
-/** Developer: opens the provider keys panel (DeveloperSlot, filled by GE3); closing it hands focus back here. */
+/** Developer: opens the provider keys panel ("Power up the globe", client/hud/developer); closing it hands focus back here. */
 function Developer() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -427,7 +427,7 @@ function Developer() {
       >
         <DeveloperIcon />
       </Round>
-      {open ? <DeveloperSlot onClose={close} /> : null}
+      {open ? <DeveloperPanel onClose={close} /> : null}
     </>
   );
 }
