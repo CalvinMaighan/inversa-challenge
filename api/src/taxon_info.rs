@@ -295,7 +295,7 @@ pub async fn enrich(state: &AppState) -> anyhow::Result<usize> {
 pub async fn apply_page(state: &AppState, bytes: &[u8]) -> anyhow::Result<usize> {
     let infos = parse_page(bytes)?;
     let now = chrono::Utc::now().timestamp_millis();
-    Ok(state.obs.write(move |tx| apply(tx, &infos, now)).await?)
+    state.obs.write(move |tx| apply(tx, &infos, now)).await
 }
 
 /// Fill `inat_taxon_id` and `iconic_group` of taxa whose iNat sightings predate T44, from the archived
@@ -418,7 +418,8 @@ mod tests {
         assert!(!summary.contains('<'), "{summary}");
         assert!(summary.matches(". ").count() <= 1, "more than two sentences: {summary}");
         assert_eq!(batch_url(&[1, 2, 3]), "https://api.inaturalist.org/v1/taxa/1,2,3");
-        assert!(BATCH <= 30);
+        // iNat accepts at most 30 ids per call and asks for at most one request a second.
+        assert_eq!(batch_url(&(1..=BATCH as i64).collect::<Vec<_>>()).matches(',').count(), 29);
         assert!(REQUEST_INTERVAL >= Duration::from_secs(1));
     }
 

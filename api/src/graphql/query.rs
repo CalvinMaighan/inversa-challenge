@@ -176,14 +176,15 @@ impl QueryRoot {
             return Err("`taxa` needs `ids` or `q`".into());
         }
         let ids = json_list(ids.map(|ids| taxon_ids(&ids)).transpose()?);
-        let like = q.map(|s| format!("%{}%", s.replace(['%', '_'], " ")));
+        // `%` and `_` in the caller's text are literal (escaped), never wildcards.
+        let like = q.map(|s| format!("%{}%", s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")));
         let rows = app_state(ctx)
             .obs
             .read(move |c| {
                 let mut st = c.prepare_cached(&format!(
                     "select {} from taxa t
                      where (?1 is null or t.id in (select value from json_each(?1)))
-                       and (?2 is null or t.common_name like ?2 or t.scientific_name like ?2)
+                       and (?2 is null or t.common_name like ?2 escape '\\' or t.scientific_name like ?2 escape '\\')
                      order by t.focus desc, t.id
                      limit ?3",
                     Taxon::COLUMNS
