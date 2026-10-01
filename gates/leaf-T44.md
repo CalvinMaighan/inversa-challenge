@@ -40,3 +40,23 @@ Scope:
 
 - [ ] G8: screenshots (looked at) `docs/evidence/species-card-other.png` and `species-bar-7d.png`
   EVIDENCE: pending
+
+## Added at user review: categories and icons
+
+- [ ] G9: "Other" splits into categories. Clicking the Other chip opens a popover listing categories with an icon, colour, count and toggle: Snakes, Lizards, Turtles & tortoises, Crocodilians, Frogs & toads, Birds, Mammals, Fish, Snails & slugs, Insects, Spiders, Plants, Other. Mapping is by iNat ancestor taxa (verified ids, unit test named "category from ancestry"). Each category drills down to its top species. Keyboard accessible with Escape returning focus
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "category from ancestry" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G10: icons instead of dots. Every sighting marker on the globe is an SVG icon for its category (snake, lizard, turtle, crocodile, frog, bird, mammal, fish, snail, insect, spider, plant, generic) tinted in its label colour, with a contrasting outline readable on satellite imagery. The same icons appear on chips, the popover, the evidence card and the legend. The licence is recorded (custom-drawn or a permissive set such as Phosphor/Lucide/Tabler; game-icons.net needs CC BY attribution, so prefer MIT). e2e prints `ICONS markers=billboard categories>=10 dots=0`
+  CHECK: cd apps/web && bun run e2e:speciescard 2>&1 | grep ICONS
+  EXPECT: /ICONS markers=billboard categories>=1\d dots=0|ICONS markers=billboard categories>=10 dots=0/
+  EVIDENCE: pending
+
+- [ ] G11: performance holds with icon billboards (one texture atlas, no per-marker canvas). e2e:scrub median < 16 ms with requests=0, and first globe frame not worse than 1.5x the current 419 ms median from e2e:perf
+  CHECK: cd apps/web && bun run e2e:scrub 2>&1 | grep SCRUB
+  EXPECT: /SCRUB median=(1[0-5]|[0-9])(\.\d+)? requests=0/
+  EVIDENCE: pending
+
+- [ ] G12: screenshots (looked at) `docs/evidence/species-other-popover.png`, `species-icons-globe.png` (zoomed so several categories show) and `species-icons-light.png` (light theme legibility)
+  EVIDENCE: pending
