@@ -42,3 +42,23 @@ Scope:
   EVIDENCE: both 1440×900 from `e2e:speciescard` on the real stack (fixtures plus a 7-day network backfill, taxa enriched), viewed.
   - `species-bar-7d.png`: top left, twelve chips in two rows and a half: Python 4, Tegu 0 (dimmed), Iguana 47, Lionfish 0 (dimmed), then Brown anole 113, Northern curly-tailed lizard 51 (name ellipsised), Cuban tree frog 47, Peters's rock agama 32, Cane toad 27, Egyptian goose 23, each with its own colour dot, then Plants 818 and Insects & others 229 hollow (off), and the "Last 7 days" selector. The globe shows South Florida with hundreds of dots in a dozen colours along the east coast and the Keys; no grey dot. The welcome lists the four focus lines and "Other introduced animals".
   - `species-card-other.png`: zoomed to a Miami shoreline; the clicked dot carries the bracket "SIGHTING 3464". The card reads "SIGHTING · Open at iNaturalist ↗", "Brown anole spotted in South Florida", "*Anolis sagrei* · introduced reptile", "4 h ago · needs ID (not yet confirmed)", the observer's photo (an anole on a seawall behind a fence), the About paragraph ("The brown anole (Anolis sagrei), also known as the Bahaman anole or De la Sagra's Anole, is a lizard native to Cuba and the Bahamas. It has been widely introduced elsewhere…"), the link "More about Brown anole on iNaturalist ↗", the T27 flag "iNat data not updating" (the e2e Axum runs with sources off), "Add note about this sighting" and the collapsed "Details for experts". The tooltip before the click read "Brown anole · needs ID · 4 h ago".
+
+## Added at user review: categories and icons
+
+- [ ] G9: "Other" splits into categories. Clicking the Other chip opens a popover listing categories with an icon, colour, count and toggle: Snakes, Lizards, Turtles & tortoises, Crocodilians, Frogs & toads, Birds, Mammals, Fish, Snails & slugs, Insects, Spiders, Plants, Other. Mapping is by iNat ancestor taxa (verified ids, unit test named "category from ancestry"). Each category drills down to its top species. Keyboard accessible with Escape returning focus
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "category from ancestry" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G10: icons instead of dots. Every sighting marker on the globe is an SVG icon for its category (snake, lizard, turtle, crocodile, frog, bird, mammal, fish, snail, insect, spider, plant, generic) tinted in its label colour, with a contrasting outline readable on satellite imagery. The same icons appear on chips, the popover, the evidence card and the legend. The licence is recorded (custom-drawn or a permissive set such as Phosphor/Lucide/Tabler; game-icons.net needs CC BY attribution, so prefer MIT). e2e prints `ICONS markers=billboard categories>=10 dots=0`
+  CHECK: cd apps/web && bun run e2e:speciescard 2>&1 | grep ICONS
+  EXPECT: /ICONS markers=billboard categories>=1\d dots=0|ICONS markers=billboard categories>=10 dots=0/
+  EVIDENCE: pending
+
+- [ ] G11: performance holds with icon billboards (one texture atlas, no per-marker canvas). e2e:scrub median < 16 ms with requests=0, and first globe frame not worse than 1.5x the current 419 ms median from e2e:perf
+  CHECK: cd apps/web && bun run e2e:scrub 2>&1 | grep SCRUB
+  EXPECT: /SCRUB median=(1[0-5]|[0-9])(\.\d+)? requests=0/
+  EVIDENCE: pending
+
+- [ ] G12: screenshots (looked at) `docs/evidence/species-other-popover.png`, `species-icons-globe.png` (zoomed so several categories show) and `species-icons-light.png` (light theme legibility)
+  EVIDENCE: pending
