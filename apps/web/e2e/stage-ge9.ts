@@ -114,7 +114,8 @@ export async function creditsInHeader(page: Page, shot?: string): Promise<Credit
   const centre = (b: { top: number; bottom: number }) => (b.top + b.bottom) / 2;
   const sameRow = !!tab && !!g.link && g.parts.length > 0 && g.parts.every((p) => centre(p) >= tab.top && centre(p) <= tab.bottom) && Math.max(...g.parts.map((p) => p.bottom)) - Math.min(...g.parts.map((p) => p.top)) <= 18;
   const rightAligned = !!g.link && g.headerContentRight !== null && Math.abs(g.link.right - g.headerContentRight) <= 1;
-  const wraps = !g.slot || g.slot.height > 18 || g.overflow > 0 || g.parts.some((p) => p.left < g.slot!.left - 0.5 || p.right > g.slot!.right + 0.5);
+  const rowHeight = g.parts.length ? Math.max(...g.parts.map((p) => p.bottom)) - Math.min(...g.parts.map((p) => p.top)) : 0;
+  const wraps = !g.slot || rowHeight > 18 || g.overflow > 0 || g.parts.some((p) => p.left < g.slot!.left - 0.5 || p.right > g.slot!.right + 0.5);
   log(`credits: in header ${g.inHeader}, card ${g.card?.width}px, slot ${JSON.stringify(g.slot)}, link "${g.linkText}" ${JSON.stringify(g.link)}, header content right ${g.headerContentRight}, parts ${g.parts.length}, overflow ${g.overflow}, tab ${JSON.stringify(tab)}`);
   if (shot && g.card) await page.screenshot({ path: shot, clip: { x: g.card.left, y: g.card.top, width: g.card.width, height: 80 } });
 
@@ -151,7 +152,8 @@ export async function creditsInHeader(page: Page, shot?: string): Promise<Credit
 /** At a narrower card the ion logo collapses to its mark and the link stays, still one row. */
 export async function creditsNarrow(page: Page): Promise<boolean> {
   const g = await creditGeometry(page);
-  const ok = g.inHeader && !!g.link && !!g.slot && g.slot.height <= 18 && g.overflow <= 0 && g.link.width > 0 && g.link.right <= g.slot.right + 0.5;
+  const rowHeight = g.parts.length ? Math.max(...g.parts.map((p) => p.bottom)) - Math.min(...g.parts.map((p) => p.top)) : 99;
+  const ok = g.inHeader && !!g.link && !!g.slot && rowHeight <= 18 && g.overflow <= 0 && g.link.width > 0 && g.link.right <= g.slot.right + 0.5;
   log(`credits at a ${g.card?.width}px card: slot ${JSON.stringify(g.slot)}, link ${JSON.stringify(g.link)}, overflow ${g.overflow}: ${ok ? "one row" : "NOT one row"}`);
   return ok;
 }
@@ -232,12 +234,14 @@ export async function creditsWithGoogle3d(browser: Browser, origin: string, cloc
   const g = await page.evaluate(() => {
     const slot = document.querySelector("[data-credit-slot]");
     const s = slot?.getBoundingClientRect();
+    // The row itself (the slot keeps a few px of padding for focus rings).
+    const row = slot?.querySelector("[data-globe-credits]")?.getBoundingClientRect();
     const google = [...(slot?.querySelectorAll<HTMLElement>(".cesium-credit-textContainer *, .cesium-credit-logoContainer *") ?? [])].filter((el) => /google/i.test(`${el.textContent ?? ""} ${(el as HTMLImageElement).src ?? ""} ${el.getAttribute("alt") ?? ""} ${el.getAttribute("title") ?? ""}`));
     const shown = google
       .map((el) => el.getBoundingClientRect())
       .filter((b) => s && b.width > 0 && b.height > 0 && b.left >= s.left - 0.5 && b.right <= s.right + 0.5 && b.top >= s.top - 0.5 && b.bottom <= s.bottom + 0.5);
     const imgs = [...(slot?.querySelectorAll("img") ?? [])].map((i) => `${new URL(i.src, location.href).host}${new URL(i.src, location.href).pathname.slice(-40)} ${i.naturalWidth}x${i.naturalHeight}`);
-    return { found: google.length, shown: shown.length, text: (slot?.querySelector(".cesium-credit-textContainer") as HTMLElement | null)?.innerText.slice(0, 160) ?? "", height: s?.height ?? -1, imgs, html: slot?.querySelector(".cesium-credit-textContainer")?.innerHTML.replace(/src="[^"]*"/g, 'src="…"').slice(0, 500) ?? "" };
+    return { found: google.length, shown: shown.length, text: (slot?.querySelector(".cesium-credit-textContainer") as HTMLElement | null)?.innerText.slice(0, 160) ?? "", height: row?.height ?? -1, imgs, html: slot?.querySelector(".cesium-credit-textContainer")?.innerHTML.replace(/src="[^"]*"/g, 'src="…"').slice(0, 500) ?? "" };
   });
   const shot = path.join(REPO_DIR, "docs/evidence/ge9-credit-google3d.png");
   await page.screenshot({ path: shot });

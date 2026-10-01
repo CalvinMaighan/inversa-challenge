@@ -78,6 +78,9 @@ export const CreditSlot = styled.div`
   justify-content: flex-end;
   min-width: 0;
   overflow: hidden;
+  /* Room inside the clip for the links' focus rings (2 px offset, 2 px wide), taken back by the margin. */
+  padding: 4px;
+  margin: -4px;
   white-space: nowrap;
   color: var(--muted);
   font: 400 10px / 14px var(--font-ui);
@@ -161,8 +164,9 @@ export const CreditSlot = styled.div`
   ${SHEET_MEDIA} {
     position: absolute;
     z-index: 1;
-    top: 2px;
-    right: var(--gap-m);
+    top: 0;
+    right: calc(var(--gap-m) - 4px);
+    margin: 0;
     max-width: calc(50% - 32px);
   }
 `;
