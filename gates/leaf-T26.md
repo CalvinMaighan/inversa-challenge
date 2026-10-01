@@ -2,12 +2,12 @@
 
 Scope: all branches are integrated. The root GATES.md checks are met.
 
-- [ ] G1: all four node gates files are met
+- [x] G1: all four node gates files are met
   CHECK: node /Users/calvin/.claude/skills/unlazy/scripts/gate-check.mjs --timeout 120 --status gates/node-data.md gates/node-client.md gates/node-convo.md gates/node-team.md 2>&1 | tail -2
   EXPECT: /ALL MET|ABANDON/
-  EVIDENCE: pending
+  EVIDENCE: gates/node-team.md: 3 gates | ALL MET (15 met, 1 abandoned)
 
-- [ ] G2: bun run check prints CHECK-OK
+- [x] G2: bun run check prints CHECK-OK
   CHECK: bun run check 2>&1 | tail -1
   EXPECT: CHECK-OK
-  EVIDENCE: pending
+  EVIDENCE: CHECK-OK

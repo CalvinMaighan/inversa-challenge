@@ -20,3 +20,7 @@ Scope:
   CHECK: curl -s -X POST -H 'content-type: application/json' -d '{"query":"{ feeds { source state } }"}' https://inversa.calvinmaighan.dev/v1/graphql
   EXPECT: /"feeds":\[/
   EVIDENCE: pending
+
+ABANDON: G1 blocked on H1 H2 H3 H8 (VM, DNS, R2, Doppler prd not provisioned; deploy needs explicit user go-ahead)
+ABANDON: G2 blocked on H1 H2 H3 H8
+ABANDON: G3 blocked on H1 H2 H3 H8

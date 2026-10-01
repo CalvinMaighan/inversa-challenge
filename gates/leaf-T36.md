@@ -10,3 +10,7 @@ Scope: walk through docs/demo-script.md on the deployed URL in Chrome, Safari an
 
 - [ ] G3: Firefox walkthrough complete, with the active fallbacks listed (manual)
   EVIDENCE: pending
+
+ABANDON: G1 blocked on T33 (walkthrough runs on the deployed URL)
+ABANDON: G2 blocked on T33
+ABANDON: G3 blocked on T33

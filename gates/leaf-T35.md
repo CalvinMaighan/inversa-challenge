@@ -11,3 +11,6 @@ Scope:
 
 - [ ] G2: GOES push to a visible frame in under 60 s (manual: quote the log timestamps for SQS receive, commit and FramesUpdated)
   EVIDENCE: pending
+
+ABANDON: G1 blocked on T33 (no live URL)
+ABANDON: G2 blocked on T33 and H4 (no deploy, no GOES SQS queue)

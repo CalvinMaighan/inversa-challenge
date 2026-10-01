@@ -5,7 +5,9 @@ Scope: stop the API, move the databases aside, restart, and let bootstrap restor
 - [ ] G1: row counts for sightings, readings and ops match before and after the restore (manual: quote both count lines from ssh)
   EVIDENCE: pending
 
-- [ ] G2: the drill procedure is documented in deploy/README.md
+- [x] G2: the drill procedure is documented in deploy/README.md
   CHECK: grep -ci "restore drill" deploy/README.md
   EXPECT: /[1-9]/
-  EVIDENCE: pending
+  EVIDENCE: 1
+
+ABANDON: G1 blocked on T33 (no deployed VM to drill)

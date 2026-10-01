@@ -57,3 +57,14 @@ With Inversa's own data: operating locations and access constraints, crew and eq
 - **App selector:** a species icon button in the HUD opens a popover listing the apps (carp, lionfish, python) with icon, name, one-line question, feed-health dot. Selecting one swaps config, map preset, layers, helper questions, agent persona and timeline. Selection lives in the URL (`?app=carp`), so share links, replays and agent view-state carry it; default is carp; remembered per viewer in localStorage. Keyboard accessible, Escape returns focus, links in new tab like the rest of the chrome. Team (WebRTC) rooms are per app.
 - Scope guard (P4) applies per app: out-of-scope species, areas or locations get a refusal naming what the app covers.
 - PostGIS from the suggestion is still not adopted (SQLite stays). The "new technology" claim stays as already documented.
+
+## C1 results (2026-10-01, verified: `gate-check --status gates/leaf-C1.md` 7 met; evidence `docs/evidence/carp-data-proof.md`)
+
+- **Claims verified with URLs:** L'CARP launched May 2026 and is run by Inversa (LDWF program page); April 2026 commission agenda item 10 is an Inversa presentation; Origin page shows Detect, Deploy, Deliver. The "unverified" marks above are lifted, with the source URLs in the evidence doc.
+- **Narrower than first thought:** L'CARP is active only in the **Atchafalaya Basin** and targets silver, grass, bighead and black carp (not common carp). Carp copy and scope guard say so. Camera presets: all sites (31.1, -91.1, zoom 7.5) and Atchafalaya (30.35, -91.55, zoom 8.5).
+- **Eight sites, all with USGS + NWPS + NWS and forecasts:** SMML1, KRZL1, BLRL1, MCGL1 (Atchafalaya), BTRL1 (Mississippi, Baton Rouge), AEXL1 (Red, Alexandria), MLUL1 (Ouachita, Monroe), BXAL1 (Pearl, Bogalusa). Discharge missing at KRZL1, BLRL1, AEXL1.
+- **Replay can be backfilled.** NWPS keeps no history (ignores `issuedTime`/`asOf`), but the Iowa Environmental Mesonet archives NWS river forecasts (7 issuances per site in 7 days). Replay coverage therefore starts well before our first snapshot; each snapshot records which source it came from (`nwps-live` or `iem-archive`).
+- **Conflicts to show, not hide:** USGS and NWPS stage can differ by datum (KRZL1: 1.47 ft vs 3.92 ft); flow at Monroe disagrees 5.7x to 7x between sources. Flood categories use NWPS stage only; flow is always labelled with its source.
+- **Forecast cadence:** one issuance per day (13:17Z–15:56Z); horizons 5 to 15 days.
+- **Ingest modes:** none of USGS, NWPS, NWS offers push (WaterAlert is email/SMS; NWWS-OI needs an emailed application, 10+ days). Poll: USGS 15 min (one batched OGC request; anonymous rate limit), NWPS 30–60 min (store only when `issuedTime` changes), NWS alerts 1–2 min. Pollers run as scheduled jobs that deliver through the signed ingest hook.
+- Only MCGL1 is at a flood category (action) today; no active NWS alerts in Louisiana. The demo needs a replay scene for an eventful day.
