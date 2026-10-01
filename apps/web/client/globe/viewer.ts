@@ -25,6 +25,7 @@ import { posesDiffer, shouldFly, viewFromPose, type CameraPose, type ViewSyncSta
 import { frameForTime } from "./frame-index";
 import { createRenderGovernor, type GovernorDiagnostics } from "./governor";
 import { installImagery, type ImageryState } from "./imagery";
+import { installLook, type LookDiagnostics } from "./look/install";
 import { createLayers, type GlobeLayer, type GlobeViewer, type LayerContext, type LayerStats } from "./layers";
 import { MISSION_ID_PREFIX } from "./layers/missions";
 import { RASTER_PICK_PREFIX } from "./layers/types";
@@ -43,6 +44,8 @@ export type GlobeDiagnostics = {
   frame: number;
   layers: LayerStats[];
   imagery: ImageryState;
+  /** Visual preset stages and the scope (GC2). */
+  look: LookDiagnostics;
 };
 
 export type GlobeHandle = {
@@ -238,6 +241,10 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     },
   });
   disposers.push(() => imagery.destroy());
+
+  // ---- look: presets and the scope mask (GC2), post-process stages over the whole frame ----------------
+  const look = installLook(scene, { requestRender: () => governor.request() });
+  disposers.push(() => look.destroy());
 
   // ---- camera ↔ VIEW -------------------------------------------------------------------------------------
   const pose = (): CameraPose => {
@@ -437,6 +444,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
       frame,
       layers: layers.map((l) => l.stats()),
       imagery: imagery.state(),
+      look: look.state(),
     }),
     destroy() {
       if (destroyed) return;

@@ -78,6 +78,9 @@ const STATUS_BUTTON = "[data-testid=status-button]";
 const STATUS_POPOVER = "[data-testid=status-popover]";
 const THEME_BUTTON = "[data-testid=theme-button]";
 const THEME_POPOVER = "[data-testid=theme-popover]";
+/** GE2: the Look button at the bottom centre and its popover (presets, scope). */
+const LOOK_BUTTON = "[data-testid=look-button]";
+const LOOK_POPOVER = "[data-testid=look-popover]";
 const PYTHON_CHIP = '[data-species-chip="python"]';
 const LAYERS_BUTTON = "[data-testid=layers-button]";
 const LEGEND = "[data-testid=layers-legend]";
@@ -478,6 +481,29 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.waitForFunction((sel) => !document.querySelector(sel), THEME_POPOVER, { timeout: 10_000 });
   if (!(await isFocused(page, THEME_BUTTON))) fail("Esc closed Theme but focus did not return to its button");
   log(`Theme after ${toTheme} Tab: opened, Esc back to the button`);
+
+  // Look (GE2): Enter opens it with focus inside, Tab reaches the pressed preset, ArrowRight moves to the next
+  // one, Enter picks it (LOOK changes), ArrowLeft and Enter go back to normal, Esc returns to the button.
+  const toLook = await tabTo(page, LOOK_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(LOOK_POPOVER).waitFor({ timeout: 10_000 });
+  if (!(await focusIn(page, LOOK_POPOVER))) fail("opening Look did not move focus into its popover");
+  await page.keyboard.press("Tab");
+  await recordStop(page);
+  await page.keyboard.press("ArrowRight");
+  await recordStop(page);
+  const picked = await page.evaluate(() => document.activeElement?.getAttribute("data-look"));
+  if (picked !== "crt") fail(`ArrowRight in the Look presets landed on ${picked}, not crt`);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__inversa!.state("LOOK") === "crt", undefined, { timeout: 10_000 });
+  await axeScan(page, "1440 look");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => window.__inversa!.state("LOOK") === "normal", undefined, { timeout: 10_000 });
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), LOOK_POPOVER, { timeout: 10_000 });
+  if (!(await isFocused(page, LOOK_BUTTON))) fail("Esc closed Look but focus did not return to its button");
+  log(`Look after ${toLook} Tab: opened, ArrowRight to crt, Enter picked it, back to normal, Esc back to the button`);
 
   // Help sheet (About → Help): focus moves into the sheet, Esc closes it back to the About button.
   await tabTo(page, STATUS_BUTTON);

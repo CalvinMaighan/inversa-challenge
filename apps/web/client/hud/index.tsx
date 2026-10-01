@@ -14,6 +14,7 @@ import AppSelect from "./appselect/AppSelect";
 import { useActiveApp } from "./appselect/use-active-app";
 import EvidenceDrawer from "./drawer/EvidenceDrawer";
 import HelpSheet from "./help/HelpSheet";
+import LookBar from "./look/LookBar";
 import DetectionOverlay from "./overlay/DetectionOverlay";
 import { MOBILE } from "./primitives";
 import { isDrawerOpen, type HudSelection } from "./selection";
@@ -148,6 +149,8 @@ function HudBody({ sync = true }: HudProps) {
       {survey ? <LionfishHud key={app.id} app={app} /> : null}
       {cardOwnsSelection ? null : <EvidenceDrawer />}
       {conditions ? null : <Timeline />}
+      {/* GE2: the Look popover (presets, scope) at the bottom centre; GE1's bar takes it over when it lands. */}
+      <LookBar />
       {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
     </Root>
   );

@@ -10,10 +10,12 @@ import { registeredStateKeys } from "@/eslint-plugins/inversa/state-key-registra
  */
 const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "MESSAGES", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
+/** The look of the globe (docs/GODS_EYE.md GC2): preset, scope mask and its feather. */
+const LOOK_KEYS = ["LOOK", "SCOPE_ON", "SCOPE_FEATHER"];
 
 describe("state catalog", () => {
-  test("holds exactly the PLAN keys plus the theme keys", () => {
-    expect(Object.keys(state).sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS].sort());
+  test("holds exactly the PLAN keys plus the theme and look keys", () => {
+    expect(Object.keys(state).sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS].sort());
   });
 
   test("every catalog entry is the key's registered default", () => {
@@ -27,7 +29,7 @@ describe("state catalog", () => {
 
   test("the lint rule reads the same registration list", () => {
     const registered = registeredStateKeys(process.cwd());
-    expect([...(registered ?? [])].sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS].sort());
+    expect([...(registered ?? [])].sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS].sort());
   });
 
   test("only ME and the theme keys persist; only the theme keys sync across tabs", () => {
@@ -48,11 +50,14 @@ describe("transport key index (PLAN.md C6)", () => {
       "CARP",
       "FEEDS",
       "LAYERS",
+      "LOOK",
       "ME",
       "MESSAGES",
       "MISSIONS",
       "NOTES",
       "PEERS",
+      "SCOPE_FEATHER",
+      "SCOPE_ON",
       "SELECTION",
       "THEME",
       "TIME",
