@@ -10,7 +10,7 @@ User: a conservation analyst deciding where to investigate next, seeing the evid
 
 ## Scope
 
-- **Species:** lionfish only (*Pterois volitans/miles*) is enabled. Species is a config unit: taxa, areas, feeds, score rules, agent prompt, eval set, copy. Python (or any other species) later becomes a second config on the same UI, one vertically integrated dashboard per species with its own helper questions, agent persona and benchmark. Python/tegu/iguana code stays but is disabled and unreachable in the lionfish build.
+- **Species:** lionfish only (*Pterois volitans/miles*) is enabled. Species is a config unit: taxa, areas, feeds, score rules, agent prompt, eval set, copy. Python is a second config on the same UI (Everglades Ops), and carp a third (Carp Field Conditions): one vertically integrated dashboard per app with its own helper questions, agent persona and benchmark. Since K1 (R14) no other species exists in the code.
 - **Four areas** (map presets; bboxes to validate against data density in the first two hours):
   1. Florida Keys / South Florida
   2. Mexican Caribbean (Quintana Roo, Banco Chinchorro)
@@ -29,10 +29,10 @@ User: a conservation analyst deciding where to investigate next, seeing the evid
 | Open-Meteo Marine | Waves, currents: fieldwork windows | Hourly modeled forecast | Exists (`openmeteo.rs`): add marine currents, 4 areas |
 | GBIF | History, and the duplicate-of-iNat case | Days to weeks lag | Exists (`gbif.rs`): dedupe against iNat so it is never counted as corroboration |
 | USGS NAS | Authoritative lionfish records | Weeks to months, **US only** | Exists (`nas.rs`): Florida only, so Mexico/Belize/Colombia show as a labeled coverage gap |
-| NDBC / CO-OPS buoys | Ground truth SST vs satellite (conflict case) | 10 min to 1 h | Exists: add Caribbean buoys where they exist |
+| NDBC buoys | Ground truth SST vs satellite (conflict case) | 10 min to 1 h | Exists: add Caribbean buoys where they exist |
 | GOES-19 SST | Satellite SST, disagrees with buoys | Minutes | Exists (`goes_*`): confirm sector covers Belize/Colombia (CONUS sector may not; full disk would) |
 
-Dropped: USGS Water, NWS alerts (US-only, no lionfish value), GOES fire/land-temperature products.
+Dropped: USGS Water, NWS alerts and NWWS (US-only, no lionfish value), CO-OPS, the Open-Meteo forecast (air, rain, wind), GOES fire, land-temperature and cloud products (LSTC, FDCC, ACMC). Done in K1 (R14).
 
 ## Honesty rules (these are graded as "data judgment")
 

@@ -2,9 +2,9 @@
 
 A full-screen command center for one question:
 
-> Where are invasive species active across South Florida right now, and where should removal crews go next?
+> Where are Burmese pythons active and where should removal crews go next?
 
-It tracks four invaders on one map, over land and sea: Burmese python, Argentine tegu, green iguana and lionfish. Ask by voice or text, follow any claim to the raw payload it came from, and scrub 30 days of hourly frames.
+One engine runs three apps, picked with the app selector: carp (river conditions in Louisiana, no species), Lionfish Watch (*Pterois volitans/miles* in four Caribbean areas) and Everglades Ops (Burmese python, *Python bivittatus*, in South Florida and the Keys). Each app tracks its own species and nothing else. This README describes Everglades Ops unless a row says carp; the app list is in [docs/APPS.md](docs/APPS.md). Ask by voice or text, follow any claim to the raw payload it came from, and scrub 30 days of hourly frames.
 
 - Target URL: https://inversa.calvinmaighan.dev. Not deployed yet; the deploy is waiting on human steps H1–H3 and H8 (see [Deploy](#deploy)).
 - Product spec: [docs/PRD.md](docs/PRD.md). Research and the reasons for this question: [docs/research.md](docs/research.md).
@@ -32,7 +32,7 @@ bun run dev       # Axum on 127.0.0.1:4041, Next on http://localhost:3050, signa
 
 Open http://localhost:3050 (http://127.0.0.1:3050 works too).
 
-- `bun run data` defaults to 7 days of iNaturalist plus a 5-year NAS and GBIF baseline. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline is about 14,500 records and dominates the run time. After the walk it asks iNaturalist for every taxon it stored (`/v1/taxa`, 30 ids per request, one request a second) and keeps each one's common name, group, a two-sentence plain summary, a photo and its iNaturalist page (`api/src/taxon_info.rs`); the running API repeats that sweep every 10 minutes for taxa the pollers add.
+- `bun run data` defaults to 7 days of iNaturalist plus a 5-year NAS and GBIF baseline, all for the Burmese python. `DAYS=30 bun run data` loads 30 days of iNaturalist, the length of the replay window. The GBIF baseline dominates the run time.
 - `INVERSA_DATA_DIR=/some/dir` moves the databases and the raw archive. Every script defaults it to `./data`, which git ignores.
 - `bun run dev` needs ports 4041, 3050 and 8799 free. The ports are fixed in `scripts/dev.ts` and `apps/web/package.json`, and a second checkout running `bun run dev` blocks them. The signal Worker runs `wrangler dev --local --env dev` from `apps/signal-worker`, the env that allows origin localhost:3050; Ctrl-C stops all three processes.
 - The running API polls the live feeds on its own. Set `INVERSA_SOURCES=off` to stop all fetching and work from what is already in the databases.
@@ -40,10 +40,10 @@ Open http://localhost:3050 (http://127.0.0.1:3050 works too).
 Offline, with no network at all, load the recorded fixtures instead of `bun run data`:
 
 ```sh
-INVERSA_SOURCES=off cargo run -q --release --manifest-path api/Cargo.toml -- backfill --fixtures
+INVERSA_SOURCES=off cargo run -q --release --manifest-path api/Cargo.toml -- backfill --fixtures --app python
 ```
 
-That loads the recorded payloads of all 10 fixture sources, including one real GOES scan, rebuilds 721 hourly frames and prints `BACKFILL-OK`. It took 2 s here.
+That loads the recorded payloads of all 10 fixture sources, including one real GOES scan, rebuilds 721 hourly frames and prints `BACKFILL-OK`. It took 2 s here. The biological fixtures are python only: 13 iNaturalist sightings (12, plus record 259939110, whose first ID of *Pantherophis* was coarsened to Serpentes before the community settled on Burmese python), 20 NAS records and 20 GBIF records, 9 of them iNaturalist mirrors linked as duplicates.
 
 ### Optional keys
 
@@ -57,7 +57,7 @@ Put keys in a `.env.local` at the repo root. Bun loads it for `bun run dev` and 
 | `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | GOES-19 push: SQS long-poll on the NODD `NewGOES19Object` topic, then LST, SST, fire and cloud cells. Setup: [deploy/aws/README.md](deploy/aws/README.md) | The `goes19` feed chip reads DOWN with the note `disabled: GOES_SQS_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY not set` |
 | `NWWS_USER`, `NWWS_PASS` | NWS products over NWWS-OI XMPP, seconds after issue | `nwws` reads DOWN. The `nws` poller on `api.weather.gov` covers alerts |
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_RAW` | Raw payloads archived to Cloudflare R2 | Raw payloads go to `<data dir>/archive/raw/<source>/<yyyy>/<mm>/<dd>/` |
-| `INGEST_HOOK_SECRET` | The HMAC webhook `POST /v1/ingest/hook/:source` | The hook answers 503 |
+| `INGEST_HOOK_SECRET` | The HMAC webhook `POST /v1/{app}/ingest/hook/{source}`, which takes the raw provider body for any poll adapter the app runs | The hook answers 503 |
 
 ### Agent
 
@@ -69,31 +69,29 @@ The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/
 
 ## UI
 
-![First load: the chat column with its welcome on the left, sightings on the globe, the species chips top left and two icon buttons top right](docs/evidence/simplify-after.png)
+![First load: the chat column with its welcome on the left, sightings on the globe, the species chip top left and two icon buttons top right](docs/evidence/simplify-after.png)
 
-The UI puts sightings first and is written for someone new to the field. On first load the globe shows only sightings: one marker per invasive animal reported in the last 7 days, each its kind's icon (snake, lizard, bird, …) in its kind's colour. A selector next to the species chips switches the window to the last 2, 7 or 30 days; most people upload sightings a few days after they see them, so 7 days shows the most. Weather stations, alerts, hotspots and temperature layers are off and sit under About, in **More data (for experts)**. An alert the agent cites still shows as a bracket.
+The UI puts sightings first and is written for someone new to the field. On first load the globe shows only sightings: one snake marker per Burmese python reported in the last 7 days, in the app's colour. Most people upload sightings a few days after they see them, so 7 days shows the most. Weather stations, alerts, hotspots and temperature layers are off and sit under About, in **More data (for experts)**. An alert the agent cites still shows as a bracket.
 
 The page has two panes. The **chat column** sits on the left: always open, full height and 420 px wide. Drag its right edge to make it anywhere from 360 to 560 px wide, and your browser keeps that width. It has two tabs:
 - **Agent**: the thread and the composer, with a mic button for voice and a send button.
 - **Notes**: the team board. Field notes first (write what you saw, pinned to a spot on the globe), then team chat and who is online, with crew missions folded away at the bottom.
 
-A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the species chips, two icon buttons, the timeline and the evidence card inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
+A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the app selector, the species chip, two icon buttons, the timeline and the evidence card inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
 
-On a first visit, a welcome above the composer says what the map is in two sentences, describes each species in one line ("Burmese python — giant constrictor eating Everglades wildlife"), and offers example questions you can click, such as "Iguana sightings near Homestead and water levels" and "Where should python crews go tonight?". Dismiss it and it stays dismissed.
+On a first visit, a welcome above the composer says what the map is in two sentences, describes the species in one line ("Burmese python: giant constrictor eating Everglades wildlife"), and offers the app's first three helper questions to click, such as "Where were pythons reported in the last 7 days?" and "Did the cold snap change python activity?". Dismiss it and it stays dismissed.
 
-Click a dot and the evidence card opens with a plain summary first, for example "Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community", the photo when there is one, and "Open at iNaturalist ↗". Every species gets the same card, not only the focus four: a brown anole's reads "Brown anole spotted near Homestead", then *Anolis sagrei* · introduced reptile, the observer's photo (or the species' photo when there is none), one About line from Wikipedia ("The brown anole (Anolis sagrei) is a lizard native to Cuba and the Bahamas…") and "More about Brown anole on iNaturalist ↗" in a new tab. The id, the normalized record, the raw payload, the source feed, links and revisions sit under a collapsed **Details for experts**. An API binary older than the app degrades instead of failing: a field it does not know is retried without, and Details for experts says to restart the API.
-
-![The species chips filtered to iguana, with the evidence card open on one sighting](docs/evidence/simplify-iguana.png)
+Click a marker and the evidence card opens with a plain summary first (what was seen, where, when and how sure), then *Python bivittatus*, a line about the species, the sighting's photo when there is one, and the species' iNaturalist page in a new tab. The id, the normalized record, the raw payload, the source feed, links and revisions sit under a collapsed **Details for experts**. An API binary older than the app degrades instead of failing: a field it does not know is retried without, and Details for experts says to restart the API.
 
 ### What the colours on the globe mean
 
-The species chips at the top left carry the sighting colours. The full legend, with a switch and a live count for every layer, is under About (ⓘ) in **More data (for experts)**. The **Layers** rows there turn the expert layers on.
+The species chip at the top left carries the sighting colour. The full legend, with a switch and a live count for every layer, is under About (ⓘ) in **More data (for experts)**. The **Layers** rows there turn the expert layers on.
 
 | Mark | Meaning |
 |---|---|
-| Icons: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python (a snake icon), Argentine tegu and green iguana (lizard icons) and red lionfish (a fish icon). Every other species draws its kind's icon in its kind's colour (snakes, lizards, turtles, crocodilians, frogs, birds, mammals, fish, snails, insects, spiders, plants, other; `docs/icons.md`), so a brown anole is the same teal lizard on the globe, in its chip, in the Other popover and in the legend; nothing is grey. Markers show the selected window (2, 7 or 30 days) and fade with age, so the newest are brightest. A red ring means the IDs conflict, and a white ring marks the selected sighting, drawn larger. |
+| Snake icons in `#e4572e` | Burmese python sightings, the app's colour from `spec/apps/python.json` (Lionfish Watch draws a fish in its own colour). A record of any other taxon is not stored or drawn. Markers show the last 7 days and fade with age, so the newest are brightest. A red ring means the IDs conflict, and a white ring marks the selected sighting, drawn larger. |
 | Squares: blue `#4fb3ff`, teal `#3fd6c6`, violet `#c89bff` | Expert layer, off by default. In-situ stations that reported in the two hours before the cursor: a USGS water gauge, an NDBC buoy, or a NOAA (CO-OPS) tide gauge. |
-| Haze from violet to yellow | Expert layer, off by default. Hotspots, on a heuristic score from low to high. The legend can pin the haze to a single species. |
+| Haze from violet to yellow | Expert layer, off by default. Python hotspots, on a heuristic score from low to high. |
 | Ramp from blue to red | Expert layers, off by default. Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). |
 | Outlined areas: red, orange, amber, teal | Expert layer, off by default. NWS alerts in effect at the cursor, coloured by severity: extreme, severe, moderate, minor. |
 | Outlined pins in a teammate's colour | Field notes: what someone on the team wrote at that spot. Hover to read the first line, click to open it. |
@@ -102,7 +100,7 @@ The species chips at the top left carry the sighting colours. The full legend, w
 | Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline's thin bottom lane, red means no satellite data, amber means cloud, and grey means no sightings for 12 h or more; hover the timeline to see which. |
 | Brackets | What the agent cited or highlighted, and the current selection. Only the selection, the hovered row and citations get a text label, 12 at most. Station readings are bracketed only when cited. |
 
-Hover a sighting to see the species first, then how sure the ID is, for example "Green iguana · research · iNat · 2 h ago" or "Brown anole · needs ID · 3 h ago". Click it to open its record. The agent knows every species too: ask "what invasive animals were seen near Homestead this week?" and it answers with the species by name and their counts (`species_counts`), and "brown anole sightings near Homestead" works like the focus species do.
+Hover a sighting to see the species first, then how sure the ID is, for example "Burmese python · research · iNat · 2 h ago". Click it to open its record. The agent answers for the Burmese python only; it refuses a question naming another app's species (lionfish) before any model call.
 
 ### Controls
 
@@ -110,22 +108,22 @@ Hover a sighting to see the species first, then how sure the ID is, for example 
 
 | Where | Control | What it does |
 |---|---|---|
-| Map | Species chips | Top left: Python, Tegu, Iguana and Lionfish pinned first (dimmed at 0), then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count, then Other. Hover a chip for a one-line description. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles & tortoises, crocodilians, frogs & toads, birds, mammals, fish, snails & slugs, insects, spiders, plants, other) with its icon, colour, count and switch, and each kind's most-seen species with their own switches; insects, spiders, plants and other are off until switched on. The globe, the legend, the timeline line and the agent's view all follow it. |
-| Map | Sightings window | Next to the chips: last 2, 7 or 30 days (7 days to start). The agent's view follows it. |
-| Map | Sighting markers | One per animal reported in the window: its kind's icon (snake, lizard, turtle, frog, bird, …) in its colour, brightest when newest, drawn as Cesium billboards from one texture atlas (one image per kind and colour, never one per marker). A white ring marks the selected one, a red ring an ID conflict. Hover for the species and the ID's grade; click to open the record. |
-| Map | Evidence card | A plain summary (what, where, when, how sure), the species' Latin name and a line about it, the photo, the species' iNaturalist page and the publisher link, with the raw record under Details for experts. |
+| Map | App selector | Top left: a round button whose popover switches between carp, Lionfish Watch and Everglades Ops. |
+| Map | Species chip | Next to the app selector: the app's one species with its icon, its colour and how many sightings are in the window. Hover for a one-line description; click to show or hide its markers. The globe, the legend, the timeline line and the agent's view follow it. |
+| Map | Sighting markers | One per python reported in the last 7 days: the snake icon in the app's colour, brightest when newest, drawn as Cesium billboards. A white ring marks the selected one, a red ring an ID conflict. Hover for the species and the ID's grade; click to open the record. |
+| Map | Evidence card | A plain summary (what, where, when, how sure), the species' Latin name and a line about it, the sighting's photo, the species' iNaturalist page and the publisher link, with the raw record under Details for experts. |
 | Map | About (ⓘ) | Top right: what this map is, how fresh its data is in plain words, Focus, Help, Data sources and More data (for experts). A small dot on it shows the worst feed's colour when a source is delayed. |
 | Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale or down), push or poll, and lag, worst first. |
 | Map | More data (for experts) | Inside About: a switch, legend and live count for every layer, plus the data-gaps key. |
 | Map | Focus | Inside About: dims the globe outside a circle around the selection. |
 | Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
 | Map | Help | Inside About: opens the help sheet. |
-| Map | Share links | The address bar always holds the camera, time, layers, species (chips and window) and selection. |
+| Map | Share links | The address bar always holds the camera, time, layers, species and selection. |
 | Timeline | Play / pause (Space) | Plays time forward at the chosen speed. |
 | Timeline | Speed | Sets playback speed in frames per second. |
 | Timeline | LIVE / REPLAY | Shows whether you are looking at now or the past; click it while replaying to jump to now. |
 | Timeline | Date jump | Loads any UTC day, including days outside the 30-day window. |
-| Timeline | Scrubber | Drag through time, or step with the arrow keys. The line is sightings (following the species chips); hatching marks gaps. |
+| Timeline | Scrubber | Drag through time, or step with the arrow keys. The line is sightings (following the species chip); hatching marks gaps. |
 | Map (carp) | Location markers | One per demonstration river location, status in shape, icon and colour (◆ ! needs review, ● ✓ no rule fired, dashed ■ ? cannot assess), freshness as a ring. Enter or click opens the briefing. |
 | Map (carp) | Review board | Every location, those needing review first, with reasons in words; camera presets All sites and Atchafalaya Basin; the boundary notice (conditions only, not carp abundance, catch, access or trip safety). |
 | Map (carp) | Location briefing | What changed, what is expected, what is missing; readings with units, datums and times; forecast issuance and source (NWPS live or IEM archive); thresholds; alerts; source pages in a new tab. |
@@ -178,7 +176,7 @@ The contracts between these parts are in [PLAN.md](PLAN.md) §C1–C16: the Grap
 
 Inversa removes invasive animals in South Florida and the Caribbean. It administers FWC's PATRIC python contractor program, where removals went from 235 in July 2024 to 748 in July 2025 (FWC, 2025-10-21). Its product Origin sells a loop of hotspot, mission, mission in progress and ROI. This app builds that loop on public data in Inversa's own geography. The hotspot half works today; the mission half waits on T21.
 
-Alternatives, all written up in [docs/research.md](docs/research.md) §4: a Caribbean lionfish dive planner (thin real-time signal outside the US), an invasive carp harvest radar for the Mississippi basin (carp are rare in iNaturalist, so the evidence is mostly indirect), and wildfire smoke (rich data, nothing to do with Inversa). The lionfish marine rules are folded into this app.
+Alternatives, all written up in [docs/research.md](docs/research.md) §4: a Caribbean lionfish dive planner (thin real-time signal outside the US), an invasive carp harvest radar for the Mississippi basin (carp are rare in iNaturalist, so the evidence is mostly indirect), and wildfire smoke (rich data, nothing to do with Inversa). Lionfish and carp later became apps of their own on the same engine ([docs/APPS.md](docs/APPS.md)).
 
 The price of this choice is that "where should crews go" invites a prediction claim. The app answers with an explainable heuristic, labels it HEURISTIC, and ships a backtest next to it.
 
@@ -188,20 +186,20 @@ Each feed answers a different part of the question.
 
 | Feed | Role | Mode |
 |---|---|---|
-| iNaturalist | where animals were seen, with photos and ID changes; every introduced species in the region (351 taxa after a week), not only the focus four, plus each taxon's name, group, summary and photo from `/v1/taxa` | poll every 2 min, at most 1 request a second |
-| USGS NAS | curated history, weeks behind | poll daily |
-| GBIF | deep history, and a mirror of iNat research-grade records | poll daily |
+| iNaturalist | where Burmese pythons were seen, with photos and ID changes | poll every 2 min, at most 1 request a second |
+| USGS NAS | curated python history in Florida (genus *Python*, Burmese python records kept), weeks behind | poll daily |
+| GBIF | deep python history (taxon key 4820533), and a mirror of iNat research-grade records | poll daily |
 | GOES-19 ABI L2 (LSTC, SSTF, FDCC, ACMC) | land and sea surface temperature, fires, cloud | push over SQS |
 | NWS | freeze, cold, heat, marine and flood alerts | NWWS-OI push, with the `api.weather.gov` poll every 60 s as fallback |
 | USGS Water | Everglades stage and water temperature | poll 15 min |
 | NDBC and CO-OPS | buoy water temperature, wind, water level | poll 10 min and 6 min |
 | Open-Meteo forecast and marine | air temperature, rain, wind, waves, 48 h forecast | poll hourly |
 
-Live, curated and lagged sources overlap on purpose. The same python can appear in iNat, then GBIF days later, then NAS weeks later, which gives the duplicate, late and conflict cases real data to work on. Not chosen: eBird (no focus species), NASA FIRMS (GOES FDCC covers fires), aisstream (vessel traffic does not answer the question).
+Live, curated and lagged sources overlap on purpose. The same python can appear in iNat, then GBIF days later, then NAS weeks later, which gives the duplicate, late and conflict cases real data to work on. Not chosen: eBird (no python), NASA FIRMS (GOES FDCC covers fires), aisstream (vessel traffic does not answer the question), Firecrawl monitors of FWC pages (no app needs them).
 
 ### Push vs poll
 
-The brief does not prescribe either. GOES-19 and NWS offer push, so the API takes it: an SQS long-poll on NOAA's SNS topic, and an XMPP client for NWWS-OI. Everything else has no push, so tokio tasks poll it under a per-source rate governor that doubles its interval on 429 or 5xx and honours `Retry-After`. A signed webhook at `/v1/ingest/hook/:source` takes anything else that can push.
+The brief does not prescribe either. GOES-19 and NWS offer push, so the API takes it: an SQS long-poll on NOAA's SNS topic, and an XMPP client for NWWS-OI. Everything else has no push, so tokio tasks poll it under a per-source rate governor that doubles its interval on 429 or 5xx and honours `Retry-After`. A signed webhook at `POST /v1/{app}/ingest/hook/{source}` takes a raw provider body for any poll adapter the app runs.
 
 Tradeoff: push needs accounts. The SQS queue is human step H4, and NWWS-OI approval can take 10 days or more (H9). Until they exist, GOES shows DOWN with a reason and the NWS poll covers alerts.
 
@@ -215,7 +213,7 @@ Alternatives: Postgres with PostGIS or TimescaleDB. They would buy concurrent wr
 
 ### EVF2 frames
 
-The timeline replays binary frames, not JSON. EVF2 packs, per hour: four species of u8 hotspot scores on a 0.02° grid (170 × 160), LST and SST as i16 centi-°C on the 0.05° GOES grid (68 × 64), and 16-byte sighting records. The layout is documented in `apps/web/shared/frames.ts`; `spec/frames/sample.evf` is the golden file both languages test against.
+The timeline replays binary frames, not JSON. EVF2 packs, per hour: one section of u8 hotspot scores per species of the app (one for python) on a 0.02° grid (170 × 160), LST and SST as i16 centi-°C on the 0.05° GOES grid (68 × 64), and 16-byte sighting records. The layout is documented in `apps/web/shared/frames.ts`; `spec/frames/sample.evf` is the golden file both languages test against.
 
 EVF1 stored f32 grids at 0.01°, about 2.6 MB per frame and 7.5 GB a month. EVF2 measured 126,278 bytes per frame raw in the T11 benchmark (`gates/leaf-T11.md` G6). GOES itself lands on 0.05° cells for the same reason: the fixture scan measures 7,232 rows per scan, 173,568 per day, under the 250k budget asserted by `goes_fixture_rows_per_scan_under_daily_budget`. Scoring still runs on the 0.01° grid, and `explainCell` answers per 0.01° cell. The frame grid shows the max of each 2 × 2 block.
 
@@ -258,13 +256,12 @@ The agent also strips any `[e:<id>]` citation whose id no tool returned in that 
 | `bun run test` | bun tests in every workspace; needs no secrets and skips `apps/web/tests/live` | web 541 pass, active-state 96, signal-worker 35, active-theme 4, all 0 fail |
 | `bun run test:live` | the agent against the real model under `doppler run --project inversa --config dev`: a real tool call, verified citations, the route's NDJSON ending in `done`, the turn, tool-call and runtime limits, the answer cache, and the voice runner | 8 pass, 0 fail |
 | `bun run test:api` | `cargo test` for the API | 225 passed, 0 failed, 3 ignored: a live call to five upstream APIs, and the release-mode frames benchmark |
-| `bun run eval` | 16 golden questions to the live model (under doppler) with tools answering from a fixture GraphQL stub; checks tools called, citation validity, citations per evidence kind and required phrases. The sixteenth asks what invasive animals were seen near Homestead this week and expects named species with counts (`species_counts`) | varies run to run: 16/16 (quality 5/5) on the T44 run; 15/15, 15/15, 14/15 and 14/15 over the four runs before it, about $0.03 a run |
+| `bun run eval` | 12 golden questions in `apps/web/eval/golden.ts` to the live model (under doppler) with tools answering from a fixture GraphQL stub; checks tools called, citation validity, citations per evidence kind and required phrases. `bun run eval -- --app <id>` runs an app's question file instead ([docs/grading/rubric.md](docs/grading/rubric.md)) | before K1 the set had 16 questions and scored 16/16 (quality 5/5) on the T44 run, about $0.03 a run; K1 removed the four about dropped species, and the 12 have not been re-run here |
 | `bun run check` | lint, typecheck, `bun run test`, `bun run test:api`; prints `CHECK-OK` | `CHECK-OK` |
 | `bun run --cwd apps/web e2e:agent`, `e2e:globe`, `e2e:scrub`, `e2e:dbworker` | Playwright against a production build; `e2e:agent` runs `next dev` with the live model under doppler | see the leaf gates below |
 | `bun run --cwd apps/web e2e:layout` | Playwright on the real stack, on free ports. It checks the chat column on the left and the globe on the right (bounding boxes), the resize and its persistence, the legend's switches against `LAYERS` and the globe's layer stats, a hover tooltip over a real station, the Missions tab and its unread dot, the help sheet, contrast in all three themes, and the phone sheet at 375 px | `gates/leaf-T40.md` G6, G18 |
-| `bun run --cwd apps/web e2e:firstload` | Playwright on the real stack at 1440×900: what a newcomer sees at load. Only sightings draw (stations, alerts and hotspots 0), the drawn count equals Axum's distinct animal sightings (`speciesCounts`) for the same 7-day window, the chrome is two icon buttons with no text, the data attribution is clickable, both popovers hand focus back on Esc, and the controls and labels on screen are counted | `gates/leaf-T41.md` G8, G9 |
-| `bun run --cwd apps/web e2e:species` | Playwright on the real stack: the species chips' counts equal the globe's per-taxon stats, Alt-click shows only iguanas (fewer than all), and a click on an iguana dot opens its evidence card with the plain summary | `gates/leaf-T41.md` G3 |
-| `bun run --cwd apps/web e2e:speciescard` | Playwright on the real stack with real data: the fixtures plus a 7-day network backfill of iNaturalist (every introduced species, taxa enriched). The bar pins the four focus chips, lists the most-seen animals with their kind's icons, ends in Other; chip counts equal the globe's per-taxon breakdown and the globe's count equals `speciesCounts` for the window with the client's own category mapping; the sightings layer reports icon billboards and no dots (`ICONS markers=billboard categories>=10 dots=0`); Other opens the categories popover (icon, count and switch per kind, species under each, a switch changes the globe); a click on the top non-focus animal's marker opens a card with its common name, Latin name, About line, photo and iNaturalist link; the window selector draws fewer at 2 days than 7. Screenshots `docs/evidence/species-other-popover.png`, `species-icons-globe.png`, `species-icons-light.png`. Needs the network; about 5 minutes | `gates/leaf-T44.md` G2, G3, G9–G12 |
+| `bun run --cwd apps/web e2e:firstload` | Playwright on the real stack at 1440×900: what a newcomer sees at load. Only sightings draw (stations, alerts and hotspots 0), the drawn count equals Axum's distinct sightings of the app's species for the same 7-day window, the chrome is two icon buttons with no text, the data attribution is clickable, both popovers hand focus back on Esc, and the controls and labels on screen are counted | `gates/leaf-T41.md` G8, G9 |
+| `bun run --cwd apps/web e2e:species` | Playwright on the real stack: the python chip's count equals the globe's sightings stats; a click on a python marker opens its evidence card with the plain summary, Latin name, About line and iNaturalist page; clicking the chip hides the pythons and clicking again brings them back. Prints `SPECIES off=0 on=<m> counts=ok drawer=1` | `gates/leaf-T41.md` G3 |
 | `bun run --cwd apps/web e2e:notes` | Two browsers on the dev stack (`next dev`, a real Axum, the signal Worker, free ports). A picks a spot on the globe and posts a field note; B sees the list entry and the pin (timed); B is offered no Edit or Delete on it; A edits, B sees the edit; A deletes, the pin goes on B; B offline, A posts, B reconnects and converges. Then the live agent answers "What have people noted near Homestead today?" from the board. Screenshots `docs/evidence/notes-*.png` | `gates/leaf-T43.md` G3, G6 |
 | `bun run --cwd apps/signal-worker e2e` | two peers against `wrangler dev --local`; prints `EXCHANGE-OK` | `gates/leaf-T20.md` G3 |
 
@@ -297,7 +294,7 @@ The runbook is [deploy/README.md](deploy/README.md): one Hetzner VM with Caddy, 
 
 From [docs/PRD.md](docs/PRD.md) §17:
 
-- **More regions or species.** A region is a bbox, a taxa list and a rule table, plus adapters for any new source. Caribbean lionfish (Belize, Colombia, Mexico) and Mississippi carp fit the same pipeline.
+- **More regions or species.** A species is one app config in `spec/apps/`: its taxon, regions (bboxes), rule table and feeds, plus adapters for any new source. Lionfish Watch (four Caribbean areas) and carp (Louisiana) already run this way.
 - **More data.** Split `observations.db` into monthly attached SQLite files, or move analytics to ClickHouse. Serve older frames as immutable R2 chunks behind a CDN. Late GBIF and NAS rows still mark old frames dirty today, so a chunk would need a rebuild-and-replace rule. GOES decoding spreads across rayon cores first, then across more consumers reading the same SQS queue.
 - **More traffic.** Axum holds no state apart from the writer, so read replicas can serve from Litestream followers while one writer ingests. Voice sessions live in one Next process's memory, so more web processes need sticky routing or a shared session store.
 - **More users per board.** Replace the mesh, capped at 8 peers, with an SFU such as Cloudflare Realtime, and move signaling to Durable Objects.

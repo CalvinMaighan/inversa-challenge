@@ -5,7 +5,7 @@ Date: 2026-09-30. Sources are listed at the end. Raw scrapes are in `.firecrawl/
 ## 1. Who Inversa is
 
 - **Business:** invasive species management. The company describes itself as "the largest diversified invasive species management company in the United States" (Florida Python Challenge sponsor page). It was founded in 2020 and is based in Miami.
-- **Model:** it removes invasive animals and turns the biomass into revenue (Inversa Leathers: python, lionfish, iguana, and "Silverfin", its invasive carp material). The economics pay for the removal.
+- **Model:** it removes invasive animals and turns the biomass into revenue (Inversa Leathers: python, lionfish and other invasive leathers, and "Silverfin", its invasive carp material). The economics pay for the removal.
 - **Programs:**
   - **Burmese python, Florida Everglades.** Inversa administers FWC's PATRIC contractor program. Removals went from 235 in July 2024 to 748 in July 2025, backed by $2M in state funding (FWC release, 2025-10-21).
   - **Lionfish, Caribbean.** Mexico (Banco Chinchorro MPA), Belize, Colombia and Florida, with NOAA, ORRAA and Conservation International. Results: 40k+ fish removed, $2.1M deployed, 267 fishers employed.
@@ -36,8 +36,8 @@ Date: 2026-09-30. Sources are listed at the end. Raw scrapes are in `.firecrawl/
 | Open-Meteo (forecast, archive, marine) | Keyless; air temp, rain, SST, wave height | Hourly | Activity and field conditions |
 | NOAA NDBC + Tides & Currents | Buoy water temp every 10 min to 1 h; water level every 6 min | Yes | Marine conditions, lionfish dive windows |
 | USGS Water Data | Everglades/South Florida gage height, stage and water temp | 15 min | Habitat (water level concentrates prey and snakes) |
-| NWS alerts | Freeze, cold, heat and flood alerts | Minutes | Official conditions (cold snaps stun iguanas and kill pythons) |
-| NASA FIRMS | Fires and prescribed burns in the Everglades | ~3 h | Optional: burns flush wildlife |
+| NWS alerts | Freeze, cold, heat and flood alerts | Minutes | Official conditions (cold snaps suppress and kill pythons) |
+| ~~NASA FIRMS~~ | ~~Fires and prescribed burns in the Everglades~~ | ~~~3 h~~ | Dropped in K1 (R14): GOES-19 FDCC covers fire for python |
 
 The mix of live, curated and lagged sources gives the brief's "stale / missing / conflicting" story naturally:
 
@@ -79,9 +79,10 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 > "Where are invasive species active across South Florida right now, and where should removal crews go next?"
 
 - **Species:**
-  - Burmese python, Argentine tegu and green iguana on land.
-  - Lionfish in Biscayne Bay and the Keys.
-  - One map region covers land and sea.
+  - Burmese python on land (Everglades Ops).
+  - Lionfish in Biscayne Bay and the Keys (Lionfish Watch, its own app).
+  - Invasive carp on the Louisiana rivers (Carp Field Conditions, conditions only, no sightings).
+  - Since K1 (R14) these three apps are the whole scope; no other species is planned.
 - **Feeds:**
   - iNaturalist (live sightings)
   - USGS NAS (curated history)
@@ -93,7 +94,7 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 - **Hero features:**
   - An explainable hotspot heatmap: sighting density × condition rules (temperature window, time of night, water level, sea state), labeled as a heuristic.
   - A "Mission" card: hotspot, conditions, evidence, then pin to the team board.
-  - Replay a cold snap and watch iguana reports and python activity respond.
+  - Replay a cold snap: the NWS cold warnings, the air temperature and the python activity term respond.
 - **Why:** it mirrors Origin's loop, uses their real programs and geography, and is dense enough for a good timeline.
 - **Risk:** "prediction" invites scrutiny. Mitigate with transparent rules plus a backtest panel (would yesterday's heatmap have caught today's sightings?).
 
@@ -128,7 +129,7 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 - **Domain:** `inversa.calvinmaighan.dev`.
 - **active-state fork:** git subtree in this repo.
 - **Low runtime budget.**
-  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.calvinmaighan.dev/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).
+  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.calvinmaighan.dev/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. ~~Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).~~ Dropped in K1 (R14): no app needs them.
   - **Runtime LLM.** A cheap model runs the tool loop, with prompt caching on system and tool definitions, a daily spend cap (God's Eye View uses $5), and answer caching keyed by question + data version. A stronger model is used only for final synthesis when needed. Current pricing and model IDs need confirming via the `claude-api` skill before building.
 
 ## 6. Decisions (2026-09-30)
@@ -150,8 +151,8 @@ The brief doesn't prescribe push or poll ingest. What exists for this domain:
 |---|---|---|---|
 | GOES-19 via NOAA NODD on AWS | SNS topic `arn:aws:sns:us-east-1:123901341784:NewGOES19Object` | LST, SST, fire and cloud mask over the Everglades, every 5–60 min | Only SQS or Lambda subscribers, so we need an AWS account (free tier) with an SQS queue and a payload filter on the key prefix. NetCDF4 decode. |
 | NWS via NWWS-OI | XMPP | Every NWS product within seconds | Account by email to `NWWS.Issue@noaa.gov`, which can take 10+ days. NWS API poll until then. |
-| aisstream.io | WebSocket | Vessel traffic | Weak fit. Skipped. |
-| Firecrawl monitors | Webhook | Web pages with no API (FWC program pages) | Stretch goal |
+| ~~aisstream.io~~ | ~~WebSocket~~ | ~~Vessel traffic~~ | Dropped in K1 (R14): vessel traffic serves no app |
+| ~~Firecrawl monitors~~ | ~~Webhook~~ | ~~Web pages with no API (FWC program pages)~~ | Dropped in K1 (R14): no app needs them |
 | iNaturalist, GBIF, USGS NAS, USGS Water, NDBC, CO-OPS, Open-Meteo | none | Core data | Polled by Axum tokio tasks under a rate governor |
 
 ## 8. Reuse from deedee and big-value (2026-09-30)
