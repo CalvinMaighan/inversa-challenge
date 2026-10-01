@@ -350,7 +350,12 @@ export const BarRow = styled.li`
   &[role="button"]:hover,
   &[role="button"]:focus-visible {
     background: color-mix(in oklab, ${({ theme }) => theme.color.accent} 14%, transparent);
-    outline: none;
+  }
+
+  /* A keyboard stop keeps a visible ring (e2e:a11y KEYBOARD found none here, GE7). */
+  &[role="button"]:focus-visible {
+    outline: 2px solid ${({ theme }) => theme.color.accent};
+    outline-offset: -2px;
   }
 `;
 

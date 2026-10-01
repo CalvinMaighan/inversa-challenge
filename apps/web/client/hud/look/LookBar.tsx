@@ -8,29 +8,21 @@ import { LOOK_PRESETS } from "client/globe/look/presets";
 import { featherOf, LOOK, lookOf, MAX_SCOPE_FEATHER, SCOPE_FEATHER, SCOPE_ON, scopeOnOf, type LookId } from "client/state/look";
 import styled from "client/styled";
 
-import { IconButton, MOBILE, Surface } from "../primitives";
+import { IconButton, Surface } from "../primitives";
 import { usePopover } from "../topbar/TopBar";
 
 /**
  * The "Look" control (docs/GODS_EYE.md GC2): one round button at the bottom centre of the globe pane, above the
- * timeline, with a popover holding the seven presets, the scope switch and the feather slider. GE1's bottom bar
- * is the mount point once it lands; until then this bar is its own small container.
+ * timeline, with a popover holding the seven presets, the scope switch and the feather slider. It sits in GE1's
+ * bottom bar (client/hud/shell/BottomBar.tsx) beside Layers; the bar places it, this wrapper anchors the popover.
  */
-const Bar = styled.div`
-  position: absolute;
-  z-index: 5;
-  left: 50%;
-  bottom: var(--hud-bottom);
-  transform: translateX(-50%);
+export const Bar = styled.div`
+  position: relative;
   display: flex;
   justify-content: center;
-
-  ${MOBILE} {
-    bottom: calc(var(--hud-bottom) - 4px);
-  }
 `;
 
-const Round = styled(Surface.withComponent("button"))`
+export const Round = styled(Surface.withComponent("button"))`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -54,7 +46,7 @@ const Round = styled(Surface.withComponent("button"))`
   }
 `;
 
-const Popover = styled.div`
+export const Popover = styled.div`
   position: absolute;
   pointer-events: auto;
   bottom: calc(100% + 8px);

@@ -154,6 +154,7 @@ export function applyAgentEvent(turn: AgentTurn, event: AgentStreamEvent, nowMs:
       };
     }
     case "view":
+    case "ui":
     case "context":
     case "debug":
       return turn;

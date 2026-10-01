@@ -19,23 +19,28 @@ import { VIEW } from "client/state/view";
 import { getFrameMeta, gqlRequest, onFrameGrid, onFrameSightings, type FrameMeta, type FrameSightings } from "client/threads/api";
 import { prefersReducedMotion } from "client/motion";
 import { activeAppId } from "client/state/app";
+import { CARP } from "client/state/carp";
 import { browserKey } from "client/keys";
 
 import { registerGlobe, type GeoPoint, type GlobeApi } from "./api";
 import { cesium } from "./cesium";
 import { posesDiffer, shouldFly, viewFromPose, type CameraPose, type ViewSyncState, type ViewValue } from "./camera";
+import { keepInView } from "./fit";
 import { frameForTime } from "./frame-index";
 import { createRenderGovernor, type GovernorDiagnostics } from "./governor";
 import { installImagery, type ImageryState } from "./imagery";
 import { GOOGLE_3D_ZONES } from "./ladder";
 import { installLook, type LookDiagnostics } from "./look/install";
 import { createLayers, type GlobeLayer, type GlobeViewer, type LayerContext, type LayerStats } from "./layers";
+import { layerClock } from "./layers/clock";
 import { MISSION_ID_PREFIX } from "./layers/missions";
 import { RASTER_PICK_PREFIX } from "./layers/types";
 import { browserQuotaStore } from "./quota";
 
 const VIEW_WRITE_DEBOUNCE_MS = 250;
 const DEFAULT_FLIGHT_S = 1.6;
+/** After a marker click: time for the sighting card to mount and slide in before the visible rect is measured. */
+const CARD_SETTLE_MS = 350;
 const BACKGROUND = "#07090d";
 /** Side of the square `pick` searches, CSS px. */
 const PICK_PX = 9;
@@ -111,11 +116,13 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   /** Meta of the published grid; meaningless without one. */
   const meta = (): FrameMeta | null => (grid ? getFrameMeta() : null);
 
+  // One cursor for every layer: TIME in a species app, CARP.asOf (live: now) in carp (client/globe/layers/clock.ts).
+  const clock = layerClock();
   const ctx: LayerContext = {
     requestRender: () => governor.request(),
     now: () => performance.now(),
-    timeMs: () => Date.parse(time().at),
-    playing: () => time().playing,
+    timeMs: clock.timeMs,
+    playing: clock.playing,
     meta,
     sightings: (i) => (frameSightings && i >= 0 && i < frameSightings.counts.length ? frameSightings.records(i) : []),
     revision: () => revision,
@@ -182,6 +189,8 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
       scheduleRefresh();
     }),
   );
+  // Carp's cursor ("what we knew", its replay) is the layers' time there, as TIME is in a species app.
+  disposers.push(subscribe(CARP, scheduleRefresh));
   disposers.push(subscribe(MISSIONS, scheduleRefresh));
   disposers.push(subscribe(SELECTION, scheduleRefresh));
   disposers.push(subscribe(PEERS, scheduleRefresh));
@@ -390,6 +399,10 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     // A marker opens its record in the evidence drawer; empty globe clears the selection.
     const evidenceId = id && parseEvidenceId(id) ? id : null;
     set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId, drawerOpen: evidenceId !== null }));
+    // The card opens at the right and may cover the marker (or the marker sat at the circle's edge): once the card
+    // is laid out, glide so the clicked place sits inside the visible circle, clear of every card (GE7).
+    const at = evidenceId ? globePoint(click.position.x, click.position.y) : null;
+    if (at) setTimeout(() => !destroyed && keepInView(at), CARD_SETTLE_MS);
   }, ScreenSpaceEventType.LEFT_CLICK);
   disposers.push(() => {
     cancelAnimationFrame(cursorFrame);

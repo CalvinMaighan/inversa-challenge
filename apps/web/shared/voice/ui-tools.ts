@@ -1,7 +1,8 @@
 /**
  * Direct UI tools Grok can call without the DeepSeek hop (PLAN.md C8). The voice relay
  * forwards validated calls to the browser as `ui.command` events; the client applies
- * them through active-state keys.
+ * them through active-state keys. The text agent gets `toggle_layer` and `set_look` too (GE7,
+ * server/agent/tools/map.ts): they reach the browser as the stream's `ui` event, validated here.
  *
  * `toggle_layer` is per app (C-A5): its `layer` enum is the app's `layers[]` and its `species`
  * enum the app's focus species, so the model is never offered a layer or species the app lacks.
@@ -9,6 +10,7 @@
 import { z } from "zod";
 
 import { appLayerIds, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
+import { LOOK_IDS, LOOK_WORDS } from "shared/look";
 
 export { LAYER_IDS };
 
@@ -47,6 +49,10 @@ function schemas(layers: readonly LayerId[], species: readonly string[]) {
     }),
     open_evidence: z.object({
       evidenceId: z.string().min(3),
+    }),
+    // GE7: the globe's look (docs/GODS_EYE.md GC2), the same seven presets as the Look popover.
+    set_look: z.object({
+      look: z.enum(LOOK_IDS).describe(LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")),
     }),
   } as const;
 }

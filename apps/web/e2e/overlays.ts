@@ -108,14 +108,11 @@ async function openWith(page: Page, origin: string, app: AppId, link: Record<str
   if (await page.locator('[data-testid="lionfish-banner-dismiss"]').count()) await page.click('[data-testid="lionfish-banner-dismiss"]');
 }
 
-/** Open About → "More data (for experts)" so the Water and weather group is on screen; close app panels so the globe shows. */
+/** Open the bottom bar's Layers popover (GE7) so the Water and weather group is on screen; close app panels so the globe shows. */
 async function openLayers(page: Page): Promise<void> {
   for (const close of await page.locator('button[aria-label="Close panel"]').all()) if (await close.isVisible()) await close.click();
   await page.waitForTimeout(400);
-  await page.click("[data-testid=status-button]");
-  await page.locator("[data-testid=status-popover]").waitFor();
-  const details = page.locator("[data-testid=expert-data]");
-  if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) await page.click("[data-testid=layers-button]");
+  if ((await page.locator("[data-testid=layers-popover]").count()) === 0) await page.click("[data-testid=layers-bar-button]");
   await page.locator("[data-testid=water-weather]").waitFor({ timeout: 10_000 });
   await page.locator("[data-testid=water-weather]").scrollIntoViewIfNeeded();
 }

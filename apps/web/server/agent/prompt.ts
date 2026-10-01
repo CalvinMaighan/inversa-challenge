@@ -1,10 +1,13 @@
 import type { AgentView } from "@/server/agent/runtime/registry";
 import { isComponentApp } from "@/server/agent/tools/lionfish";
-import { APP_IDS, appTimeZone, LAYER_IDS, type AppConfig } from "@/shared/apps";
+import { switchableLayers } from "@/server/agent/tools/map";
+import { APP_IDS, appTimeZone, hasLayer, LAYER_IDS, type AppConfig } from "@/shared/apps";
 import { SIGHTING_WINDOW_HOURS } from "@/shared/frames";
+import { LOOK_IDS, LOOK_WORDS } from "@/shared/look";
+import { OVERLAYS } from "@/shared/overlays";
 
 /** Tools named after the layer they fill. */
-const [SIGHTINGS, HOTSPOTS, , , , , , , NOTES] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, , , , , , , NOTES, VESSELS] = LAYER_IDS;
 /** The python app (pythonSections). */
 const PYTHON_APP = APP_IDS[2];
 
@@ -263,6 +266,33 @@ function workingMethod(app: AppConfig): string {
 }
 
 /**
+ * What the agent may put on this app's map (GE7): the layers `toggle_layer` switches (the config's `layers[]`), the
+ * ships (`vessels`, cited as `vessel:<mmsi>`), the water and weather pictures, and the looks of `set_look`. Only for
+ * the tools the app lists.
+ */
+function mapSection(app: AppConfig): string {
+  const tools = new Set(app.agent.tools);
+  if (!tools.has("toggle_layer") && !tools.has("set_look") && !tools.has(VESSELS)) return "";
+  const weather = OVERLAYS.filter((o) => hasLayer(app, o.id)).map((o) => `${o.id} (${app.layers.find((l) => l.id === o.id)?.label ?? o.label})`);
+  return [
+    "## The map: layers, ships and looks",
+    "- Showing things on the map is part of this app's scope: a request to see ships, rain, clouds, lightning, storms or sea temperature on the map is answered with the map tools, never refused.",
+    ...(tools.has("toggle_layer")
+      ? [
+          `- toggle_layer switches one layer of this app: ${switchableLayers(app)}. At first load only sightings and field notes are on; switch others on only when the user asks to see them (\"show me ships\" means toggle_layer ${VESSELS} on), and say in a few words that you did.`,
+          ...(weather.length ? [`- Water and weather layers (pictures from NOAA and NASA that follow the timeline, no citable records): ${weather.join(", ")}. Switching one on is the answer to "show me the rain/clouds/lightning/storms/sea temperature"; describe what it shows only in general words, never as observed facts.`] : []),
+        ]
+      : []),
+    ...(tools.has(VESSELS) && hasLayer(app, VESSELS)
+      ? [
+          "- Ships: the Ships layer (vessels) shows AIS positions from AISStream.io. For any question about ships or boats in an area, call vessels (a place or the view's box) and, when the user wants to see them, toggle_layer vessels on, both in the same turn. Cite every ship you name or count as [e:vessel:<mmsi>], exactly as the tool returned it, and give its type, last position time and speed from the row. Say that AIS covers only ships that broadcast (small boats often do not), and say plainly when the aisstream feed is down or stale. Ships are context on the map, never evidence about the species.",
+        ]
+      : []),
+    ...(tools.has("set_look") ? [`- set_look changes how the globe looks: ${LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")}. Call it only when the user asks for a look or mode ("night vision" is nvg, "thermal" is flir, "back to normal" is normal); a look changes no data.`] : []),
+  ].join("\n");
+}
+
+/**
  * The system prompt of one app (C-A5): its persona, scope and refusal from the config, then the shared evidence
  * and data-quality rules, then the species and working-method sections for the tools it has. Static per app, so
  * the provider's prompt cache holds across turns.
@@ -277,7 +307,7 @@ export function agentSystemPrompt(app: AppConfig): string {
   ].join("\n");
   // The benchmark's questions (spec/apps/questions) are never listed or matched here: the agent is measured
   // on what it does with the rules and the tools, not on being handed each question's expected answer.
-  return [head, SHARED_RULES, speciesSections(app), componentSections(app), pythonSections(app), conditionsSections(app), workingMethod(app)].filter(Boolean).join("\n\n");
+  return [head, SHARED_RULES, speciesSections(app), componentSections(app), pythonSections(app), conditionsSections(app), workingMethod(app), mapSection(app)].filter(Boolean).join("\n\n");
 }
 
 export function viewContext(view: AgentView | undefined, now: Date, app: AppConfig): string {

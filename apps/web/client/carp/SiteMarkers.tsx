@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 import { onGlobeReady } from "client/globe/api";
+import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
 import type { Site } from "./model";
@@ -13,7 +14,9 @@ const SIZE = 30;
 
 const Layer = styled.div`
   position: absolute;
-  inset: 0;
+  /* Canvas pixels: the HUD chrome this sits in starts right of the chat card (--chat-inset, GE1), the globe at 0. */
+  inset: 0 0 0 calc(-1 * var(--chat-inset, 0px));
+  ${STAGE_SCOPE_CSS}
   overflow: hidden;
   z-index: 1;
   && {

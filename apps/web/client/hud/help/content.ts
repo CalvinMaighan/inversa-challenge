@@ -4,7 +4,7 @@
  * descriptions and README's UI section: `tests/client/hud/help/content.test.ts` fails when README drifts from
  * this list. Plain data, no React, so docs tooling can import it too.
  */
-import { copyText, taxonKey, type AppConfig } from "shared/apps";
+import { copyText, hasLayer, LAYER_IDS, taxonKey, type AppConfig, type LayerId } from "shared/apps";
 import { SIGHTING_WINDOW_HOURS, windowLabel } from "shared/frames";
 /** The default window in words ("7 days"). */
 export const DEFAULT_WINDOW = windowLabel(SIGHTING_WINDOW_HOURS);
@@ -21,6 +21,8 @@ export type HelpEntry = {
   what: string;
   /** Only in apps of this kind (species: sightings, conditions: carp's river locations); absent: every app. */
   kind?: AppConfig["kind"];
+  /** Only in apps that list this layer (GE7: Ships, in carp and lionfish). */
+  layer?: LayerId;
 };
 
 export const HELP_GROUPS: readonly HelpGroup[] = ["Map", "Timeline", "Chat column"];
@@ -66,6 +68,31 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     what: "Inside About. Shows or hides each layer, explains every colour, ramp and hatch, and counts what is drawn right now.",
   },
   {
+    id: "layers-bar",
+    group: "Map",
+    control: "Layers",
+    what: "Bottom of the map, beside Look. What the map shows: the app's own markers and field notes are on at first; ships and the water and weather pictures (rain radar, clouds, lightning, storms, sea temperature) are one tap away. Each one follows the timeline.",
+  },
+  {
+    id: "ships",
+    group: "Map",
+    control: "Ships",
+    what: "Inside Layers. Ships that broadcast their position (AIS, from AISStream.io), coloured by type, moving with the timeline with a fading trail. Click one for its name, speed and course and its VesselFinder page (new tab). Small boats often do not broadcast.",
+    layer: LAYER_IDS[9],
+  },
+  {
+    id: "look",
+    group: "Map",
+    control: "Look",
+    what: "Bottom of the map. Changes how the globe looks: Normal, CRT, NVG (night vision), FLIR (thermal), Noir, Anime or Snow. The scope switch shows the map in a round window and Soft edge blurs its rim. A look changes no data.",
+  },
+  {
+    id: "developer",
+    group: "Map",
+    control: "Developer (<>)",
+    what: "Top right. Power up the globe: every API key the map can use, set or missing, what it unlocks and where to get it (new tab). A browser key you paste stays in this browser; server keys live in Doppler. No key's value is ever shown.",
+  },
+  {
     id: "focus",
     group: "Map",
     control: "Focus",
@@ -76,12 +103,6 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
     group: "Map",
     control: "Theme (◐)",
     what: "Top right. Light, dark or tactical (green on black). Your choice is remembered.",
-  },
-  {
-    id: "developer",
-    group: "Map",
-    control: "Developer (key)",
-    what: "Top right. Power up the globe: every API key the map can use, which are set, and where to get the rest. Browser keys stay in this browser.",
   },
   {
     id: "help",
@@ -204,8 +225,8 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
 ];
 
 /** The help sheet's entries for an app: the shared ones and those of its kind. */
-export function helpEntries(app: Pick<AppConfig, "kind">): HelpEntry[] {
-  return HELP_ENTRIES.filter((e) => !e.kind || e.kind === app.kind);
+export function helpEntries(app: Pick<AppConfig, "kind" | "layers">): HelpEntry[] {
+  return HELP_ENTRIES.filter((e) => (!e.kind || e.kind === app.kind) && (!e.layer || hasLayer(app as AppConfig, e.layer)));
 }
 
 /** The About popover's first line: what this app is, in one plain sentence (its config `copy.about`, else its question). */

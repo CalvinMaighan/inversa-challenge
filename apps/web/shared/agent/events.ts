@@ -25,6 +25,8 @@ export type AgentStreamEvent =
   | { type: "context"; windowTokens: number; segments: { label: string; tokens: number }[] }
   | ({ type: "view"; bbox: BBox; time: string } & CarpViewState & LionfishViewState)
   | { type: "citation"; id: string; kind: EvidenceKind; label: string }
+  /** A map control the agent used (GE7: `toggle_layer`, `set_look`), validated against shared/voice/ui-tools.ts and applied by the browser. */
+  | { type: "ui"; name: string; args: unknown }
   | { type: "done"; content: string }
   | { type: "error"; message: string }
   /** Grounding notices, e.g. an unverified citation was stripped. */
@@ -76,6 +78,7 @@ const EVENT_TYPES = new Set<AgentStreamEvent["type"]>([
   "context",
   "view",
   "citation",
+  "ui",
   "done",
   "error",
   "debug",

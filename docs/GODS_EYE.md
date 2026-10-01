@@ -52,6 +52,19 @@ Google 3D Tiles bill per root-tileset request after a free monthly allowance; ch
 - **GC6 defaults.** Novice rule holds: only sightings and notes are on at first load. Vessels and overlays are off, one tap in the Layers popover, grouped under "Water and weather" and, for carp and lionfish, "Ships". Each layer follows the timeline: scrubbing or playing the timeline moves ships and steps overlay times.
 - **GC7 external links** keep `target=_blank rel="noopener noreferrer"` via `ExternalLink`.
 
+### Contract amendments after the merge (GE7, 2026-10-01)
+
+What the five leaves built differs from the contracts above in these places; the amendments are the contract now.
+
+- **GC1 breakpoints, amended.** The stage layout starts at 768 px (`STAGE_MIN_PX`, the chat sheet's breakpoint), not 1100: from 768 px the chat and sighting cards float over the black page; below about 1100 px they overlap the circle's edges but never its centre (`CENTRE_CLEAR_PX` 48); under 768 px the phone docks (full-screen globe, chat and evidence as bottom sheets). On the stage layout a left panel (carp's "Locations to review", the lionfish survey) opens in the right card region, because the chat card owns the left (`client/hud/Panel.tsx`). There is one scope: the stage shell's CSS circle mask on `[data-stage]`, driven by `SCOPE_ON` and `SCOPE_FEATHER`; GE2's shader scope stage was removed. Camera framings (the agent, carp's sites, lionfish areas, a clicked marker the sighting card would cover) fit inside the circle's opaque disc and clear of every card (`client/globe/fit.ts` `visibleRect`, `keepInView`).
+- **GC2 look keys, amended.** The keys live in `client/state/look.ts` (not in `client/globe/look/`); the seven ids are shared with the server as `shared/look.ts` `LOOK_IDS`, so the agent's and the voice's `set_look` UI tool validates against the same list.
+- **GC3 GET shape, amended.** `GET /api/dev/keys` answers `{id, set, source, vars, writable}[]` for server keys: `source` is `external` (shell or Doppler), `local` (`data/local-keys.env`), `pending` (saved, waiting for the dev restart) or `null` (missing); `vars` lists each variable of a multi-variable key with its own `set` and `source`; `writable` says whether this request may `POST` (development on loopback only). Still never a value.
+- **GC4 vessels, amended.** The ship card's outside link is VesselFinder by MMSI (`https://www.vesselfinder.com/vessels/details/<mmsi>`, new tab); the feed id is `aisstream` (feed state, attribution "Vessel positions: AISStream.io", the agent's `vessels` tool and its citations `vessel:<mmsi>`).
+- **GC5 overlay time limits, amended.** Each overlay snaps the timeline to its source's cadence and clamps it to what the source still serves, saying so ("newest available", "oldest kept by the source"): `sst-map` daily, newest about 36 h behind, a year back; `radar` 4 min, 7 h back; `clouds` 5 min, 7 h back; `lightning` 15 min, 5 h back; `cyclones` 6 h advisories, 30 days back (`shared/overlays.ts`).
+- **GC6 timeline, amended.** `LayerContext.timeMs()` and `playing()` are the one cursor for every layer (`client/globe/layers/clock.ts`): TIME in a species app; in carp, `CARP.asOf` (now when live) and `CARP.replay`. The viewer refreshes the layers on TIME and on CARP; no layer subscribes to CARP itself.
+- **Imagery ladder.** `ImageryPlan.google3d` is an ordered route list (`["direct", "ion"]`, whichever have keys): a failed route falls to the next, then to keyless imagery (`client/globe/ladder.ts`).
+- **Agent.** The text agent has `toggle_layer` and `set_look` (the voice's UI tools, `shared/voice/ui-tools.ts`), sent to the browser as the stream's `ui` event, and, in carp and lionfish, `vessels`; `server/agent/prompt.ts` "## The map: layers, ships and looks" lists per app what it may switch.
+
 ## Leaves, ownership, gates
 
 | Leaf | Scope | Owns (only these) | Gates |

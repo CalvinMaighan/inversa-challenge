@@ -17,10 +17,13 @@
  * 2. normal → nvg while sampling both stage intensities on every animation frame: the incoming one only rises,
  *    the outgoing one only falls, they never sum above one, and the ramp takes about 500 ms.
  *    `LOOK fade ms=<n> monotonic=1`.
- * 3. The scope: with it off the pane's far edge shows imagery; on, the centre is untouched and the edge is
- *    black; the feather slider (Home = 0, End = 100) widens the soft edge, measured as the pixels along rays
- *    from the centre whose brightness lies between the unmasked value and black.
- *    `SCOPE on=1 off=1 feather0_edge=<px> feather60_edge=<px>`, screenshots look-scope-*.png.
+ * 3. The scope, measured on the page as the user sees it (GE7: one scope, the stage shell's CSS circle on
+ *    `[data-stage]`): with it off the far edge shows imagery; on, the centre is untouched and the edge is black;
+ *    the feather slider (Home = 0, End = 100) widens the soft edge, measured as the pixels along rays from the
+ *    stage centre whose brightness lies between the unmasked value and black. The circle's edge lies as far
+ *    from the stage centre to the right as upwards (within 3 px) and at the stage's radius: it is centred on
+ *    `[data-stage]`. `SCOPE on=1 off=1 feather0_edge=<px> feather60_edge=<px> centred=1 radius=<px>`, screenshots
+ *    look-scope-*.png.
  * 4. Keyboard: the arrow keys move between preset buttons, Enter picks one, Escape closes the popover and
  *    hands focus back to the Look button. `LOOK keyboard=ok`.
  * 5. The share link carries `look`, `scope` and `feather`, and reopening it restores them. `LOOK link=ok`.
@@ -71,11 +74,14 @@ type LookState = {
 
 const lookState = (page: Page) => page.evaluate(() => window.__look!.state() as unknown as LookState);
 
-const paneRect = (page: Page): Promise<Rect> =>
-  page.evaluate(() => {
-    const r = document.querySelector('[data-slot="globe-pane"]')!.getBoundingClientRect();
+const rectOf = (page: Page, selector: string): Promise<Rect> =>
+  page.evaluate((sel) => {
+    const r = document.querySelector(sel)!.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
-  });
+  }, selector);
+const paneRect = (page: Page) => rectOf(page, '[data-slot="globe-pane"]');
+/** The stage circle (GE1's `[data-stage]`): the scope is centred on it. */
+const stageRect = (page: Page) => rectOf(page, "[data-stage]");
 
 async function openPopover(page: Page): Promise<void> {
   if ((await page.locator(POPOVER).count()) > 0) return;
@@ -104,12 +110,12 @@ type Analysis = { centre: { bright: number; total: number; mean: [number, number
 
 /**
  * Decode a screenshot inside the page and sample it: the share of bright pixels and the mean colour of the
- * centre square, and the brightest channel of every pixel along each ray from the centre to the pane's edge
- * (right, left, up: down would cross the Look popover).
+ * centre square, and the brightest channel of every pixel along each ray from the stage centre to the pane's
+ * edge (right, left, up: down would cross the Look popover).
  */
-async function analyze(page: Page, png: Buffer, pane: Rect, centreHalf: number): Promise<Analysis> {
+async function analyze(page: Page, png: Buffer, pane: Rect, centreHalf: number, stage: Rect): Promise<Analysis> {
   return page.evaluate(
-    async ({ b64, pane, centreHalf }) => {
+    async ({ b64, pane, centreHalf, stage }) => {
       const img = new Image();
       img.src = `data:image/png;base64,${b64}`;
       await img.decode();
@@ -123,8 +129,8 @@ async function analyze(page: Page, png: Buffer, pane: Rect, centreHalf: number):
         const i = (Math.round(y) * c.width + Math.round(x)) * 4;
         return [data[i]!, data[i + 1]!, data[i + 2]!] as [number, number, number];
       };
-      const cx = pane.x + pane.width / 2;
-      const cy = pane.y + pane.height / 2;
+      const cx = stage.x + stage.width / 2;
+      const cy = stage.y + stage.height / 2;
       let bright = 0;
       let total = 0;
       const sum = [0, 0, 0];
@@ -145,7 +151,7 @@ async function analyze(page: Page, png: Buffer, pane: Rect, centreHalf: number):
       };
       return { centre: { bright, total, mean: sum.map((v) => v / total) as [number, number, number] }, rays: [ray(1, 0), ray(-1, 0), ray(0, -1)] };
     },
-    { b64: png.toString("base64"), pane, centreHalf },
+    { b64: png.toString("base64"), pane, centreHalf, stage },
   );
 }
 
@@ -159,6 +165,15 @@ function edgeWidth(on: number[], off: number[]): number {
     if (ratio > 0.08 && ratio < 0.92) n += 1;
   }
   return n;
+}
+
+/** Distance from the centre to the first pixel along a ray that is darker than half its unmasked value. */
+function edgeAt(on: number[], off: number[]): number {
+  for (let i = 0; i < Math.min(on.length, off.length); i++) {
+    const o = off[i]!;
+    if (o >= 24 && on[i]! / o < 0.5) return i;
+  }
+  return -1;
 }
 
 const median = (xs: number[]) => {
@@ -186,6 +201,8 @@ async function main() {
     // Imagery tiles and the markers settle.
     await page.waitForTimeout(6_000);
     const pane = await paneRect(page);
+    const stage = await stageRect(page);
+    if (stage.width < 100) fail(`no stage circle at 1280 px: ${JSON.stringify(stage)}`);
     const drawn = await page.evaluate(() => window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.count ?? 0);
     const renderer = await page.evaluate(() => {
       const gl = document.createElement("canvas").getContext("webgl2");
@@ -205,7 +222,7 @@ async function main() {
       await closePopover(page);
       await page.waitForTimeout(150);
       const png = await page.screenshot({ path: path.join(SHOT_DIR, `look-${id}.png`) });
-      const a = await analyze(page, png, pane, 150);
+      const a = await analyze(page, png, pane, 150, stage);
       const share = a.centre.bright / a.centre.total;
       const diff = normalMean ? a.centre.mean.reduce((acc, v, i) => acc + Math.abs(v - normalMean![i]!), 0) / 3 : 0;
       const ok = share >= 0.25 && (id === "normal" || diff >= 2);
@@ -269,7 +286,7 @@ async function main() {
     };
     const scopeShot = async (name: string) => {
       const png = await page.screenshot({ path: path.join(SHOT_DIR, `look-scope-${name}.png`) });
-      return analyze(page, png, pane, 60);
+      return analyze(page, png, pane, 60, stage);
     };
     await page.locator(SWITCH).click();
     await page.waitForFunction(() => !window.__look!.state().scope.on, undefined, { timeout: 10_000 });
@@ -288,11 +305,17 @@ async function main() {
     const centreOn = f0.rays[0]![0]!;
     const scopeOn = Math.abs(centreOn - centreOff) <= 8 && edgeOn <= 6 && edgeOff >= 24;
     const scopeOff = edgeOff >= 24 && off.centre.bright / off.centre.total >= 0.25;
-    const e0 = Math.max(...f0.rays.map((r, i) => edgeWidth(r, off.rays[i]!)));
-    const e60 = Math.max(...f60.rays.map((r, i) => edgeWidth(r, off.rays[i]!)));
-    log(`scope: centre off ${centreOff} on ${centreOn}; edge off ${edgeOff} on ${edgeOn}; radius ${Math.round(Math.min(pane.width, pane.height) / 2)} px`);
-    console.log(`SCOPE on=${scopeOn ? 1 : 0} off=${scopeOff ? 1 : 0} feather0_edge=${e0} feather60_edge=${e60}`);
-    if (!scopeOn || !scopeOff || e60 <= e0 || e0 > 4) failed = true;
+    // The right and upward rays only: the left one runs under the chat card, whose glass shows the mask through it.
+    const clear = [0, 2];
+    const e0 = Math.max(...clear.map((i) => edgeWidth(f0.rays[i]!, off.rays[i]!)));
+    const e60 = Math.max(...clear.map((i) => edgeWidth(f60.rays[i]!, off.rays[i]!)));
+    // Centred on [data-stage]: the hard edge (feather 0) as far to the right as upwards, at the stage's radius.
+    const radius = stage.width / 2;
+    const [edgeRight, edgeUp] = clear.map((i) => edgeAt(f0.rays[i]!, off.rays[i]!));
+    const centred = edgeRight > 0 && edgeUp > 0 && Math.abs(edgeRight - edgeUp) <= 3 && Math.abs(edgeRight - radius) <= 3;
+    log(`scope: centre off ${centreOff} on ${centreOn}; edge off ${edgeOff} on ${edgeOn}; stage ${JSON.stringify(stage)} radius ${radius} px, edge right ${edgeRight} up ${edgeUp}`);
+    console.log(`SCOPE on=${scopeOn ? 1 : 0} off=${scopeOff ? 1 : 0} feather0_edge=${e0} feather60_edge=${e60} centred=${centred ? 1 : 0} radius=${Math.round(radius)}`);
+    if (!scopeOn || !scopeOff || e60 <= e0 || e0 > 4 || !centred) failed = true;
     await setFeather(11);
 
     // ---- 4. keyboard --------------------------------------------------------------------------------------

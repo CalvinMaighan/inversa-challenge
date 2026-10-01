@@ -399,3 +399,22 @@ Wave 0: C1 (carp proof, running), F1 (ingest modes), Q1 (questions), A0 (this co
 - DRIVER pooled live evals on merged tree before BUG1 (judge gemini-3.8-flash; stubs still on old lionfish taxon id): carp golden 204/207 (98pct) met=yes, holdout 83/84; lionfish golden 193/195 (98pct) met=yes, holdout 77/80 (96pct); python golden 199/201 (99pct) met=yes, holdout 69/72 (95pct); ungrounded 0 everywhere, boundary 100pct per run. Outlier: ph-lookup-week took 101.9 s (one slow answer). Lionfish numbers must be re-measured after BUG1 (taxon id fix changes real tool results).
 - BUG1 merged 6/6 (driver re-ran api 366, web 1031, typecheck, lint, clippy on merged tree). Fixed: taxa dbId (lionfish 4/python 1) in config Rust+TS, agent filter, globe; carp scrub requests=0; carp markers use API reviewBoard (agree 8/8); answer cache on globalThis + perf same-view repeat; early tool_start for first token (carp 852, lionfish 840, python 1161 ms); lionfish heat label overlap; reasoning markdown; cold-snap scene re-recorded (0 python obs 30 Jan-3 Feb, 2 on 6 Feb). BUG1's own pooled runs: lionfish 188/195 (96pct, planning 88pct), python 192/201 (95pct, ungrounded 1) -> driver re-measuring.
 - STOP LIVE RUNS: the driver's post-BUG1 pooled batch (driver2 logs) is INVALID: from 2026-10-01T19:10Z OpenRouter returned 402 ("requires more credits ... can only afford 13829 tokens") to agent and judge calls, so lionfish/python/carp pooled numbers in that batch (e.g. lionfish 107/195, carp 0/207) measure the outage, not the agent. Key state at 20:00Z: limit 450, usage 399.48, daily usage 93.03 (real spend; the harness cost<= figures understated it). Do not run further live evals/e2e that call the model until credits reset. Valid post-merge numbers are the PRE-BUG1 driver batch (carp 204/207, lionfish 193/195 on the old taxon-id stub, python 199/201) plus BUG1/FX leaves' own reports. Needs re-run tomorrow: lionfish and python golden --runs 3 and holdout --runs 2; carp holdout; e2e:evidence, e2e:agent, e2e:perf, e2e:dm/notes with live model.
+
+## God's Eye View upgrade (GE1-GE7, 2026-10-01)
+
+Spec and contracts GC1-GC7: [docs/GODS_EYE.md](docs/GODS_EYE.md). Leaves: GE1 layout, GE2 looks and scope, GE3 keys panel with Google 3D direct and the media cache, GE4 vessels, GE5 water and weather overlays, GE6 place search (in flight), GE7 integration (gates/leaf-GE7.md).
+
+### Contract amendments (GE7)
+
+- **GC1 breakpoints:** cards float from 768 px (`STAGE_MIN_PX`), overlap the circle's edges below about 1100 px (never its centre), phones dock below 768 px. Left panels (carp board, lionfish survey) open in the right card region on the stage layout. One scope: the stage shell's CSS circle (`SCOPE_ON`, `SCOPE_FEATHER`); GE2's shader scope stage is gone. Framings fit inside the circle's opaque disc and clear of the cards (`client/globe/fit.ts`).
+- **GC2 look keys** live in `client/state/look.ts`; the ids are `shared/look.ts` `LOOK_IDS`, shared with the `set_look` UI tool.
+- **GC3 GET shape:** `GET /api/dev/keys` answers `{id, set, source, vars, writable}[]`, never a value.
+- **GC4 vessels:** VesselFinder link by MMSI (new tab); feed id `aisstream`; evidence `vessel:<mmsi>`; the agent's `vessels` tool (carp, lionfish).
+- **GC5 overlay time limits:** snapped to each source's cadence and clamped to what it serves (sst-map daily, about 36 h behind, 365 days; radar 4 min, 7 h; clouds 5 min, 7 h; lightning 15 min, 5 h; cyclones 6 h, 30 days), saying "newest available" or "oldest kept by the source".
+- **GC6 one cursor:** `LayerContext.timeMs()`/`playing()` come from `client/globe/layers/clock.ts` (TIME, or carp's `CARP.asOf`/`replay`); the viewer refreshes the layers on TIME and CARP.
+- **Imagery ladder:** `ImageryPlan.google3d` is an ordered route list (`direct`, then `ion`).
+- **Agent (C7 addendum):** `toggle_layer` and `set_look` reach the browser as the stream's `ui` event; `server/agent/prompt.ts` has a per-app map section.
+
+### Status log (God's Eye)
+
+- GE1-GE5 merged at 5423826 (each leaf's own ledger in gates/leaf-GE1..GE5.md).

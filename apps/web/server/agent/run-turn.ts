@@ -49,6 +49,7 @@ const REPLAYED = new Set<AgentStreamEvent["type"]>([
   "tool_start",
   "tool_end",
   "view",
+  "ui",
   "citation",
   "content_delta",
   "debug",

@@ -3,6 +3,7 @@ import { get, set } from "@calvinjs/active-state";
 import { SELECTION, TIME, VIEW, VOICE } from "client/state";
 import { activeApp } from "client/state/app";
 import { setLayerVisible, setSpeciesVisible } from "client/state/layers";
+import { LOOK, type LookId } from "client/state/look";
 import { parseEvidenceId, type SelectionState } from "client/state/selection";
 import { clampToWindow, TIME_STEP_MINUTES, TIME_WINDOW_DAYS, timeWindow, windowFor, type TimeState } from "client/state/time";
 import type { ViewState } from "client/state/view";
@@ -13,8 +14,8 @@ import { resolvePlace } from "./gazetteer";
 import { bboxAround } from "./hud-state";
 
 /**
- * Applies a `ui.command` voice event to the catalog keys the globe and HUD read (VIEW, TIME,
- * LAYERS, SELECTION). The relay already validated it; the client validates again because the
+ * Applies a `ui.command` voice event (or the text agent's `ui` stream event) to the catalog keys the globe
+ * and HUD read (VIEW, TIME, LAYERS, SELECTION, LOOK). The relay already validated it; the client validates again because the
  * event crossed the network. Returns false when the command was not applied.
  */
 
@@ -117,13 +118,23 @@ function apply(command: UiCommand, nowMs: number): boolean {
       if (!parseEvidenceId(command.args.evidenceId)) return false;
       set<SelectionState>(SELECTION, { evidenceId: command.args.evidenceId, drawerOpen: true });
       return true;
+    case "set_look":
+      set<LookId>(LOOK, command.args.look);
+      return true;
   }
 }
 
-export function applyUiCommand(event: { name: string; args: unknown }, nowMs = Date.now()): boolean {
+/**
+ * Validate and apply one UI command against the active app, from the voice relay or the text agent's `ui` stream
+ * event (GE7). Returns the command applied, or null.
+ */
+export function applyUiEvent(event: { name: string; args: unknown }, nowMs = Date.now()): UiCommand | null {
   const command = parseUiCommand(event.name, event.args, activeApp());
-  if (!command) return false;
-  const applied = apply(command, nowMs);
-  if (applied) set<VoiceState>(VOICE, (prev = VOICE.defaults) => ({ ...prev, lastCommand: command.name }));
-  return applied;
+  return command && apply(command, nowMs) ? command : null;
+}
+
+export function applyUiCommand(event: { name: string; args: unknown }, nowMs = Date.now()): boolean {
+  const command = applyUiEvent(event, nowMs);
+  if (command) set<VoiceState>(VOICE, (prev = VOICE.defaults) => ({ ...prev, lastCommand: command.name }));
+  return command !== null;
 }

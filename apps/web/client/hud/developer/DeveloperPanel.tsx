@@ -211,8 +211,9 @@ const Foot = styled.footer`
     padding: 8px 14px;
     border: 1px solid var(--accent);
     border-radius: var(--radius-s);
-    background: var(--accent);
-    color: var(--bg);
+    background: color-mix(in oklch, var(--accent) 22%, var(--surface));
+    /* Accent-tinted with the theme's text colour: white on the accent read 4.24:1 and --bg 4.03:1 at 11 px (axe, GE7). */
+    color: var(--text);
     font: 700 11px / 1 var(--font-mono);
     letter-spacing: 0.08em;
     cursor: pointer;

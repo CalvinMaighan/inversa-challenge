@@ -12,7 +12,6 @@ import { cycloneBucket, cycloneKind, cyclonePositionAt, cyclonesUrl, CYCLONES, o
 
 import { cesium } from "../../cesium";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "../types";
-import { onCarpCursor, overlayCursorMs } from "./cursor";
 
 const REFRESH_MS = 5 * 60_000;
 export const CYCLONE_ID_PREFIX = "cyclone:";
@@ -40,7 +39,6 @@ export function createCyclonesLayer(ctx: LayerContext, load: (url: string, signa
   let timer: ReturnType<typeof setTimeout> | null = null;
   let drawnKey = "";
   let lastFrame = -1;
-  let offCursor: (() => void) | null = null;
   const stats: LayerStats = { id: CYCLONES, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
 
   const stopFetching = () => {
@@ -93,7 +91,7 @@ export function createCyclonesLayer(ctx: LayerContext, load: (url: string, signa
 
   const draw = () => {
     if (!viewer || !enabled || !lines || !points || !labels) return;
-    const atMs = overlayCursorMs(ctx);
+    const atMs = ctx.timeMs();
     const key = `${fetchedFor}|${storms.map((s) => `${s.id}:${s.advisory.number}`).join(",")}|${atMs}`;
     if (key === drawnKey) return;
     const C = cesium();
@@ -166,10 +164,6 @@ export function createCyclonesLayer(ctx: LayerContext, load: (url: string, signa
       lines = v.scene.primitives.add(new C.PolylineCollection());
       points = v.scene.primitives.add(new C.PointPrimitiveCollection());
       labels = v.scene.primitives.add(new C.LabelCollection());
-      // Carp's "what we knew" cursor is not TIME: the centres follow it too.
-      offCursor = onCarpCursor(() => {
-        if (enabled) draw();
-      });
     },
     enable() {
       enabled = stats.enabled = true;
@@ -207,8 +201,6 @@ export function createCyclonesLayer(ctx: LayerContext, load: (url: string, signa
     stats: () => ({ ...stats }),
     destroy() {
       stopFetching();
-      offCursor?.();
-      offCursor = null;
       setCredit(false);
       if (viewer) {
         clearPrimitives();

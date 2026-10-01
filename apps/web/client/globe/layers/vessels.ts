@@ -6,17 +6,15 @@
  * layer tweens from the last drawn time to the new one on animation frames, so ships glide instead of jumping a
  * whole step.
  *
- * Time: a species app follows TIME (the viewer calls `update` on every change); a conditions app (carp) follows
- * its "what we knew" time (CARP.asOf, live when absent) and its replay, which the layer subscribes to itself,
- * plus a 30 s tick for the live edge. Every primitive carries `vessel:<mmsi>`, so a click opens the vessel card.
+ * Time: `LayerContext.timeMs()` and `playing()` (client/globe/layers/clock.ts): TIME in a species app, carp's "what
+ * we knew" time (CARP.asOf, live when absent) and its replay in a conditions app; the viewer calls `update` when
+ * either moves. A 30 s tick keeps the live edge moving. Every primitive carries `vessel:<mmsi>`, so a click opens the vessel card.
  * Only apps that list the layer (carp, lionfish) fetch anything; it starts off (C-A3 `defaultOn: false`). While
  * it is on, the globe's credit line shows "Vessel positions: AISStream.io".
  */
-import { subscribe } from "@calvinjs/active-state";
 import type { Billboard, BillboardCollection, Material, Polyline, PolylineCollection } from "cesium";
 
 import { activeApp } from "client/state/app";
-import { CARP, carpState } from "client/state/carp";
 import { appBBox, hasLayer, LAYER_IDS } from "shared/apps";
 import {
   parseTracks,
@@ -70,16 +68,6 @@ export function vesselBucket(t: number): number {
 /** The window one bucket's fetch asks for: the trail and a tween step before it, up to its end (capped at now). */
 export function vesselWindow(bucketMs: number, nowMs: number): { from: number; to: number } {
   return { from: bucketMs - LEAD_MS, to: Math.min(bucketMs + VESSEL_BUCKET_MS, Math.max(nowMs, bucketMs)) };
-}
-
-/** The time ships are drawn at: TIME in a species app; CARP.asOf (live: now) in a conditions app. */
-export function vesselTargetTime(ctx: Pick<LayerContext, "timeMs">, nowMs: number): number {
-  if (activeApp().kind === "conditions") return carpState().asOf ?? nowMs;
-  return ctx.timeMs();
-}
-
-export function vesselPlaying(ctx: Pick<LayerContext, "playing">): boolean {
-  return activeApp().kind === "conditions" ? carpState().replay === true : ctx.playing();
 }
 
 /** Split a trail (oldest first) into its three age thirds; each run shares its end point with the next. */
@@ -137,7 +125,6 @@ export function createVesselsLayer(ctx: LayerContext): GlobeLayer {
   const icons = new Map<string, HTMLCanvasElement>();
   const materials = new Map<string, Material>();
   let credit: unknown = null;
-  let unsubscribe: (() => void) | null = null;
   let tick: ReturnType<typeof setInterval> | null = null;
   /** Time the ships are drawn at, and the tween toward the newest target. */
   let shownAt = Number.NaN;
@@ -296,7 +283,7 @@ export function createVesselsLayer(ctx: LayerContext): GlobeLayer {
       return;
     }
     const now = Date.now();
-    const next = vesselTargetTime(ctx, now);
+    const next = ctx.timeMs();
     const changed = next !== target;
     const since = wall() - targetSetAt;
     if (changed) {
@@ -310,7 +297,7 @@ export function createVesselsLayer(ctx: LayerContext): GlobeLayer {
       if (!tween) draw(Number.isFinite(shownAt) ? shownAt : target);
       return;
     }
-    const canTween = vesselPlaying(ctx) && Number.isFinite(shownAt) && Math.abs(target - shownAt) <= MAX_TWEEN_SPAN_MS && typeof requestAnimationFrame === "function";
+    const canTween = ctx.playing() && Number.isFinite(shownAt) && Math.abs(target - shownAt) <= MAX_TWEEN_SPAN_MS && typeof requestAnimationFrame === "function";
     if (canTween) {
       tween = { from: shownAt, to: target, start: wall(), ms: Math.min(MAX_TWEEN_MS, Math.max(MIN_TWEEN_MS, since)) };
       if (!raf) raf = requestAnimationFrame(step);
@@ -340,7 +327,6 @@ export function createVesselsLayer(ctx: LayerContext): GlobeLayer {
         credit = new (cesium().Credit)(VESSEL_CREDIT, true);
         cd.addStaticCredit(credit);
       }
-      unsubscribe = subscribe(CARP, refresh);
       tick = setInterval(refresh, TICK_MS);
       target = Number.NaN;
       refresh();
@@ -348,8 +334,6 @@ export function createVesselsLayer(ctx: LayerContext): GlobeLayer {
     disable() {
       enabled = stats.enabled = false;
       fetcher.cancel();
-      unsubscribe?.();
-      unsubscribe = null;
       if (tick) clearInterval(tick);
       tick = null;
       if (raf && typeof cancelAnimationFrame === "function") cancelAnimationFrame(raf);

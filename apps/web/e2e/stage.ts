@@ -22,12 +22,28 @@
  *
  * Screenshots: docs/evidence/stage-1440.png (nothing selected), stage-1440-selected.png, stage-1024.png,
  * stage-375.png.
+ *
+ * GE7 (gates/leaf-GE7.md), on the same stack with every app's fixtures, at 1440×900 and 1024×768:
+ *   FRAMING: framed targets land inside the stage circle and under no card or bar: the real agent's `set_view`
+ *     (one turn through the chat card, OpenRouter via Doppler; 1440 only), a python marker clicked off centre (at
+ *     1024 the sighting card opens over it and the camera glides it back into view), carp's first view of its
+ *     eight sites and a lionfish area chosen in the survey panel. Each target's points are projected with the
+ *     globe's own `project` (read only). `FRAMING inside=<n> outside=<m>`.
+ *   PANELS: carp's "Locations to review" and the lionfish survey panel sit in the right card region, clear of the
+ *     circle's centre (the centre point hits the globe). `PANELS carp=ok lionfish=ok`.
+ *   LAYERSBAR: the bottom bar's Layers button opens its popover in each app; it lists the switches, a Ships group
+ *     in carp and lionfish only, Water and weather everywhere, only sightings and notes on at first load, and the
+ *     keyboard walk (Enter opens with focus inside, Tab reaches a switch, Esc closes back onto the button).
+ *     `LAYERSBAR items=<python's switches> ships=carp,lionfish water=all defaults=ok`.
  */
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { sitesOf } from "../client/carp/model";
+import { getApp, type AppId } from "../shared/apps";
+import { ask, tapAgentStreams, type Tapped } from "./agent-ui";
 import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
 
 const SHOT_DIR = path.join(REPO_DIR, "docs/evidence");
@@ -64,6 +80,7 @@ function watch(page: Page, errors: string[], name: string): Page {
 async function open(browser: Browser, origin: string, viewport: { width: number; height: number }, errors: string[], name: string): Promise<Page> {
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1, ...(viewport.width < 768 ? { hasTouch: true } : {}) });
   await context.clock.install({ time: new Date(FIXTURE_CLOCK) });
+  await context.addInitScript(tapAgentStreams);
   const page = watch(await context.newPage(), errors, name);
   await page.goto(`${origin}/${LINK}`, { waitUntil: "load" });
   await page.locator("[data-chat-column]").waitFor({ timeout: LOAD_TIMEOUT_MS });
@@ -124,6 +141,216 @@ async function clickPython(page: Page, list: Python[]): Promise<{ id: string; x:
 /** The element at the stage centre belongs to the globe (no card or bar covers it). */
 async function centreIsGlobe(page: Page, stage: Box): Promise<boolean> {
   return page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest("[data-globe]"), [centreX(stage), stage.y + stage.height / 2] as const);
+}
+
+// ---- GE7: framing, panels, layers bar ----------------------------------------------------------------------------
+
+const M_PER_DEG = 111_320;
+const AGENT_TIMEOUT_MS = 150_000;
+/** A question whose answer flies the map (geocode, set_view) and nothing else to read. */
+const AGENT_FLY_QUESTION = "Fly the map to Flamingo in Everglades National Park.";
+type LatLon = { lat: number; lon: number };
+/** Framed targets so far, over both viewports. */
+const framing = { inside: 0, outside: 0 };
+/** The Layers popover per app, at 1440. */
+const layersByApp: Partial<Record<AppId, LayersBarCheck>> = {};
+
+/** Wait for the camera to come to rest: VIEW unchanged over three reads 400 ms apart, after the longest flight. */
+async function settle(page: Page): Promise<void> {
+  await page.waitForTimeout(1_800);
+  let last = "";
+  let same = 0;
+  for (let i = 0; i < 40 && same < 3; i++) {
+    const v = JSON.stringify(await page.evaluate(() => {
+      const view = window.__inversa?.state("VIEW") as { lat: number; lon: number; altitudeM: number } | undefined;
+      return view ? [view.lat.toFixed(5), view.lon.toFixed(5), Math.round(view.altitudeM)] : null;
+    }));
+    same = v === last ? same + 1 : 0;
+    last = v;
+    await page.waitForTimeout(400);
+  }
+}
+
+/**
+ * One framed target: every point projected by the globe lies inside the stage circle and under none of the HUD's
+ * surfaces (cards, bars, buttons, the chat card). Counted once per target in `framing`.
+ */
+async function framed(page: Page, name: string, points: readonly LatLon[]): Promise<boolean> {
+  const result = await page.evaluate(
+    (pts) => {
+      const s = document.querySelector("[data-stage]")!.getBoundingClientRect();
+      const cx = s.left + s.width / 2;
+      const cy = s.top + s.height / 2;
+      const r = s.width / 2;
+      const covers = [...document.querySelectorAll("[data-hud-obstacle], [data-chat-column], [data-testid='hud-topbar'] button, [data-testid='hud-drawer']")]
+        .map((el) => el.getBoundingClientRect())
+        .filter((b) => b.width > 0 && b.height > 0);
+      return pts.map((p) => {
+        const at = window.__inversa!.project(p.lon, p.lat);
+        if (!at) return { ok: false, why: "off screen", at: null };
+        const d = Math.hypot(at.x - cx, at.y - cy);
+        const under = covers.find((b) => at.x >= b.left && at.x <= b.right && at.y >= b.top && at.y <= b.bottom);
+        return { ok: d <= r && !under, why: d > r ? `outside the circle (${Math.round(d)} > ${Math.round(r)} px)` : under ? `under a surface at ${Math.round(under.left)},${Math.round(under.top)}` : "", at: { x: Math.round(at.x), y: Math.round(at.y), d: Math.round(d), r: Math.round(r) } };
+      });
+    },
+    points.map((p) => ({ lat: p.lat, lon: p.lon })),
+  );
+  const ok = result.every((p) => p.ok);
+  if (ok) framing.inside += 1;
+  else framing.outside += 1;
+  log(`framing ${name}: ${ok ? "inside" : "OUTSIDE"} ${result.map((p) => (p.at ? `(${p.at.x},${p.at.y} d=${p.at.d}/${p.at.r})${p.ok ? "" : ` ${p.why}`}` : p.why)).join(" ")}`);
+  return ok;
+}
+
+const corners = (b: { west: number; south: number; east: number; north: number }): LatLon[] => [
+  { lat: b.south, lon: b.west },
+  { lat: b.south, lon: b.east },
+  { lat: b.north, lon: b.west },
+  { lat: b.north, lon: b.east },
+];
+
+/** The real agent flies the map (set_view): its view event's box, or its highlighted results, land in the circle. */
+async function agentFraming(page: Page): Promise<void> {
+  const before = await page.evaluate(() => (window as unknown as { __agentStreams: Tapped[] }).__agentStreams.length);
+  await ask(page, AGENT_FLY_QUESTION, AGENT_TIMEOUT_MS);
+  const events = await page.evaluate((n) => (window as unknown as { __agentStreams: Tapped[] }).__agentStreams[n]?.events ?? [], before);
+  const tools = events.filter((e) => e.type === "tool_start").map((e) => String(e.capabilityName));
+  const view = events.filter((e) => e.type === "view").at(-1) as { bbox?: { west: number; south: number; east: number; north: number } } | undefined;
+  log(`agent: "${AGENT_FLY_QUESTION}" tools ${tools.join(", ")}; view ${JSON.stringify(view?.bbox ?? null)}`);
+  await settle(page);
+  if (!view?.bbox) {
+    framing.outside += 1;
+    log("framing agent set_view: OUTSIDE (no view event: set_view was not called)");
+    return;
+  }
+  // A turn with result panels ends framing its primary result and highlights (showTurn); otherwise the view's box.
+  const highlight = (await page.evaluate(() => (window.__inversa?.state("AGENT_HIGHLIGHT") as { targets?: { lat?: number; lon?: number }[] } | undefined)?.targets ?? [])).filter((t): t is LatLon => typeof t.lat === "number" && typeof t.lon === "number");
+  const b = view.bbox;
+  await framed(page, `agent set_view ${highlight.length ? `(${highlight.length} highlighted results)` : "(its box)"}`, highlight.length ? highlight : [...corners(b), { lat: (b.south + b.north) / 2, lon: (b.west + b.east) / 2 }]);
+}
+
+/**
+ * A python marker clicked `share` of the circle's radius right of its centre (camera straight down at 4 km). At 1024
+ * px the sighting card then opens over it; the camera must glide it back into the visible circle.
+ */
+async function offsetClick(page: Page, list: Python[], share: number, label: string): Promise<void> {
+  const vp = page.viewportSize()!;
+  const stage = await box(page, "[data-stage]");
+  const dx = share * (stage.width / 2);
+  const altitudeM = 4_000;
+  const mpp = (altitudeM * 2 * Math.tan(Math.PI / 6)) / Math.max(vp.width, vp.height);
+  if ((await page.locator(DRAWER).count()) > 0) {
+    await page.locator(`${DRAWER} button[aria-label="Close panel"]`).click();
+    await page.locator(DRAWER).waitFor({ state: "detached", timeout: 5_000 });
+  }
+  for (const s of list.slice(0, 12)) {
+    const lon = s.lon - (dx * mpp) / (M_PER_DEG * Math.cos((s.lat * Math.PI) / 180));
+    await flyTo(page, s.lat, lon, altitudeM);
+    const p = await page.evaluate(([lo, la]) => window.__inversa!.project(lo, la), [s.lon, s.lat] as const);
+    if (!p) continue;
+    if ((await page.evaluate(([x, y]) => window.__inversa!.pick(x, y), [p.x, p.y] as const)) !== `sighting:${s.id}`) continue;
+    log(`${label}: python sighting:${s.id} at x=${Math.round(p.x)} (stage centre ${Math.round(centreX(stage))}, ${Math.round(dx)} px right)`);
+    await page.mouse.click(p.x, p.y);
+    await page.locator(DRAWER).waitFor({ timeout: 15_000 });
+    await settle(page);
+    await framed(page, `${label} sighting click`, [s]);
+    await page.locator(`${DRAWER} button[aria-label="Close panel"]`).click();
+    await page.locator(DRAWER).waitFor({ state: "detached", timeout: 5_000 });
+    return;
+  }
+  framing.outside += 1;
+  log(`framing ${label} sighting click: OUTSIDE (no python marker could be hit off centre)`);
+}
+
+type LayersBarCheck = { items: number; ids: string[]; on: string[]; ships: boolean; water: boolean; defaults: boolean; keyboard: boolean };
+
+/** The Layers popover: its switches and groups, the defaults, and the keyboard walk. */
+async function layersBar(page: Page, app: AppId): Promise<LayersBarCheck> {
+  const button = page.locator('[data-testid="layers-bar-button"]');
+  await button.focus();
+  await page.keyboard.press("Enter");
+  const pop = page.locator('[data-testid="layers-popover"]');
+  await pop.waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const focusIn = await page.evaluate(() => !!document.activeElement?.closest('[data-testid="layers-popover"]'));
+  await page.keyboard.press("Tab");
+  const onSwitch = await page.evaluate(() => document.activeElement?.getAttribute("role") === "switch" || (document.activeElement as HTMLInputElement | null)?.type === "checkbox");
+  const toggles = await pop.locator('input[data-testid^="legend-toggle-"]').evaluateAll((els) => els.map((el) => ({ id: el.getAttribute("data-testid")!.slice("legend-toggle-".length), on: (el as HTMLInputElement).checked, named: !!el.getAttribute("aria-label") })));
+  const ships = (await pop.locator('[data-testid="legend-group-ships"]').count()) > 0;
+  const water = (await pop.locator('[data-testid="water-weather"]').count()) > 0;
+  await page.screenshot({ path: path.join(SHOT_DIR, `layers-${app}-1440.png`) });
+  await page.keyboard.press("Escape");
+  await pop.waitFor({ state: "detached", timeout: 5_000 });
+  const back = await page.evaluate(() => document.activeElement?.getAttribute("data-testid") === "layers-bar-button");
+  const cfg = getApp(app);
+  const novice = ["sightings", "notes"].filter((id) => cfg.layers.some((l) => l.id === id));
+  const on = toggles.filter((t) => t.on).map((t) => t.id);
+  const defaults = on.length === novice.length && novice.every((id) => on.includes(id));
+  const keyboard = focusIn && onSwitch && back && toggles.every((t) => t.named);
+  log(`layers ${app}: ${toggles.map((t) => `${t.id}${t.on ? "*" : ""}`).join(" ")}; ships ${ships} water ${water}; keyboard focus-in ${focusIn} tab-to-switch ${onSwitch} esc-back ${back}`);
+  return { items: toggles.length, ids: toggles.map((t) => t.id), on, ships, water, defaults, keyboard };
+}
+
+/** Open an app's page with no camera in the link, so it frames itself. */
+async function openApp(browser: Browser, origin: string, app: AppId, viewport: { width: number; height: number }, errors: string[]): Promise<Page> {
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  await context.clock.install({ time: new Date(FIXTURE_CLOCK) });
+  const page = watch(await context.newPage(), errors, `${app}-${viewport.width}`);
+  await page.goto(`${origin}/?app=${app}#v=2&app=${app}`, { waitUntil: "domcontentloaded" });
+  await page.locator(`[data-testid="app-select-button"][data-app="${app}"]`).waitFor({ timeout: LOAD_TIMEOUT_MS });
+  await page.waitForFunction(() => !!window.__inversa?.globe(), undefined, { timeout: LOAD_TIMEOUT_MS });
+  await page.waitForTimeout(1_000);
+  return page;
+}
+
+/**
+ * Carp and lionfish at one viewport: the left panel opens in the right card region clear of the circle's centre,
+ * the app frames itself inside the circle (carp's sites at load, a lionfish area chosen in the panel), and at 1440 the
+ * Layers popover.
+ */
+async function appChecks(browser: Browser, stack: Stack, app: "carp" | "lionfish", viewport: { width: number; height: number }, errors: string[]): Promise<{ panel: boolean; layers: LayersBarCheck | null }> {
+  const page = await openApp(browser, stack.origin, app, viewport, errors);
+  const panelSel = app === "carp" ? '[data-testid="carp-board-panel"]' : '[data-testid="lionfish-panel"]';
+  await page.locator(panelSel).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(500);
+  const stage = await box(page, "[data-stage]");
+  const panel = await box(page, panelSel);
+  // The centre shows the map: the globe or a map marker drawn over it (a carp site can sit there), never a card or bar.
+  const clear = await page.evaluate(([x, y]) => {
+    const el = document.elementFromPoint(x, y);
+    return !!el && (!!el.closest("[data-globe]") || !!el.closest("[data-carp-site]")) && !el.closest("[data-hud-obstacle], [data-chat-column]");
+  }, [centreX(stage), stage.y + stage.height / 2] as const);
+  const right = panel.x > centreX(stage);
+  log(`panel ${app} ${viewport.width}: ${JSON.stringify(panel)}; stage centre ${Math.round(centreX(stage))}; right of centre ${right}; centre shows the map ${clear}`);
+  await page.screenshot({ path: path.join(SHOT_DIR, `stage-${app}-${viewport.width}.png`) });
+  let aligned = true;
+  if (app === "carp") {
+    await settle(page);
+    const sites = sitesOf(getApp("carp").locations);
+    await framed(page, `carp ${viewport.width} sites at load`, sites);
+    // The site buttons sit over their globe points (canvas pixels), not shifted by the chat card's width.
+    const offsets = await page.evaluate(
+      (list) =>
+        list.map((s) => {
+          const el = document.querySelector(`[data-carp-site="${s.lid}"]`);
+          const p = window.__inversa!.project(s.lon, s.lat);
+          if (!el || !p) return null;
+          const r = el.getBoundingClientRect();
+          return Math.round(Math.hypot(r.left + r.width / 2 - p.x, r.top + r.height / 2 - p.y));
+        }),
+      sites.map((s) => ({ lid: s.lid, lat: s.lat, lon: s.lon })),
+    );
+    aligned = offsets.every((d) => d !== null && d <= 4);
+    log(`carp ${viewport.width} site buttons off their globe points by ${offsets.join(", ")} px`);
+  } else {
+    const area = getApp("lionfish").regions[0]!;
+    await page.locator(`${panelSel} button[data-area="${area.id}"]`).click();
+    await settle(page);
+    await framed(page, `lionfish ${viewport.width} area ${area.id}`, corners(area.bbox));
+  }
+  const layers = viewport.width >= 1440 ? await layersBar(page, app) : null;
+  await page.context().close();
+  return { panel: right && clear && aligned, layers };
 }
 
 /**
@@ -261,6 +488,18 @@ async function desktop(browser: Browser, stack: Stack, list: Python[], errors: s
   await page.locator(DRAWER).waitFor({ state: "detached", timeout: 5_000 });
   const back = await page.evaluate((id) => document.activeElement?.getAttribute("data-evidence") === id, hit.id);
   log(`keyboard: Enter on the label put focus inside the card=${inside}; Esc returned focus to the label=${back}`);
+
+  // ---- GE7: the Layers popover, a marker clicked off centre, the real agent flying the map ------------------------
+  layersByApp.python = await layersBar(page, "python");
+  await offsetClick(page, list, 0.45, "1440");
+  try {
+    await agentFraming(page);
+  } catch (err) {
+    // A failed turn (no credit, a network error) is a framing that did not happen, not a reason to lose the other lines.
+    framing.outside += 1;
+    log(`framing agent set_view: OUTSIDE (the turn failed: ${err instanceof Error ? err.message : String(err)})`);
+  }
+  await page.screenshot({ path: path.join(SHOT_DIR, "stage-1440-agent.png") });
   await page.context().close();
 
   return [
@@ -322,6 +561,8 @@ async function tablet(browser: Browser, stack: Stack, list: Python[], errors: st
   const clear = await centreIsGlobe(page, stage);
   const o = await page.evaluate(sideways);
   await page.screenshot({ path: path.join(SHOT_DIR, "stage-1024.png") });
+  // GE7: a marker the sighting card will cover once it opens; the camera keeps it in sight.
+  await offsetClick(page, list, 0.4, "1024");
   await page.context().close();
   const cx = centreX(stage);
   const overlapsEdges = right(chat) > stage.x && details.x < right(stage);
@@ -333,7 +574,7 @@ async function main() {
   buildApi(log);
   buildWeb(log);
   mkdirSync(SHOT_DIR, { recursive: true });
-  const stack = await startStack({ name: "stage" });
+  const stack = await startStack({ name: "stage", apps: ["python", "carp", "lionfish"] });
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   const errors: string[] = [];
   try {
@@ -343,6 +584,22 @@ async function main() {
     const mobileOk = await phone(browser, stack, errors);
     const tabletOk = await tablet(browser, stack, list, errors);
     lines.push(`RESPONSIVE mobile=${mobileOk ? "ok" : "no"} tablet=${tabletOk ? "ok" : "no"}`);
+    // GE7: carp and lionfish at both sizes.
+    const panels: Record<string, boolean> = { carp: true, lionfish: true };
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }]) {
+      for (const app of ["carp", "lionfish"] as const) {
+        const r = await appChecks(browser, stack, app, viewport, errors);
+        panels[app] &&= r.panel;
+        if (r.layers) layersByApp[app] = r.layers;
+      }
+    }
+    lines.push(`FRAMING inside=${framing.inside} outside=${framing.outside}`);
+    lines.push(`PANELS carp=${panels.carp ? "ok" : "no"} lionfish=${panels.lionfish ? "ok" : "no"}`);
+    const checks = Object.entries(layersByApp) as [AppId, LayersBarCheck][];
+    const ships = checks.filter(([, c]) => c.ships).map(([a]) => a).sort();
+    const water = checks.length === 3 && checks.every(([, c]) => c.water) ? "all" : checks.filter(([, c]) => c.water).map(([a]) => a).sort().join(",") || "none";
+    const defaults = checks.length === 3 && checks.every(([, c]) => c.defaults && c.keyboard);
+    lines.push(`LAYERSBAR items=${layersByApp.python?.items ?? 0} ships=${ships.join(",") || "none"} water=${water} defaults=${defaults ? "ok" : "no"}`);
     if (errors.length) fail(`page errors: ${errors.join(" | ")}`);
     for (const line of lines) console.log(line);
   } catch (err) {

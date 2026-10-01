@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { selectPython } from "@/tests/client/python-app";
 import type { BillboardCollection, PolylineCollection } from "cesium";
 
+import { layerClock } from "client/globe/layers/clock";
 import { createVesselsLayer, trailThirds, vesselBucket, vesselWindow, VESSELS_QUERY } from "client/globe/layers/vessels";
 import { plainSummary } from "client/hud/drawer/summary";
 import { legendRows } from "client/hud/legend/model";
@@ -138,13 +139,17 @@ describe("vessels layer: drawing", () => {
     applyApp("carp");
     applyCarpView({ asOf: T });
     const requests: Record<string, unknown>[] = [];
-    const ctx = fakeContext({
-      gql: async (query, variables) => {
-        expect(query).toBe(VESSELS_QUERY);
-        requests.push(variables ?? {});
-        return { vessels: [TUG, TANKER] };
-      },
-    });
+    // The viewer's clock (client/globe/layers/clock.ts): in carp the layers' time is CARP.asOf.
+    const ctx = {
+      ...fakeContext({
+        gql: async (query, variables) => {
+          expect(query).toBe(VESSELS_QUERY);
+          requests.push(variables ?? {});
+          return { vessels: [TUG, TANKER] };
+        },
+      }),
+      ...layerClock(),
+    };
     const viewer = fakeViewer();
     const credits: unknown[] = [];
     (viewer as unknown as { creditDisplay: unknown }).creditDisplay = {
@@ -176,6 +181,8 @@ describe("vessels layer: drawing", () => {
     const before = lonAt(s1);
     // The "what we knew" time moves 20 minutes: the tug moves east, the anchored tanker stays.
     applyCarpView({ asOf: T + 20 * MIN });
+    // The viewer refreshes the layers when CARP moves, as it does on TIME.
+    layer.update(0, null);
     await flush(5);
     const s2 = layer.stats();
     expect(lonAt(s2)).toBeCloseTo(before + 0.06, 6);
