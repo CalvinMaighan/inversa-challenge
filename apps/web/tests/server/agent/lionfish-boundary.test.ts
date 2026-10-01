@@ -57,11 +57,14 @@ beforeEach(() => {
   emitted.length = 0;
 });
 
-/** The question file's refusal criteria, applied to a guard's text: every phrase matches, nothing forbidden does. */
+/**
+ * The question file's deterministic refusal criteria, applied to a guard's text: nothing forbidden matches. The
+ * `mustSay` statements are semantic and belong to the live judge (eval/judge.ts), not to a regex here.
+ */
 function expectMeetsRefusal(id: string, text: string): void {
   const q = supportedQuestions("lionfish").find((x) => x.id === id)!;
   expect(q.pass.mode).toBe("refuse");
-  for (const p of q.pass.phrases) expect([id, p, new RegExp(p, "i").test(text)]).toEqual([id, p, true]);
+  expect(q.pass.mustSay?.length).toBeGreaterThan(0);
   for (const f of q.pass.forbid) expect([id, f, new RegExp(f, "i").test(text)]).toEqual([id, f, false]);
 }
 

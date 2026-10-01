@@ -1,6 +1,6 @@
 /**
  * Per-question checks for the live eval (docs/grading/rubric.md "Agent and eval"): the golden's `pass`
- * criteria (phrases, forbid patterns, mode), required tools, citations by kind and by feed (`mustCite`),
+ * criteria (forbid patterns, mode; the `mustSay` statements go to the judge in run.ts), required tools, citations by kind and by feed (`mustCite`),
  * the numbers trace (every number in the answer appears in some tool output, unit conversions allowed) and
  * the feed-state disclosure. The numbers trace and the disclosure are the runtime's own generic checks
  * (server/agent/answer-check.ts); the golden criteria live here and in the question files only, never in
@@ -53,6 +53,81 @@ export function barsMet(passed: number, total: number, byCategory: ReadonlyMap<s
   return true;
 }
 
+// ---------------------------------------------------------------- pooled runs
+
+/** One run's tallies, as `--runs N` collects them. */
+export type RunTally = {
+  passed: number;
+  total: number;
+  byCategory: ReadonlyMap<string, { passed: number; total: number }>;
+  ungrounded: number;
+  checked: number;
+  viewsValid: number;
+  viewsTotal: number;
+  failedIds: readonly string[];
+};
+
+export type Pooled = {
+  runs: number;
+  passed: number;
+  total: number;
+  byCategory: Map<string, { passed: number; total: number }>;
+  ungrounded: number;
+  checked: number;
+  viewsValid: number;
+  viewsTotal: number;
+  /** Runs where boundary was below 100%. */
+  boundaryMissRuns: number[];
+  /** Runs with an ungrounded number. */
+  ungroundedRuns: number[];
+  /** Question ids failed in two of three runs (both runs of a two-run series), with their counts. */
+  repeatFailures: { id: string; runs: number }[];
+};
+
+/** Sums the runs: the pooled rate is the statistic, with the per-run strict bars kept per run. */
+export function pool(runs: readonly RunTally[]): Pooled {
+  const out: Pooled = { runs: runs.length, passed: 0, total: 0, byCategory: new Map(), ungrounded: 0, checked: 0, viewsValid: 0, viewsTotal: 0, boundaryMissRuns: [], ungroundedRuns: [], repeatFailures: [] };
+  const failCount = new Map<string, number>();
+  runs.forEach((run, i) => {
+    out.passed += run.passed;
+    out.total += run.total;
+    out.ungrounded += run.ungrounded;
+    out.checked += run.checked;
+    out.viewsValid += run.viewsValid;
+    out.viewsTotal += run.viewsTotal;
+    if (run.ungrounded > 0) out.ungroundedRuns.push(i + 1);
+    for (const [c, row] of run.byCategory) {
+      const acc = out.byCategory.get(c) ?? { passed: 0, total: 0 };
+      acc.passed += row.passed;
+      acc.total += row.total;
+      out.byCategory.set(c, acc);
+      if (c === "boundary" && row.passed < row.total) out.boundaryMissRuns.push(i + 1);
+    }
+    for (const id of run.failedIds) failCount.set(id, (failCount.get(id) ?? 0) + 1);
+  });
+  // Two of three runs; for a two-run series only a question that failed both.
+  const need = runs.length >= 3 ? Math.ceil(runs.length / 2) : runs.length;
+  out.repeatFailures = [...failCount].filter(([, n]) => runs.length > 1 && n >= need).map(([id, n]) => ({ id, runs: n })).sort((a, b) => b.runs - a.runs || a.id.localeCompare(b.id));
+  return out;
+}
+
+/**
+ * The pooled bars: overall at least `overall` pooled, every non-boundary category at least `category` pooled (when a
+ * category bar applies: the golden set, not the holdout), boundary 100% in every run, ungrounded 0 in every run, every
+ * view valid. Returns the reasons it is not met; empty means met.
+ */
+export function pooledBarsUnmet(p: Pooled, bars: { overall: number; category: number | null }): string[] {
+  const reasons: string[] = [];
+  if (pct(p.passed, p.total) < bars.overall) reasons.push(`overall ${pct(p.passed, p.total)}% < ${bars.overall}%`);
+  if (bars.category !== null) {
+    for (const [c, row] of p.byCategory) if (c !== "boundary" && pct(row.passed, row.total) < bars.category) reasons.push(`category ${c} ${pct(row.passed, row.total)}% < ${bars.category}%`);
+  }
+  if (p.boundaryMissRuns.length) reasons.push(`boundary below 100% in run ${p.boundaryMissRuns.join(", ")}`);
+  if (p.ungroundedRuns.length) reasons.push(`ungrounded number in run ${p.ungroundedRuns.join(", ")}`);
+  if (p.viewsValid !== p.viewsTotal) reasons.push(`views valid ${p.viewsValid}/${p.viewsTotal}`);
+  return reasons;
+}
+
 // ---------------------------------------------------------------- the whole check
 
 export type QuestionCheck = { reasons: string[]; tools: string[]; cited: string[]; trace: ReturnType<typeof numbersTrace> };
@@ -85,7 +160,7 @@ export function checkQuestion(golden: Golden, events: readonly AgentStreamEvent[
     if (got < need) reasons.push(`${got} ${kind} citations, need ${need}`);
   }
   reasons.push(...mustCiteOk(cited, evidenceById, golden.mustCite ?? []));
-  for (const phrase of golden.expect.phrases) if (!phrase.test(content)) reasons.push(`missing phrase ${phrase}`);
+  // `mustSay` items are judged by eval/judge.ts (async, in run.ts); only the deterministic checks live here.
   for (const phrase of golden.expect.forbid ?? []) if (phrase.test(content)) reasons.push(`forbidden phrase ${phrase}`);
   if (golden.expect.view && !events.some((event) => event.type === "view")) reasons.push("no view event");
 

@@ -34,7 +34,7 @@ describe("eval trace", () => {
     expect(review.expect.tools).toEqual(["site_status", "set_view"]);
     expect(review.mustCite).toEqual(["feed:usgs", "feed:nwps", "feed:nws"]);
     expect(review.expect.view).toBe(true);
-    expect(review.expect.phrases[0]!.test("These sites need operational review")).toBe(true);
+    expect(review.mustSay).toEqual(["Names the sites that need operational review", "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"]);
     expect(review.expect.forbid![0]!.test("carp are abundant there")).toBe(true);
     const explain = carp.find((g) => g.id === "carp-explain-start-review")!;
     expect(explain.context).toEqual({ selectedSite: "MCGL1" });
@@ -46,6 +46,10 @@ describe("eval trace", () => {
   test("eval trace: numbers in the answer are read without ids, dates, times and years", () => {
     const text = "At 2026-10-01T06:00:00Z (01:00 CDT, 1:00 am) KRZL1 read 1.65 ft (USGS 07381500), 15.5 h old; in 2026 the 3rd check at 10:32 found 8,110 cfs.";
     expect(extractNumbers(text).map((n) => n.raw)).toEqual(["1.65", "15.5", "8,110"]);
+    // A hyphen after a word is a joiner, not a minus: "last-90-days" holds 90 (which the question supplies), not -90.
+    expect(extractNumbers("in the last-90-days window, a 3-night average").map((n) => n.value)).toEqual([90, 3]);
+    expect(numbersTrace("the wider last-90-days results", [JSON.stringify({ windowDays: 90 })]).ungrounded).toEqual([]);
+    expect(extractNumbers("the anomaly was -1.2 °C").map((n) => n.value)).toEqual([-1.2]);
     // A whole number's trailing zeros are a rounding: 8110 matches 8105..8115, "21,200" matches 21187.
     expect(extractNumbers("8.11 kcfs = 8110 cfs")[1]).toEqual({ value: 8110, decimals: -1, raw: "8110" });
     expect(numbersTrace("about 21,200 cfs", [JSON.stringify({ mean24h: 21187 })]).ungrounded).toEqual([]);
@@ -92,7 +96,7 @@ describe("eval trace", () => {
     expect(mustCiteOk(["reading:1"], by, ["feed:nwps", "kind:forecast"])).toEqual(["no citation from feed nwps", "no forecast: citation"]);
   });
 
-  test("eval trace: checkQuestion applies tools, citations, phrases, forbid, numbers and feed state to a stream", () => {
+  test("eval trace: checkQuestion applies tools, citations, forbid, numbers and feed state to a stream (mustSay is the judge's)", () => {
     const golden: Golden = {
       id: "q",
       question: "What is the river stage at Krotz Springs right now?",
@@ -100,7 +104,8 @@ describe("eval trace", () => {
       category: "lookup",
       mode: "answer",
       mustCite: ["feed:usgs", "kind:reading"],
-      expect: { tools: ["river_readings"], phrases: [/\bft\b/], forbid: [/safe/], minCitations: 1, cites: { reading: 1 }, groundedNumbers: true, feedState: true },
+      mustSay: ["Gives a stage or height value in feet"],
+      expect: { tools: ["river_readings"], forbid: [/safe/], minCitations: 1, cites: { reading: 1 }, groundedNumbers: true, feedState: true },
     };
     const evidence: Evidence[] = [{ id: "reading:1", kind: "reading", label: "r", feed: "usgs" }];
     const stream = (content: string): AgentStreamEvent[] => [
@@ -115,7 +120,7 @@ describe("eval trace", () => {
     expect(good.trace).toEqual({ checked: 1, ungrounded: [] });
     const bad = checkQuestion(golden, stream("Krotz Springs reads 2.95 ft and it is safe [e:reading:1] [e:reading:2]."), captures);
     expect(bad.reasons).toEqual(expect.arrayContaining(["final text cites unreturned id reading:2", "forbidden phrase /safe/", "ungrounded numbers: 2.95", expect.stringContaining("does not say how fresh")]));
-    const refusal: Golden = { ...golden, mode: "refuse", mustCite: [], expect: { tools: [], phrases: [/cannot/], minCitations: 0, groundedNumbers: true, feedState: false } };
+    const refusal: Golden = { ...golden, mode: "refuse", mustCite: [], mustSay: ["Says it cannot estimate abundance"], expect: { tools: [], minCitations: 0, groundedNumbers: true, feedState: false } };
     expect(checkQuestion(refusal, [{ type: "done", content: "I cannot estimate carp abundance." }], []).reasons).toEqual([]);
     expect(checkQuestion(refusal, stream("I cannot."), captures).reasons).toEqual(["refusal called tools: river_readings"]);
   });

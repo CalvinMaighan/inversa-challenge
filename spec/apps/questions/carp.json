@@ -13,7 +13,9 @@
     "2026-10-01 AGB: carp-quality-late-gauges no longer requires feed_state beside site_status: site_status returns every site's observation age and the feeds' fetch markers (inputsLine), which answers 'late reporting' with the fetch citations the question requires.",
     "2026-10-01 AGB: carp-quality-missing-discharge accepts 'stage-only' (hyphen), 'does not report' and 'reports no flow': 'the USGS gauge is stage-only, and NWPS reports no flow there' is the correct answer in other words.",
     "2026-10-01 AGB: carp-planning-compare-tomorrow's safety forbid also ignores 'neither … safer', 'not … safe' and 'cannot … safe': 'neither site stands out as a safer choice' declines the verdict rather than giving one.",
-    "2026-10-01 AGB: carp-lookup-review-today and carp-planning-focus-tomorrow also accept 'peaks at', 'reaches' and 'reaching' as the review reason: 'needs review: its forecast peaks at 4 ft, at the 4 ft action stage' states the reason in the rule's own words."
+    "2026-10-01 AGB: carp-lookup-review-today and carp-planning-focus-tomorrow also accept 'peaks at', 'reaches' and 'reaching' as the review reason: 'needs review: its forecast peaks at 4 ft, at the 4 ft action stage' states the reason in the rule's own words.",
+    "2026-10-01 J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts.",
+    "2026-10-01 J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). After the final series: 'Places the scene in January 2026' is 'Places the scene in the January cold snap' (the regex was (January|2026-01)); 'Gives the quality flag' is 'Gives the quality flag, or notes cloud masking' (the regex accepted 'cloud'). After the held-out series: the outside-area refusal statement also accepts naming the eight locations as the coverage (the scope guard's wording); 'States NAS's lag of weeks to months' is 'Says NAS records lag or arrive late, by weeks to months'; 'Names the buoy, the in-situ measured reading' also accepts its absence (Belize has no buoy); 'Names USGS NAS as a source' is 'Names NAS or USGS NAS as a source'. No statement was loosened below its regex."
   ],
   "scope": "Louisiana Field Conditions Explorer. Question: how have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? Eight demonstration locations (SMML1 Simmesport, KRZL1 Krotz Springs, BLRL1 Butte La Rose, MCGL1 Morgan City (Atchafalaya), BTRL1 Baton Rouge, AEXL1 Alexandria, MLUL1 Monroe, BXAL1 Bogalusa); L'CARP works only in the Atchafalaya Basin and targets silver, bighead, grass and black carp. The feeds describe conditions only: no carp abundance, catch, legal access or trip safety.",
   "feeds": [
@@ -126,9 +128,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "needs? (operational )?review",
-          "(because|reason|due to|trigger|rule|peaks? at|reach(es|ing)?)"
+        "mustSay": [
+          "Names the sites that need operational review",
+          "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"
         ],
         "forbid": [
           "carp (are|will be) (present|abundant|there)",
@@ -156,10 +158,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\bft\\b|feet",
-          "(USGS|NWPS)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the gauge source, USGS or NWPS",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -189,13 +191,13 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Simmesport|SMML1",
-          "Krotz|KRZL1",
-          "Butte La Rose|BLRL1",
-          "Morgan City|MCGL1",
-          "(issued|issuance)",
-          "(action|minor|moderate|major|no flood category|below (action|flood))"
+        "mustSay": [
+          "Names Simmesport or SMML1",
+          "Names Krotz Springs or KRZL1",
+          "Names Butte La Rose or BLRL1",
+          "Names Morgan City or MCGL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives the flood category: action, minor, moderate, major, or below any flood category"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -224,9 +226,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "k?cfs|cubic feet",
-          "(USGS|NWPS)"
+        "mustSay": [
+          "Gives discharge in cfs, kcfs or cubic feet per second",
+          "Names the gauge source, USGS or NWPS"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -252,9 +254,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(no active|active) (NWS )?alerts?|alerts? (in effect|active)",
-          "(as of|checked|at \\d)"
+        "mustSay": [
+          "States whether NWS alerts are active or in effect, including when none are",
+          "Gives the time of the check"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -281,9 +283,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Simmesport",
-          "Morgan City"
+        "mustSay": [
+          "Names Simmesport among the sites shown",
+          "Names Morgan City among the sites shown"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -307,10 +309,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(\\u00B0F|degrees|\\bF\\b)",
-          "(wind|rain|precip|showers|storm|clear|cloud)",
-          "updat"
+        "mustSay": [
+          "Gives a temperature in degrees",
+          "Describes the weather: wind, rain, storms or sky",
+          "States when the forecast was updated"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -337,10 +339,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\bft\\b|feet",
-          "(24 ?h|24 hours|last day|past day)",
-          "(rose|rise|risen|up)"
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Frames the change over the last 24 hours",
+          "Names the site with the largest rise"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -370,10 +372,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Baton Rouge|BTRL1",
-          "\\bft\\b|feet",
-          "(rose|risen|fell|fallen|dropped|steady|unchanged|up|down)"
+        "mustSay": [
+          "Names Baton Rouge or BTRL1",
+          "Gives a stage or height value in feet",
+          "States the direction of the change: rose, fell or held steady"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -400,9 +402,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "(higher|lower|raised|lowered|unchanged|same|earlier|later)"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "States how the forecast peak moved between the two issuances"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -429,10 +431,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "\\bft\\b|feet",
-          "forecast"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet",
+          "Reports the forecast rises"
         ],
         "forbid": [
           "will (definitely|certainly)",
@@ -465,9 +467,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(fell|fallen|falling|dropped|down|lower)",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "Names the sites that fell or dropped",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -494,10 +496,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "tid(al|e)",
-          "(mean|average)",
-          "k?cfs"
+        "mustSay": [
+          "Says the site is tidal",
+          "Gives or uses a 24 hour mean, an average",
+          "Gives flow in cfs or kcfs"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -524,9 +526,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(categor|action|minor|moderate|major)",
-          "(issued|issuance)"
+        "mustSay": [
+          "Names the flood categories compared",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -556,10 +558,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(since|started|began|first flagged|flipped|changed)",
-          "(because|reason|due to|triggered)",
-          "\\d{1,2}(:\\d{2})?\\s*(am|pm|Z|UTC|CDT|CST)|\\d{4}-\\d{2}-\\d{2}"
+        "mustSay": [
+          "Says when the status flipped to needs review",
+          "Gives the reason: what triggered the flip to needs review",
+          "Gives the time or date of the flip"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -586,10 +588,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "action (stage|level|threshold)",
-          "tid(al|e)",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "Names the action stage threshold",
+          "Says the site is tidal",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -614,10 +616,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "action (stage|level|threshold)",
-          "below|under|short of|beneath|does not reach|doesn't reach|not reach|lower than|stays? under",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "Names the action stage threshold",
+          "Says the forecast peak stays below the action stage",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -642,9 +644,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(rule|reason|check)",
-          "(stage|forecast|alert|fresh)"
+        "mustSay": [
+          "Walks through the review rules or reasons",
+          "Names the rule inputs: stage, forecast, alerts or freshness"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -668,13 +670,13 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "action",
-          "minor",
-          "moderate",
-          "major",
-          "\\bft\\b|feet",
-          "NWPS|National Water Prediction|NWS"
+        "mustSay": [
+          "Explains the action stage",
+          "Explains the minor flood category",
+          "Explains the moderate flood category",
+          "Explains the major flood category",
+          "Gives a stage or height value in feet",
+          "Names NWPS, the National Water Prediction Service or NWS"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -698,9 +700,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "low[- ]water|low threshold",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "Refers to the low water flag or threshold",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -727,10 +729,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "stage",
-          "(discharge|flow)",
-          "(conditions|operations|fieldwork)"
+        "mustSay": [
+          "Explains what river stage tells",
+          "Explains what discharge, the flow, tells",
+          "Relates the measures to field operations or river conditions"
         ],
         "forbid": [
           "(more|fewer) carp",
@@ -758,9 +760,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(threshold|categor)",
-          "(gauge|stage)"
+        "mustSay": [
+          "Explains flood categories as gauge thresholds",
+          "Refers to the gauge stage"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
@@ -787,9 +789,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(wind|rain|storm|weather)",
-          "(alert|review|schedul|plan)"
+        "mustSay": [
+          "Names weather factors such as wind, rain or storms",
+          "Links the weather to review status or scheduling"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -813,10 +815,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "days?",
-          "(through|until|horizon|ahead|out to)",
-          "(issued|issuance)"
+        "mustSay": [
+          "Gives the horizon in days",
+          "States how far ahead the forecast reaches",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -842,10 +844,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "demonstration",
-          "Atchafalaya",
-          "(USGS|NWPS|NWS)"
+        "mustSay": [
+          "Says the locations are demonstration locations",
+          "Names the Atchafalaya",
+          "Names the feeds that cover the sites, such as USGS, NWPS or NWS"
         ],
         "forbid": [
           "Inversa('s)? (operating|actual|real) (areas|sites)"
@@ -873,9 +875,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "alert",
-          "review"
+        "mustSay": [
+          "Explains how NWS alerts can trigger review",
+          "Refers to the review status or which sites need review"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -900,10 +902,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(history|archive|past (forecasts|issuances))",
-          "(IEM|Iowa)",
-          "replay"
+        "mustSay": [
+          "Says the archive holds past forecast issuances, a history",
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Says the archive serves replay"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -929,10 +931,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "(stale|missing|current|no current|up to date|within)",
-          "(hours?|h) (old|ago)"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "States whether each forecast is current, stale or missing",
+          "Gives the issuance age in hours"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -957,10 +959,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "datum|reference (point|elevation)|zero",
-          "NWPS",
-          "(flood categor|threshold|action stage)"
+        "mustSay": [
+          "Explains the datum offset between the two gauges",
+          "Names NWPS as a source",
+          "Says flood categories or thresholds use the NWPS stage"
         ],
         "forbid": [
           "USGS(?:[^.]|\\.\\d){0,60}\\b(below|above|under|over|exceeds?|short of)\\b(?:[^.]|\\.\\d){0,20}(action|flood|minor|moderate|major) (stage|categor)"
@@ -990,11 +992,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "USGS",
-          "NWPS|NWS",
-          "(disagree|differ|conflict|mismatch)",
-          "cfs"
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS or NWS as a source",
+          "Says the two values disagree or conflict",
+          "Gives flow in cfs or kcfs"
         ],
         "forbid": [
           "(averag|blend)(e|ed|ing) (the )?(two|both)"
@@ -1023,8 +1025,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(not measured|does(n't| not) (measure|report)|reports? no (discharge|flow)|no (USGS )?(discharge|flow) (data|reading|series|measurement)|stage[- ]only)"
+        "mustSay": [
+          "Says USGS does not measure or report discharge at this site"
         ],
         "forbid": [
           "USGS(?:[^.]|\\.\\d){0,40}\\d[\\d,.]*\\s*k?cfs"
@@ -1051,9 +1053,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)",
-          "(fresh|late|stale|lagging|on time|current)"
+        "mustSay": [
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched",
+          "Says whether the gauges are fresh, on time, late or stale"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1078,9 +1080,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "no active (NWS )?alerts?",
-          "(as of|checked|at \\d|ago)"
+        "mustSay": [
+          "Says there are no active NWS alerts",
+          "Gives the time of the check"
         ],
         "forbid": [
           "(feed|data) (is )?(missing|down|broken)"
@@ -1108,10 +1110,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "(nwps-live|iem-archive|archive|snapshot)",
-          "(gap|missing|missed|every day|daily|none missed)"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Names where the issuances come from: the live NWPS snapshots or the IEM archive",
+          "Says whether any issuance was missed"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1141,11 +1143,11 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Krotz",
-          "Butte La Rose",
-          "(issued|issuance)",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "Names Krotz Springs as the place it reports on",
+          "Names Butte La Rose as the place it reports on",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [
           "(?<!\\b(whether|if|that|say|judge|establish|which|neither|nor|not|cannot|can't)\\b[^.]{0,30})\\b(safer|is safe|are safe)\\b"
@@ -1176,9 +1178,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "forecast",
-          "conditions only|not (a )?(safety|access)|does not (cover|judge|assess) (safety|access)"
+        "mustSay": [
+          "Uses the forecasts to rank the days",
+          "Says this covers conditions only, not safety or access"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
@@ -1207,9 +1209,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "review",
-          "(because|reason|due to|trigger|rule|peaks? at|reach(es|ing)?)"
+        "mustSay": [
+          "Names where to focus review, or the review status",
+          "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"
         ],
         "forbid": [
           "carp (are|will be)"
@@ -1235,9 +1237,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(rain|showers|precip|storm|dry)",
-          "updat"
+        "mustSay": [
+          "States the rain expectation, including dry",
+          "States when the forecast was updated"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1261,9 +1263,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "\\bft\\b|feet|beyond|horizon"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives the forecast stage in feet, or says the date lies beyond the forecast horizon"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -1290,9 +1292,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "low[- ]water|low threshold|below",
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(access|ramp|launch)"
+        "mustSay": [
+          "Reports the low water threshold flags or forecast minimums",
+          "Says the data cannot confirm ramp access or launching"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -1319,11 +1321,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "USGS",
-          "07381490|SMML1",
-          "(fetched|retrieved|ingested)",
-          "public domain"
+        "mustSay": [
+          "Names USGS as a source",
+          "Names the gauge: USGS 07381490 or NWPS SMML1",
+          "Gives the fetch time",
+          "Says the data is public domain"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1351,9 +1353,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "NWPS|National Water Prediction|NWS",
-          "(gauge|metadata)"
+        "mustSay": [
+          "Names NWPS, the National Water Prediction Service or NWS",
+          "Says the thresholds come from NWPS gauge metadata"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1379,10 +1381,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(IEM|Iowa Environmental Mesonet)",
-          "(snapshot|archive)",
-          "(Iowa State|university)"
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Names our own issuance snapshots or the archive backfill",
+          "Names Iowa State University as the publisher"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1409,10 +1411,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "public domain",
-          "rate limit",
-          "(not published|unpublished|no published)"
+        "mustSay": [
+          "Says the data is public domain",
+          "States the rate limits",
+          "Says where a limit is unpublished"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1438,11 +1440,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "USGS",
-          "NWPS",
-          "NWS",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS as a source",
+          "Names NWS as a source",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1470,9 +1472,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "updat",
-          "(office|LCH|Lake Charles)"
+        "mustSay": [
+          "States when the forecast was updated",
+          "Refers to the NWS office, LCH or Lake Charles"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1502,10 +1504,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "(as of|at the time|known|knew)",
-          "(later|since then|afterwards|after that)"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1536,11 +1538,11 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "(observed|actual|measured)",
-          "(error|off by|higher|lower|within|missed|difference)",
-          "\\bft\\b|feet"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Compares the forecast with the observed stage",
+          "States the forecast error or difference",
+          "Gives a stage or height value in feet"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1572,9 +1574,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "review",
-          "(as of|at the time|known|then)"
+        "mustSay": [
+          "Names the sites that needed review at that time, or says none did",
+          "Frames the answer as what was known at that past time, as of then"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1600,10 +1602,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(IEM|archive)",
-          "(snapshot|our own)",
-          "(start|begin|earliest|back to)"
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Distinguishes our own snapshots from the archive",
+          "States where replay coverage starts"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1630,9 +1632,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "alert",
-          "(Saturday|Sunday|weekend)"
+        "mustSay": [
+          "States whether alerts were active over the weekend, including when none were",
+          "Addresses the weekend days"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1661,9 +1663,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\bft\\b|feet",
-          "(Simmesport|Krotz|Butte La Rose|Morgan City)"
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the Atchafalaya sites"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1688,10 +1690,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(issued|issuance)",
-          "action",
-          "(later|then|at the time|at that time|as of|replay|since|afterwards)"
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Compares the issuance's peak with the action stage",
+          "Separates what the issuance showed at that time from what happened later"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1713,9 +1715,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(abundance|how many|number of carp|carp (numbers|population|counts))",
-          "(river|stage|forecast|conditions)"
+        "mustSay": [
+          "Says in its own words that it cannot say or estimate how many carp there are",
+          "Says what the app does cover, such as river conditions, stage or forecasts"
         ],
         "forbid": [
           "\\d[\\d,]*\\s*(carp|fish)\\b",
@@ -1737,9 +1739,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(catch|harvest)",
-          "(river|stage|forecast|conditions)"
+        "mustSay": [
+          "Says in its own words that it cannot predict the catch",
+          "Says what the app does cover, such as river conditions, stage or forecasts"
         ],
         "forbid": [
           "\\d[\\d,.]*\\s*(carp|fish|pounds|lbs|tons)\\b"
@@ -1760,8 +1762,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(legal|access|permit|regulat)"
+        "mustSay": [
+          "Says in its own words that it cannot say whether fishing or access is legal or permitted"
         ],
         "forbid": [
           "\\b(yes|you are|you're)\\b(?:[^.]|\\.\\d){0,30}(allowed|legal|permitted)"
@@ -1789,9 +1791,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
-          "forecast"
+        "mustSay": [
+          "Says in its own words that it cannot judge whether it is safe",
+          "Reports the forecast conditions: stage, weather or alerts"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
@@ -1818,9 +1820,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(no|not|doesn't|does not)(?:[^.]|\\.\\d){0,60}(probabilit|percent|chance|likelihood)",
-          "forecast"
+        "mustSay": [
+          "Says in its own words that it does not give a probability, percentage or odds",
+          "Reports the forecast stage or peak instead"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -1841,8 +1843,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(carp|movement|cause|causal)"
+        "mustSay": [
+          "Says in its own words that it cannot say whether the water moves the carp"
         ],
         "forbid": [
           "(?<!(whether|if|that) )(rising water|high water|flooding) (makes|causes|drives|leads)"
@@ -1863,9 +1865,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(eight|8) (river )?(sites|locations|gauges)|demonstration locations|Atchafalaya",
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(sighting|location|where)"
+        "mustSay": [
+          "Names the eight demonstration locations or the Atchafalaya as what the app covers",
+          "Says in its own words that it cannot say where carp are"
         ],
         "forbid": [
           "common carp (are|were) (at|in|near|found)"
@@ -1886,8 +1888,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(eight|8) (river )?(sites|locations|gauges)|demonstration locations|Atchafalaya"
+        "mustSay": [
+          "Names the eight demonstration locations or the Atchafalaya as what the app covers"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(ft|feet)"
@@ -1908,9 +1910,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(Python app|python)",
-          "(Louisiana|river|carp app)"
+        "mustSay": [
+          "Points to the Python app for pythons",
+          "Says this app covers Louisiana river conditions"
         ],
         "forbid": [
           "(Shark Valley|Big Cypress|Flamingo)(?:[^.]|\\.\\d){0,40}(hotspot|sighting|active)"
@@ -1935,8 +1937,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(noted|wrote|note)"
+        "mustSay": [
+          "Reports the notes, what the team noted or wrote, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1962,9 +1964,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(note|noted|no notes)",
-          "Krotz"
+        "mustSay": [
+          "Reports the notes near the place, or says there are none",
+          "Names Krotz Springs as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1987,9 +1989,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(message|wrote|said|sent)",
-          "Morgan City"
+        "mustSay": [
+          "Summarises what the team messages said",
+          "Names Morgan City as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -2015,8 +2017,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -2045,9 +2047,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission",
-          "(issued|issuance)"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -2076,9 +2078,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "review|flagged",
-          "mission"
+        "mustSay": [
+          "Names the flagged sites, those needing review",
+          "Refers to the missions on the team board, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -2104,10 +2106,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "note",
-          "(gauge|stage)",
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(ramp|confirm|verify)"
+        "mustSay": [
+          "Reports what the crew note said",
+          "Refers to the gauge stage",
+          "Says the gauge cannot confirm or verify the ramp conditions"
         ],
         "forbid": [],
         "groundedNumbers": true,

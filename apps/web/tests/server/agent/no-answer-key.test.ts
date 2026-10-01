@@ -12,35 +12,17 @@ import type { QuestionFile } from "@/shared/apps/questions";
 /**
  * gates/leaf-AGB.md G2: the benchmark measures the agent, not the agent being handed the answers. Nothing the
  * model can see (system prompt, turn context, tool names, descriptions and input schemas) may carry a golden
- * or held-out question's id, its text (whole, or any run of five words), or a literal phrase from its pass
- * criteria. The question files are read from disk so a new file is covered without a code change.
+ * or held-out question's id, its text (whole, or any run of five words), or one of its `mustSay` statements (the
+ * whole statement, normalised). The question files are read from disk so a new file is covered without a code change.
  */
 
 const QUESTIONS_DIR = join(import.meta.dir, "../../../../../spec/apps/questions");
 
 const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[^a-z0-9'°\s]/g, " ").replace(/\s+/g, " ").trim();
 
-/**
- * The literal alternatives of a pass regex that are a phrase, not vocabulary: three words or more, so
- * `(stale|no current forecast)` gives "no current forecast" while place names, units and "needs ID" (the data's
- * own words, which any correct answer uses) are left to the five-word question check.
- */
-function literals(source: string): string[] {
-  const flat = source.replace(/\\b/g, "").replace(/\\u([0-9a-f]{4})/gi, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
-  const out = new Set<string>();
-  for (const part of flat.split(/[|()]/)) {
-    const s = part.replace(/\?/g, "").toLowerCase().trim().replace(/\s+/g, " ");
-    if (/^[a-z0-9'° -]+$/.test(s) && s.split(" ").length >= 3) out.add(s);
-  }
-  return [...out];
-}
-
 type Needle = { what: string; from: string; text: string };
 
-/** The apps' own place and preset names: a pass literal that is one of them is vocabulary, not an answer. */
-const PLACES = new Set(APP_IDS.flatMap((id) => [...getApp(id).locations.map((l) => l.name), ...(getApp(id).cameraPresets ?? []).map((p) => p.name)]).map(norm));
-
-/** Everything that would hand the model an answer: ids, question text and five-word runs of it, pass literals. */
+/** Everything that would hand the model an answer: ids, question text and five-word runs of it, mustSay statements. */
 function needles(): Needle[] {
   const out: Needle[] = [];
   for (const name of readdirSync(QUESTIONS_DIR).filter((f) => f.endsWith(".json"))) {
@@ -50,9 +32,7 @@ function needles(): Needle[] {
       const words = norm(q.question).split(" ");
       out.push({ what: "question", from: q.id, text: words.join(" ") });
       for (let i = 0; i + 5 <= words.length; i++) out.push({ what: "five words of the question", from: q.id, text: words.slice(i, i + 5).join(" ") });
-      for (const source of q.pass.phrases) {
-        for (const lit of literals(source)) if (![...PLACES].some((p) => p.includes(lit))) out.push({ what: "pass phrase", from: q.id, text: lit });
-      }
+      for (const statement of q.pass.mustSay ?? []) out.push({ what: "mustSay statement", from: q.id, text: norm(statement) });
     }
   }
   return out;
@@ -75,7 +55,7 @@ function visible(appId: (typeof APP_IDS)[number]): { label: string; text: string
 }
 
 describe("no answer key", () => {
-  test("no answer key: no prompt, context, tool description or input schema carries a golden or held-out question id, question text or pass phrase", () => {
+  test("no answer key: no prompt, context, tool description or input schema carries a golden or held-out question id, question text or mustSay statement", () => {
     const all = needles();
     expect(all.length).toBeGreaterThan(500);
     const hits: string[] = [];

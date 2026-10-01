@@ -94,10 +94,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Belize",
-          "(DHW|degree heating|alert level|heat stress)",
-          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)"
+        "mustSay": [
+          "Names Belize as the place it reports on",
+          "Reports the reef heat stress: DHW or alert level",
+          "Says the reports in the window are few, thin or absent"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -127,10 +127,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Mexican Caribbean|Quintana Roo|Cozumel|Chinchorro",
-          "(research|needs id|casual|grade)",
-          "observed"
+        "mustSay": [
+          "Names the Mexican Caribbean area, such as Quintana Roo, Cozumel or Chinchorro",
+          "Gives the quality grade of the reports, such as research, needs ID or casual",
+          "Gives the observed date of the reports, when the animals were seen"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -157,12 +157,12 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "DHW|degree heating",
-          "alert level|BAA|bleaching alert",
-          "\\d{4}-\\d{2}-\\d{2}|days? (old|ago)|as of",
-          "Belize",
-          "Colombia"
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Reports the bleaching alert level",
+          "Gives the data date or age of the CRW data",
+          "Names Belize as the place it reports on",
+          "Names Colombia as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -186,9 +186,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(model|Open-Meteo|forecast)"
+        "mustSay": [
+          "Gives a wave height in metres",
+          "Says the wave values are a modelled forecast, from Open-Meteo"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -214,9 +214,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "report",
-          "(not (the same as|mean)|doesn't mean|does not mean)(?:[^.]|\\.\\d){0,60}(absen|no lionfish|none there)|no reports? (is|are) not"
+        "mustSay": [
+          "Reports the week's Florida Keys reports, or that none came in",
+          "Says that having no reports does not mean there are no lionfish there"
         ],
         "forbid": [
           "(?<!(mean|imply|say|show) )no lionfish (are|were) (there|present)",
@@ -245,9 +245,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(recent reports|heat stress|ID quality|identification|completeness)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the priority components, such as recent reports, heat stress, ID quality or completeness"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
@@ -278,9 +278,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "San Andr[e\\u00E9]s|Colombia",
-          "observed"
+        "mustSay": [
+          "Names San Andrés or Colombia",
+          "Gives the observed date of the reports, when the animals were seen"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -313,10 +313,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(previous|prior|earlier) (month|30 days)",
-          "(more|fewer|same|no change|up|down|from \\d+ to \\d+)",
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Compares with the previous month, the 30 days before",
+          "States the direction of the change between the two months",
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [
           "(?<!(mean|imply|say|show|that|whether|evidence|proof)\\b[^.]{0,40})(population|abundance) (grew|increased|rose|fell|declined)"
@@ -349,10 +349,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "DHW|degree heating",
-          "(rose|risen|fell|fallen|peak|steady|up|down)",
-          "\\u00B0C-weeks|degree.?C.?weeks|C-weeks"
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Describes the DHW trend, its rise, fall or peak",
+          "Gives DHW in degree C weeks"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -377,10 +377,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "\\d+",
-          "(observed)",
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Gives the count as a number",
+          "Counts or lists the reports by their observed date",
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -407,9 +407,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Florida Keys|Mexican Caribbean|Belize|Colombia)",
-          "(new|since yesterday|no new)"
+        "mustSay": [
+          "Names the areas: Florida Keys, Mexican Caribbean, Belize or Colombia",
+          "Says what is new since yesterday, or that nothing is"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -433,10 +433,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Chinchorro",
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(build|rising|increas|calm|dropping|decreas|steady)"
+        "mustSay": [
+          "Names Banco Chinchorro as the place it reports on",
+          "Gives a wave height in metres",
+          "States whether the waves build, ease or hold steady"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -460,9 +460,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "alert level|BAA",
-          "(changed|unchanged|rose|fell|same|from)"
+        "mustSay": [
+          "Reports the bleaching alert level",
+          "States whether the alert level changed"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -491,10 +491,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(recent reports|heat stress|ID quality|identification|completeness)",
-          "(observed|data date|as of|\\d{4}-\\d{2}-\\d{2})"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Names the priority components, such as recent reports, heat stress, ID quality or completeness",
+          "Gives the timestamps or data dates of the evidence"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
@@ -528,10 +528,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "accumulat",
-          "(HotSpot|hot ?spot|current (heat|anomaly|SST))",
-          "(DHW|degree heating)"
+        "mustSay": [
+          "Says DHW accumulates heat stress over weeks",
+          "Says the alert level also needs a current HotSpot, current heat",
+          "Names degree heating weeks or DHW"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -558,10 +558,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
-          "(heat|SST|anomaly)",
-          "(component|heuristic)"
+        "mustSay": [
+          "Says the reports in the window are few, thin or absent",
+          "Reports the heat stress, SST or anomaly",
+          "Refers to the priority components or the heuristic"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -588,9 +588,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
-          "(heat stress|history|GBIF|NAS)"
+        "mustSay": [
+          "Says the reports in the window are few, thin or absent",
+          "Says what Belize still shows: heat stress, or the historical records from GBIF or NAS"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -615,13 +615,13 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "recent reports",
-          "(ID quality|identification)",
-          "heat stress",
-          "completeness",
-          "weight",
-          "heuristic"
+        "mustSay": [
+          "Names the recent reports component",
+          "Names the ID quality component",
+          "Names the heat stress component",
+          "Names the completeness component",
+          "Says the components are weighted, or gives their weights",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -648,10 +648,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "Cozumel",
-          "(recent reports|heat stress|ID quality|identification|completeness)",
-          "heuristic"
+        "mustSay": [
+          "Names Cozumel as the place it reports on",
+          "Names the priority components, such as recent reports, heat stress, ID quality or completeness",
+          "Says the score or ranking is a heuristic rather than a measurement or prediction"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -681,14 +681,14 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(SST|sea surface)",
-          "anomal",
-          "(degree heating|DHW)",
-          "(alert level|BAA)",
-          "wave",
-          "current",
-          "(context|not proof|does not show|doesn't show)"
+        "mustSay": [
+          "Explains SST or sea surface temperature",
+          "Explains the SST anomaly",
+          "Explains degree heating weeks, the DHW",
+          "Explains the bleaching alert level",
+          "Explains the wave measure",
+          "Explains the current measure",
+          "Says these measures are context, not proof of lionfish effects"
         ],
         "forbid": [
           "heat (stress )?(causes|caused) lionfish",
@@ -715,9 +715,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(separate|kept out|not part|outside)",
-          "(field|dive|survey)"
+        "mustSay": [
+          "Says waves and currents are kept separate from the priority score",
+          "Says waves and currents bear on field or dive conditions, when to go"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -742,9 +742,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(reef|heat stress)",
-          "context"
+        "mustSay": [
+          "Refers to reef heat stress",
+          "Says reef heat stress is context for where reef surveys matter, not evidence of lionfish effects"
         ],
         "forbid": [
           "lionfish (cause|caused|drive)"
@@ -771,10 +771,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "km\\/h",
-          "(m\\/s|knots)",
-          "model"
+        "mustSay": [
+          "Gives the current speed in km/h",
+          "Gives the speed in m/s or knots as well",
+          "Says the current velocity is modelled"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -800,10 +800,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(history|historical)",
-          "(lag|delay|days|weeks)",
-          "duplicate|dedup"
+        "mustSay": [
+          "Says GBIF provides history, the historical record",
+          "States GBIF's lag in days",
+          "Says GBIF copies are deduplicated against iNaturalist"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -828,10 +828,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(curated|verified|authoritative)",
-          "(lag|weeks|months)",
-          "(Colombia|outside Florida|stale)"
+        "mustSay": [
+          "Says NAS records are curated",
+          "Says NAS records lag, by weeks to months",
+          "Says NAS is stale, or that its records outside Florida, such as Colombia, are old"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -855,10 +855,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "submitted|uploaded",
-          "observed",
-          "(days|months|years) (later|after|before|earlier)"
+        "mustSay": [
+          "Gives the submitted or upload date",
+          "Gives the observed date of the reports, when the animals were seen",
+          "States the lag between observation and submission in days, months or years"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -889,10 +889,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Florida Keys|Mexican Caribbean|Belize|Colombia)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)",
-          "(fresh|stale|lag|old)"
+        "mustSay": [
+          "Names the areas: Florida Keys, Mexican Caribbean, Belize or Colombia",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched",
+          "Says how fresh or stale the supporting data is"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -917,11 +917,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "duplicate|copy|copies",
-          "iNaturalist|iNat",
-          "GBIF",
-          "(not|never) (counted|count)"
+        "mustSay": [
+          "Says the GBIF records are duplicates or copies of iNaturalist observations",
+          "Names iNaturalist as a source",
+          "Names GBIF as a source",
+          "Says the duplicates are not counted twice"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -949,11 +949,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "buoy|in-situ|measured",
-          "satellite|GOES",
-          "(disagree|differ|conflict|agree)",
-          "(only|just)(?:[^.]|\\.\\d){0,60}Florida|no (sea temperature )?buoys?(?:[^.]|\\.\\d){0,80}(Mexic|Belize|Colombia)"
+        "mustSay": [
+          "Refers to the buoy or in-situ measured reading, or its absence",
+          "Names the satellite reading",
+          "States whether the buoy and satellite readings agree or disagree",
+          "Says only Florida has buoys to compare, or that the other areas have none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -981,9 +981,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "NAS",
-          "(stale|old|newest|latest|not current)"
+        "mustSay": [
+          "Names NAS or USGS NAS as a source",
+          "Says the NAS data is stale, old or not current"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1009,10 +1009,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Coral Reef Watch|CRW)",
-          "(daily|latency|behind|delay)",
-          "(stale|fresh)"
+        "mustSay": [
+          "Names NOAA Coral Reef Watch or CRW",
+          "Explains the daily cadence or its latency",
+          "Says whether the CRW feed is fresh, nominal or stale"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1037,9 +1037,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "research",
-          "\\d+"
+        "mustSay": [
+          "Gives the research grade split of the reports",
+          "Gives the count as a number"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1063,8 +1063,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(obscured|imprecise|accuracy|uncertain|open (sea|water)|offshore)"
+        "mustSay": [
+          "Says the position is obscured, imprecise or uncertain, or gives its accuracy"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1090,10 +1090,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "wave",
-          "\\d(\\.\\d+)?\\s*(m|metres|meters)\\b",
-          "(separate|not part of|independent of|apart from)(?:[^.]|\\.\\d){0,60}priority|priority(?:[^.]|\\.\\d){0,60}(separate|unchanged|not affected)"
+        "mustSay": [
+          "Reports the wave forecast or wave height",
+          "Gives a wave height in metres",
+          "Says the wave ranking is separate from the priority ranking"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -1121,9 +1121,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(wave|sea|current)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Refers to the marine forecast, waves, sea or currents"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)",
@@ -1150,8 +1150,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(km\\/h|m\\/s|knots|beyond|horizon|three days|3 days|72)"
+        "mustSay": [
+          "Gives the weekend currents with their unit, or says the three day horizon does not reach the weekend"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1179,10 +1179,10 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(few|thin|sparse|only (one|1|two|2|three|3|four|4)|no (recent )?reports|single report)",
-          "(heat|DHW|alert level)",
-          "wave"
+        "mustSay": [
+          "Says the reports in the window are few, thin or absent",
+          "Reports the heat stress: DHW or alert level",
+          "Reports the wave forecast or wave height"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -1211,9 +1211,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "wave",
-          "(report|sighting)"
+        "mustSay": [
+          "Reports the wave forecast or wave height",
+          "Reports the sighting reports"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
@@ -1238,9 +1238,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(3|three)[- ]days?|72 hours",
-          "(beyond|cannot|can't|doesn't|does not|only)"
+        "mustSay": [
+          "Says the marine forecast covers three days, 72 hours",
+          "Says the date lies beyond what the forecast covers"
         ],
         "forbid": [
           "in two weeks(?:[^.]|\\.\\d){0,40}\\d(\\.\\d+)?\\s*(m|metres|meters)\\b"
@@ -1268,11 +1268,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Coral Reef Watch|CRW)",
-          "(5 ?km|CoralTemp)",
-          "(DOI|credit)",
-          "(fetched|retrieved)"
+        "mustSay": [
+          "Names NOAA Coral Reef Watch or CRW",
+          "Names CoralTemp or the 5 km product",
+          "Gives the required credit or DOI",
+          "Gives the fetch time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1301,11 +1301,11 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "CC BY",
-          "non-commercial",
-          "(Coral Reef Watch|CRW)",
-          "iNaturalist"
+        "mustSay": [
+          "Names the CC BY licence",
+          "Says Open-Meteo is for non-commercial use",
+          "Names NOAA Coral Reef Watch or CRW",
+          "Names iNaturalist as a source"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1329,10 +1329,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(iNaturalist|GBIF|NAS)",
-          "observed",
-          "https?:\\/\\/"
+        "mustSay": [
+          "Names the feed the record came from: iNaturalist, GBIF or NAS",
+          "Gives the observed date of the reports, when the animals were seen",
+          "Gives the publisher page link as a URL"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1362,9 +1362,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "model",
-          "Open-Meteo"
+        "mustSay": [
+          "Says the wave forecast is modelled, not measured",
+          "Names Open-Meteo as a source"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1390,10 +1390,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "iNat",
-          "(CRW|Coral Reef Watch)",
-          "(\\d+(\\.\\d+)? ?(h|hours?|min|minutes?|days?) (old|ago)|as of|updated|fetched)"
+        "mustSay": [
+          "Names iNaturalist as a source",
+          "Names NOAA Coral Reef Watch or CRW",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1420,10 +1420,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "GOES",
-          "(full disk|full-disk)",
-          "(hour)"
+        "mustSay": [
+          "Names the GOES satellite as a source",
+          "Names the full disk product",
+          "Says the cadence is hourly"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1453,10 +1453,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(90[- ]days?|three[- ]months?|quarter)",
-          "(DHW|heat)",
-          "report"
+        "mustSay": [
+          "Covers the 90 day window",
+          "Reports the heat stress",
+          "Summarises the reports over the window"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1485,9 +1485,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(as of|at the time|known|knew)",
-          "(later|since|afterwards|after that)"
+        "mustSay": [
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1515,9 +1515,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "DHW|degree heating",
-          "\\d{4}-\\d{2}-\\d{2}|(January|February|March|April|May|June|July|August|September|October|November|December) \\d"
+        "mustSay": [
+          "Reports degree heating weeks, the DHW value",
+          "Gives the date of the peak"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1541,10 +1541,10 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "August",
-          "(submitted|uploaded|arrived)",
-          "(after|later)"
+        "mustSay": [
+          "Refers to the August observations",
+          "Gives when they were submitted",
+          "Says they arrived after August ended"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1574,9 +1574,9 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|day)",
-          "(report|heat|DHW)"
+        "mustSay": [
+          "Goes through the window day by day, or names the days",
+          "Narrates the reports or heat stress"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1603,10 +1603,10 @@
       },
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "heuristic",
-          "(two weeks|14 days)",
-          "(then|at the time|differ|changed|same)"
+        "mustSay": [
+          "Says the score or ranking is a heuristic rather than a measurement or prediction",
+          "Frames the ranking as of two weeks ago",
+          "Compares the past ranking with today's, or says whether it differs"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1629,8 +1629,8 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})population (is|has been) (growing|increasing|declining|shrinking|stable)"
@@ -1651,9 +1651,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(no|not|don't|do not|doesn't)(?:[^.]|\\.\\d){0,60}(percent|single|risk (score|number))",
-          "component"
+        "mustSay": [
+          "Says in its own words that it does not give a single risk percentage or score",
+          "Points to the separate priority components instead"
         ],
         "forbid": [
           "\\d+(\\.\\d+)?\\s*(%|percent)"
@@ -1674,8 +1674,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,80}(reef (damage|health|decline)|cause|causal|killing)"
+        "mustSay": [
+          "Says in its own words that it cannot judge whether lionfish damage the reef"
         ],
         "forbid": [
           "(?<!(whether|if|that) )lionfish (are|is) (killing|damaging|destroying)"
@@ -1696,9 +1696,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "context",
-          "(not|no)(?:[^.]|\\.\\d){0,40}(proof|evidence|cause)"
+        "mustSay": [
+          "Says heat stress is context only, not a lionfish measurement",
+          "Says heat stress is not proof that lionfish damage the reef"
         ],
         "forbid": [
           "heat stress (means|shows|proves)(?:[^.]|\\.\\d){0,40}lionfish"
@@ -1719,9 +1719,9 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "lionfish",
-          "(only|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something))"
+        "mustSay": [
+          "Names lionfish as what the app covers",
+          "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
           "pythons? (were|are) (reported|seen|found)"
@@ -1742,8 +1742,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(Florida Keys|four areas)(?:[^.]|\\.\\d){0,120}(Mexic|Belize|Colombia)|four (survey )?areas"
+        "mustSay": [
+          "Names the four survey areas the app covers, such as the Florida Keys, Mexican Caribbean, Belize and Colombia"
         ],
         "forbid": [
           "\\d+ (lionfish )?(reports|sightings) in the Bahamas"
@@ -1764,8 +1764,8 @@
       "mustCite": [],
       "pass": {
         "mode": "refuse",
-        "phrases": [
-          "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
+        "mustSay": [
+          "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
         ],
         "forbid": [
           "(about|roughly|approximately|estimated?|around) [\\d,]+ lionfish"
@@ -1791,9 +1791,9 @@
       ],
       "pass": {
         "mode": "caveat",
-        "phrases": [
-          "(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}safe",
-          "(wave|current)"
+        "mustSay": [
+          "Says in its own words that it cannot judge whether it is safe",
+          "Gives the modelled waves or currents"
         ],
         "forbid": [
           "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
@@ -1819,8 +1819,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(noted|wrote|note)"
+        "mustSay": [
+          "Reports the notes, what the team noted or wrote, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1847,9 +1847,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(noted|wrote|note|no notes)",
-          "Looe Key"
+        "mustSay": [
+          "Names who wrote the notes, or says there are none",
+          "Names Looe Key as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1872,9 +1872,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "(message|wrote|said|sent|no messages)",
-          "Belize"
+        "mustSay": [
+          "Summarises what the team messages said, or says there are none",
+          "Names Belize as the place it reports on"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1897,8 +1897,8 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1926,9 +1926,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "mission",
-          "wave"
+        "mustSay": [
+          "Refers to the missions on the team board, or says there are none",
+          "Reports the wave forecast or wave height"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1956,9 +1956,9 @@
       ],
       "pass": {
         "mode": "answer",
-        "phrases": [
-          "note",
-          "(research|needs id|casual|grade)"
+        "mustSay": [
+          "Lists the notes linked to sightings",
+          "Gives the quality grade of the reports, such as research, needs ID or casual"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -1986,6 +1986,16 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "lionfish-replay-90d-mx: the span phrase accepted only \"90 days\"; \"90-day record\" and \"three-month\" name the same span, so the pattern now takes either spelling (1 pattern)."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "J1",
+      "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). After the final series: 'Places the scene in January 2026' is 'Places the scene in the January cold snap' (the regex was (January|2026-01)); 'Gives the quality flag' is 'Gives the quality flag, or notes cloud masking' (the regex accepted 'cloud'). After the held-out series: the outside-area refusal statement also accepts naming the eight locations as the coverage (the scope guard's wording); 'States NAS's lag of weeks to months' is 'Says NAS records lag or arrive late, by weeks to months'; 'Names the buoy, the in-situ measured reading' also accepts its absence (Belize has no buoy); 'Names USGS NAS as a source' is 'Names NAS or USGS NAS as a source'. No statement was loosened below its regex."
     }
   ]
 }

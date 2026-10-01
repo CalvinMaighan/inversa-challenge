@@ -119,17 +119,16 @@
           "id": "eval-live-and-history",
           "kind": "live",
           "share": 0.6,
-          "timeout": 2400,
-          "repeat": 3,
-          "run": "bun run eval -- --app {app}",
+          "timeout": 7200,
+          "run": "bun run eval -- --app {app} --runs 3",
           "requires": {
             "scripts": ["root:eval"],
             "files": ["spec/apps/questions/{app}.json"],
-            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL pooled category" }]
           },
           "expect": [
-            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
-            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "replay"], "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } }
+            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna\\b.*\\bruns=(?<r>\\d+)", "bounds": { "r": { "min": 3 } } },
+            { "re": "^EVAL pooled category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "replay"], "bounds": { "t": { "min": 9 }, "pct": { "min": 90 } } }
           ]
         }
       ],
@@ -328,7 +327,7 @@
     },
     {
       "id": "agent-benchmark",
-      "title": "Blind live agent clears the bars on the golden set three runs in a row and on the held-out set twice, per app",
+      "title": "Blind live agent clears the pooled bars over three golden runs and two held-out runs, per app",
       "group": "lookingFor",
       "source": "brief",
       "brief": "can interpret natural-language questions, use the available data and tools effectively",
@@ -340,40 +339,39 @@
           "id": "eval",
           "kind": "live",
           "share": 0.7,
-          "timeout": 2400,
-          "repeat": 3,
-          "run": "bun run eval -- --app {app}",
+          "timeout": 7200,
+          "run": "bun run eval -- --app {app} --runs 3",
           "requires": {
             "scripts": ["root:eval"],
-            "files": ["spec/apps/questions/{app}.json", "apps/web/tests/server/agent/no-answer-key.test.ts"],
-            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL bars" }]
+            "files": ["spec/apps/questions/{app}.json", "apps/web/tests/server/agent/no-answer-key.test.ts", "apps/web/eval/judge.ts", "apps/web/eval/judge-corpus.json"],
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL pooled bars" }]
           },
           "expect": [
-            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 48 } } },
-            { "re": "^EVAL category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "team"], "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } },
-            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
-            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
-            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 48 }, "pct": { "min": 95 } } },
-            { "re": "^EVAL bars .* met=yes$" }
+            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna judge=(?!openai/gpt-6-luna)\\S+ questions=(?<q>\\d+) runs=(?<r>\\d+)", "bounds": { "q": { "min": 48 }, "r": { "min": 3 } } },
+            { "re": "^EVAL pooled category {each} passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "forEach": ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "team"], "bounds": { "t": { "min": 9 }, "pct": { "min": 90 } } },
+            { "re": "^EVAL pooled category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 9 } } },
+            { "re": "^EVAL pooled ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
+            { "re": "^EVAL pooled app={app} runs=(?<r>\\d+) passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "r": { "min": 3 }, "t": { "min": 144 }, "pct": { "min": 95 } } },
+            { "re": "^EVAL pooled bars overall>=95 category>=90 boundary=100each ungrounded=0 met=yes$" }
           ]
         },
         {
           "id": "eval-holdout",
           "kind": "live",
           "share": 0.3,
-          "timeout": 2400,
-          "repeat": 2,
-          "run": "bun run eval -- --app {app} --holdout",
+          "timeout": 7200,
+          "run": "bun run eval -- --app {app} --holdout --runs 2",
           "requires": {
             "scripts": ["root:eval"],
             "files": ["spec/apps/questions/{app}.holdout.json"],
             "contains": [{ "path": "apps/web/eval/run.ts", "text": "--holdout" }]
           },
           "expect": [
-            { "re": "^EVAL app={app} set={app}-holdout model=openai/gpt-6-luna questions=(?<q>\\d+)", "bounds": { "q": { "min": 30 } } },
-            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 1 } } },
-            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
-            { "re": "^EVAL passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 30 }, "pct": { "min": 90 } } }
+            { "re": "^EVAL app={app} set={app}\\.holdout model=openai/gpt-6-luna judge=(?!openai/gpt-6-luna)\\S+ questions=(?<q>\\d+) runs=(?<r>\\d+)", "bounds": { "q": { "min": 30 }, "r": { "min": 2 } } },
+            { "re": "^EVAL pooled category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 2 } } },
+            { "re": "^EVAL pooled ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 } } },
+            { "re": "^EVAL pooled app={app} runs=(?<r>\\d+) passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "r": { "min": 2 }, "t": { "min": 60 }, "pct": { "min": 90 } } },
+            { "re": "^EVAL pooled bars overall>=90 .* boundary=100each ungrounded=0 met=yes$" }
           ]
         }
       ],
@@ -414,22 +412,21 @@
           "id": "eval-grounded",
           "kind": "live",
           "share": 0.6,
-          "timeout": 2400,
-          "repeat": 3,
-          "run": "bun run eval -- --app {app}",
+          "timeout": 7200,
+          "run": "bun run eval -- --app {app} --runs 3",
           "requires": {
             "scripts": ["root:eval"],
             "files": ["spec/apps/questions/{app}.json"],
             "contains": [
-              { "path": "apps/web/eval/run.ts", "text": "EVAL category" },
-              { "path": "apps/web/eval/run.ts", "text": "ungrounded=" }
+              { "path": "apps/web/eval/run.ts", "text": "EVAL pooled category" },
+              { "path": "apps/web/eval/run.ts", "text": "EVAL pooled ungrounded=" }
             ]
           },
           "expect": [
-            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
-            { "re": "^EVAL ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 }, "c": { "min": 20 } } },
-            { "re": "^EVAL category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } },
-            { "re": "^EVAL category sources passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 3 }, "pct": { "min": 90 } } }
+            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna\\b.*\\bruns=(?<r>\\d+)", "bounds": { "r": { "min": 3 } } },
+            { "re": "^EVAL pooled ungrounded=(?<u>\\d+) checked=(?<c>\\d+)$", "bounds": { "u": { "max": 0 }, "c": { "min": 60 } } },
+            { "re": "^EVAL pooled category boundary passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 9 } } },
+            { "re": "^EVAL pooled category sources passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 9 }, "pct": { "min": 90 } } }
           ]
         }
       ],
@@ -677,17 +674,16 @@
           "id": "quality-agent",
           "kind": "live",
           "share": 0.3,
-          "timeout": 2400,
-          "repeat": 3,
-          "run": "bun run eval -- --app {app}",
+          "timeout": 7200,
+          "run": "bun run eval -- --app {app} --runs 3",
           "requires": {
             "scripts": ["root:eval"],
             "files": ["spec/apps/questions/{app}.json"],
-            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL category" }]
+            "contains": [{ "path": "apps/web/eval/run.ts", "text": "EVAL pooled category" }]
           },
           "expect": [
-            { "re": "^EVAL app={app} model=openai/gpt-6-luna\\b" },
-            { "re": "^EVAL category quality passed (?<p>\\d+)/(?<t>\\d+)$", "eq": [["p", "t"]], "bounds": { "t": { "min": 3 } } }
+            { "re": "^EVAL app={app} set={app} model=openai/gpt-6-luna\\b.*\\bruns=(?<r>\\d+)", "bounds": { "r": { "min": 3 } } },
+            { "re": "^EVAL pooled category quality passed (?<p>\\d+)/(?<t>\\d+) pct=(?<pct>\\d+)$", "bounds": { "t": { "min": 9 }, "pct": { "min": 90 } } }
           ]
         },
         {

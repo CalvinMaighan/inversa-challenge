@@ -71,3 +71,22 @@ Honest residual failure rate, final code: main set 6.4% (13 failures over 204 qu
 ## Cost
 
 A full python run costs at most $0.21 (about 1.7 M input tokens, 25 k output, list price). See the lionfish analysis for the leaf total.
+
+## J1: the judged benchmark (2026-10-01, 14:30Z)
+
+Regex phrases replaced by judged `mustSay` statements, bars pooled over three runs (`docs/grading/judge-validation.md`). Final code; the 68-question file (this series ran before K1's python edits were merged).
+
+| Run | Score | Failed ids |
+|---|---|---|
+| golden 1 (14:30:28Z) | 59/68 | py-legacy-homestead-species-counts (caveat: the answer listed tegu, anole, iguana and frog counts and never mentioned pythons; boundary 13/14), explain-activity-term (explain_cell not called), relevance-stage (the answer said the source record "does not explain why stage is included"), planning-best-night (the stored NWS forecast had one period, so no night could be named), planning-route (Big Cypress never named), sources-nas-cadence (feed_state not called), replay-scores-during-cold (below), team-notes-today and team-notes-flamingo (no note citation: nothing in the window and nothing earlier in the fixture to cite) |
+| golden 2 (14:34:22Z) | 64/68 | explain-activity-term, replay-cold-snap-map (judged: "January cold-snap timeline" without "2026"; the statement over-specified the regex `(January\|2026-01)` and is reworded, `changelog`), replay-scores-during-cold, team-messages (Shark Valley never named) |
+| golden 3 (14:38:19Z) | 64/68 | sources-licences (turns limit, no answer), sources-lst-number (judged: "cloud masking" not credited for "the quality flag"; statement reworded, `changelog`), sources-nas-cadence, team-notes-today |
+| pooled | 187/204 (91%) | boundary 41/42, `ungrounded=0` (440 checked), views 390/390; sources 14/18, team 14/18, replay 15/18, explain 16/18, planning 16/18 |
+| held-out 1 (14:42:29Z) | 32/36 | ph-planning-blind-spots (conditions, sightings not called), ph-sources-sighting-platform (no URL given), ph-sources-nas-speed (feed_state not called; "NAS" judged not to name "USGS NAS", statement reworded), ph-replay-cold-map (the January 2026 statement, reworded) |
+| held-out 2 (14:44:37Z) | 32/36 | ph-change-week, ph-planning-tamiami-weekend, ph-sources-sighting-platform, ph-replay-cold-map |
+| held-out pooled, first series | 64/72 (88%) | boundary 12/12, `ungrounded=0`; `met=no` on the overall bar, two of the eight misses on statements reworded afterwards |
+| held-out rerun 1 (14:48:52Z), reworded statements | 32/36 | ph-relevance-stage (judged: the answer never reported the stage), ph-planning-tamiami-weekend (no weekend forecast and no horizon statement), ph-sources-nas-speed (feed_state not called), ph-team-notes-today (no note citation, the fixture gap above) |
+| held-out rerun 2 (14:51:16Z) | 34/36 | ph-sources-nas-speed, ph-replay-cold-map (judged not met once more on "the January cold-snap timeline"; the question is sensitive to the judge) |
+| held-out rerun pooled | 66/72 (91%) | boundary 12/12, `ungrounded=0`: `met=yes` |
+
+Repeat failures, two of three golden runs: `explain-activity-term` and `sources-nas-cadence` are tool-sequence criteria the model skips (`explain_cell`, `feed_state`); `replay-scores-during-cold` cannot pass against the fixture stub, whose `hotspots` resolver ignores the knowledge time, so a query for January 12 returns the January 15 snapshot and the agent says, correctly, that it cannot show how the scores moved (the regex had passed it on the word "same"; fabricating a past snapshot in the fixture would be making data up, so the question stays and is logged as a harness limit); `team-notes-today` cannot cite a note because the fixture holds none in the 24-hour window and none earlier that the tool's 7-day fallback returns (a fixture gap: the criterion `cites: { note: 1 }` has nothing to point at). The boundary miss in run 1 is the caveat question answered without its subject, the fourth time AG2 and this series have seen that question flip.
