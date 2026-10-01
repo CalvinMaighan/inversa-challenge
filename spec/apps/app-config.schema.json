@@ -116,7 +116,7 @@
         "additionalProperties": false,
         "required": ["source", "mode"],
         "properties": {
-          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "crw", "nwps", "openmeteo-marine", "goes19-sst", "nws-alerts", "nws-forecast", "iem"] },
+          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "crw", "nwps", "openmeteo-marine", "goes19-sst", "nws-alerts", "nws-forecast", "iem", "aisstream"] },
           "mode": { "type": "string", "enum": ["push", "poll"] },
           "name": { "type": "string" },
           "homepage": { "type": "string" },

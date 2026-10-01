@@ -637,6 +637,12 @@ impl<'t, 'c> RowWriter<'t, 'c> {
             Row::ForecastObservations(o) => self.forecast_observations(o)?,
             Row::Thresholds(t) => self.thresholds(t)?,
             Row::SiteAlerts(a) => self.site_alerts(a)?,
+            // Scope guard: a position outside the app's regions is skipped.
+            Row::VesselPosition(p) => match self.app.region_of(p.lat, p.lon) {
+                Some(_) => Some(crate::vessels::write_position(self.tx, p, self.raw_object_id)?),
+                None => None,
+            },
+            Row::VesselStatic(s) => Some(crate::vessels::write_static(self.tx, s, self.raw_object_id)?),
         };
         match changed {
             None => self.skipped += 1,
@@ -1492,7 +1498,7 @@ mod tests {
         let carp = crate::app::test_support::test_state_for("carp");
         let p = plan(&carp);
         assert_eq!(p.runnable_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
-        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws"]);
+        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws", "aisstream"]);
         let nwws = p.known.iter().find(|(i, _)| i.id == "nwws").unwrap();
         assert!(nwws.1.as_deref().unwrap().contains("NWWS_USER"), "registered but down with the reason: {:?}", nwws.1);
 

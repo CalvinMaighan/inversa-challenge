@@ -11,6 +11,7 @@ import { speciesIndexOfTaxon } from "client/globe/species";
 import { activeApp } from "client/state/app";
 import { nearestPlace } from "client/voice/gazetteer";
 import { QUALITY_CODES } from "shared/frames";
+import { vesselCard } from "shared/vessels";
 
 import { feedLabel } from "../topbar/feed-chips";
 import { ago, formatReading, NETWORK_LABELS } from "../tooltip/model";
@@ -105,6 +106,7 @@ const SOURCE_NAMES: Record<string, string> = {
   openmeteo: "Open-Meteo weather",
   goes: "GOES satellite",
   goes19: "GOES satellite",
+  aisstream: "AISStream.io ship positions",
 };
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
@@ -151,6 +153,12 @@ export function plainSummary(kind: string, record: Record<string, unknown>, atMs
       const rows = typeof record.rowsIn === "number" ? `${record.rowsIn} record${record.rowsIn === 1 ? "" : "s"} received` : null;
       const failed = str(record.error) ? "the check failed" : null;
       return build(`Data check of ${SOURCE_NAMES[source] ?? feedLabel(source)}`, [when(record.fetchedAt, atMs), rows, failed]);
+    }
+    case "vessel": {
+      // "Last heard" is real reception time, so it is measured from now (a conditions app's cursor is its own).
+      const card = vesselCard(record);
+      const heard = when(record.lastSeen, Math.max(atMs, Date.now()));
+      return build(card.title, [...card.parts, heard ? `last heard ${heard}` : null]);
     }
     default:
       return null;

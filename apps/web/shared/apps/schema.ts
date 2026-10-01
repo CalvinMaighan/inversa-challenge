@@ -37,6 +37,8 @@ export const LAYER_IDS = [
   "missions",
   "peers",
   "notes",
+  // GE4 vessels (AIS), carp and lionfish only (docs/GODS_EYE.md GC4).
+  "vessels",
   // GE5 water and weather overlays (docs/GODS_EYE.md GC5), served through the Axum overlay proxy.
   "sst-map",
   "radar",
@@ -69,6 +71,7 @@ export const FEED_SOURCES = {
   "nws-alerts": "poll",
   "nws-forecast": "poll",
   iem: "poll",
+  aisstream: "push",
 } as const;
 export type FeedSource = keyof typeof FEED_SOURCES;
 const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];

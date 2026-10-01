@@ -9,7 +9,7 @@ export type SelectionState = {
   drawerOpen: boolean;
 };
 
-const EVIDENCE_KINDS: readonly EvidenceKind[] = ["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note"];
+const EVIDENCE_KINDS: readonly EvidenceKind[] = ["sighting", "reading", "alert", "fetch", "hotspot", "backtest", "note", "vessel"];
 
 /** Split an evidence id into kind and key. Keys may contain colons (readings, hotspots); only the first splits. */
 export function parseEvidenceId(id: string): { kind: EvidenceKind; key: string } | null {

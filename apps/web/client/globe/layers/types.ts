@@ -50,6 +50,11 @@ export type LayerStats = {
   marker?: { kind: "billboard" | "point"; dots: number; images: number };
   /** GE5 overlays: the instant the layer shows (snapped to its source's cadence) and whether it was clamped to an edge. */
   overlay?: { shownMs: number; clamped: "latest" | "earliest" | null; opacity: number };
+  /**
+   * Vessels layer (GE4): the time the ships are drawn at (unix ms), trails drawn, and up to 200 drawn positions by
+   * MMSI as [lon, lat], so a check can see ships move between two timeline times.
+   */
+  vessels?: { atMs: number; trails: number; positions: Record<string, readonly [number, number]> };
 };
 
 /** What layers read besides the frame grid. The globe wires it to active-state and the threads API. */

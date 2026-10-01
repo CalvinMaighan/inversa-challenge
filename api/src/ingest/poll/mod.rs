@@ -39,9 +39,9 @@ mod tests {
     use crate::app::test_support::{router_for, test_state_for};
     use crate::ingest::scheduler::{plan, start};
 
-    const LIONFISH_FEEDS: [&str; 7] = ["crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
+    const LIONFISH_FEEDS: [&str; 8] = ["aisstream", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
 
-    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those seven: no
+    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those (seven plus `aisstream`, GE4): no
     /// NWS/NWWS, no CO-OPS water level, no Open-Meteo forecast, no GOES LST/cloud/fire.
     #[tokio::test]
     async fn lionfish_feed_set() {

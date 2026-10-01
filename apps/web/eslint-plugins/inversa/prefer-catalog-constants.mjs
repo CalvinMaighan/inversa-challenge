@@ -17,7 +17,7 @@ export const CATALOG_VOCABULARY = {
   /** shared/apps APP_IDS */
   APP_IDS: ["carp", "lionfish", "python"],
   /** shared/apps LAYER_IDS (re-exported by shared/voice/ui-tools) */
-  LAYER_IDS: ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes", "sst-map", "radar", "clouds", "lightning", "cyclones"],
+  LAYER_IDS: ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes", "vessels", "sst-map", "radar", "clouds", "lightning", "cyclones"],
   /** shared/frames.ts QUALITY_CODES */
   QUALITY_CODES: ["research", "needs_id", "casual", "curated"],
 };

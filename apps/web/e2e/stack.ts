@@ -75,6 +75,8 @@ export type StackOptions = {
    * nominal) instead of `down`/disabled. Default false.
    */
   offlinePollers?: boolean;
+  /** Extra Axum environment, applied last (e2e:vessels points `AISSTREAM_URL` at its local mock). */
+  axumEnv?: Record<string, string>;
 };
 
 /** Optional delivery headers of the hook (`X-Source-Url`, `X-Fetched-At` unix ms, `Content-Type`). */
@@ -290,6 +292,7 @@ export async function startStack(opts: StackOptions): Promise<Stack> {
     const dead = `http://127.0.0.1:${freePort()}`;
     Object.assign(axumEnv, { INVERSA_SOURCES: "on", HTTP_PROXY: dead, HTTPS_PROXY: dead, ALL_PROXY: dead, http_proxy: dead, https_proxy: dead, all_proxy: dead, NO_PROXY: "", no_proxy: "" });
   }
+  Object.assign(axumEnv, opts.axumEnv ?? {});
 
   if (!existsSync(API_BIN)) throw new Error(`no Axum binary at ${API_BIN}; call buildApi first`);
   for (const id of opts.apps ?? [app]) {

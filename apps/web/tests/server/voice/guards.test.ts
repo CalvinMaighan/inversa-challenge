@@ -91,7 +91,8 @@ describe("ui tool validation", () => {
     const props = (id: "carp" | "lionfish" | "python") => (toggle(id).parameters as { properties: Record<string, { enum?: string[] }> }).properties;
     // Config order; carp's `locations` layer has no client layer yet, so voice cannot toggle it. The GE5 water
     // and weather overlays follow (docs/GODS_EYE.md GC5).
-    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes", "sst-map", "radar", "clouds", "lightning", "cyclones"]);
+    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes", "vessels", "sst-map", "radar", "clouds", "lightning", "cyclones"]);
+    expect(props("python").layer!.enum).not.toContain("vessels");
     expect(props("carp").species?.enum).toBeUndefined();
     expect(toggle("carp").description).not.toContain("python");
     expect(props("lionfish").species!.enum).toEqual(["lionfish"]);

@@ -215,6 +215,15 @@ fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqli
             .flatten();
         newest = newest.max(max);
     }
+    // AIS (GE4): the newest stored vessel position.
+    if source_id == crate::vessels::SOURCE_ID {
+        let max: Option<i64> = conn
+            .prepare_cached("select max(observed_at) from vessel_positions where observed_at <= ?1")?
+            .query_row([now_ms], |r| r.get(0))
+            .optional()?
+            .flatten();
+        newest = newest.max(max);
+    }
     // Alerts only: sightings and stations empty, alerts present.
     let event_feed = !has[0] && !has[1] && has[2];
     Ok((newest, event_feed))

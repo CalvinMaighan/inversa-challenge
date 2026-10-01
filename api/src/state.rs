@@ -36,6 +36,10 @@ pub struct Config {
     /// `USGS_API_KEY`: a free key for api.waterdata.usgs.gov raises the anonymous per-IP rate
     /// limit; sent as `X-Api-Key` by the `usgs` poller when set.
     pub usgs_api_key: Option<String>,
+    /// `AISSTREAM_API_KEY`: AISStream.io vessel positions (GE4); server only, never logged.
+    pub aisstream_api_key: Option<crate::ingest::push::ais::ApiKey>,
+    /// `AISSTREAM_URL`: a loopback mock for e2e; anything but the AISStream endpoint or loopback is refused.
+    pub aisstream_url: Option<String>,
     /// When false, the scheduler starts no network sources (tests, offline dev).
     pub sources_enabled: bool,
 }
@@ -78,6 +82,8 @@ impl Config {
             nwws_user: env("NWWS_USER"),
             nwws_pass: env("NWWS_PASS"),
             usgs_api_key: env("USGS_API_KEY"),
+            aisstream_api_key: env("AISSTREAM_API_KEY").map(crate::ingest::push::ais::ApiKey::new),
+            aisstream_url: env("AISSTREAM_URL"),
             sources_enabled: env("INVERSA_SOURCES").as_deref() != Some("off"),
         }
     }
@@ -103,6 +109,8 @@ impl Config {
             nwws_user: None,
             nwws_pass: None,
             usgs_api_key: None,
+            aisstream_api_key: None,
+            aisstream_url: None,
             sources_enabled: false,
         }
     }

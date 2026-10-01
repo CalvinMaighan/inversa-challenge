@@ -13,10 +13,11 @@ import { sightingHoursOf, type LayerId, type LayersState, type SpeciesId } from 
 import { windowLabel } from "shared/frames";
 import { hasLayer, speciesIds, type AppConfig } from "shared/apps";
 import { LAYER_IDS } from "shared/voice/ui-tools";
+import { VESSEL_CATEGORIES, VESSEL_COLORS, VESSEL_CREDIT, VESSEL_LABELS } from "shared/vessels";
 
 import { NETWORK_LABELS } from "../tooltip/model";
 
-const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES, VESSELS] = LAYER_IDS;
 
 export type SwatchShape = "dot" | "square" | "diamond" | "area" | "hatch" | "icon";
 
@@ -51,6 +52,8 @@ export type LegendRow = {
   ramp?: LegendRamp;
   /** Layer error from its last fetch, shown under the row. */
   error: string | null;
+  /** Heading the row is listed under ("Ships"); rows without one sit at the top. */
+  group?: string;
 };
 
 /** CSS gradient through a ramp's colours, opaque so the hue run reads on any theme. */
@@ -153,6 +156,13 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
       unit: "cells",
       swatches: [],
       ramp: { css: rampGradient(TEMP_STOPS), min: `${SST_RANGE_C.min} °C`, max: `${SST_RANGE_C.max} °C`, caption: "°C" },
+    }),
+    row(VESSELS, {
+      group: "Ships",
+      label: "Ships (AIS)",
+      note: `Ships broadcasting AIS where they were at the cursor, arrow along their course (a dot when stopped), with the last three hours fading behind. Not every boat carries AIS. ${VESSEL_CREDIT}.`,
+      unit: "ships",
+      swatches: VESSEL_CATEGORIES.map((type) => ({ key: `vessel-${type}`, label: VESSEL_LABELS[type], color: VESSEL_COLORS[type], shape: "diamond" as const, count: part(statsFor(stats, VESSELS), type) })),
     }),
   ].filter((r) => hasLayer(app, r.layer));
 }

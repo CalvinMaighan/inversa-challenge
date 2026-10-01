@@ -29,9 +29,10 @@ const layers = (over: Partial<LayersState> = {}): LayersState => ({ ...PYTHON_LA
 
 describe("legend", () => {
   test("one row per globe layer, none missing, none twice", () => {
+    // Python lists every layer but vessels (carp and lionfish only, GE4).
     const rows = legendRows(layers(), null);
     // The GE5 water and weather overlays have their own group (client/hud/legend/WaterWeather.tsx).
-    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].filter((id) => !isOverlayId(id)).sort());
+    expect(rows.map((r) => r.layer).sort()).toEqual([...LAYER_IDS].filter((id) => id !== "vessels" && !isOverlayId(id)).sort());
   });
 
   test("sightings: one row for the app's species in the layer's own colour with the app icon and its live count", () => {

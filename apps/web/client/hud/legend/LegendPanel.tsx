@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
@@ -20,6 +20,15 @@ const LegendTitle = styled.p`
   padding-bottom: var(--gap-xs);
   color: var(--muted);
   font: 500 12px / 1.4 var(--font-ui);
+`;
+
+/** A group heading ("Ships") above the rows listed under it. */
+const GroupHead = styled.h3`
+  margin: var(--gap-s) 0 0;
+  color: var(--muted);
+  font: 600 11px / 1.3 var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 `;
 
 const Row = styled.div`
@@ -236,8 +245,11 @@ export default function LegendBody({ active }: { active: boolean }) {
   return (
     <section aria-label="Layers and legend" data-testid="layers-legend" data-app={app.id}>
       {title ? <LegendTitle data-testid="legend-title">{title}</LegendTitle> : null}
-      {rows.map((row) => (
-        <LegendRowView key={row.layer} row={row} />
+      {rows.map((row, i) => (
+        <Fragment key={row.layer}>
+          {row.group && row.group !== rows[i - 1]?.group ? <GroupHead data-testid={`legend-group-${row.group.toLowerCase()}`}>{row.group}</GroupHead> : null}
+          <LegendRowView row={row} />
+        </Fragment>
       ))}
       <WaterWeather app={app} active={active} />
       <GapsRow />

@@ -165,6 +165,25 @@ fn bad_column(idx: usize, what: &str, value: &str) -> rusqlite::Error {
 
 #[Object(name = "Query")]
 impl QueryRoot {
+    /// AIS vessel tracks (GE4): vessels with a fix inside `bbox` during `from..=to` (at most 7
+    /// days), most recently seen first, each with every fix of the window oldest first. `types`
+    /// filters on the category (cargo, tanker, passenger, fishing, tug, pleasure, highspeed,
+    /// service, other, unknown). At most `limit` (default 300, max 1000) tracks and 100,000
+    /// points; a cut list comes with a `TRUNCATED` error. Apps without the aisstream feed get
+    /// `NO_VESSEL_FEED`. Cite a vessel as `vessel:<mmsi>`.
+    #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
+    async fn vessels(
+        &self,
+        ctx: &Context<'_>,
+        bbox: BBox,
+        from: Time,
+        to: Time,
+        types: Option<Vec<String>>,
+        limit: Option<i32>,
+    ) -> Result<Vec<super::vessels::VesselTrack>> {
+        super::vessels::vessels(ctx, bbox, from, to, types, limit).await
+    }
+
     /// Freshness of every registered feed, ordered by source id.
     async fn feeds(&self, ctx: &Context<'_>) -> Result<Vec<FeedState>> {
         let states = feed_state::compute(&app_state(ctx).obs, app_state(ctx).now_ms()).await?;

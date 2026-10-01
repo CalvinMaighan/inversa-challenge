@@ -15,6 +15,7 @@
 //! | `message` | the message id | body, author node, recipient, thread, HLC |
 //! | `hotspot` | `<species>:<cell id>:<frame ms>` (cell id `<col>:<row>`, or `<region>:<col>:<row>` in a multi-region app) | the explain terms |
 //! | `backtest` | `<species>:<days>` | the backtest summary with `perDay` |
+//! | `vessel` | the MMSI (carp, lionfish; GE4) | name, type, call sign, IMO, destination, length, last position with speed and course, fixes in the last 24 h; the VesselFinder page |
 //!
 //! Every id the engines cite resolves here: review reasons (`reading:<lid>:stage_m:…`,
 //! `reading:<usgs site>:discharge_cfs:…`, `forecast:<lid>:<ms>`, `alert:<nws id>`, `fetch:<id>`),
@@ -175,14 +176,19 @@ pub async fn evidence(state: &AppState, id: &str) -> Res<Evidence> {
         "source" => source_found(state, id, key).await?,
         "mission" | "note" => team_entity(state, id, kind, key).await?,
         "message" => team_message(state, id, key).await?,
+        "vessel" => vessel_found(state, id, key).await?,
         _ => {
             return Err(bad_id(
                 id,
-                "kind sighting, reading, alert, fetch, forecast, review, source, mission, note, message, hotspot or backtest",
+                "kind sighting, reading, alert, fetch, forecast, review, source, mission, note, message, hotspot, backtest or vessel",
             ));
         }
     };
-    assemble(state, id, kind, found).await
+    let mut e = assemble(state, id, kind, found).await?;
+    if kind == "vessel" {
+        e.raw = e.raw.map(|raw| crate::vessels::raw_frames_of(raw, key));
+    }
+    Ok(e)
 }
 
 async fn assemble(state: &AppState, id: &str, kind: &str, found: Found) -> Res<Evidence> {
@@ -1108,6 +1114,32 @@ async fn source_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
         links,
         page_url: page,
         api_url: api,
+    })
+}
+
+/// A vessel by MMSI (`vessel:<mmsi>`, GE4): its static data and last position, the archived payload
+/// that last touched it, and its VesselFinder page.
+async fn vessel_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
+    let mmsi: i64 = key.parse().ok().filter(|m| crate::vessels::valid_mmsi(*m)).ok_or_else(|| bad_id(id, "vessel:<mmsi> (nine digits)"))?;
+    let now = state.now_ms();
+    let found = state
+        .obs
+        .read(move |c| {
+            let Some(v) = crate::vessels::evidence_record(c, mmsi, now)? else { return Ok(None) };
+            let raw = raw_ref(c, v.raw_object_id)?;
+            let fetch = fetch_link(c, crate::vessels::SOURCE_ID, v.raw_object_id)?;
+            Ok(Some((v.record, raw, fetch)))
+        })
+        .await?;
+    let (record, raw, fetch) = found.ok_or_else(|| not_found(id))?;
+    Ok(Found {
+        record,
+        source: Some(crate::vessels::SOURCE_ID.to_string()),
+        raw,
+        ingest_lag_ms: None,
+        links: fetch.into_iter().collect(),
+        page_url: source_page_url(crate::vessels::SOURCE_ID, &mmsi.to_string()),
+        api_url: None,
     })
 }
 
