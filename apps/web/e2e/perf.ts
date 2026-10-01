@@ -217,8 +217,9 @@ async function appPass(app: AppId): Promise<void> {
     const cachedMs = performance.now() - started;
     const hit = text.includes('"answer cache hit"');
     log(`cache repeat: ${ms(cachedMs)} ms hit=${hit}`);
+    // The line carries what was measured either way; a miss is the model's full answer time, not a cached one.
+    console.log(`PERF app=${app} first_token_p50_ms=${ms(median(timings.map((t) => t.firstModel)))} n=${timings.length} cached_query_ms=${ms(cachedMs)} cache_hit=${hit ? "yes" : "no"} status_p50_ms=${ms(median(timings.map((t) => t.status)))} done_p50_ms=${ms(median(timings.map((t) => t.done)))}`);
     if (!hit) throw new Error("the repeated question was not served from the answer cache");
-    console.log(`PERF app=${app} first_token_p50_ms=${ms(median(timings.map((t) => t.firstModel)))} n=${timings.length} cached_query_ms=${ms(cachedMs)} status_p50_ms=${ms(median(timings.map((t) => t.status)))} done_p50_ms=${ms(median(timings.map((t) => t.done)))}`);
   } finally {
     if (next.pid) {
       try {
