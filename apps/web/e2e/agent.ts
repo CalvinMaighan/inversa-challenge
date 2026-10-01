@@ -258,8 +258,135 @@ async function lionfishView(origin: string): Promise<void> {
   log(`lionfish view: preset=${framed.preset} region=${framed.region} layers=${framed.layers?.join(",")} asOf=${new Date(framed.asOf!).toISOString()} replay=${framed.replay} tools=${tools.join(",")}`);
 }
 
+const GE7_SHIPS_QUESTION = "Show me ships near Louisiana.";
+const GE7_LOOK_QUESTION = "Switch the map to night vision.";
+const GE7_SHOTS = resolve(WEB, "../../docs/evidence");
+
+/**
+ * GE7 G6 (`--ge7`): the agent knows the map's new layers and looks, on the real stack (Axum with carp's fixtures, the
+ * production build, the proxy), with the local AISStream mock feeding six recorded-template ships through the real
+ * ingest pipeline, and the real model (OpenRouter through Doppler; two short turns). "Show me ships near Louisiana"
+ * must switch the Ships layer on (a `ui` toggle_layer event, LAYERS.vessels on, ships drawn) and cite ships as
+ * `vessel:<mmsi>` chips; "Switch the map to night vision" must set the look (a `ui` set_look event, LOOK nvg).
+ * Then, for gates/leaf-GE7.md G9, radar on through the Layers popover, the scope feather at 40, the Layers popover,
+ * the Developer panel (no key value on screen) and the phone layout are saved to docs/evidence/ge7-*.png.
+ * Line: `AGENT-LAYERS toggled=<layer> cited=<n> look=<set|missing>`.
+ */
+async function ge7(): Promise<void> {
+  const { buildFrames, MOCK_KEY, startMock, waitForTracks } = await import("./ais-mock");
+  const { tapAgentStreams, ask } = await import("./agent-ui");
+  const { buildApi, buildWeb, startStack } = await import("./stack");
+  const nowMs = Date.now();
+  const { frames, fromMs, toMs } = await buildFrames(nowMs);
+  const mock = startMock(frames);
+  const say = (...a: unknown[]) => log(a.map(String).join(" "));
+  buildApi(say);
+  buildWeb(say);
+  // Overlays reach their real upstreams (NO_PROXY); every other poller hits the dead proxy, so no feed data comes from the network.
+  const stack = await startStack({
+    name: "agent-ge7",
+    app: "carp",
+    apps: ["carp"],
+    offlinePollers: true,
+    axumEnv: { AISSTREAM_URL: mock.url, AISSTREAM_API_KEY: MOCK_KEY, NO_PROXY: "nowcoast.noaa.gov,gibs.earthdata.nasa.gov,www.nhc.noaa.gov,mapservices.weather.noaa.gov", no_proxy: "nowcoast.noaa.gov,gibs.earthdata.nasa.gov,www.nhc.noaa.gov,mapservices.weather.noaa.gov" },
+  });
+  const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  let toggled = "none";
+  let cited = 0;
+  let look = false;
+  try {
+    const tracks = await waitForTracks(stack, fromMs, toMs);
+    log(`mock AISStream: ${tracks.length} ships stored over ${Math.round((toMs - fromMs) / 3_600_000)} h`);
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await context.addInitScript(tapAgentStreams);
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(`${stack.origin}/?app=carp#v=2&app=carp`, { waitUntil: "domcontentloaded" });
+    await page.locator('[data-testid="app-select-button"][data-app="carp"]').waitFor({ timeout: BOOT_TIMEOUT_MS });
+    await page.waitForFunction(() => !!window.__inversa?.globe(), undefined, { timeout: BOOT_TIMEOUT_MS });
+    await page.waitForTimeout(1_500);
+    const streams = () => page.evaluate(() => (window as unknown as { __agentStreams: { events: { type: string; [k: string]: unknown }[] }[] }).__agentStreams);
+    const visible = (id: string) => page.evaluate((l) => (window.__inversa?.state("LAYERS") as { visible: Record<string, boolean> }).visible[l] === true, id);
+
+    // 1. Ships.
+    if (await visible("vessels")) throw new Error("the Ships layer is on before the question (novice default broken)");
+    await ask(page, GE7_SHIPS_QUESTION, STEP_TIMEOUT_MS * 2);
+    const turn1 = (await streams()).at(-1)!.events;
+    const tools1 = turn1.filter((e) => e.type === "tool_start").map((e) => String(e.capabilityName));
+    const uis1 = turn1.filter((e) => e.type === "ui");
+    const toggleEvent = uis1.find((e) => e.name === "toggle_layer" && (e.args as { layer?: string; visible?: boolean })?.layer === "vessels" && (e.args as { visible?: boolean }).visible === true);
+    const answer = page.locator('[data-chat-column] [data-source="text"][data-status="done"]').last();
+    const chips = await answer.locator(".agent-cite").evaluateAll((els) => els.map((el) => el.getAttribute("data-evidence-id") ?? ""));
+    cited = chips.filter((id) => id.startsWith("vessel:")).length;
+    if (toggleEvent && (await visible("vessels"))) toggled = "vessels";
+    await page.waitForFunction(() => ((window.__inversa?.globe()?.layers.find((l) => l.id === "vessels")?.count ?? 0) > 0), undefined, { timeout: 60_000 }).catch(() => log("no ships drawn within 60 s"));
+    const drawn = await page.evaluate(() => window.__inversa?.globe()?.layers.find((l) => l.id === "vessels")?.count ?? 0);
+    log(`turn 1 "${GE7_SHIPS_QUESTION}": tools ${tools1.join(", ")}; ui ${JSON.stringify(uis1.map((e) => [e.name, e.args]))}; chips ${chips.join(", ")}; ships drawn ${drawn}`);
+
+    // 2. Night vision.
+    await ask(page, GE7_LOOK_QUESTION, STEP_TIMEOUT_MS * 2);
+    const turn2 = (await streams()).at(-1)!.events;
+    const lookEvent = turn2.find((e) => e.type === "ui" && e.name === "set_look");
+    await page.waitForFunction(() => window.__inversa?.state("LOOK") === "nvg", undefined, { timeout: 10_000 }).catch(() => undefined);
+    look = !!lookEvent && (await page.evaluate(() => window.__inversa?.state("LOOK"))) === "nvg";
+    log(`turn 2 "${GE7_LOOK_QUESTION}": tools ${turn2.filter((e) => e.type === "tool_start").map((e) => String(e.capabilityName)).join(", ")}; ui ${JSON.stringify(lookEvent ?? null)}; LOOK ${await page.evaluate(() => String(window.__inversa?.state("LOOK")))}`);
+
+    // 3. Evidence screenshots (G9). Radar on through the Layers popover; the look back to normal for the ships shot.
+    mkdirSync(GE7_SHOTS, { recursive: true });
+    await page.click('[data-testid="layers-bar-button"]');
+    await page.locator('[data-testid="layers-popover"]').waitFor();
+    await page.click('[data-testid="legend-toggle-radar"]');
+    await page.screenshot({ path: join(GE7_SHOTS, "ge7-layers-popover-1440.png") });
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => {
+      location.hash = location.hash.replace(/(^#|&)c=[^&]*/, "") + "&c=29.6,-91.6,700000,0,-90";
+    });
+    await page.waitForResponse((r) => r.url().includes("/overlay/radar/"), { timeout: 60_000 }).catch(() => log("no radar tile response seen"));
+    await page.waitForTimeout(5_000);
+    await page.screenshot({ path: join(GE7_SHOTS, "ge7-carp-ships-radar-nvg-1440.png") });
+    await page.click('[data-testid="look-button"]');
+    await page.locator('[data-testid="look-popover"]').waitFor();
+    const slider = page.locator('[data-testid="scope-feather"]');
+    await slider.focus();
+    await page.keyboard.press("Home");
+    for (let i = 0; i < 40; i++) await page.keyboard.press("ArrowRight");
+    await page.waitForFunction(() => window.__inversa?.state("SCOPE_FEATHER") === 40, undefined, { timeout: 10_000 });
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: join(GE7_SHOTS, "ge7-look-nvg-feather40-1440.png") });
+    await page.keyboard.press("Escape");
+    await page.locator('[data-testid="look-popover"]').waitFor({ state: "detached" });
+    await page.click('[data-testid="developer-button"]');
+    await page.locator('[data-testid="developer-panel"]').waitFor();
+    await page.waitForTimeout(800);
+    const devText = await page.locator('[data-testid="developer-panel"]').innerText();
+    const devInputs = await page.locator('[data-testid="developer-panel"] input').evaluateAll((els) => els.map((el) => ({ type: (el as HTMLInputElement).type, filled: (el as HTMLInputElement).value.length > 0 })));
+    const keyShaped = /AIza[0-9A-Za-z_-]{20}|sk-[0-9A-Za-z-]{20}|eyJ[0-9A-Za-z_-]{20}/.test(devText);
+    log(`developer panel: ${devInputs.length} inputs (types ${[...new Set(devInputs.map((i) => i.type))].join(",")}, filled ${devInputs.filter((i) => i.filled).length}); key-shaped text on screen: ${keyShaped}`);
+    // Key fields are password fields and start empty; the one number field is the monthly Google cap.
+    if (keyShaped || devInputs.some((i) => i.type !== "number" && i.filled) || devInputs.some((i) => i.type === "text")) throw new Error("the Developer panel shows a key value");
+    await page.screenshot({ path: join(GE7_SHOTS, "ge7-developer-1440.png") });
+    await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.waitForTimeout(1_500);
+    await page.screenshot({ path: join(GE7_SHOTS, "ge7-carp-375.png") });
+    if (errors.length) log(`page errors: ${errors.join(" | ")}`);
+    await context.close();
+  } finally {
+    await browser.close();
+    await stack.stop();
+    mock.stop();
+  }
+  console.log(`AGENT-LAYERS toggled=${toggled} cited=${cited} look=${look ? "set" : "missing"}`);
+  if (toggled !== "vessels" || cited === 0 || !look) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   assert(process.env.OPENROUTER_API_KEY?.trim(), "OPENROUTER_API_KEY not set: run `bun run e2e:agent`, which wraps doppler inversa/dev");
+  if (process.argv.includes("--ge7")) {
+    await ge7();
+    return;
+  }
   const saved = new Map(DEV_SIDE_EFFECTS.map((file) => [file, existsSync(file) ? readFileSync(file) : null]));
   const stub = startStub();
   const dataDir = mkdtempSync(join(tmpdir(), "inversa-e2e-agent-"));
@@ -303,7 +430,7 @@ async function main(): Promise<void> {
 }
 
 main().then(
-  () => process.exit(0),
+  () => process.exit(process.exitCode ?? 0),
   (error: unknown) => {
     console.error(`[e2e:agent] FAIL: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
     process.exit(1);

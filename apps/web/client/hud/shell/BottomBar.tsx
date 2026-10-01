@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import styled from "client/styled";
 
+import LayersBar from "../layers/LayersBar";
 import LookBar from "../look/LookBar";
 import { MOBILE } from "../primitives";
 import PlaceSearch from "../search/PlaceSearch";
@@ -13,7 +14,7 @@ import PlaceSearch from "../search/PlaceSearch";
  * map's look and layer controls, each a leaf's own component that brings its own button and popover:
  *
  *   Look (presets and scope), GE2: client/hud/look
- *   Layers (sightings, notes, water and weather, ships)
+ *   Layers (sightings, notes, ships, water and weather), GE7: client/hud/layers
  *
  * Each leaf appends its one entry to `ITEMS` and nothing else. The bar draws no surface of its own, so with no
  * entries it shows nothing. Popovers opened from it open upwards (`bottom: calc(100% + 6px)`).
@@ -23,6 +24,8 @@ const ITEMS: readonly ReactNode[] = [
   <PlaceSearch key="search" />,
   // GE2: the Look popover (presets and scope).
   <LookBar key="look" />,
+  // GE7: the Layers popover (ships, water and weather).
+  <LayersBar key="layers" />,
 ];
 
 const Bar = styled.div`
@@ -30,7 +33,9 @@ const Bar = styled.div`
   z-index: 5;
   left: 50%;
   bottom: calc(var(--hud-bottom) + var(--gap-s));
-  transform: translateX(-50%);
+  /* Centred under the stage, but never under the chat card (about 1100 px and narrower, where the card reaches
+     close to the centre): its left edge stays right of --chat-inset (GE7). */
+  transform: translateX(max(-50%, calc(var(--chat-inset, 0px) - 50vw)));
   display: flex;
   align-items: center;
   gap: 6px;

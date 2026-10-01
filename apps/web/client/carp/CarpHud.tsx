@@ -50,11 +50,12 @@ const SITE_ALTITUDE_M = 45_000;
 const MARKER_INSET_PX = 34;
 
 /**
- * Sites framed clear of the HUD. A phone fits them to the free rect it measures (portrait, bars of their own
- * height); the desktop keeps `frameSites`' margins for the board on the left and the timeline below.
+ * Sites framed where the user sees them: fitted to the measured free rect (clear of the board, the timeline and the
+ * cards) and, on the stage layout, inside the circle (client/globe/fit.ts). `frameSites`' fixed margins only before
+ * the pane is laid out.
  */
 function frameFor(sites: readonly Site[], mobile: boolean) {
-  return (mobile ? fitInPane(boxOf(sites), MARKER_INSET_PX) : null) ?? frameSites(sites, !mobile);
+  return fitInPane(boxOf(sites), MARKER_INSET_PX) ?? frameSites(sites, !mobile);
 }
 
 /**

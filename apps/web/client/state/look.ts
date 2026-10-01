@@ -2,11 +2,12 @@ import { key } from "@calvinjs/active-state";
 
 /**
  * The look of the globe (docs/GODS_EYE.md GC2): one of seven visual presets, drawn as Cesium post-process
- * stages by `client/globe/look`, and the circular scope mask with its feathered edge, drawn by
- * `client/hud/look/ScopeMask`. The share link carries all three as `look`, `scope` and `feather`.
+ * stages by `client/globe/look`, and the circular scope mask with its feathered edge, drawn once by the stage
+ * shell's CSS circle (`client/hud/shell/StageShell.tsx`). The share link carries all three as `look`, `scope` and `feather`.
  */
-export const LOOK_IDS = ["normal", "crt", "nvg", "flir", "noir", "anime", "snow"] as const;
-export type LookId = (typeof LOOK_IDS)[number];
+import { LOOK_IDS, type LookId } from "shared/look";
+
+export { LOOK_IDS, type LookId };
 
 export const DEFAULT_LOOK: LookId = "normal";
 export const DEFAULT_SCOPE_ON = true;

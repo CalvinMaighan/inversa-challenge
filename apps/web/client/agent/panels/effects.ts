@@ -5,7 +5,7 @@ import { AGENT_HIGHLIGHT, type AgentHighlightState, type AgentHighlightTarget } 
 import { TIME, type TimeState } from "client/state/time";
 import type { BBox } from "shared/agent/events";
 
-import { bboxCamera } from "../chat/effects";
+import { bboxCamera, frameInView } from "../chat/effects";
 import { altitudeForBox, frameBox, highlightTargets, locateIds, primaryPanelIndex, targetFor, timeForInstant, viewTime, type Panel } from "./model";
 import { panelsOf } from "./store";
 
@@ -48,7 +48,7 @@ function moveTime(panel: Panel, nowMs: number): void {
 export function framePanel(panel: Panel, panels: readonly Panel[], nowMs: number = Date.now()): void {
   const located = locateIds(panels);
   const box = frameBox(panel.bbox, panel.highlight.map((id) => targetFor(id, located)));
-  if (box) getGlobe()?.flyTo(frameCamera(box));
+  if (box) getGlobe()?.flyTo(frameInView(box, (b) => frameCamera(b)));
   moveTime(panel, nowMs);
 }
 
@@ -61,7 +61,7 @@ export function showTurn(turnId: string, nowMs: number = Date.now()): void {
   const main = panels[primary];
   if (!main) return;
   const box = frameBox(main.bbox, targets);
-  if (box) getGlobe()?.flyTo(frameCamera(box));
+  if (box) getGlobe()?.flyTo(frameInView(box, (b) => frameCamera(b)));
   moveTime(main, nowMs);
 }
 

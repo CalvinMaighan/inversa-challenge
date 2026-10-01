@@ -1,6 +1,7 @@
 /**
- * Looks on the Cesium scene (docs/GODS_EYE.md GC2): one `PostProcessStage` per preset shader plus the scope
- * stage, driven by the LOOK, SCOPE_ON and SCOPE_FEATHER keys. Switching preset crossfades over `FADE_MS`: the
+ * Looks on the Cesium scene (docs/GODS_EYE.md GC2): one `PostProcessStage` per preset shader, driven by the LOOK
+ * key. The scope (SCOPE_ON, SCOPE_FEATHER) is no stage: the stage shell draws it once, as the CSS circle mask
+ * over the canvas (client/hud/shell/StageShell.tsx); `state().scope` only reports the two keys. Switching preset crossfades over `FADE_MS`: the
  * outgoing stage's `intensity` ramps down as the incoming one ramps up, their sum one on every frame, and a
  * stage is enabled only while its intensity is above zero. Animated presets ask for frames at a low rate while
  * active; `normal` costs nothing and keeps the idle governor idle.
@@ -15,7 +16,7 @@ import { prefersReducedMotion } from "client/motion";
 import { featherOf, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER, SCOPE_ON, scopeOnOf, type LookId } from "client/state/look";
 
 import { cesium } from "../cesium";
-import { LOOK_PRESETS, SCOPE_SHADER } from "./presets";
+import { LOOK_PRESETS } from "./presets";
 
 /** Crossfade length between presets. */
 export const FADE_MS = 500;
@@ -106,8 +107,6 @@ export function installLook(scene: Scene, opts: LookOptions): LookHandle {
     scene.postProcessStages.add(stage);
     stages.set(preset.id, stage);
   }
-  const scope = new Stage({ name: "inversa_look_scope", fragmentShader: SCOPE_SHADER, uniforms: { feather: 0 } });
-  scene.postProcessStages.add(scope);
 
   const setIntensity = (id: LookId, value: number) => {
     intensity[id] = value;
@@ -226,17 +225,7 @@ export function installLook(scene: Scene, opts: LookOptions): LookHandle {
   disposers.push(() => document.removeEventListener("visibilitychange", syncTicker));
   disposers.push(scene.postRender.addEventListener(syncTicker));
 
-  // ---- scope -----------------------------------------------------------------------------------------
-  const applyScope = () => {
-    scope.enabled = scopeOnOf(get(SCOPE_ON));
-    scope.uniforms.feather = featherOf(get(SCOPE_FEATHER)) / 100;
-    opts.requestRender();
-  };
-  applyScope();
-
   disposers.push(subscribe(LOOK, applyLook));
-  disposers.push(subscribe(SCOPE_ON, applyScope));
-  disposers.push(subscribe(SCOPE_FEATHER, applyScope));
   syncTicker();
 
   const state = (): LookDiagnostics => ({
@@ -247,7 +236,7 @@ export function installLook(scene: Scene, opts: LookOptions): LookHandle {
     compiled: LOOK_IDS.filter((id) => compiled.has(id)),
     errors: [...errors],
     lastFade: fade ? { ...fade, ticks: [...fade.ticks] } : lastFade ? { ...lastFade, ticks: [...lastFade.ticks] } : null,
-    scope: { on: scope.enabled, feather: featherOf(get(SCOPE_FEATHER)) },
+    scope: { on: scopeOnOf(get(SCOPE_ON)), feather: featherOf(get(SCOPE_FEATHER)) },
     animating: ticker !== null,
   });
 
@@ -284,7 +273,6 @@ export function installLook(scene: Scene, opts: LookOptions): LookHandle {
       if (ticker !== null) clearInterval(ticker);
       if (!scene.isDestroyed()) {
         for (const stage of stages.values()) scene.postProcessStages.remove(stage);
-        scene.postProcessStages.remove(scope);
       }
     },
   };

@@ -53,11 +53,13 @@ describe("water and weather", () => {
     // Nothing on: no attribution yet, and no "Showing" line.
     expect(group).not.toContain('data-testid="overlay-attribution"');
     expect(text).not.toContain("Showing");
-    // The Layers legend mounts the group between the classic rows and the data-gaps row (LegendBody reads
+    // The Layers popover (GE7, client/hud/layers) mounts the group after its own rows (LayersBar reads
     // LAYERS through a hook without a server snapshot, so its composition is checked in the source).
-    const panel = await Bun.file(path.join(import.meta.dir, "../../../../client/hud/legend/LegendPanel.tsx")).text();
+    const panel = await Bun.file(path.join(import.meta.dir, "../../../../client/hud/layers/LayersBar.tsx")).text();
     expect(panel.indexOf("<LegendRowView key={row.layer}")).toBeLessThan(panel.indexOf("<WaterWeather app={app} active={active} />"));
-    expect(panel.indexOf("<WaterWeather app={app} active={active} />")).toBeLessThan(panel.indexOf("<GapsRow />"));
+    // One place for it: the expert legend no longer repeats the group.
+    const legend = await Bun.file(path.join(import.meta.dir, "../../../../client/hud/legend/LegendPanel.tsx")).text();
+    expect(legend).not.toContain("<WaterWeather");
   });
 
   test("water and weather: python lists the weather layers but no SST map; the group reads the app config's labels", () => {

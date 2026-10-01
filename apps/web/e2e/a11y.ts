@@ -83,6 +83,10 @@ const LOOK_BUTTON = "[data-testid=look-button]";
 const LOOK_POPOVER = "[data-testid=look-popover]";
 const PYTHON_CHIP = '[data-species-chip="python"]';
 const LAYERS_BUTTON = "[data-testid=layers-button]";
+const LAYERS_BAR_BUTTON = "[data-testid=layers-bar-button]";
+const LAYERS_POPOVER = "[data-testid=layers-popover]";
+const DEVELOPER_BUTTON = "[data-testid=developer-button]";
+const DEVELOPER_PANEL = "[data-testid=developer-panel]";
 const LEGEND = "[data-testid=layers-legend]";
 const HELP_BUTTON = "[data-testid=help-button]";
 const HELP = "[data-testid=help-sheet]";
@@ -505,6 +509,40 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.waitForFunction((sel) => !document.querySelector(sel), LOOK_POPOVER, { timeout: 10_000 });
   if (!(await isFocused(page, LOOK_BUTTON))) fail("Esc closed Look but focus did not return to its button");
   log(`Look after ${toLook} Tab: opened, ArrowRight to crt, Enter picked it, back to normal, Esc back to the button`);
+
+  // Layers (GE7): Enter opens it with focus inside, Tab reaches a named switch, Space flips it and back, Esc returns.
+  const toLayers = await tabTo(page, LAYERS_BAR_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(LAYERS_POPOVER).waitFor({ timeout: 10_000 });
+  if (!(await focusIn(page, LAYERS_POPOVER))) fail("opening Layers did not move focus into its popover");
+  await page.keyboard.press("Tab");
+  await recordStop(page);
+  const switchId = await page.evaluate(() => (document.activeElement?.getAttribute("role") === "switch" ? document.activeElement.getAttribute("data-testid") : null));
+  if (!switchId) fail("Tab inside Layers did not reach a layer switch");
+  const flip = () => page.evaluate((id) => (document.querySelector(`[data-testid="${id}"]`) as HTMLInputElement).checked, switchId);
+  const was = await flip();
+  await page.keyboard.press("Space");
+  await page.waitForFunction(([id, w]) => (document.querySelector(`[data-testid="${id}"]`) as HTMLInputElement).checked !== w, [switchId, was] as const, { timeout: 10_000 });
+  await page.keyboard.press("Space");
+  await page.waitForFunction(([id, w]) => (document.querySelector(`[data-testid="${id}"]`) as HTMLInputElement).checked === w, [switchId, was] as const, { timeout: 10_000 });
+  await axeScan(page, "1440 layers");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), LAYERS_POPOVER, { timeout: 10_000 });
+  if (!(await isFocused(page, LAYERS_BAR_BUTTON))) fail("Esc closed Layers but focus did not return to its button");
+  log(`Layers after ${toLayers} Tab: opened, Tab to ${switchId}, Space flipped it and back, Esc back to the button`);
+
+  // Developer (GE3): Enter opens the keys panel with focus inside; Esc closes it back to the button.
+  const toDev = await tabTo(page, DEVELOPER_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(DEVELOPER_PANEL).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(300);
+  if (!(await focusIn(page, DEVELOPER_PANEL))) fail("opening Developer did not move focus into its panel");
+  await recordStop(page);
+  await axeScan(page, "1440 developer");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), DEVELOPER_PANEL, { timeout: 10_000 });
+  if (!(await isFocused(page, DEVELOPER_BUTTON))) fail("Esc closed Developer but focus did not return to its button");
+  log(`Developer after ${toDev} Tab: opened with focus inside, Esc back to the button`);
 
   // Help sheet (About → Help): focus moves into the sheet, Esc closes it back to the About button.
   await tabTo(page, STATUS_BUTTON);

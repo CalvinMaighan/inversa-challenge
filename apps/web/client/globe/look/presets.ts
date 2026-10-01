@@ -192,25 +192,6 @@ void main() {
 }
 `;
 
-/**
- * The circular scope: black outside a circle centred on the stage, radius half the shorter side; `feather`
- * (0..1, a share of the radius) is the width of the soft edge straddling it. At 0 the crop is one pixel wide.
- */
-export const SCOPE_SHADER = /* glsl */ `
-uniform sampler2D colorTexture;
-uniform vec2 colorTextureDimensions;
-uniform float feather;
-in vec2 v_textureCoordinates;
-void main() {
-  vec2 dims = colorTextureDimensions;
-  vec2 p = (v_textureCoordinates - 0.5) * dims;
-  float radius = 0.5 * min(dims.x, dims.y);
-  float w = max(radius * feather * 0.5, 0.5);
-  float outside = smoothstep(radius - w, radius + w, length(p));
-  vec3 src = texture(colorTexture, v_textureCoordinates).rgb;
-  out_FragColor = vec4(mix(src, vec3(0.0), outside), 1.0);
-}
-`;
 
 export const LOOK_PRESETS: readonly LookPreset[] = [
   { id: "normal", label: "Normal", blurb: "The map as it is", fragmentShader: null, animated: false },

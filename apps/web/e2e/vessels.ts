@@ -6,7 +6,7 @@
  * last 26 hours, plus their static data. Axum runs the carp pollers offline (dead proxy) with
  * `AISSTREAM_URL=ws://127.0.0.1:<mock>` and a mock key, so the AIS source ingests through the real pipeline.
  *
- * The page opens on the carp app, turns Ships on in the Layers legend (under the "Ships" heading), then presses
+ * The page opens on the carp app, turns Ships on in the bottom bar's Layers popover (under the "Ships" heading), then presses
  * the carp timeline's play button (replay from 48 h ago to now) and samples the vessels layer's drawn positions
  * (`window.__inversa.globe()` layer stats, read only). A ship "moved" when its position differs between two
  * samples at different timeline times. Finally a click on a ship opens its evidence card with an "Open at
@@ -21,99 +21,14 @@ import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
-import { buildApi, buildWeb, REPO_DIR, startStack, type Stack } from "./stack";
+import { buildFrames, CARP_BOX, HOURS, MOCK_KEY, NAMES, SHIPS, startMock, waitForTracks } from "./ais-mock";
+import { buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 
 const log = (...a: unknown[]) => console.error("[e2e:vessels]", ...a);
-const FIXTURES = path.join(REPO_DIR, "api/tests/fixtures/ais");
-const MOCK_KEY = "e2e-mock-aisstream-key";
-const SHIPS = 6;
-const HOURS = 26;
-const STEP_MIN = 10;
-const MIN = 60_000;
 const LOAD_TIMEOUT_MS = 120_000;
-const CARP_BOX = [[28.9, -94.0], [32.9, -88.8]];
-const TYPES = [70, 80, 60, 30, 52, 37];
-const NAMES = ["GULF TRADER", "DELTA STAR", "BAYOU QUEEN", "PELICAN", "MISS LOUISE", "REEL DEAL"];
-
-/** An AISStream envelope (the recorded fixtures). */
-type Envelope = { MessageType: string; MetaData: Record<string, unknown>; Message: Record<string, Record<string, unknown>> };
-type Subscription = { APIKey?: unknown; BoundingBoxes?: unknown; FilterMessageTypes?: unknown };
-type Track = { mmsi: string; name: string | null; type: string; points: { at: string }[] };
 
 function fail(message: string): never {
   throw new Error(message);
-}
-
-/** AISStream's `MetaData.time_utc` format, e.g. `2024-12-09 02:27:43.237370229 +0000 UTC`. */
-const aisTime = (ms: number) => new Date(ms).toISOString().replace("T", " ").replace(/\.(\d{3})Z$/, ".$1000000 +0000 UTC");
-
-/** Frames for the mock: static data, then every ship's fixes in time order. Built from the recorded templates. */
-async function buildFrames(nowMs: number): Promise<{ frames: string[]; fromMs: number; toMs: number }> {
-  const position = (await Bun.file(path.join(FIXTURES, "position_report.json")).json()) as Envelope;
-  const statics = (await Bun.file(path.join(FIXTURES, "ship_static_data.json")).json()) as Envelope;
-  const frames: string[] = [];
-  const toMs = Math.floor(nowMs / MIN) * MIN - 2 * MIN;
-  const fromMs = toMs - HOURS * 3_600_000;
-  for (let s = 0; s < SHIPS; s += 1) {
-    const mmsi = 367_500_000 + s;
-    const st = structuredClone(statics);
-    st.MetaData = { ...st.MetaData, MMSI: mmsi, MMSI_String: mmsi, ShipName: NAMES[s], latitude: 29.0 + 0.08 * s, longitude: -93.8, time_utc: aisTime(fromMs) };
-    st.Message.ShipStaticData = { ...st.Message.ShipStaticData, UserID: mmsi, Name: `${NAMES[s]}@@@@`, Type: TYPES[s], Destination: "NEW ORLEANS" };
-    frames.push(JSON.stringify(st));
-  }
-  for (let t = fromMs; t <= toMs; t += STEP_MIN * MIN) {
-    const hours = (t - fromMs) / 3_600_000;
-    for (let s = 0; s < SHIPS; s += 1) {
-      const mmsi = 367_500_000 + s;
-      // 4 to 8 kn: 26 h east from 93.8 W stays inside the carp box (east edge 88.8 W).
-      const knots = 4 + 0.8 * s;
-      const lat = 29.0 + 0.08 * s;
-      // East at `knots`: one knot is 1/60 degree of latitude per hour; longitude degrees shrink by cos(lat).
-      const lon = -93.8 + (knots * hours) / 60 / Math.cos((lat * Math.PI) / 180);
-      const p = structuredClone(position);
-      p.MetaData = { ...p.MetaData, MMSI: mmsi, MMSI_String: mmsi, ShipName: NAMES[s], latitude: lat, longitude: lon, time_utc: aisTime(t) };
-      p.Message.PositionReport = { ...p.Message.PositionReport, UserID: mmsi, Latitude: lat, Longitude: lon, Sog: knots, Cog: 90, TrueHeading: 90, NavigationalStatus: 0 };
-      frames.push(JSON.stringify(p));
-    }
-  }
-  return { frames, fromMs, toMs };
-}
-
-type MockState = { subscriptions: Subscription[]; sent: number; errors: string[] };
-
-/** The mock AISStream: one subscription per connection, checked, then every frame as a binary message. */
-function startMock(frames: string[]): { url: string; state: MockState; stop(): void } {
-  const state: MockState = { subscriptions: [], sent: 0, errors: [] };
-  const server = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch(req, srv) {
-      if (new URL(req.url).pathname !== "/v0/stream" || !srv.upgrade(req)) return new Response("upgrade required", { status: 426 });
-      return undefined;
-    },
-    websocket: {
-      message(ws, message) {
-        let sub: Subscription;
-        try {
-          sub = JSON.parse(String(message));
-        } catch {
-          state.errors.push("subscription is not JSON");
-          ws.send(JSON.stringify({ error: "bad subscription" }));
-          return;
-        }
-        state.subscriptions.push({ ...sub, APIKey: sub.APIKey === MOCK_KEY ? "<mock key>" : "<other>" });
-        if (sub.APIKey !== MOCK_KEY) {
-          ws.send(JSON.stringify({ error: "Api Key Is Not Valid" }));
-          return;
-        }
-        for (const f of frames) {
-          ws.send(new TextEncoder().encode(f));
-          state.sent += 1;
-        }
-      },
-    },
-  });
-  return { url: `ws://127.0.0.1:${server.port}/v0/stream`, state, stop: () => server.stop(true) };
 }
 
 type VesselStats = { count: number; enabled: boolean; error: string | null; vessels?: { atMs: number; trails: number; positions: Record<string, [number, number]> } };
@@ -123,18 +38,6 @@ const vesselStats = (page: Page) =>
     const g = window.__inversa?.globe();
     return (g?.layers.find((l) => l.id === "vessels") ?? null) as unknown as VesselStats | null;
   });
-
-async function waitForTracks(stack: Stack, fromMs: number, toMs: number): Promise<Track[]> {
-  const deadline = Date.now() + 120_000;
-  const q = `query($bbox: BBox!, $from: Time!, $to: Time!) { vessels(bbox: $bbox, from: $from, to: $to) { mmsi name type points { at } } }`;
-  for (;;) {
-    const d = await stack.graphql<{ vessels: Track[] }>(q, { bbox: { west: -94, south: 28.9, east: -88.8, north: 32.9 }, from: new Date(fromMs - MIN).toISOString(), to: new Date(Math.min(toMs + MIN, fromMs + 7 * 24 * 3_600_000)).toISOString() });
-    const complete = d.vessels.length === SHIPS && d.vessels.every((v) => v.points.length >= HOURS * (60 / STEP_MIN));
-    if (complete) return d.vessels;
-    if (Date.now() > deadline) fail(`vessels not ingested: ${d.vessels.length} tracks, points ${d.vessels.map((v) => v.points.length).join(",")}`);
-    await Bun.sleep(1000);
-  }
-}
 
 async function main(): Promise<void> {
   const nowMs = Date.now();
@@ -170,9 +73,8 @@ async function main(): Promise<void> {
     // Default off.
     const before = await vesselStats(page);
     const defaultOff = before !== null && before.enabled === false;
-    // Layers legend: About, then "More data (for experts)"; Ships has its own heading.
-    await page.click('[data-testid="status-button"]');
-    await page.click('[data-testid="layers-button"]');
+    // The Layers popover in the bottom bar (GE7); Ships has its own heading.
+    await page.click('[data-testid="layers-bar-button"]');
     await page.locator('[data-testid="legend-group-ships"]').waitFor({ timeout: 20_000 });
     const groupOk = (await page.locator('[data-testid="legend-group-ships"]').innerText()).toLowerCase() === "ships";
     await page.click('[data-testid="legend-toggle-vessels"]');

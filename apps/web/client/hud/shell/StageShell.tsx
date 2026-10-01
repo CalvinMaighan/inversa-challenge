@@ -1,9 +1,11 @@
 "use client";
 
 import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { get, subscribe } from "@calvinjs/active-state";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
+import { featherOf, SCOPE_FEATHER, SCOPE_ON, scopeOnOf } from "client/state/look";
 import styled from "client/styled";
 
 import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_CLIP_CSS, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
@@ -22,8 +24,9 @@ import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_CLIP_CSS, SCOPE_MASK_CS
  * - `hud`: fills the pane above the globe, a size container (`globe`) for the HUD's container queries. The
  *   layer lets the pointer through; its direct children take it back.
  *
- * `[data-stage]` marks the circle (layout only, nothing drawn). `setStageScope` turns the circle off or sets its
- * feather (the Look control, GE2).
+ * `[data-stage]` marks the circle (layout only, nothing drawn). The circle is the app's one scope (GE7): the Look
+ * popover's switch and slider write SCOPE_ON and SCOPE_FEATHER (client/state/look.ts), and the shell follows them
+ * (`data-scope="off"` drops the mask, `--scope-feather` sets the soft edge as a share of the radius).
  */
 export type StageShellSlots = {
   side?: ReactNode;
@@ -98,6 +101,19 @@ const GlobeLayer = styled.div`
   }
 `;
 
+/**
+ * For a layer drawn over the globe in canvas pixels (carp's site buttons, the lionfish overlay): the same circle
+ * mask and hit area as the canvas, so nothing of the map shows or takes clicks in the black margin.
+ */
+export const STAGE_SCOPE_CSS = `
+  ${STAGE_MEDIA} {
+    [data-shell]:not([data-scope="off"]) & {
+      mask-image: ${SCOPE_MASK_CSS};
+      clip-path: ${SCOPE_CLIP_CSS};
+    }
+  }
+`;
+
 const HudLayer = styled.div`
   position: absolute;
   inset: 0;
@@ -148,13 +164,11 @@ export function useStageLayout(): boolean {
   return useSyncExternalStore(subscribeStage, () => window.matchMedia(STAGE_QUERY).matches, () => false);
 }
 
-/** The Look control's hook into the stage (GE2): the circle on or off, and its feather (0..1). */
-export function setStageScope(scope: { on: boolean; feather?: number }): void {
-  const shell = typeof document === "undefined" ? null : document.querySelector<HTMLElement>("[data-shell]");
-  if (!shell) return;
-  if (scope.on) delete shell.dataset.scope;
+/** The circle on or off and its feather, from SCOPE_ON and SCOPE_FEATHER (0..100 percent of the radius). */
+function applyScope(shell: HTMLElement): void {
+  if (scopeOnOf(get(SCOPE_ON))) delete shell.dataset.scope;
   else shell.dataset.scope = "off";
-  if (scope.feather !== undefined) shell.style.setProperty("--scope-feather", featherValue(scope.feather));
+  shell.style.setProperty("--scope-feather", featherValue(featherOf(get(SCOPE_FEATHER)) / 100));
 }
 
 export default function StageShell({ side, globe, hud }: StageShellSlots) {
@@ -164,6 +178,20 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
   const mainRef = useRef<HTMLElement>(null);
   const sideRef = useRef<HTMLDivElement>(null);
   const hasSide = side !== undefined && side !== null;
+
+  // The scope follows the Look keys (after hydration, so the server HTML never disagrees with the first paint).
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    const sync = () => applyScope(main);
+    sync();
+    const offOn = subscribe(SCOPE_ON, sync);
+    const offFeather = subscribe(SCOPE_FEATHER, sync);
+    return () => {
+      offOn();
+      offFeather();
+    };
+  }, []);
 
   // The chat card's right edge, for the HUD chrome and the attribution. It changes when the card is resized.
   useLayoutEffect(() => {

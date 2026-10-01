@@ -42,6 +42,8 @@ const UI_TOOL_DESCRIPTIONS: Record<Exclude<UiToolName, "toggle_layer">, string> 
     "Highlight one piece of evidence on the globe by its evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
   open_evidence:
     "Open the evidence drawer for one evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
+  set_look:
+    "Change how the globe looks: normal (the plain map), crt (an old monitor), nvg (night vision), flir (thermal camera), noir (black and white), anime (flat colours) or snow. Only when the user asks for a look. Returns at once.",
 };
 
 function uiToolParameters(name: UiToolName, app: AppConfig): Record<string, unknown> {
@@ -125,7 +127,7 @@ export function buildVoiceInstructions(app: AppConfig): string {
     "Speak as one assistant in the first person. Never mention tools, agents, task ids or protocols.",
     "",
     "# Direct commands",
-    "Camera, time and layer commands are yours to do at once with the UI tools: fly_to, set_time, play_timeline, toggle_layer, select, open_evidence. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
+    "Camera, time and layer commands are yours to do at once with the UI tools: fly_to, set_time, play_timeline, toggle_layer, select, open_evidence, set_look. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
     "If a UI tool returns an error, fix the arguments and call it again once. If a place is unknown, call fly_to again with lat and lon when you know them, otherwise ask where it is.",
     "",
     "# Analysis",

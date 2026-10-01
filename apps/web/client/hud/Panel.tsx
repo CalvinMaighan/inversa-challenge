@@ -5,6 +5,7 @@ import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "rea
 import styled from "client/styled";
 
 import { Icon, IconButton, MOBILE, Surface } from "./primitives";
+import { useStageLayout } from "./shell/StageShell";
 
 type Side = "left" | "right";
 /** Height kept free under a left panel for the attribution line (10 px text, lifted 4 px above the timeline). */
@@ -13,6 +14,11 @@ const CREDITS_ROOM_PX = 16;
 /**
  * Edge panel: a column along the left or right edge between the top bar and the timeline on desktop, a bottom
  * sheet on phones (PRD §12). The HUD root sets `--hud-top` and `--hud-bottom` so panels never cover the bars.
+ *
+ * On the stage layout (docs/GODS_EYE.md GC1, from 768 px) the chat card owns the left: a left panel (carp's
+ * "Locations to review", the lionfish survey) opens in the right card region instead, beside the circle, so it
+ * never covers the circle's centre (GE7). A card that opens later on the right (a site, an area, a sighting) lies
+ * over it until closed.
  */
 const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
@@ -189,8 +195,9 @@ function usePanelFocus(open: boolean) {
   return { frameRef, tabRef, fromTabRef };
 }
 
-export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, maxHeight, actions, children, ...rest }: PanelProps) {
+export default function Panel({ side: asked, title, open, onClose, onOpen, tabLabel, width = 360, maxHeight, actions, children, ...rest }: PanelProps) {
   const { frameRef, tabRef, fromTabRef } = usePanelFocus(open);
+  const side: Side = useStageLayout() ? "right" : asked;
   if (!open) {
     return onOpen ? (
       <Tab

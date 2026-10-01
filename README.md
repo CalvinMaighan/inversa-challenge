@@ -4,9 +4,9 @@ A natural-language interface for exploring questions about the physical world fr
 
 | App | Question | Feeds |
 |---|---|---|
-| **Carp Field Conditions** (default) | How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? | USGS Water Data, NOAA NWPS, NWS alerts and forecasts, IEM forecast archive, NWWS-OI (push, pending) |
-| **Lionfish Watch** | Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions? | iNaturalist, GBIF, USGS NAS, NOAA Coral Reef Watch, Open-Meteo Marine, NDBC, GOES-19 SST (push, pending) |
-| **Everglades Ops** (python) | Where are Burmese pythons active and where should removal crews go next? | iNaturalist, USGS NAS, GBIF, NWS, USGS Water, NDBC, CO-OPS, Open-Meteo, GOES-19 and NWWS-OI (push, pending) |
+| **Carp Field Conditions** (default) | How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? | USGS Water Data, NOAA NWPS, NWS alerts and forecasts, IEM forecast archive, NWWS-OI (push, pending); on the map: AISStream.io ships (push), NOAA nowCOAST radar, clouds and lightning, NASA GIBS sea temperature, NHC storms |
+| **Lionfish Watch** | Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions? | iNaturalist, GBIF, USGS NAS, NOAA Coral Reef Watch, Open-Meteo Marine, NDBC, GOES-19 SST (push, pending); on the map: AISStream.io ships (push), NOAA nowCOAST radar, clouds and lightning, NASA GIBS sea temperature, NHC storms |
+| **Everglades Ops** (python) | Where are Burmese pythons active and where should removal crews go next? | iNaturalist, USGS NAS, GBIF, NWS, USGS Water, NDBC, CO-OPS, Open-Meteo, GOES-19 and NWWS-OI (push, pending); on the map: NOAA nowCOAST radar, clouds and lightning, NHC storms |
 
 ![Carp Field Conditions at first load: chat column on the left, the eight demonstration sites on the globe with the review board, the stage timeline with replay coverage at the bottom](docs/evidence/carp-desktop.png)
 
@@ -51,13 +51,14 @@ Open http://localhost:3050. It opens on carp; `?app=lionfish` or `?app=python` o
 
 ### Keys (all optional; Doppler, the shell, or the Developer panel)
 
-The globe runs with no key at all. The **Developer** button (a key, top right) opens "Power up the globe": one row per provider, set or missing, a MANAGE or GET KEY link, and a password field for each missing key. Browser-side keys are stored in that browser's localStorage and never sent to our server. Server-side keys pasted there are written to `data/local-keys.env` (git-ignored, mode 0600) only under `bun run dev` on loopback; `bun run dev` then restarts the API and web with them. A key set in the shell or Doppler wins over that file and shows CONFIGURED EXTERNALLY. Anywhere else the panel shows the `doppler secrets set NAME` command. Step by step: [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) section 14.
+The globe runs with no key at all. The **Developer** button (`<>`, top right) opens "Power up the globe": one row per provider, set or missing, a MANAGE or GET KEY link, and a password field for each missing key. Browser-side keys are stored in that browser's localStorage and never sent to our server. Server-side keys pasted there are written to `data/local-keys.env` (git-ignored, mode 0600) only under `bun run dev` on loopback; `bun run dev` then restarts the API and web with them. A key set in the shell or Doppler wins over that file and shows CONFIGURED EXTERNALLY. Anywhere else the panel shows the `doppler secrets set NAME` command. Step by step: [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) section 14.
 
 | Variable | Where | Get it | Enables | Without it |
 |---|---|---|---|---|
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | browser: Developer panel or build env | https://developers.google.com/maps/documentation/tile/get-api-key (enable Map Tiles API, restrict by HTTP referrer) | Google Photorealistic 3D Tiles direct, tried before ion; capped at 1,000 sessions per browser per month (editable in the panel) | Google 3D through ion, else none |
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | browser: Developer panel or build env | https://ion.cesium.com/tokens | Cesium World Terrain, Bing aerial and Google 3D through ion | keyless Esri imagery |
-| `AISSTREAM_API_KEY` | server | https://aisstream.io/apikeys | live ships | the ships layer replays stored history |
+| `AISSTREAM_API_KEY` | server | https://aisstream.io/apikeys | live ships in carp and lionfish (Layers, Ships), and the agent's `vessels` tool | the ships layer replays stored history; the feed reads DOWN with the reason |
+| (none) | | | Water and weather (NOAA nowCOAST radar, clouds, lightning; NASA GIBS sea temperature; NHC storms) through the same-origin overlay proxy | always on offer in Layers |
 | `OPENROUTER_API_KEY` | server | https://openrouter.ai/settings/keys | the agent: `openai/gpt-6-luna` on OpenRouter | `/api/agent/stream` answers 503 `agent unavailable`; there is no mock or scripted fallback |
 | `XAI_API_KEY` | server | https://console.x.ai/ | voice through the grok-voice relay | voice answers 503; text works |
 | `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | server | AWS console, see docs/HUMAN_STEPS.md section 7 | GOES-19 push (python, lionfish) | the GOES feed reads DOWN with the reason |
@@ -115,10 +116,13 @@ Open the same app in two browser windows. In the **Notes** tab, pick a spot on t
 | Map (carp) | Location briefing | What changed, what is expected, what is missing; readings with units and times, forecast issuance and source, thresholds, alerts, source pages. |
 | Map | About (ⓘ) | Top right: what the map is, how fresh its data is, Focus, Help, Data sources and More data (for experts). |
 | Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale, down), push or poll, and lag. |
-| Map | More data (for experts) | Inside About: a switch, legend and live count for every layer. |
+| Map | More data (for experts) | Inside About: a switch, legend and live count for every expert layer (stations, alerts, hotspots, temperature grids, missions, cursors). |
+| Map | Look | Bottom of the map: seven looks (Normal, CRT, NVG, FLIR, Noir, Anime, Snow) and the scope, a round window with a Soft edge slider. Changes no data. |
+| Map | Layers | Bottom of the map, beside Look: sightings and field notes (on at first), Ships (carp and lionfish) and Water and weather, one plain line each; every layer follows the timeline. |
+| Map (carp, lionfish) | Ships | Inside Layers: AIS ships by type with fading trails, moving with the timeline; a click opens the ship with its VesselFinder page in a new tab. |
 | Map | Focus | Inside About: dims the globe outside a circle around the selection. |
 | Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
-| Map | Developer (key) | Top right: "Power up the globe", every API key with set or missing, where to get it and a paste field (see Keys below). |
+| Map | Developer (<>) | Top right: "Power up the globe", every API key with set or missing, where to get it and a paste field (see Keys below). No value is ever shown. |
 | Map | Help | Inside About: opens the help sheet. |
 | Map | Share links | The address bar holds the app, camera, time, layers and selection. |
 | Timeline (species) | Play / pause (Space) | Plays time forward at the chosen speed. |

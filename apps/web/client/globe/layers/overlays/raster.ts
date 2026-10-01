@@ -12,7 +12,6 @@ import { overlaySpec, overlayTileTemplate, snapOverlayTime, type CYCLONES, type 
 
 import { cesium } from "../../cesium";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "../types";
-import { onCarpCursor, overlayCursorMs } from "./cursor";
 import { overlayOpacity, subscribeOverlayOpacity } from "./opacity";
 
 /** The outgoing layer stays this long under the incoming one (tiles usually land within it). */
@@ -30,8 +29,6 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
   const retiring = new Set<ImageryLayer>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let offOpacity: (() => void) | null = null;
-  let offCursor: (() => void) | null = null;
-  let lastFrame = -1;
   const stats: LayerStats = { id, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
 
   const removeLayer = (layer: ImageryLayer | null) => {
@@ -60,7 +57,6 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
   };
 
   const draw = (frameIndex: number) => {
-    lastFrame = frameIndex;
     if (!enabled || !viewer) return;
     stats.frame = frameIndex;
     if (!viewer.scene.imageryLayers) {
@@ -68,7 +64,7 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
       return;
     }
     const app = activeAppId();
-    const snapped = snapOverlayTime(spec, overlayCursorMs(ctx), Date.now());
+    const snapped = snapOverlayTime(spec, ctx.timeMs(), Date.now());
     const key = `${app}|${snapped.shownMs}`;
     if (key === drawnKey) return;
     const C = cesium();
@@ -115,8 +111,6 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
         if (stats.overlay) stats.overlay = { ...stats.overlay, opacity: alpha };
         ctx.requestRender();
       });
-      // Carp's "what we knew" cursor is not TIME: follow it too.
-      offCursor = onCarpCursor(() => draw(lastFrame));
     },
     enable() {
       enabled = stats.enabled = true;
@@ -137,8 +131,6 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
     destroy() {
       offOpacity?.();
       offOpacity = null;
-      offCursor?.();
-      offCursor = null;
       setCredit(false);
       clear();
       viewer = null;

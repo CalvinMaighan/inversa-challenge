@@ -12,7 +12,6 @@ import { Mono } from "../primitives";
 import AppIcon from "../appselect/AppIcon";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
-import WaterWeather from "./WaterWeather";
 
 /** The app's legend line (config `legend.title`). */
 const LegendTitle = styled.p`
@@ -23,7 +22,7 @@ const LegendTitle = styled.p`
 `;
 
 /** A group heading ("Ships") above the rows listed under it. */
-const GroupHead = styled.h3`
+export const GroupHead = styled.h3`
   margin: var(--gap-s) 0 0;
   color: var(--muted);
   font: 600 11px / 1.3 var(--font-ui);
@@ -177,7 +176,7 @@ function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolea
   );
 }
 
-function LegendRowView({ row }: { row: LegendRow }) {
+export function LegendRowView({ row }: { row: LegendRow }) {
   return (
     <Row data-legend-layer={row.layer} data-off={row.visible ? undefined : ""}>
       <RowHead>
@@ -235,12 +234,15 @@ function GapsRow() {
  * Layers and legend (T40, T41): what every colour on the globe means, a switch per layer and per species, and
  * what each layer draws right now (GlobeApi `stats()`). Lives in the About popover under "More data (for
  * experts)"; the species chip is the everyday filter. Samples the globe only while `active` (the section open).
+ *
+ * Ships and Water and weather are not here: they live in the Layers popover of the bottom bar (GE7,
+ * client/hud/layers), one tap for everyone. `expertRows` drops them; a line points there.
  */
 export default function LegendBody({ active }: { active: boolean }) {
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
   const stats = useGlobeStats(active);
   const app = useActiveApp();
-  const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats, app), [app, layers, stats]);
+  const rows = useMemo(() => expertRows(legendRows({ ...LAYERS.defaults, ...layers }, stats, app)), [app, layers, stats]);
   const title = legendTitle(app);
   return (
     <section aria-label="Layers and legend" data-testid="layers-legend" data-app={app.id}>
@@ -251,8 +253,11 @@ export default function LegendBody({ active }: { active: boolean }) {
           <LegendRowView row={row} />
         </Fragment>
       ))}
-      <WaterWeather app={app} active={active} />
+      <LegendTitle data-testid="legend-layers-hint">Ships and water and weather: the Layers button at the bottom of the map.</LegendTitle>
       <GapsRow />
     </section>
   );
 }
+
+/** The expert legend's rows: everything but the grouped rows the Layers popover owns (Ships). */
+export const expertRows = (rows: readonly LegendRow[]): LegendRow[] => rows.filter((r) => !r.group);

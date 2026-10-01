@@ -30,7 +30,7 @@
     "e2e:links": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/links.ts",
     "e2e:panels": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/panels.ts",
     "e2e:layout": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/layout.ts",
-    "e2e:stage": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/stage.ts",
+    "e2e:stage": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/stage.ts",
     "e2e:species": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/species.ts",
     "e2e:firstload": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/firstload.ts",
     "e2e:quality": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/quality.ts",

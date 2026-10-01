@@ -330,9 +330,11 @@ export function CellsPanel({ view, turnId }: ViewProps & { view: CellsView }) {
   if (view.cells.length === 0) return <Empty>No scored cells here.</Empty>;
   const max = Math.max(...view.cells.map((c) => c.score), 1e-9);
   return (
-    <BarList aria-label={view.title} onPointerLeave={() => hoverEvidence(turnId, null)}>
+    // The rows are buttons, so the container is a group of buttons, not a list (axe "list", GE7).
+    <BarList as="div" role="group" aria-label={view.title} onPointerLeave={() => hoverEvidence(turnId, null)}>
       {view.cells.map((cell, i) => (
         <BarRow
+          as="div"
           key={cell.evidenceId}
           role="button"
           tabIndex={0}

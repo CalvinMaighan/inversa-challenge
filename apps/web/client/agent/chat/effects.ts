@@ -1,11 +1,13 @@
 import { set } from "@calvinjs/active-state";
 
 import { getGlobe, type CameraTarget } from "client/globe/api";
+import { fitInPane } from "client/globe/fit";
 import { SELECTION, type SelectionState, parseEvidenceId } from "client/state/selection";
 import { TIME, retime, type TimeState } from "client/state/time";
 import { activeApp } from "client/state/app";
 import { applyCarpView } from "client/state/carp";
 import { altitudeToFit } from "client/state/view";
+import { applyUiEvent } from "client/voice/ui-command-handler";
 import type { AgentStreamEvent, BBox } from "shared/agent/events";
 import { cellCentre, primaryRegion } from "shared/apps";
 
@@ -32,6 +34,17 @@ export function evidenceCoordinates(id: string): { lon: number; lat: number } | 
 
 const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
+/** Room around a framed box for the markers and labels at its edge. */
+export const FRAME_INSET_PX = 24;
+
+/**
+ * The agent's framing of a box: inside the part of the globe the user sees (clear of the cards, inside the stage
+ * circle, client/globe/fit.ts); `fallback` before the pane is laid out (and in tests without a DOM).
+ */
+export function frameInView(bbox: BBox, fallback: (bbox: BBox) => CameraTarget = bboxCamera): CameraTarget {
+  return fitInPane(bbox, FRAME_INSET_PX) ?? fallback(bbox);
+}
+
 /** Camera that frames `bbox` from straight above. */
 export function bboxCamera(bbox: BBox): CameraTarget {
   return {
@@ -48,7 +61,7 @@ export function bboxCamera(bbox: BBox): CameraTarget {
  * window moves the window (`retime`), so an answer about last February shows last February's frames.
  */
 export function applyViewEvent(event: Extract<AgentStreamEvent, { type: "view" }>, nowMs = Date.now()): void {
-  getGlobe()?.flyTo(bboxCamera(event.bbox));
+  getGlobe()?.flyTo(frameInView(event.bbox));
   applyCarpViewEvent(event, nowMs);
   const atMs = Date.parse(event.time);
   if (!Number.isFinite(atMs)) return;
@@ -88,4 +101,6 @@ export function openEvidence(id: string): void {
 /** Side effects of one streamed event. */
 export function applyAgentSideEffects(event: AgentStreamEvent, nowMs = Date.now()): void {
   if (event.type === "view") applyViewEvent(event, nowMs);
+  // A map control (toggle_layer, set_look): validated again here, since the event crossed the network.
+  if (event.type === "ui") applyUiEvent(event, nowMs);
 }

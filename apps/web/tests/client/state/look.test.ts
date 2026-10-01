@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { selectPython } from "@/tests/client/python-app";
 import { get, set } from "@calvinjs/active-state";
 
-import { LOOK_PRESETS, lookPreset, SCOPE_SHADER } from "client/globe/look/presets";
+import * as presets from "client/globe/look/presets";
+import { LOOK_PRESETS, lookPreset } from "client/globe/look/presets";
 import { decodeShareLink, encodeShareLink, type ShareState } from "client/hud/share-link";
 import { applyShareState, readShareState } from "client/hud/share-link-store";
 import { DEFAULT_LOOK, DEFAULT_SCOPE_FEATHER, DEFAULT_SCOPE_ON, featherOf, isLookId, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER, SCOPE_ON, scopeOnOf } from "client/state/look";
@@ -31,7 +32,7 @@ describe("look presets", () => {
     expect(DEFAULT_SCOPE_FEATHER).toBe(11);
   });
 
-  test("normal has no shader; every other preset mixes by intensity and reads the scene; the scope reads feather", () => {
+  test("normal has no shader; every other preset mixes by intensity and reads the scene; no shader draws the scope", () => {
     expect(lookPreset("normal").fragmentShader).toBeNull();
     for (const p of LOOK_PRESETS) {
       if (p.id === "normal") continue;
@@ -45,8 +46,9 @@ describe("look presets", () => {
       expect(glsl).not.toContain("renderTimestamp");
     }
     expect(LOOK_PRESETS.filter((p) => p.animated).map((p) => p.id)).toEqual(["crt", "nvg", "flir", "snow"]);
-    expect(SCOPE_SHADER).toContain("uniform float feather;");
-    expect(SCOPE_SHADER).toContain("0.5 * min(dims.x, dims.y)");
+    // One scope: the stage shell's CSS circle (GE7 G1); the presets module has no scope shader any more.
+    expect("SCOPE_SHADER" in presets).toBe(false);
+    for (const p of LOOK_PRESETS) expect(p.fragmentShader ?? "").not.toContain("feather");
   });
 
   test("invalid values fall back to the defaults", () => {

@@ -5,6 +5,7 @@ import * as Cesium from "cesium";
 import type { GroundPrimitive, ImageryLayer, LabelCollection, PointPrimitiveCollection, PolylineCollection } from "cesium";
 
 import { createLayers } from "client/globe/layers";
+import { layerClock } from "client/globe/layers/clock";
 import { createCyclonesLayer, cycloneLabel, createOverlayRasterLayer, overlayOpacity, setOverlayOpacity } from "client/globe/layers/overlays";
 import { activeAttributions, overlayRows, rampCss } from "client/globe/layers/overlays/legend";
 import type { LayerStats } from "client/globe/layers/types";
@@ -173,7 +174,8 @@ describe("overlay layers", () => {
   test("overlay time: in carp the overlays follow the stage chart's 'what we knew' cursor (CARP.asOf), live when unset", async () => {
     applyApp("carp");
     const base = Math.floor((Date.now() - 2 * 60 * MIN) / (60 * MIN)) * 60 * MIN;
-    const ctx = fakeContext({ timeMs: base + 60 * MIN, layers: onLayers([RADAR]) });
+    // The viewer's clock (GE7): carp's cursor is CARP.asOf, now (here base + 60 min) when live.
+    const ctx = { ...fakeContext({ layers: onLayers([RADAR]) }), ...layerClock(() => base + 60 * MIN) };
     const viewer = imageryViewer();
     const layer = createOverlayRasterLayer(RADAR, ctx);
     layer.init(viewer);
@@ -181,11 +183,13 @@ describe("overlay layers", () => {
     set(CARP, { asOf: base + 7 * MIN });
     layer.update(0, null);
     expect(layer.stats().overlay!.shownMs).toBe(base + 8 * MIN);
-    // The cursor moves without a TIME change: the layer follows on its own subscription.
+    // The cursor moves without a TIME change: the viewer refreshes the layers on CARP as on TIME.
     set(CARP, { asOf: base + 30 * MIN });
+    layer.update(0, null);
     expect(layer.stats().overlay!.shownMs).toBe(base + 32 * MIN);
-    // Live again: TIME's cursor.
+    // Live again: now.
     set(CARP, {});
+    layer.update(0, null);
     expect(layer.stats().overlay!.shownMs).toBe(base + 60 * MIN);
     layer.destroy();
     await flush(800);

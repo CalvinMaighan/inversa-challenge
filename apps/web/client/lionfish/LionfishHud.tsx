@@ -8,6 +8,7 @@ import { getGlobe } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
+import { useStageLayout } from "client/hud/shell/StageShell";
 import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { VIEW, type ViewState } from "client/state/view";
@@ -26,8 +27,9 @@ const Banner = styled(Surface)`
   position: absolute;
   z-index: 3;
   top: var(--hud-top);
-  left: calc(max(var(--gap-m), env(safe-area-inset-left)) + var(--lf-panel, 0px));
-  right: max(var(--gap-m), env(safe-area-inset-right));
+  /* Clear of the survey panel: on its left below 768 px, on its right on the stage layout (GE7). */
+  left: calc(max(var(--gap-m), env(safe-area-inset-left)) + var(--lf-panel-l, 0px));
+  right: calc(max(var(--gap-m), env(safe-area-inset-right)) + var(--lf-panel-r, 0px));
   max-width: 640px;
   margin: 0 auto;
   display: flex;
@@ -85,11 +87,12 @@ const Turn = styled.span<{ $up: boolean }>`
 const AsOf = styled(Surface)`
   position: absolute;
   z-index: 4;
-  left: calc(50% + var(--lf-panel, 0px) / 2);
-  bottom: calc(var(--hud-bottom) + var(--gap-s));
+  left: calc(50% + (var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)) / 2);
+  /* Above the bottom bar (Look, Layers). */
+  bottom: calc(var(--hud-bottom) + var(--gap-s) + 44px);
   transform: translateX(-50%);
   width: max-content;
-  max-width: min(600px, calc(100cqw - 2 * var(--gap-m) - var(--lf-panel, 0px)));
+  max-width: min(600px, calc(100cqw - 2 * var(--gap-m) - var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)));
   ${MOBILE} {
     left: 50%;
     max-width: calc(100cqw - 2 * var(--gap-s));
@@ -122,6 +125,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const data = useLionfishData(app);
   const view = useView();
   const mobile = useIsMobile();
+  const stage = useStageLayout();
   const cursor = useCursor();
   const live = cursor.live;
   const atMs = live ? data.liveMs : Math.min(cursor.atMs, data.liveMs);
@@ -150,10 +154,11 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   }, [app]);
 
   const [banner, setBanner] = useState(() => !bannerDismissed(typeof window === "undefined" ? null : window.sessionStorage));
-  // In full on a desktop, one line on a phone (three wrapped caveats would take a fifth of the screen); either
+  // In full on a narrow desktop, one line on a phone (three wrapped caveats would take a fifth of the screen) and on
+  // the stage layout, where the line sits above the circle between the chat card and the survey panel (GE7); either
   // way the reader can switch.
   const [bannerOpen, setBannerOpen] = useState<boolean | null>(null);
-  const bannerFull = bannerOpen ?? !mobile;
+  const bannerFull = bannerOpen ?? (!mobile && !stage);
   const notes = [
     copyText(app, "sightingsNote", "Sightings are not abundance."),
     copyText(app, "heatNote", "Heat stress is context, not proof of damage."),
@@ -197,7 +202,9 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
     (id: string | null) => {
       setView({ area: id });
       const a = data.areas.find((x) => x.id === id);
-      if (a) getGlobe()?.flyTo({ lat: a.camera.lat, lon: a.camera.lon, altitudeM: a.camera.heightM, heading: 0, pitch: -90, durationS: 1.2 });
+      // The area's box where the user sees it (clear of the cards, inside the stage circle); its configured camera
+      // before the pane is laid out.
+      if (a) getGlobe()?.flyTo({ ...(fitInPane(a.bbox, AREA_INSET_PX) ?? { lat: a.camera.lat, lon: a.camera.lon, altitudeM: a.camera.heightM, heading: 0, pitch: -90 }), durationS: 1.2 });
       if (mobile) setView({ panelOpen: false });
     },
     [data.areas, mobile],
@@ -217,6 +224,10 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const pickedArea = picked ? (data.areas.find((a) => picked.cell.startsWith(`${a.id}:`))?.name ?? "") : "";
 
   const panelOpen = view.panelOpen ?? !mobile;
+  // Room the banner and the as-of chip keep for the open survey panel: on the left of the docked layout, on the
+  // right of the stage layout, where the panel opens in the right card region (client/hud/Panel.tsx, GE7).
+  const panelRoom = panelOpen && !mobile ? `${PANEL_WIDTH + 12}px` : "0px";
+  const panelVars = { [stage ? "--lf-panel-r" : "--lf-panel-l"]: panelRoom } as Record<string, string>;
   const onHelp = (t: HelpTopic | "all") => setView({ help: t });
   const show = { reports: visible.sightings !== false, heat: view.heat, priority: visible.hotspots !== false, field: view.field && live };
 
@@ -226,7 +237,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
       data-ready={data.reports && data.heat && data.feeds && snapshot ? "1" : "0"}
       data-replay-ready={data.replayReady ? "1" : "0"}
       data-live={live ? "1" : "0"}
-      style={{ display: "contents", ["--lf-panel" as string]: panelOpen && !mobile ? `${PANEL_WIDTH + 12}px` : "0px" }}
+      style={{ display: "contents", ...panelVars }}
     >
       <Overlay
         areas={data.areas}
@@ -249,7 +260,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
           data-testid="lionfish-banner"
           data-hud-obstacle=""
           data-expanded={bannerFull ? "true" : "false"}
-          style={{ ["--lf-panel" as string]: panelOpen && !mobile ? `${PANEL_WIDTH + 12}px` : "0px" }}
+          style={{ ...panelVars }}
         >
           {bannerFull ? (
             <ul id="lionfish-banner-notes">

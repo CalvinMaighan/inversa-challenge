@@ -5,9 +5,13 @@
  */
 import type { Page } from "playwright";
 
-type Tapped = { status: number; done: boolean };
+/** One tapped stream: its status, whether it was read to the end, and the events the map acts on (GE7). */
+export type Tapped = { status: number; done: boolean; events: { type: string; [k: string]: unknown }[] };
 
-/** Init script: wrap `window.fetch` so every agent stream is recorded with its status and completion. */
+/**
+ * Init script: wrap `window.fetch` so every agent stream is recorded with its status and completion, and its `view`,
+ * `ui`, `tool_start` and `citation` events (read from a tee of the NDJSON body, so the page reads its own copy).
+ */
 export function tapAgentStreams(): void {
   const w = window as unknown as { __agentStreams: Tapped[] };
   w.__agentStreams = [];
@@ -17,11 +21,29 @@ export function tapAgentStreams(): void {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!url.includes("/api/agent/stream") || !res.body) return res;
     const [mine, theirs] = res.body.tee();
-    const entry: Tapped = { status: res.status, done: false };
+    const entry: Tapped = { status: res.status, done: false, events: [] };
     w.__agentStreams.push(entry);
     void (async () => {
       const reader = mine.getReader();
-      while (!(await reader.read()).done);
+      const decoder = new TextDecoder();
+      let buffered = "";
+      const keep = (line: string) => {
+        try {
+          const event = JSON.parse(line) as Tapped["events"][number];
+          if (["view", "ui", "tool_start", "citation"].includes(event.type)) entry.events.push(event);
+        } catch {
+          // Not a JSON line.
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffered += decoder.decode(value, { stream: true });
+        const lines = buffered.split("\n");
+        buffered = lines.pop() ?? "";
+        for (const line of lines) if (line.trim()) keep(line);
+      }
+      if (buffered.trim()) keep(buffered);
       entry.done = true;
     })();
     return new Response(theirs, { status: res.status, statusText: res.statusText, headers: res.headers });
