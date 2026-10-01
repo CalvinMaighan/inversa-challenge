@@ -20,6 +20,7 @@ import { sightingHoursOf } from "client/state/layers";
 import { taxonCategory, type TaxonInfo } from "client/state/taxa";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import type { CategoryId } from "shared/species-categories";
+import { isSurveyApp } from "client/lionfish/model";
 import { activeApp } from "client/state/app";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
@@ -245,7 +246,10 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
       }
     },
     update(frameIndex, grid) {
-      if (enabled) draw(frameIndex, grid);
+      if (!enabled) return;
+      // A survey app (Lionfish Watch) draws its reports itself, by date basis and with GBIF copies marked.
+      if (isSurveyApp(activeApp())) clear();
+      else draw(frameIndex, grid);
     },
     stats: () => ({ ...stats, breakdown: stats.breakdown && { ...stats.breakdown }, marker: stats.marker && { ...stats.marker } }),
     describe(id) {

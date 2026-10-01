@@ -83,7 +83,7 @@
   "windows": { "defaultHours": 720, "optionsHours": [48, 168, 720] },
   "layers": [
     { "id": "sightings", "label": "Lionfish reports", "defaultOn": true },
-    { "id": "hotspots", "label": "Survey priority", "defaultOn": false },
+    { "id": "hotspots", "label": "Survey priority", "defaultOn": true },
     { "id": "sst", "label": "Sea surface temperature (GOES-19)", "defaultOn": false },
     { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": true },
     { "id": "marine", "label": "Waves and currents (Open-Meteo)", "defaultOn": false },
@@ -112,7 +112,11 @@
     "shortTitle": "Lionfish",
     "sightingsNote": "Sightings are not abundance: more reports can mean more observers; no reports can mean no sampling.",
     "scopeNote": "Lionfish in four areas: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean.",
-    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown."
+    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown.",
+    "heatNote": "Heat stress is context, not proof of damage: it says how hot the reef has been, not what lionfish did there.",
+    "priorityNote": "Survey priority orders places to look first from four separate components. It is not a risk or a probability.",
+    "lagNote": "Divers often upload days or years after a dive: in the L1 data proof (2026-10-01) the median lag was 5 days and 24 of 74 recent iNaturalist records were uploaded more than 30 days late. Counting by observed date puts each report on the day of the dive; by submitted date, on the day it reached iNaturalist.",
+    "replayNote": "Known at that time: reports submitted by then, the CRW product of that day, and the survey priority computed from what was submitted by then."
   },
   "helperQuestions": [
     "Show recent lionfish reports near reefs with elevated heat stress in Belize.",

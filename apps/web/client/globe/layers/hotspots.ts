@@ -5,6 +5,8 @@
  */
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 
+import { isSurveyApp } from "client/lionfish/model";
+import { activeApp } from "client/state/app";
 import type { BBox } from "shared/agent/events";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
@@ -69,7 +71,8 @@ export function createHotspotLayer(ctx: LayerContext): GlobeLayer {
     },
     update(frameIndex, grid) {
       if (!enabled) return;
-      if (!grid || frameIndex < 0 || frameIndex >= grid.shape.frameCount || grid.shape.speciesCount === 0 || grid.layout.hsCells === 0) {
+      // A survey app (Lionfish Watch) draws its ranked cells itself, components kept apart.
+      if (!grid || isSurveyApp(activeApp()) || frameIndex < 0 || frameIndex >= grid.shape.frameCount || grid.shape.speciesCount === 0 || grid.layout.hsCells === 0) {
         if (shown) {
           hide();
           ctx.requestRender();
