@@ -9,7 +9,7 @@ interface Vector {
   name: string;
   board?: string;
   ops: Op[];
-  expected: { missions: Record<string, unknown>; notes: Record<string, unknown>; messages: { id: string; body: string; hlc: string }[]; removals: Record<string, number> };
+  expected: { missions: Record<string, unknown>; notes: Record<string, unknown>; messages: { id: string; body: string; hlc: string; to?: string; thread?: string }[]; removals: Record<string, number> };
 }
 
 // apps/web/tests/client/threads/crdt -> repo root -> spec/crdt (../../spec/crdt from apps/web)
@@ -40,7 +40,7 @@ function projection(view: BoardView) {
   return {
     missions: map(view.missions),
     notes: map(view.notes),
-    messages: view.messages.map(({ id, body, hlc }) => ({ id, body, hlc })),
+    messages: view.messages.map(({ id, body, hlc, to, thread }) => ({ id, body, hlc, ...(to === null ? {} : { to }), ...(thread === null ? {} : { thread }) })),
     removals: view.removals,
   };
 }
@@ -129,6 +129,10 @@ describe("CRDT golden vectors", () => {
       ["hlc 16 digits", { hlc: "1700000000000000:0:a" }],
       ["bigint value", { value: 1n as unknown }],
       ["_deleted", { field: "_deleted", value: "yes" }],
+      ["message object body", { entity: "message", field: "body", value: { body: 1 } }],
+      ["message extra key", { entity: "message", field: "body", value: { body: "x", html: "y" } }],
+      ["message empty to", { entity: "message", field: "body", value: { body: "x", to: "" } }],
+      ["message array", { entity: "message", field: "body", value: ["x"] }],
       ["id", { id: "" }],
     ];
     for (const [label, patch] of bad) {

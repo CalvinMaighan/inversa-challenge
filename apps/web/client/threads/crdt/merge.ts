@@ -12,7 +12,7 @@
 // - Apply is idempotent on op id.
 
 import { compare, parse } from "./hlc";
-import { DELETED_FIELD, isEntity, MAX_ID_BYTES, MAX_VALUE_BYTES, type Op } from "./types";
+import { DELETED_FIELD, isEntity, MAX_ID_BYTES, MAX_VALUE_BYTES, type MessageValue, type Op } from "./types";
 
 export interface FieldRegister {
   value: unknown;
@@ -23,6 +23,16 @@ export interface MessageRow {
   body: string;
   hlc: string;
   nodeId: string;
+  /** Direct message: the addressee and its thread (PLAN.md C-A7); null for a team-wide message. */
+  to: string | null;
+  thread: string | null;
+}
+
+/** A message op's value as `{body, to, thread}`; a plain string is a team-wide message. */
+export function messageValue(value: unknown): { body: string; to: string | null; thread: string | null } {
+  if (typeof value === "string") return { body: value, to: null, thread: null };
+  const v = value as MessageValue;
+  return { body: v.body, to: v.to ?? null, thread: v.thread ?? null };
 }
 
 export interface BoardState {
@@ -47,6 +57,8 @@ export interface MessageView {
   body: string;
   hlc: string;
   nodeId: string;
+  to: string | null;
+  thread: string | null;
 }
 
 export interface BoardView {
@@ -138,12 +150,27 @@ export function validateOp(op: Op, boardId: string): string | null {
       return null;
     case "message":
       if (op.field !== "body") return 'message field must be "body"';
-      if (typeof op.value !== "string") return "message body must be a string";
-      return null;
+      return validateMessageValue(op.value);
     case "removal":
       if (!Number.isSafeInteger(op.value) || (op.value as number) < 0) return "removal value must be a non-negative integer";
       return null;
   }
+}
+
+const MESSAGE_KEYS = new Set(["body", "to", "thread"]);
+
+/** A string, or `{body, to?, thread?}` with string members (ids 1..=256 bytes) and nothing else. */
+function validateMessageValue(value: unknown): string | null {
+  if (typeof value === "string") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "message body must be a string or {body, to, thread}";
+  const v = value as Record<string, unknown>;
+  for (const k of Object.keys(v)) if (!MESSAGE_KEYS.has(k)) return `message value has unknown key ${JSON.stringify(k)}`;
+  if (typeof v.body !== "string") return "message body must be a string";
+  for (const k of ["to", "thread"] as const) {
+    if (v[k] === undefined) continue;
+    if (typeof v[k] !== "string" || v[k].length === 0 || byteLength(v[k]) > MAX_ID_BYTES) return `message ${k} must be 1..=256 bytes`;
+  }
+  return null;
 }
 
 // ---- apply -------------------------------------------------------------------------------
@@ -172,7 +199,7 @@ export function applyOps(state: BoardState, ops: readonly Op[]): BoardState {
         break;
       }
       case "message": {
-        if (messageWins(messages.get(op.entityId)?.hlc, op.hlc)) messages.set(op.entityId, { body: op.value as string, hlc: op.hlc, nodeId: op.nodeId });
+        if (messageWins(messages.get(op.entityId)?.hlc, op.hlc)) messages.set(op.entityId, { ...messageValue(op.value), hlc: op.hlc, nodeId: op.nodeId });
         break;
       }
       case "removal": {
@@ -224,7 +251,10 @@ export function viewBoard(state: BoardState): BoardView {
 /** Order-independent dump of the whole state (deleted rows included), for convergence checks. */
 export function canonical(state: BoardState): string {
   const fields = sortedKeys(state.fields).map((k) => [...splitFieldKey(k), state.fields.get(k)!.hlc, JSON.stringify(state.fields.get(k)!.value)]);
-  const messages = sortedKeys(state.messages).map((id) => [id, state.messages.get(id)!.hlc, state.messages.get(id)!.body, state.messages.get(id)!.nodeId]);
+  const messages = sortedKeys(state.messages).map((id) => {
+    const m = state.messages.get(id)!;
+    return [id, m.hlc, m.body, m.nodeId, m.to, m.thread];
+  });
   const removals = sortedKeys(state.removals).map((id) => [id, sortedKeys(state.removals.get(id)!).map((n) => [n, state.removals.get(id)!.get(n)!])]);
   return JSON.stringify({ boardId: state.boardId, fields, messages, removals, seen: [...state.seen].sort() });
 }

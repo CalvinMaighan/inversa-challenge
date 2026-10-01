@@ -12,7 +12,7 @@ interface Vector {
   name: string;
   board?: string;
   ops: Op[];
-  expected: { missions: Record<string, unknown>; notes: Record<string, unknown>; messages: { id: string; body: string; hlc: string }[]; removals: Record<string, number> };
+  expected: { missions: Record<string, unknown>; notes: Record<string, unknown>; messages: { id: string; body: string; hlc: string; to?: string; thread?: string }[]; removals: Record<string, number> };
 }
 
 const DIR = resolve(import.meta.dir, "../../../../../spec/crdt");
@@ -46,7 +46,7 @@ describe("CRDT tables against spec/crdt vectors", () => {
       const asMap = (xs: { id: string; fields: Record<string, unknown> }[]): Record<string, unknown> => Object.fromEntries(xs.map((e) => [e.id, e.fields]));
       expect(asMap(view.missions)).toEqual(v.expected.missions);
       expect(asMap(view.notes)).toEqual(v.expected.notes);
-      expect(view.messages.map((m) => ({ id: m.id, body: m.body, hlc: m.hlc }))).toEqual(v.expected.messages);
+      expect(view.messages.map((m) => ({ id: m.id, body: m.body, hlc: m.hlc, ...(m.to === null ? {} : { to: m.to }), ...(m.thread === null ? {} : { thread: m.thread }) }))).toEqual(v.expected.messages);
       expect(view.removals).toEqual(v.expected.removals);
       // And the SQL view matches T12's pure view for the same delivery order.
       const pure = viewBoard(applyPure(createState(board), boards.get(board) ?? []));

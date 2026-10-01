@@ -26,9 +26,10 @@ import type { BoardView } from "client/threads/crdt/merge";
 import type { Op } from "client/threads/crdt/types";
 import { startPeers, type TeamLink } from "client/threads/rtc/peers";
 
+import { startLiveStreams, type LiveStreams } from "../messages/live";
 import { pinsOf } from "../notes/model";
 import { cell, type Cell } from "../store";
-import { boardModel, messageOp, overlayOps, type BoardModel, type OpFactory } from "./board";
+import { boardModel, directMessageOp, editFieldNoteOp, messageOp, overlayOps, type BoardModel, type OpFactory } from "./board";
 
 export const RESYNC_MS = 15_000;
 
@@ -38,6 +39,8 @@ export type Team = {
   readonly board: Cell<BoardModel | null>;
   readonly link: TeamLink;
   readonly threads: Threads;
+  /** Live text streams: direct-message drafts and note edits as they are typed (PLAN.md C-A7). */
+  readonly live: LiveStreams;
   factory(): OpFactory;
   /** Apply locally, broadcast to peers, queue for the server. Resolves once the local apply returned. */
   edit(ops: Op[]): Promise<void>;
@@ -61,6 +64,8 @@ type Harness = {
   board(): BoardModel | null;
   blockRtc(on: boolean): void;
   say(text: string): Promise<void>;
+  /** Write a note's text through the CRDT (no live stream), as a concurrent editor would. */
+  editNote(noteId: string, text: string): Promise<void>;
   select(evidenceId: string | null): void;
   sync(): Promise<void>;
 };
@@ -144,12 +149,22 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
     }
   };
 
+  const live = startLiveStreams({
+    link,
+    nodeId: me.nodeId,
+    persistDm(msgId, to, thread, text) {
+      const op = directMessageOp(factory(), msgId, { body: text, to, thread });
+      return { hlc: op.hlc, done: edit([op]) };
+    },
+  });
+
   const t: Team = {
     boardId,
     nodeId: me.nodeId,
     board,
     link,
     threads,
+    live,
     factory,
     edit,
     sync,
@@ -160,6 +175,7 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
       window.removeEventListener("online", onOnline);
       offBoard();
       offRemote();
+      live.close();
       link.close();
       if (team === t) {
         team = null;
@@ -179,6 +195,7 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
       board: () => board.get(),
       blockRtc: (on) => link.setBlocked(on),
       say: (text) => edit([messageOp(factory(), text)]),
+      editNote: (noteId, text) => edit([editFieldNoteOp(factory(), noteId, text)]),
       select: (evidenceId) => set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId })),
       sync,
     };

@@ -3,12 +3,12 @@
  * bun:sqlite and run the same statements. CRDT merges use T12's rule functions (`crdt/merge.ts`) row by row,
  * so the SQL tables converge exactly like the in-memory board.
  */
-import { isDeleted, mergeCounter, messageWins, orderMessages, registerWins, validateOp, InvalidOpError, type BoardView } from "client/threads/crdt/merge";
+import { isDeleted, mergeCounter, messageValue, messageWins, orderMessages, registerWins, validateOp, InvalidOpError, type BoardView } from "client/threads/crdt/merge";
 import { DELETED_FIELD, type Op, type StoredOp } from "client/threads/crdt/types";
 
 import { cacheDecision, type CacheDecision, type CacheRow } from "./cache";
 import { INFLIGHT_STALE_MS, type OutboxEntry, type OutboxStatus } from "./outbox";
-import { SCHEMA_STATEMENTS, SCHEMA_VERSION } from "./schema";
+import { SCHEMA_STATEMENTS, SCHEMA_UPGRADES, SCHEMA_VERSION } from "./schema";
 
 export type SqlValue = string | number | bigint | null | Uint8Array;
 
@@ -47,6 +47,13 @@ export class Store {
 
   migrate(): void {
     for (const sql of SCHEMA_STATEMENTS) this.db.run(sql);
+    for (const sql of SCHEMA_UPGRADES) {
+      try {
+        this.db.run(sql);
+      } catch {
+        // The column exists: a fresh schema or an earlier upgrade.
+      }
+    }
     this.db.run("INSERT OR REPLACE INTO meta (k, v) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)]);
   }
 
@@ -192,7 +199,8 @@ export class Store {
       case "message": {
         const row = this.db.all("SELECT hlc FROM messages WHERE board_id = ? AND id = ?", [boardId, op.entityId])[0];
         if (messageWins(row ? str(row.hlc) : undefined, op.hlc)) {
-          this.db.run("INSERT OR REPLACE INTO messages (board_id, id, body, hlc, node_id) VALUES (?, ?, ?, ?, ?)", [boardId, op.entityId, op.value as string, op.hlc, op.nodeId]);
+          const v = messageValue(op.value);
+          this.db.run("INSERT OR REPLACE INTO messages (board_id, id, body, hlc, node_id, to_node, thread) VALUES (?, ?, ?, ?, ?, ?, ?)", [boardId, op.entityId, v.body, op.hlc, op.nodeId, v.to, v.thread]);
         }
         return;
       }
@@ -231,7 +239,14 @@ export class Store {
   /** Same shape as `merge.viewBoard`, plus the board id and the highest server seq applied. */
   readBoard(boardId: string): BoardRead {
     const messages = orderMessages(
-      this.db.all("SELECT id, body, hlc, node_id FROM messages WHERE board_id = ?", [boardId]).map((r) => ({ id: str(r.id), body: str(r.body), hlc: str(r.hlc), nodeId: str(r.node_id) })),
+      this.db.all("SELECT id, body, hlc, node_id, to_node, thread FROM messages WHERE board_id = ?", [boardId]).map((r) => ({
+        id: str(r.id),
+        body: str(r.body),
+        hlc: str(r.hlc),
+        nodeId: str(r.node_id),
+        to: r.to_node === null ? null : str(r.to_node),
+        thread: r.thread === null ? null : str(r.thread),
+      })),
     );
     const removals: Record<string, number> = {};
     for (const r of this.db.all("SELECT entity_id, SUM(total) AS total FROM removal_counts WHERE board_id = ? GROUP BY entity_id ORDER BY entity_id", [boardId])) {

@@ -13,9 +13,19 @@ export interface Op {
   entityId: string;
   /** Mission/note register name; "body" for messages; "_deleted" for tombstones. */
   field: string;
-  /** JSON. A string for messages, a non-negative integer for removals, a boolean for _deleted. */
+  /** JSON. A string or `MessageValue` for messages, a non-negative integer for removals, a boolean for _deleted. */
   value: unknown;
   nodeId: string;
+}
+
+/**
+ * A message's `body` value when it carries an address (PLAN.md C-A7): a direct message to node `to` in `thread`.
+ * A plain string body is a team-wide message with neither.
+ */
+export interface MessageValue {
+  body: string;
+  to?: string;
+  thread?: string;
 }
 
 /** Persisted op as the API returns it (GraphQL `Op`). */

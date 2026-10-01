@@ -1,0 +1,51 @@
+{
+  "name": "message-concurrent-commit",
+  "ops": [
+    {
+      "id": "op-0111",
+      "hlc": "1700000000500:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm9",
+      "field": "body",
+      "value": { "body": "replayed from b with a later clock", "to": "a", "thread": "dm:a~b" },
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0112",
+      "hlc": "1700000000500:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm9",
+      "field": "body",
+      "value": { "body": "a commits first", "to": "b", "thread": "dm:a~b" },
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0113",
+      "hlc": "1700000000400:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm9",
+      "field": "body",
+      "value": "a string body with the lowest clock wins, and has no address",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0112",
+      "hlc": "1700000000500:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm9",
+      "field": "body",
+      "value": { "body": "a commits first", "to": "b", "thread": "dm:a~b" },
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [{ "id": "dm9", "body": "a string body with the lowest clock wins, and has no address", "hlc": "1700000000400:0:b" }],
+    "removals": {}
+  }
+}

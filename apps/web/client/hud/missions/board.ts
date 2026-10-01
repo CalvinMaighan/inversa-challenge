@@ -8,8 +8,8 @@ import { speciesIds } from "shared/apps";
 
 import { cellCenter, type HotspotRef } from "client/hud/drawer/evidence";
 import { type Clock, compare, format } from "client/threads/crdt/hlc";
-import { orderMessages, type BoardView, type EntityView, type MessageView } from "client/threads/crdt/merge";
-import { DELETED_FIELD, type Op } from "client/threads/crdt/types";
+import { messageValue, orderMessages, type BoardView, type EntityView, type MessageView } from "client/threads/crdt/merge";
+import { DELETED_FIELD, type MessageValue, type Op } from "client/threads/crdt/types";
 
 export const MISSION_STATUSES = ["planned", "in_progress", "done"] as const;
 export type MissionStatus = (typeof MISSION_STATUSES)[number];
@@ -147,6 +147,11 @@ export function deleteMissionOp(f: OpFactory, missionId: string): Op {
 
 export function messageOp(f: OpFactory, body: string): Op {
   return stamp(f, "message", uuidv7((f.now ?? Date.now)()), "body", body);
+}
+
+/** A direct message (PLAN.md C-A7): the committed `dm.commit` text, addressed to `to` in `thread`, under the stream's `msgId`. */
+export function directMessageOp(f: OpFactory, msgId: string, value: Required<MessageValue>): Op {
+  return stamp(f, "message", msgId, "body", value);
 }
 
 export function createNoteOps(f: OpFactory, missionId: string, body: string): Op[] {
@@ -345,7 +350,7 @@ export function overlayOps(view: BoardView, ops: readonly Op[]): BoardView {
         break;
       }
       case "message":
-        if (!messages.some((m) => m.id === op.entityId)) messages.push({ id: op.entityId, body: String(op.value), hlc: op.hlc, nodeId: op.nodeId });
+        if (!messages.some((m) => m.id === op.entityId)) messages.push({ id: op.entityId, ...messageValue(op.value), hlc: op.hlc, nodeId: op.nodeId });
         break;
       case "removal":
         pendingTotals.set(op.entityId, [...(pendingTotals.get(op.entityId) ?? []), Number(op.value)]);

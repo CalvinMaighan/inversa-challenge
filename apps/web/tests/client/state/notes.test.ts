@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { get, init, set } from "@calvinjs/active-state";
 
 import { state } from "client/state";
-import { NOTES, resetNoteDraft, setNotePick, setNotePicking, setNotePins, setNotePrefill, type NotePin, type NotesState } from "client/state/notes";
+import { NOTES, resetNoteDraft, setNoteLive, setNotePick, setNotePicking, setNotePins, setNotePrefill, type NotePin, type NotesState } from "client/state/notes";
 
 init(state);
 
@@ -21,7 +21,7 @@ const pin = (id: string, text = "two tegus"): NotePin => ({
 
 describe("NOTES", () => {
   test("starts with no pins, not picking, nothing picked or prefilled", () => {
-    expect(NOTES.defaults).toEqual({ pins: [], picking: false, pick: null, prefill: null });
+    expect(NOTES.defaults).toEqual({ pins: [], live: {}, picking: false, pick: null, prefill: null });
   });
 
   test("setNotePins keeps the same value when nothing changed, so chat traffic does not redraw the globe", () => {
@@ -60,7 +60,21 @@ describe("NOTES", () => {
     setNotePrefill({ lon: -80.4, lat: 25.5, sightingId: "77" });
     resetNoteDraft();
     // A post clears the draft's place and prefill, never the pins.
-    expect(get<NotesState>(NOTES)).toEqual({ pins: [pin("a")], picking: false, pick: null, prefill: null });
+    expect(get<NotesState>(NOTES)).toEqual({ pins: [pin("a")], live: {}, picking: false, pick: null, prefill: null });
+    set(NOTES, NOTES.defaults);
+  });
+
+  test("setNoteLive adds and removes a peer's live edit without touching the pins; clearing an absent one is a no-op", () => {
+    set(NOTES, NOTES.defaults);
+    setNotePins([pin("a")]);
+    const before = get<NotesState>(NOTES);
+    setNoteLive("a", null);
+    expect(get<NotesState>(NOTES)).toBe(before);
+    setNoteLive("a", { from: "node-b", text: "two teg", caret: 7, at: 1_000 });
+    expect(get<NotesState>(NOTES)!.live).toEqual({ a: { from: "node-b", text: "two teg", caret: 7, at: 1_000 } });
+    expect(get<NotesState>(NOTES)!.pins).toBe(before!.pins);
+    setNoteLive("a", null);
+    expect(get<NotesState>(NOTES)!.live).toEqual({});
     set(NOTES, NOTES.defaults);
   });
 });

@@ -18,7 +18,7 @@ import type { Op } from "client/threads/crdt/types";
 import type { Threads } from "client/threads/boot";
 
 import { Mesh, type SessionState } from "./mesh";
-import { isFromRtc, type PeerIdentity, type ToRtc } from "./protocol";
+import { isFromRtc, type PeerIdentity, type StreamMessage, type ToRtc } from "./protocol";
 import { RelayHost } from "./relay";
 import { createSignaling, resolveSignalUrl, type IceServer, type Signaling, type SignalPeer } from "./signal";
 
@@ -40,6 +40,12 @@ export type TeamLink = {
   setBlocked(on: boolean): void;
   /** Fires with ops a peer delivered over a data channel, after they were handed to the db worker. */
   onRemoteOps(cb: (ops: Op[]) => void): () => void;
+  /** A live text stream message (PLAN.md C-A7) to one peer, or to every open channel when `to` is null. */
+  send(to: string | null, msg: StreamMessage): void;
+  /** Fires with a peer's stream message; `msg.from` is the channel's peer id, set by the worker. */
+  onStream(cb: (msg: StreamMessage) => void): () => void;
+  /** Fires when a peer's data channel opens or closes. */
+  onLink(cb: (peerId: string, state: "open" | "closed") => void): () => void;
   peers(): Peer[];
   close(): void;
 };
@@ -68,6 +74,8 @@ export function startPeers(o: StartPeersOptions): TeamLink {
   const signal = o.signaling ?? createSignaling(resolveSignalUrl(o.signalUrl ?? process.env.NEXT_PUBLIC_SIGNAL_URL));
   const worker = o.createWorker ? o.createWorker() : new Worker(new URL("../rtc.worker.ts", import.meta.url), { type: "module", name: "inversa-rtc" });
   const remoteListeners = new Set<(ops: Op[]) => void>();
+  const streamListeners = new Set<(msg: StreamMessage) => void>();
+  const linkListeners = new Set<(peerId: string, state: "open" | "closed") => void>();
   let ice: IceServer[] = STUN_ONLY;
   let relay: { channel: Channel; host: RelayHost } | null = null;
   let closed = false;
@@ -149,9 +157,15 @@ export function startPeers(o: StartPeersOptions): TeamLink {
     switch (m.t) {
       case "rtc:open":
         patchPeer(m.peerId, { link: "open", seenAt: iso(now()) });
+        for (const cb of linkListeners) cb(m.peerId, "open");
         return;
       case "rtc:closed":
         if (mesh.stateOf(m.peerId) !== null) patchPeer(m.peerId, { link: "relay" });
+        for (const cb of linkListeners) cb(m.peerId, "closed");
+        return;
+      case "rtc:peer-stream":
+        patchPeer(m.peerId, { seenAt: iso(now()) });
+        for (const cb of streamListeners) cb(m.msg);
         return;
       case "rtc:ops":
         patchPeer(m.peerId, { seenAt: iso(now()) });
@@ -296,6 +310,19 @@ export function startPeers(o: StartPeersOptions): TeamLink {
       remoteListeners.add(cb);
       return () => {
         remoteListeners.delete(cb);
+      };
+    },
+    send: (to, msg) => post({ t: "rtc:send", to, msg }),
+    onStream(cb) {
+      streamListeners.add(cb);
+      return () => {
+        streamListeners.delete(cb);
+      };
+    },
+    onLink(cb) {
+      linkListeners.add(cb);
+      return () => {
+        linkListeners.delete(cb);
       };
     },
     peers: () => get<Peer[]>(PEERS) ?? [],

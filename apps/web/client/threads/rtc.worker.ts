@@ -11,14 +11,15 @@
  */
 import { openChannel, type ChannelHandle } from "@calvinjs/active-state/threads";
 
-import { isPeerMessage, isToRtc, MAX_PEER_MESSAGE_CHARS, type FromRtc, type PeerIdentity, type PeerMessage } from "./rtc/protocol";
+import { isPeerMessage, isToRtc, MAX_PEER_MESSAGE_CHARS, type FromRtc, type PeerIdentity, type PeerMessage, type StreamMessage } from "./rtc/protocol";
 import { RelayClient, RelayedChannel, type ChannelLike } from "./rtc/relay";
+import { admitInbound, RateLimit } from "./rtc/stream";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
 const post = (m: FromRtc) => scope.postMessage(m);
 
-type Link = { peerId: string; channel: ChannelLike; relayed: boolean };
+type Link = { peerId: string; channel: ChannelLike; relayed: boolean; deltas: RateLimit };
 
 const links = new Map<string, Link>();
 let me: PeerIdentity | null = null;
@@ -31,6 +32,18 @@ function stats(): void {
   post({ t: "rtc:stats", open: openLinks().length });
 }
 
+/**
+ * Liveness over the channel: a `hello` every HELLO_MS to each open link. Chrome does not tell the other side
+ * when a tab vanishes (no close alert; ICE consent can take a minute to fail), so a peer's `seenAt` is what the
+ * DM panel's presence reads (`hud/messages/model.ts`), and a heartbeat keeps it honest within seconds.
+ */
+const HELLO_MS = 5_000;
+setInterval(() => {
+  if (!me || blocked) return;
+  const text = JSON.stringify({ type: "hello", me } satisfies PeerMessage);
+  for (const l of openLinks()) l.channel.send(text);
+}, HELLO_MS);
+
 function sendAll(msg: PeerMessage): void {
   if (blocked) return;
   const text = JSON.stringify(msg);
@@ -40,6 +53,23 @@ function sendAll(msg: PeerMessage): void {
     else l.channel.send(text);
   }
   if (relayed) relay?.broadcast(text);
+}
+
+function sendTo(peerId: string, msg: PeerMessage): void {
+  if (blocked) return;
+  const l = links.get(peerId);
+  if (l?.channel.readyState === "open") l.channel.send(JSON.stringify(msg));
+}
+
+/**
+ * A stream message from a peer, with `from` set to the channel it came on (a peer cannot speak as another), a
+ * `to` that must be this node, and deltas capped at MAX_DELTAS_PER_SECOND per peer. Dropped deltas leave a seq
+ * gap, and main answers a gap with a `stream.resync`, so a flood costs one sync instead of a frozen tab.
+ */
+function receiveStream(link: Link, msg: StreamMessage): void {
+  if (!me) return;
+  const admitted = admitInbound(msg, link.peerId, me.nodeId, link.deltas, Date.now());
+  if (admitted) post({ t: "rtc:peer-stream", peerId: link.peerId, msg: admitted });
 }
 
 function receive(peerId: string, data: unknown): void {
@@ -61,12 +91,17 @@ function receive(peerId: string, data: unknown): void {
     case "hello":
       post({ t: "rtc:peer-hello", peerId, me: msg.me });
       return;
+    default: {
+      const link = links.get(peerId);
+      if (link && !blocked) receiveStream(link, msg);
+      return;
+    }
   }
 }
 
 function wire(peerId: string, channel: ChannelLike, relayed: boolean): void {
   detach(peerId);
-  const link: Link = { peerId, channel, relayed };
+  const link: Link = { peerId, channel, relayed, deltas: new RateLimit() };
   links.set(peerId, link);
   channel.onopen = () => {
     if (me) channel.send(JSON.stringify({ type: "hello", me } satisfies PeerMessage));
@@ -116,6 +151,10 @@ scope.addEventListener("message", (ev: MessageEvent) => {
       return;
     case "rtc:cursor":
       sendAll({ type: "cursor", lon: m.lon, lat: m.lat });
+      return;
+    case "rtc:send":
+      if (m.to === null) sendAll(m.msg);
+      else sendTo(m.to, m.msg);
       return;
     case "rtc:block":
       blocked = m.on;

@@ -10,6 +10,7 @@ import { layersFor, LAYERS } from "./layers";
 import { MISSIONS, type MissionsState } from "./missions";
 import { NOTES } from "./notes";
 import { PEERS } from "./peers";
+import { MESSAGES } from "./messages";
 import { SELECTION } from "./selection";
 import { TAXA } from "./taxa";
 import { VIEW, viewFor, type ViewState } from "./view";
@@ -31,6 +32,7 @@ export function applyApp(id: AppId): boolean {
   set(LAYERS, layersFor(app));
   set<MissionsState>(MISSIONS, (prev = MISSIONS.defaults) => ({ ...MISSIONS.defaults, boardId: boardIdFor(id), panelOpen: prev.panelOpen }));
   set(NOTES, NOTES.defaults);
+  set(MESSAGES, MESSAGES.defaults);
   set(PEERS, PEERS.defaults);
   set<FeedState[]>(FEEDS, []);
   set(TAXA, TAXA.defaults);

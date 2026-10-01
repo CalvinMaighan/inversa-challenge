@@ -24,6 +24,7 @@
     "e2e:live": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/live.ts",
     "e2e:team": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/team.ts",
     "e2e:notes": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/notes.ts",
+    "e2e:dm": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/dm.ts",
     "e2e:a11y": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/a11y.ts",
     "e2e:prod": "bun e2e/prod.ts",
     "e2e:links": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/links.ts",

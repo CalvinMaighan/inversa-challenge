@@ -168,6 +168,17 @@ The next step is a `Content-Security-Policy-Report-Only` with `script-src 'self'
   - The agent's markdown is parsed into a small AST and mounted with DOM APIs, with no HTML pass-through, and links are `http(s)` only (`apps/web/client/agent/markdown/parse.ts`).
   - The drawer's source link is a URL Axum built itself, the fetch URL of the poller. It opens with `rel="noopener noreferrer"`, and React 19 blocks `javascript:` URLs.
 
+### 11. Real-time messaging over the data channel (M1)
+
+- **Threat:** a peer on the WebRTC mesh forges authorship, floods a tab with keystroke deltas, injects HTML through a direct message or a live note edit, or leaves a ghost "is typing" behind.
+- **Controls** (`apps/web/client/threads/rtc/{protocol,stream}.ts`, `rtc.worker.ts`, `client/hud/messages/live.ts`):
+  - Every stream message (`dm.delta`, `dm.commit`, `dm.typing`, `note.delta`, `stream.sync`, `stream.resync`) is validated by shape in the rtc worker: exactly the contract's keys, typed, ids at most 256 characters, `ins` and `text` at most 4 KB. Anything else is dropped before main sees it (`tests/client/threads/rtc/protocol.test.ts` "peer message dm").
+  - Authorship comes from the channel, not the payload: the worker replaces `from` with the peer id the channel was opened for, and a `to` that is not this node is dropped (`admitInbound`, "dm injection: a peer cannot spoof `from`").
+  - Inbound deltas are capped at 60 per peer per second in a sliding window; a flood is dropped, the receiver's seq gap asks the author for one `stream.sync` (at most one request per 250 ms per stream), and 10k deltas apply in one task under 50 ms ("dm resilience").
+  - A closed channel drops that peer's live drafts and typing presence at once; typing presence expires 3 s after the last delta; a commit clears both.
+  - Message, draft and note text are React text nodes, never HTML or markdown (`tests/client/hud/messages/model.test.ts` "dm injection"). The committed message is a CRDT `message` op whose `{body, to, thread}` value goes through the same op validation as every other op, on both runners (`spec/crdt/message-thread.json`).
+- **Accepted:** direct messages are not private. The data channel is DTLS-encrypted peer to peer, but the committed message is an op on the shared board: Axum stores it and any client that syncs the board can read it (there is no auth, see below). `to` and `thread` are routing, not access control.
+
 ## Accepted risks
 
 - **The team board is unauthenticated.** Anyone who can reach the site can post ops (missions, notes, chat, removal counts) through `applyOps`. The prototype has no accounts, so this is by design. The damage is bounded by the op-size and body caps and by CRDT idempotence, and ops are append-only history. Adding real authentication (an OIDC session, with the board id bound to a team) is the first step before real crews use it.

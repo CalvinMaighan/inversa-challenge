@@ -22,6 +22,8 @@ import { SELECTION, type SelectionState } from "client/state/selection";
 import styled from "client/styled";
 
 import { parseHotspotId, type HotspotRef } from "../drawer/evidence";
+import MessagesPanel from "../messages/MessagesPanel";
+import { teamMessages } from "../messages/model";
 import NotesPanel from "../notes/NotesPanel";
 import { Dot, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { useCell } from "../store";
@@ -428,11 +430,13 @@ function TeamChat({ team, model, me, peers }: { team: Team; model: BoardModel; m
     setDraft("");
   };
   const colorOf = (nodeId: string) => (me && nodeId === me.nodeId ? me.color : (peers.find((p) => p.peerId === nodeId)?.color ?? "var(--muted)"));
+  // Direct messages (`thread` set) belong to the Direct messages section, not the team log.
+  const shown = useMemo(() => teamMessages(model.messages), [model.messages]);
   return (
     <Section aria-label="Team chat">
       <SectionTitle>Team chat</SectionTitle>
       <Chat data-testid="chat-log" aria-live="polite">
-        {model.messages.map((m) => (
+        {shown.map((m) => (
           <li key={m.id} data-testid="chat-message">
             <Author $color={colorOf(m.nodeId)}>{callsignOf(m.nodeId, peers, me)}</Author>
             <span>{m.body}</span>
@@ -500,6 +504,7 @@ function PanelBody({ team }: { team: Team }) {
   return (
     <Stack data-testid="team-panel" data-ready={model ? "1" : "0"}>
       <Presence me={me} peers={peers} />
+      {model && <MessagesPanel team={team} me={me} peers={peers} messages={model.messages} />}
       {model && <NotesPanel team={team} me={me} notes={model.fieldNotes} />}
       {model && <TeamChat team={team} model={model} me={me} peers={peers} />}
       <Disclosure ref={disclosure} data-testid="crew-missions">

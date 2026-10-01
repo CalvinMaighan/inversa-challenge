@@ -7,13 +7,16 @@
  *      `note:<id>`), and B's row offers no Edit or Delete (not the author).
  *   2. B posts a note of its own, so the Notes tab shows two authors; screenshots: docs/evidence/notes-tab.png,
  *      and A clicks its pin, the drawer shows the note card: docs/evidence/notes-map.png.
+ *   2b. (M1) A edits its note key by key; B sees each key, A's caret and "is editing"; B edits its own note at the
+ *      same time; a concurrent CRDT write to A's note converges on A's save; docs/evidence/notes-live.png.
  *   3. A edits its note; B sees the new text. A deletes it; the row and the pin disappear on B.
  *   4. With peer traffic blocked and B offline, A posts a note; B must not see it until it reconnects, then both
  *      converge (list and pin).
  *   5. With an OpenRouter key in the environment (`bun run e2e:notes` wraps doppler), A asks the agent what people
  *      noted near Homestead today, waits for a cited answer and saves docs/evidence/notes-agent.png.
  *
- * Prints `NOTES rtc_ms=<n> pin=1 list=1 edit=1 delete=1 offline_sync=1` on success.
+ * Prints `NOTES rtc_ms=<n> pin=1 list=1 edit=1 delete=1 offline_sync=1 live_edit=ok caret=ok converge=ok p50_ms=<n> presence=ok`
+ * on success.
  */
 import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -157,6 +160,24 @@ async function clickPin(page: Page, at: { lon: number; lat: number }): Promise<v
 
 const authorRow = (id: string) => `[data-testid="note-row"][data-note-id="${id}"]`;
 
+/** What A types onto its note while B watches (M1 live edit). */
+const LIVE_SUFFIX = " (three now)";
+
+const p50 = (xs: number[]) => [...xs].sort((x, y) => x - y)[Math.floor(xs.length / 2)]!;
+
+/** The text before the caret element at `selector`, as its parent's text nodes read, or null without a caret. */
+const textBeforeCaret = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    const caret = document.querySelector(sel);
+    if (!caret) return null;
+    let s = "";
+    for (const n of caret.parentElement!.childNodes) {
+      if (n === caret) break;
+      s += n.textContent ?? "";
+    }
+    return s;
+  }, selector);
+
 // ---- agent (live) -----------------------------------------------------------------------------------
 
 async function askAgent(page: Page, stack: DevStack): Promise<string> {
@@ -280,6 +301,63 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   await a.screenshot({ path: join(SHOT_DIR, "notes-map.png") });
   log("notes-map.png: pin clicked, note card open");
 
+  // 2b. Live editing (M1, gates/leaf-M1.md G6): A edits its note and B sees every key and A's caret while it is
+  // typed; B edits its own note at the same time and A sees that; a concurrent CRDT write to A's note from B
+  // converges on A's save (LWW), with no live residue left on screen.
+  await a.click(`${authorRow(noteA!.id)} [data-testid="note-edit"]`);
+  await a.locator('[data-testid="note-edit-text"]').click();
+  await a.keyboard.press("End");
+  const liveSamples: number[] = [];
+  for (let i = 0; i < LIVE_SUFFIX.length; i++) {
+    const want = textA + LIVE_SUFFIX.slice(0, i + 1);
+    const seen = watchFor(b, authorRow(noteA!.id), want, 10_000);
+    const t0 = Date.now();
+    await a.keyboard.press(LIVE_SUFFIX[i] === " " ? "Space" : LIVE_SUFFIX[i]!);
+    liveSamples.push((await seen) - t0);
+  }
+  const liveOnB = await b.textContent(`${authorRow(noteA!.id)} [data-testid="note-live"]`);
+  if (liveOnB !== textA + LIVE_SUFFIX) fail(`B's live text ${JSON.stringify(liveOnB)}`);
+  const caretOnB = await textBeforeCaret(b, `${authorRow(noteA!.id)} [data-testid="note-caret"]`);
+  if (caretOnB !== textA + LIVE_SUFFIX) fail(`B draws A's caret after ${JSON.stringify(caretOnB)}, expected the end of the live text`);
+  const editing = await b.textContent(`${authorRow(noteA!.id)} [data-testid="note-editing"]`);
+  if (!editing?.includes("is editing")) fail(`B shows no editing presence: ${JSON.stringify(editing)}`);
+  const livePin = await pickPin(b, { lon: noteA!.lon, lat: noteA!.lat });
+  if (livePin !== `note:${noteA!.id}`) fail(`A's pin left B's map during the live edit: ${livePin}`);
+  log(`live edit: ${LIVE_SUFFIX.length} keys seen on B, per-key ms ${liveSamples.join(" ")} p50=${p50(liveSamples)}; caret and presence drawn`);
+  mkdirSync(SHOT_DIR, { recursive: true });
+  await b.locator("[data-chat-column]").screenshot({ path: join(SHOT_DIR, "notes-live.png") });
+  log("notes-live.png: B's Notes tab while A edits (live text, caret, 'is editing')");
+
+  // B edits its own note at the same time: A sees B's keys on the other row while A's own edit stays open.
+  await b.click(`${authorRow(noteB!.id)} [data-testid="note-edit"]`);
+  await b.locator('[data-testid="note-edit-text"]').click();
+  await b.keyboard.press("End");
+  const seenLiveB = watchFor(a, authorRow(noteB!.id), `${textB} (B live)`, 10_000);
+  await b.keyboard.type(" (B live)");
+  await seenLiveB;
+  if ((await a.locator('[data-testid="note-edit-text"]').count()) !== 1) fail("A's own edit closed while B edited another note");
+  await b.click('[data-testid="note-save"]');
+  await waitNotes(a, (n) => n.some((x) => x.id === noteB!.id && x.text === `${textB} (B live)`), "B's concurrent edit of its own note on A");
+  log("concurrent edits of two notes: both seen live, B's saved");
+
+  // A concurrent write to A's note (B, through the CRDT, as a second editor would) and A's save: A's later HLC wins
+  // on both sides, and the live overlay is gone once the saved text matches.
+  await b.evaluate((id) => window.__team!.editNote(id, "concurrent write from B"), noteA!.id);
+  await waitNotes(a, (n) => n.some((x) => x.id === noteA!.id && x.text === "concurrent write from B"), "B's concurrent write on A");
+  const liveFinal = textA + LIVE_SUFFIX;
+  await a.click('[data-testid="note-save"]');
+  await waitNotes(a, (n) => n.some((x) => x.id === noteA!.id && x.text === liveFinal), "A's save on A");
+  await waitNotes(b, (n) => n.some((x) => x.id === noteA!.id && x.text === liveFinal), "A's save on B");
+  await b.waitForFunction((sel) => document.querySelector(`${sel} [data-testid="note-live"]`) === null && document.querySelector(`${sel} [data-testid="note-body"]`) !== null, authorRow(noteA!.id), { timeout: 10_000 });
+  for (const [name, p] of [
+    ["A", a],
+    ["B", b],
+  ] as const) {
+    const body = await p.textContent(`${authorRow(noteA!.id)} [data-testid="note-body"]`);
+    if (body !== liveFinal) fail(`${name} shows ${JSON.stringify(body)} after the concurrent edits, expected ${JSON.stringify(liveFinal)}`);
+  }
+  log("concurrent edits of one note converged on both (A's save won), no live residue");
+
   // 3. A edits; B sees the edit. A deletes; the row and the pin go on B.
   const edited = `${textA} (edit: three, one juvenile)`;
   await a.click(`${authorRow(noteA!.id)} [data-testid="note-edit"]`);
@@ -332,7 +410,7 @@ async function run(stack: DevStack, browser: Browser, pages: Page[]): Promise<st
   const fatal = [...pageErrors.entries()].flatMap(([n, errs]) => errs.filter((e) => /\[rtc\]|\[team\]|\[missions\]|\[notes\]|Uncaught/.test(e)).map((e) => `${n}: ${e}`));
   if (fatal.length) fail(`page errors:\n${fatal.join("\n")}`);
 
-  return [`NOTES rtc_ms=${rtcMs} pin=1 list=1 edit=1 delete=1 offline_sync=1`];
+  return [`NOTES rtc_ms=${rtcMs} pin=1 list=1 edit=1 delete=1 offline_sync=1 live_edit=ok caret=ok converge=ok p50_ms=${p50(liveSamples)} presence=ok`];
 }
 
 async function main(): Promise<number> {
