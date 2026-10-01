@@ -7,7 +7,7 @@ import { isAppId, type AppId } from "../shared/apps";
 export function appArg(fallback: AppId = "python", argv: readonly string[] = process.argv.slice(2)): AppId {
   const eq = argv.find((a) => a.startsWith("--app="))?.slice("--app=".length);
   const at = argv.indexOf("--app");
-  const raw = eq ?? (at >= 0 ? argv[at + 1] : undefined) ?? fallback;
+  const raw = eq ?? (at >= 0 ? (argv[at + 1] ?? "") : fallback);
   if (!isAppId(raw)) throw new Error(`--app ${raw}: not an app id`);
   return raw;
 }
