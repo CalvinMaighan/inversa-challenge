@@ -3,8 +3,28 @@
  * with the real agent (Doppler inversa/dev hands the Next server its model key; the key is never printed).
  *
  *   bun run e2e:a11y           build, run, print the AXE, KEYBOARD, MOBILE and REDUCED-MOTION lines
+ *   … -- --app carp|lionfish   the same over that app's UI (default python, described below)
  *   E2E_SKIP_BUILD=1 …         reuse the last e2e build
  *
+ * Lines (every one carries the app): `AXE app=<id> serious=<n> critical=<n> scans=<n> (labels)`, full-page
+ * scans with serious and critical violations counted once per rule and element; `KEYBOARD-OK app=<id>` only
+ * when the app's keyboard path held with a focus ring on every stop (else KEYBOARD-FAIL); `MOBILE app=<id>
+ * <state> …` per phone state.
+ *
+ * Carp (wall clock, like e2e/carp.ts): scans at load, with a briefing drawer open, in as-of mode, with the
+ * Layers legend open, in light theme with a drawer, and at 375×812 at load, with the board sheet and with the
+ * drawer sheet. Keyboard: Tab to a board row, Enter opens its drawer with focus inside, Esc closes it back to
+ * the row; Enter on a map marker opens its site; the stage scrubber goes as-of on an arrow and back to live
+ * on End; About opens with focus inside, More data, Tab into the legend, Esc back to the button.
+ *
+ * Lionfish Watch (page clock 2026-10-01T09:00Z, like e2e/lionfish.ts): scans at load with the banner, with a
+ * priority card open, with the ocean-data guide open, with the legend, in light theme with a card, and at
+ * 375×812 at load, with the survey sheet and with the card. Keyboard: Enter on an area chip flies there,
+ * Space toggles a layer switch, Enter on a ranked place opens its card with focus inside, Enter on the card's
+ * guide button moves focus into the guide, Esc returns to the button, Esc again closes the card back to the
+ * row; About as for carp.
+ *
+ * Python:
  * The layout is T40's with T41's chrome: the chat column (Agent and Missions tabs) left of the globe pane, a
  * bottom sheet with collapsed / half / full snaps on phones; in the globe pane the species chips, the About (ⓘ)
  * and Theme icon buttons with their popovers (the Layers legend and Help inside About), the help sheet and the
@@ -34,6 +54,8 @@ import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
 
+import { getApp } from "../shared/apps";
+import { appArg } from "./args";
 import { APP_DIR, buildApi, buildWeb, REPO_DIR, startStack } from "./stack";
 
 const AXE_PATH = Bun.resolveSync("axe-core/axe.min.js", APP_DIR);
@@ -64,6 +86,9 @@ const HELP = "[data-testid=help-sheet]";
 const AGENT_TAB = "#chat-tab-agent";
 const MISSIONS_TAB = "#chat-tab-board";
 const MISSIONS = "[data-testid=hud-missions]";
+
+/** `--app <id>` (default python): the app whose UI is scanned and walked. */
+const APP = appArg();
 
 const log = (...a: unknown[]) => console.error("[e2e:a11y]", ...a);
 
@@ -285,6 +310,8 @@ function horizontalOverflow(): Overflow {
   for (const el of document.querySelectorAll("body *")) {
     const cs = getComputedStyle(el);
     if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity) === 0) continue;
+    // Not rendered: inside a closed <details> (content-visibility: hidden) or a hidden ancestor.
+    if (!el.checkVisibility({ contentVisibilityAuto: true, opacityProperty: true, visibilityProperty: true })) continue;
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) continue;
     let left = r.left;
@@ -330,14 +357,14 @@ let mobileFailed = false;
 
 async function mobileState(page: Page, name: string, sheet: string | null): Promise<void> {
   await page.waitForTimeout(1_500);
-  const file = path.join(MOBILE_DIR, `${name}.png`);
+  const file = path.join(MOBILE_DIR, APP === "python" ? `${name}.png` : `${APP}-${name}.png`);
   await page.screenshot({ path: file });
   const o = await page.evaluate(horizontalOverflow);
   const asSheet = sheet ? await isSheet(page, sheet) : null;
-  console.log(`MOBILE ${name} overflow=${o.overflow.length} hscroll=${o.hscroll.length} pagescroll=${o.pageScroll} sheet=${asSheet === null ? "-" : asSheet ? "yes" : "no"} → ${path.relative(REPO_DIR, file)}`);
+  console.log(`MOBILE app=${APP} ${name} overflow=${o.overflow.length} hscroll=${o.hscroll.length} pagescroll=${o.pageScroll} sheet=${asSheet === null ? "-" : asSheet ? "yes" : "no"} → ${path.relative(REPO_DIR, file)}`);
   for (const line of [...o.overflow, ...o.hscroll].slice(0, 12)) log(`   ${name}: ${line}`);
   if (o.overflow.length || o.hscroll.length || o.pageScroll > 0 || asSheet === false) mobileFailed = true;
-  await axeScan(page, `375 ${name}`);
+  await axeScan(page, `375 ${APP === "python" ? "" : `${APP} `}${name}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -545,32 +572,328 @@ async function phone(browser: Browser, origin: string, citation: string): Promis
   return sheetMs === "0";
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Carp and Lionfish Watch: the same scans, keyboard rings and phone checks over each app's own controls.
+
+type ContextOpts = { width: number; height: number; mobile?: boolean; light?: boolean; clockMs?: number };
+
+async function appPage(browser: Browser, o: ContextOpts): Promise<{ page: Page; errors: string[]; close: () => Promise<void> }> {
+  const context = await browser.newContext({
+    viewport: { width: o.width, height: o.height },
+    deviceScaleFactor: o.mobile ? 2 : 1,
+    isMobile: o.mobile ?? false,
+    hasTouch: o.mobile ?? false,
+    reducedMotion: "reduce",
+  });
+  if (o.light) await context.addInitScript(() => localStorage.setItem("inversa:THEME", JSON.stringify("light")));
+  const page = await context.newPage();
+  page.setDefaultTimeout(LOAD_TIMEOUT_MS);
+  if (o.clockMs !== undefined) await page.clock.setFixedTime(o.clockMs);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  return { page, errors, close: () => context.close() };
+}
+
+async function requireLight(page: Page): Promise<void> {
+  if ((await page.evaluate(() => document.documentElement.dataset.theme)) !== "light") fail("light theme not applied");
+}
+
+/** Keyboard checks: each named step held, every focus stop shows a ring, no page error. */
+function keyboardVerdict(steps: Record<string, boolean>, errors: string[]): boolean {
+  const failed = Object.entries(steps).filter(([, v]) => !v).map(([k]) => k);
+  log(`keyboard steps: ${Object.entries(steps).map(([k, v]) => `${k}=${v}`).join(" ")}`);
+  const ringless = [...new Map(stops.filter((s) => !s.ring).map((s) => [s.desc, s])).values()];
+  log(`${stops.length} focus stops, ${ringless.length} without a visible ring`);
+  for (const s of ringless) log(`   no ring: ${s.desc} (${s.why})`);
+  if (errors.length) log(`page errors: ${errors.join(" | ")}`);
+  return failed.length === 0 && ringless.length === 0 && errors.length === 0;
+}
+
+/** About (ⓘ) by keyboard: focus moves into the popover, More data opens the legend, Esc returns to the button. */
+async function aboutByKeyboard(page: Page, label: string): Promise<boolean> {
+  await tabTo(page, STATUS_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(STATUS_POPOVER).waitFor({ timeout: 10_000 });
+  const inside = await focusIn(page, STATUS_POPOVER);
+  await tabTo(page, LAYERS_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(LEGEND).waitFor({ timeout: 10_000 });
+  await page.keyboard.press("Tab");
+  await recordStop(page);
+  const inLegend = await focusIn(page, LEGEND);
+  await axeScan(page, `${label} legend`);
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), STATUS_POPOVER, { timeout: 10_000 });
+  const back = await isFocused(page, STATUS_BUTTON);
+  log(`About: focus inside=${inside} legend=${inLegend} Esc back=${back}`);
+  return inside && inLegend && back;
+}
+
+const CARP_ROW = "[data-carp-row]";
+const CARP_DRAWER = '[data-testid="carp-drawer"]';
+const CARP_DRAWER_PANEL = '[data-testid="carp-drawer-panel"]';
+const CARP_TIMELINE = '[data-testid="carp-timeline"]';
+
+async function carpReady(page: Page): Promise<void> {
+  await page.locator('[data-testid="app-select-button"][data-app="carp"]').waitFor({ timeout: LOAD_TIMEOUT_MS });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-carp-row]").length === 8 && [...document.querySelectorAll("[data-carp-site]")].every((m) => m.getAttribute("data-status") !== "loading"),
+    undefined,
+    { timeout: LOAD_TIMEOUT_MS },
+  );
+}
+
+const carpBriefing = (page: Page, lid: string) => page.locator(`${CARP_DRAWER}[data-site="${lid}"] [data-testid="carp-changed"]`).waitFor({ timeout: 30_000 });
+const carpMode = (page: Page) => page.getAttribute(CARP_TIMELINE, "data-mode");
+
+async function carpDesktop(browser: Browser, origin: string): Promise<boolean> {
+  const { page, errors, close } = await appPage(browser, { width: 1440, height: 900 });
+  await page.goto(`${origin}/?app=carp`, { waitUntil: "load" });
+  await carpReady(page);
+  await page.waitForTimeout(1_000);
+  await axeScan(page, "carp 1440 loaded");
+
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  // Board row: Enter opens the briefing drawer with focus inside; Esc closes it and focus returns to the row.
+  const toRow = await tabTo(page, CARP_ROW);
+  const lid = (await page.evaluate(() => document.activeElement?.getAttribute("data-carp-row"))) ?? fail("focused row without a site");
+  await page.keyboard.press("Enter");
+  await page.locator(`${CARP_DRAWER}[data-site="${lid}"]`).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const rowInDrawer = await focusIn(page, CARP_DRAWER_PANEL);
+  await recordStop(page);
+  await carpBriefing(page, lid);
+  await axeScan(page, "carp 1440 drawer");
+  await page.keyboard.press("Escape");
+  await page.locator(CARP_DRAWER).waitFor({ state: "detached", timeout: 10_000 });
+  const rowBack = await page.evaluate((id) => document.activeElement?.getAttribute("data-carp-row") === id, lid);
+  log(`board row ${lid} after ${toRow} Tab: drawer focus=${rowInDrawer}, Esc back=${rowBack}`);
+
+  // Map marker: Enter opens that site.
+  const toMarker = await tabTo(page, "[data-carp-site]:not([data-hidden])");
+  const site = (await page.evaluate(() => document.activeElement?.getAttribute("data-carp-site"))) ?? fail("focused marker without a site");
+  await page.keyboard.press("Enter");
+  const markerOpens = await page
+    .locator(`${CARP_DRAWER}[data-site="${site}"]`)
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  log(`marker ${site} after ${toMarker} Tab: drawer=${markerOpens}`);
+
+  // Stage scrubber: an arrow goes back in time (as-of), End returns to live.
+  const toScrub = await tabTo(page, "[data-carp-scrubber]");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("PageDown");
+  const asof = await page
+    .waitForFunction((sel) => document.querySelector(sel)?.getAttribute("data-mode") === "asof", CARP_TIMELINE, { timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const asofMode = await carpMode(page);
+  await axeScan(page, "carp 1440 as-of");
+  await page.keyboard.press("End");
+  const live = await page
+    .waitForFunction((sel) => document.querySelector(sel)?.getAttribute("data-mode") === "live", CARP_TIMELINE, { timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  log(`scrubber after ${toScrub} Tab: as-of=${asof} (${asofMode}), End live=${live} (${await carpMode(page)})`);
+
+  const about = await aboutByKeyboard(page, "carp 1440");
+  const keyboard = keyboardVerdict({ rowInDrawer, rowBack, markerOpens, asof, live, about }, errors);
+  await close();
+
+  const light = await appPage(browser, { width: 1440, height: 900, light: true });
+  await light.page.goto(`${origin}/?app=carp#v=2&app=carp&site=MCGL1`, { waitUntil: "load" });
+  await carpReady(light.page);
+  await carpBriefing(light.page, "MCGL1");
+  await requireLight(light.page);
+  await axeScan(light.page, "carp 1440 light drawer");
+  await light.close();
+  return keyboard;
+}
+
+async function carpPhone(browser: Browser, origin: string): Promise<void> {
+  mkdirSync(MOBILE_DIR, { recursive: true });
+  const { page, close } = await appPage(browser, { width: 375, height: 812, mobile: true });
+  await page.goto(`${origin}/?app=carp`, { waitUntil: "load" });
+  await page.locator('[data-testid="carp-board-panel-tab"]').waitFor({ timeout: LOAD_TIMEOUT_MS });
+  await page.waitForFunction(() => [...document.querySelectorAll("[data-carp-site]")].every((m) => m.getAttribute("data-status") !== "loading"), undefined, { timeout: LOAD_TIMEOUT_MS });
+  await mobileState(page, "main", COLUMN);
+  await page.locator('[data-testid="carp-board-panel-tab"]').tap();
+  await carpReady(page);
+  await mobileState(page, "board", '[data-testid="carp-board-panel"]');
+  await page.locator('[data-carp-row="KRZL1"]').tap();
+  await carpBriefing(page, "KRZL1");
+  await mobileState(page, "drawer", CARP_DRAWER_PANEL);
+  await close();
+}
+
+const LIONFISH = getApp("lionfish");
+const LIONFISH_LIVE_MS = Date.parse("2026-10-01T09:00:00Z");
+const CARD = '[data-testid="lionfish-card"] [data-testid="lionfish-components"]';
+const CARD_PANEL = '[data-testid="lionfish-card-panel"]';
+const GUIDE = '[data-testid="lionfish-help"]';
+
+async function lionfishReady(page: Page): Promise<void> {
+  await page.locator('[data-testid="app-select-button"][data-app="lionfish"]').waitFor({ timeout: LOAD_TIMEOUT_MS });
+  await page.locator('[data-testid="lionfish-hud"][data-ready="1"]').waitFor({ state: "attached", timeout: LOAD_TIMEOUT_MS });
+}
+
+async function dismissBanner(page: Page): Promise<void> {
+  const dismiss = page.locator('[data-testid="lionfish-banner-dismiss"]');
+  if (await dismiss.count()) await dismiss.click();
+}
+
+async function lionfishDesktop(browser: Browser, origin: string): Promise<boolean> {
+  const { page, errors, close } = await appPage(browser, { width: 1440, height: 900, clockMs: LIONFISH_LIVE_MS });
+  await page.goto(`${origin}/?app=lionfish`, { waitUntil: "load" });
+  await lionfishReady(page);
+  await page.waitForTimeout(1_000);
+  await axeScan(page, "lionfish 1440 loaded (banner)");
+  await dismissBanner(page);
+
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  // Area chip: Enter flies there; Enter again shows every area.
+  const toChip = await tabTo(page, "[data-area]");
+  const areaId = (await page.evaluate(() => document.activeElement?.getAttribute("data-area"))) ?? fail("focused chip without an area");
+  const region = LIONFISH.regions.find((r) => r.id === areaId) ?? fail(`unknown area ${areaId}`);
+  await page.keyboard.press("Enter");
+  const pressed = (await page.getAttribute(`[data-area="${areaId}"]`, "aria-pressed")) === "true";
+  const flew = await page
+    .waitForFunction(
+      ({ lat, lon }) => {
+        const v = window.__inversa?.state("VIEW") as { lat: number; lon: number } | undefined;
+        return !!v && Math.abs(v.lat - lat) < 0.3 && Math.abs(v.lon - lon) < 0.3;
+      },
+      { lat: region.camera.lat, lon: region.camera.lon },
+      { timeout: 20_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  await page.keyboard.press("Enter");
+  const unpressed = (await page.getAttribute(`[data-area="${areaId}"]`, "aria-pressed")) === "false";
+  log(`area ${areaId} after ${toChip} Tab: pressed=${pressed} flew=${flew} Enter again=${unpressed}`);
+
+  // Layer switch: Space turns the heat layer off and on.
+  const toLayer = await tabTo(page, 'input[data-layer="heat"]');
+  await page.keyboard.press("Space");
+  const layerOff = !(await page.isChecked('input[data-layer="heat"]'));
+  await page.keyboard.press("Space");
+  const layerOn = await page.isChecked('input[data-layer="heat"]');
+  log(`heat switch after ${toLayer} Tab: Space off=${layerOff} Space on=${layerOn}`);
+
+  // Ranked place: Enter opens its card with focus inside; the guide opens from the card; Esc twice walks back.
+  const toRow = await tabTo(page, "[data-cell-row]");
+  const cell = (await page.evaluate(() => document.activeElement?.getAttribute("data-cell-row"))) ?? fail("focused row without a cell");
+  await page.keyboard.press("Enter");
+  await page.locator(CARD).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(300);
+  const inCard = await focusIn(page, CARD_PANEL);
+  await recordStop(page);
+  await axeScan(page, "lionfish 1440 card");
+  await tabTo(page, '[data-testid="lionfish-card-help"]');
+  await page.keyboard.press("Enter");
+  await page.locator(GUIDE).waitFor({ timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const inGuide = await focusIn(page, GUIDE);
+  await recordStop(page);
+  await axeScan(page, "lionfish 1440 guide");
+  await page.keyboard.press("Escape");
+  await page.locator(GUIDE).waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
+  const guideBack = await isFocused(page, '[data-testid="lionfish-card-help"]');
+  await page.keyboard.press("Escape");
+  const cardClosed = await page
+    .locator(CARD_PANEL)
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  const rowBack = await page.evaluate((c) => document.activeElement?.getAttribute("data-cell-row") === c, cell);
+  log(`place ${cell} after ${toRow} Tab: card focus=${inCard} guide focus=${inGuide} Esc→guide button=${guideBack} Esc→card closed=${cardClosed} row=${rowBack}`);
+
+  const about = await aboutByKeyboard(page, "lionfish 1440");
+  const keyboard = keyboardVerdict({ pressed, flew, unpressed, layerOff, layerOn, inCard, inGuide, guideBack, cardClosed, rowBack, about }, errors);
+  await close();
+
+  const light = await appPage(browser, { width: 1440, height: 900, light: true, clockMs: LIONFISH_LIVE_MS });
+  await light.page.goto(`${origin}/?app=lionfish`, { waitUntil: "load" });
+  await lionfishReady(light.page);
+  await requireLight(light.page);
+  await dismissBanner(light.page);
+  await light.page.click('[data-area="fl-keys"]');
+  await light.page.click(`[data-cell-row="${(await light.page.getAttribute("[data-cell-row]", "data-cell-row"))!}"]`);
+  await light.page.locator(CARD).waitFor({ timeout: 30_000 });
+  await axeScan(light.page, "lionfish 1440 light card");
+  await light.close();
+  return keyboard;
+}
+
+async function lionfishPhone(browser: Browser, origin: string): Promise<void> {
+  mkdirSync(MOBILE_DIR, { recursive: true });
+  const { page, close } = await appPage(browser, { width: 375, height: 812, mobile: true, clockMs: LIONFISH_LIVE_MS });
+  await page.goto(`${origin}/?app=lionfish`, { waitUntil: "load" });
+  await lionfishReady(page);
+  await mobileState(page, "main", COLUMN);
+  await dismissBanner(page);
+  await page.locator('[data-testid="lionfish-panel-tab"]').tap();
+  await page.locator('[data-testid="lionfish-panel"]').waitFor();
+  await mobileState(page, "panel", '[data-testid="lionfish-panel"]');
+  await page.locator('[data-area="fl-keys"]').tap();
+  await page.locator('[data-testid="lionfish-panel-tab"]').tap();
+  const row = (await page.getAttribute("[data-cell-row]", "data-cell-row")) ?? fail("no ranked place on the phone");
+  await page.locator(`[data-cell-row="${row}"]`).tap();
+  await page.locator(CARD).waitFor({ timeout: 30_000 });
+  await mobileState(page, "card", CARD_PANEL);
+  await close();
+}
+
+function printAxe(): { serious: number; critical: number } {
+  const impacts = [...axeFindings.values()];
+  const serious = impacts.filter((i) => i === "serious").length;
+  const critical = impacts.filter((i) => i === "critical").length;
+  for (const [k, impact] of axeFindings) if (impact === "serious" || impact === "critical") log(`   ${impact}: ${k}`);
+  console.log(`AXE app=${APP} serious=${serious} critical=${critical} scans=${axeScans.length} (${axeScans.join(", ")})`);
+  return { serious, critical };
+}
+
 async function main() {
   buildApi(log);
   buildWeb(log);
   const nextPrefix = process.env.OPENROUTER_API_KEY ? [] : DOPPLER;
   log(nextPrefix.length ? "model key from Doppler (inversa/dev)" : "model key from the environment");
-  const stack = await startStack({ name: "a11y", scene: true, nextPrefix });
+  const stack = await startStack({ name: "a11y", app: APP, apps: [APP], scene: APP === "python", nextPrefix });
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   let ok = true;
   try {
-    const d = await desktop(browser, stack.origin);
-    const sheetSnaps = await phone(browser, stack.origin, d.citation);
-    const offenders = [...new Set(motionOffenders)];
-    for (const o of offenders.slice(0, 10)) log(`   animation under reduced motion: ${o}`);
-    const reduced = d.reduced && sheetSnaps && offenders.length === 0;
-    console.log(
-      reduced
-        ? "REDUCED-MOTION-OK flights=0 sheet=instant infinite-animations=0"
-        : `REDUCED-MOTION-FAIL flights-ok=${d.reduced} sheet-instant=${sheetSnaps} infinite-animations=${offenders.length}`,
-    );
-    const impacts = [...axeFindings.values()];
-    const serious = impacts.filter((i) => i === "serious").length;
-    const critical = impacts.filter((i) => i === "critical").length;
-    console.log(`AXE serious=${serious} critical=${critical} (scans: ${axeScans.join(", ")})`);
-    if (d.keyboard) console.log("KEYBOARD-OK");
-    else console.log("KEYBOARD-FAIL");
-    ok = serious === 0 && critical === 0 && d.keyboard && reduced && !mobileFailed;
+    if (APP !== "python") {
+      let keyboard = false;
+      try {
+        keyboard = APP === "carp" ? await carpDesktop(browser, stack.origin) : await lionfishDesktop(browser, stack.origin);
+      } catch (err) {
+        log(`desktop failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      try {
+        await (APP === "carp" ? carpPhone(browser, stack.origin) : lionfishPhone(browser, stack.origin));
+      } catch (err) {
+        log(`phone failed: ${err instanceof Error ? err.message : String(err)}`);
+        mobileFailed = true;
+      }
+      const { serious, critical } = printAxe();
+      console.log(keyboard ? `KEYBOARD-OK app=${APP}` : `KEYBOARD-FAIL app=${APP}`);
+      ok = serious === 0 && critical === 0 && keyboard && !mobileFailed;
+    } else {
+      const d = await desktop(browser, stack.origin);
+      const sheetSnaps = await phone(browser, stack.origin, d.citation);
+      const offenders = [...new Set(motionOffenders)];
+      for (const o of offenders.slice(0, 10)) log(`   animation under reduced motion: ${o}`);
+      const reduced = d.reduced && sheetSnaps && offenders.length === 0;
+      console.log(
+        reduced
+          ? "REDUCED-MOTION-OK flights=0 sheet=instant infinite-animations=0"
+          : `REDUCED-MOTION-FAIL flights-ok=${d.reduced} sheet-instant=${sheetSnaps} infinite-animations=${offenders.length}`,
+      );
+      const { serious, critical } = printAxe();
+      console.log(d.keyboard ? `KEYBOARD-OK app=${APP}` : `KEYBOARD-FAIL app=${APP}`);
+      ok = serious === 0 && critical === 0 && d.keyboard && reduced && !mobileFailed;
+    }
   } catch (err) {
     log(`failed: ${err instanceof Error ? err.message : String(err)}`);
     log(stack.logs());
