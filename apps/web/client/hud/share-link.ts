@@ -16,6 +16,8 @@
  * - `st`: taxon overrides on top of the categories (T44): taxon ids shown, hidden ones with a leading `-`.
  * - `w`: the sightings window in hours (48, 168 or 720), omitted at the default.
  * - `e`: selected evidence id (PLAN.md C14).
+ * - `site`, `asof` (carp): the selected location's NWPS id and the "what we knew" time, UTC to the minute; no
+ *   `asof` means live.
  *
  * Decoding is defensive: a link is untrusted input, so each field is validated and clamped, and a bad field is
  * dropped instead of failing the whole link. Encode and decode are pure; `client/hud/ShareLinkSync.tsx` wires
@@ -49,6 +51,9 @@ export type ShareState = {
   /** Sightings window, hours. */
   hours?: SightingWindowHours;
   evidenceId?: string | null;
+  /** Carp (conditions apps): the selected location's NWPS id and the "what we knew" time (absent: live). */
+  site?: string;
+  asOf?: string;
 };
 
 /** An app's default species filter as a shown-key list. */
@@ -60,6 +65,8 @@ export function defaultSpecies(app: AppConfig): SpeciesId[] {
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((v) => b.includes(v));
 
 export const SHARE_LINK_VERSION = 2;
+/** An NWPS location id (`KRZL1`); the store checks it against the app's locations. */
+const SITE_ID = /^[A-Za-z0-9]{3,8}$/;
 const MAX_ALTITUDE_M = 20_000_000;
 const MIN_ALTITUDE_M = 1;
 
@@ -107,6 +114,11 @@ export function encodeShareLink(state: ShareState): string {
   }
   if (state.hours !== undefined && state.hours !== layersFor(app).sightingHours) params.set("w", String(state.hours));
   if (state.evidenceId && parseEvidenceId(state.evidenceId)) params.set("e", state.evidenceId);
+  if (state.site && SITE_ID.test(state.site)) params.set("site", state.site);
+  if (state.asOf) {
+    const k = compactIso(state.asOf);
+    if (k) params.set("asof", k);
+  }
   // `,` and `:` are legal in a fragment (RFC 3986) and URLSearchParams reads them back raw; unescaped, the
   // link stays readable.
   return params.toString().replace(/%2C/g, ",").replace(/%3A/g, ":");
@@ -167,6 +179,10 @@ export function decodeShareLink(hash: string): ShareState {
   if (isWindowHours(w)) out.hours = w;
   const e = params.get("e");
   if (e && parseEvidenceId(e)) out.evidenceId = e;
+  const site = params.get("site");
+  if (site && SITE_ID.test(site)) out.site = site.toUpperCase();
+  const asof = params.get("asof");
+  if (asof && Number.isFinite(Date.parse(asof))) out.asOf = new Date(Date.parse(asof)).toISOString();
   return out;
 }
 

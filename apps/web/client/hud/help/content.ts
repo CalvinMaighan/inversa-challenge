@@ -19,6 +19,8 @@ export type HelpEntry = {
   control: string;
   /** What it does, one or two sentences. */
   what: string;
+  /** Only in apps of this kind (species: sightings, conditions: carp's river locations); absent: every app. */
+  kind?: AppConfig["kind"];
 };
 
 export const HELP_GROUPS: readonly HelpGroup[] = ["Map", "Timeline", "Chat column"];
@@ -26,24 +28,28 @@ export const HELP_GROUPS: readonly HelpGroup[] = ["Map", "Timeline", "Chat colum
 export const HELP_ENTRIES: readonly HelpEntry[] = [
   {
     id: "species",
+    kind: "species",
     group: "Map",
     control: "Species chips",
     what: `Top left. The app's focus species first, then the six animals seen most in the window (three on a phone), each with its kind's icon in its colour and its count. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every animal back. Other opens every kind (snakes, lizards, turtles, frogs, birds, mammals, fish, snails, insects, spiders, plants, …) with a switch each and its most-seen species; insects, spiders and plants are off until you switch them on.`,
   },
   {
     id: "window",
+    kind: "species",
     group: "Map",
     control: "Sightings window",
     what: `Next to the chips: last 2, 7 or 30 days (${DEFAULT_WINDOW} to start). Most people upload sightings a few days after they see them, so 7 days shows the most.`,
   },
   {
     id: "dots",
+    kind: "species",
     group: "Map",
     control: "Sighting markers",
     what: `Each marker is one animal someone reported in the window: its kind's icon (a snake, a lizard, a bird, …) in its colour, brightest when newest. Hover for the species and how sure the ID is; click to open the record.`,
   },
   {
     id: "drawer",
+    kind: "species",
     group: "Map",
     control: "Evidence card",
     what: "Opens on the right when you click a dot, a citation or a label: what was seen, where, when and how sure, the species' Latin name, a line about it and its iNaturalist page, with the photo when there is one. The raw record sits under Details for experts.",
@@ -92,33 +98,73 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
   },
   {
     id: "play",
+    kind: "species",
     group: "Timeline",
     control: "Play / pause (Space)",
     what: "Plays time forward from the cursor at the chosen speed.",
   },
   {
     id: "speed",
+    kind: "species",
     group: "Timeline",
     control: "Speed",
     what: "Playback speed in frames per second.",
   },
   {
     id: "live",
+    kind: "species",
     group: "Timeline",
     control: "LIVE / REPLAY",
     what: "Says whether you are looking at now (LIVE) or the past (REPLAY). Click it while replaying to jump back to now.",
   },
   {
     id: "date",
+    kind: "species",
     group: "Timeline",
     control: "Date jump",
     what: "Pick a UTC day. A day outside the loaded month loads that period (the cold snap of 2026-02-01, say).",
   },
   {
     id: "scrub",
+    kind: "species",
     group: "Timeline",
     control: "Scrubber",
     what: "Drag through time, or focus it and use the arrow keys to step. The line is sightings over time; hatched stretches are gaps in the data (hover for which: no satellite data, cloud, or no sightings for 12 h or more).",
+  },
+  {
+    id: "carp-markers",
+    kind: "conditions",
+    group: "Map",
+    control: "Location markers",
+    what: "One per demonstration river location: a diamond with ! needs review, a circle with a tick means no rule fired (not that a trip is safe), a dashed square with ? cannot be assessed. The ring is freshness: green within 2 h, amber within 6 h, dashed red older, dotted grey none. Click or press Enter to open its briefing.",
+  },
+  {
+    id: "carp-board",
+    kind: "conditions",
+    group: "Map",
+    control: "Review board",
+    what: "Left: every location, those needing review first, each with its reasons in words, plus the camera presets (All sites, Atchafalaya Basin). Conditions only: nothing here estimates carp abundance, catch, access or trip safety.",
+  },
+  {
+    id: "carp-briefing",
+    kind: "conditions",
+    group: "Map",
+    control: "Location briefing",
+    what: "Right: what changed, what is expected and what is missing, then the readings with units and times, the forecast's issuance and source, flood thresholds, NWS alerts and the source pages (new tab).",
+  },
+  {
+    id: "carp-timeline",
+    kind: "conditions",
+    group: "Timeline",
+    control: "Stage timeline",
+    what: "USGS gauge height (its own datum), NWPS observed stage and the NWPS forecast with the spread of recent issuances, flood thresholds, NWS alerts and where replay coverage begins. A red chip says when two sources disagree, and why.",
+  },
+  {
+    id: "carp-asof",
+    kind: "conditions",
+    group: "Timeline",
+    control: "What we knew",
+    what: "Drag the timeline (arrow keys: an hour, Page keys: a day) or press What we knew yesterday afternoon: the board, briefing and chart show only what was held then, with the forecast issued by then; later observations are drawn hollow and dashed. Play replays to now; LIVE returns.",
   },
   {
     id: "agent-tab",
@@ -158,6 +204,11 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
   },
 ];
 
+/** The help sheet's entries for an app: the shared ones and those of its kind. */
+export function helpEntries(app: Pick<AppConfig, "kind">): HelpEntry[] {
+  return HELP_ENTRIES.filter((e) => !e.kind || e.kind === app.kind);
+}
+
 /** The About popover's first line: what this app is, in one plain sentence (its config `copy.about`, else its question). */
 export function aboutSentence(app: AppConfig): string {
   return copyText(app, "about", app.question);
@@ -170,7 +221,7 @@ export const WINDOW_NOTE = `Most people upload sightings a few days after they s
 export function welcome(app: AppConfig): string {
   const where = copyText(app, "region", app.regions.map((r) => r.name).join(", "));
   if (app.kind === "conditions") {
-    return `Each marker is a river gauge or a weather alert in ${where}; click one to see its readings and forecast. Ask the agent below what changed and what needs review.`;
+    return `Each marker is one of the ${where}, its shape and colour saying whether it needs review; click one for its briefing, readings and forecast. Ask the agent below what changed, or scrub the timeline to see what was known at an earlier hour.`;
   }
   return (
     `Each marker is an invasive animal someone reported in ${where} in the last ${windowLabel(app.windows.defaultHours)}, drawn as its kind's icon; click one to see what it is. ` +

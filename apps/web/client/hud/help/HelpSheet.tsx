@@ -4,8 +4,9 @@ import { useEffect, useRef } from "react";
 
 import styled from "client/styled";
 
+import { useActiveApp } from "../appselect/use-active-app";
 import { Icon, IconButton } from "../primitives";
-import { HELP_ENTRIES, HELP_GROUPS } from "./content";
+import { HELP_GROUPS, helpEntries } from "./content";
 
 const Sheet = styled.section`
   position: absolute;
@@ -89,6 +90,7 @@ const Group = styled.section`
 export default function HelpSheet({ onClose }: { onClose: () => void }) {
   const ref = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const app = useActiveApp();
 
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -126,7 +128,7 @@ export default function HelpSheet({ onClose }: { onClose: () => void }) {
           <Group key={group} aria-label={group}>
             <h3>{group}</h3>
             <dl>
-              {HELP_ENTRIES.filter((e) => e.group === group).map((e) => (
+              {helpEntries(app).filter((e) => e.group === group).map((e) => (
                 <div key={e.id} data-help-entry={e.id}>
                   <dt>{e.control}</dt>
                   <dd>{e.what}</dd>

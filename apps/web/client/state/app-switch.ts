@@ -5,6 +5,7 @@ import type { FeedState } from "shared/feed-state";
 
 import { AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
 import { APP, type AppState } from "./app";
+import { CARP } from "./carp";
 import { FEEDS } from "./feeds";
 import { layersFor, LAYERS } from "./layers";
 import { MISSIONS, type MissionsState } from "./missions";
@@ -37,6 +38,7 @@ export function applyApp(id: AppId): boolean {
   set<FeedState[]>(FEEDS, []);
   set(TAXA, TAXA.defaults);
   set(SELECTION, SELECTION.defaults);
+  set(CARP, CARP.defaults);
   set(AGENT_CHAT, AGENT_CHAT.defaults);
   set(AGENT_HIGHLIGHT, AGENT_HIGHLIGHT.defaults);
   return true;

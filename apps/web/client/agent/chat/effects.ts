@@ -4,6 +4,7 @@ import { getGlobe, type CameraTarget } from "client/globe/api";
 import { SELECTION, type SelectionState, parseEvidenceId } from "client/state/selection";
 import { TIME, retime, type TimeState } from "client/state/time";
 import { activeApp } from "client/state/app";
+import { applyCarpView } from "client/state/carp";
 import { altitudeToFit } from "client/state/view";
 import type { AgentStreamEvent, BBox } from "shared/agent/events";
 import { cellCentre, primaryRegion } from "shared/apps";
@@ -48,12 +49,33 @@ export function bboxCamera(bbox: BBox): CameraTarget {
  */
 export function applyViewEvent(event: Extract<AgentStreamEvent, { type: "view" }>, nowMs = Date.now()): void {
   getGlobe()?.flyTo(bboxCamera(event.bbox));
+  applyCarpViewEvent(event, nowMs);
   const atMs = Date.parse(event.time);
   if (!Number.isFinite(atMs)) return;
   set<TimeState>(TIME, (prev) => {
     const base = { ...TIME.defaults, ...prev };
     return { ...base, ...retime(base, atMs, nowMs), playing: false };
   });
+}
+
+/**
+ * The carp fields of a `view` event (leaf UC / AG1 contract): `site?: string` (NWPS lid), `asOf?: number` (unix ms;
+ * absent = live), `replay?: boolean`. Applied in a conditions app when the event carries any of them; then a
+ * missing `asOf` means live. Read structurally, so the event type can gain the fields without this file changing.
+ */
+export function applyCarpViewEvent(event: object, nowMs = Date.now()): boolean {
+  if (activeApp().kind !== "conditions") return false;
+  const { site, asOf, replay } = event as { site?: unknown; asOf?: unknown; replay?: unknown };
+  if (site === undefined && asOf === undefined && replay === undefined) return false;
+  applyCarpView(
+    {
+      site: typeof site === "string" ? site : site === null ? null : undefined,
+      asOf: typeof asOf === "number" && Number.isFinite(asOf) ? asOf : null,
+      replay: replay === true,
+    },
+    nowMs,
+  );
+  return true;
 }
 
 /** Citation chip: select the evidence, open the drawer, and fly there when the id carries coordinates. */

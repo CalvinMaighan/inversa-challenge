@@ -57,7 +57,7 @@
     { "id": "notes", "label": "Field notes", "defaultOn": true }
   ],
   "legend": {
-    "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP works the Atchafalaya Basin.",
+    "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP is reported as active in the Atchafalaya Basin (LDWF).",
     "alerts": "NWS products in effect at the cursor time; \"no active alerts\" shows the time of the last check.",
     "stations": "Observed stage and discharge (USGS, cfs) with NWPS forecast issuance times. Flood categories use NWPS stage; flow is always labelled with its source.",
     "missions": "Areas the team has claimed or finished.",
