@@ -178,11 +178,12 @@ async function runTurnUnguarded(
   const root = await bootHarness();
   const entry = harnessModel(root);
   const endpoint = resolveAgentEndpoint(entry.model, app.id);
-  const hint = questionHint(app, question);
+  const blind = process.env.AGENT_BLIND === "1";
+  const hint = blind ? null : questionHint(app, question);
   const context = hint ? `${viewContext(params.view, now, app)}\n${hint}` : viewContext(params.view, now, app);
   // A supported question's final answer is checked against its documented form before it streams; one
   // revision is asked for when something is missing (docs/questions.md pass criteria).
-  const supported = matchSupportedQuestion(app.id, question)?.question;
+  const supported = blind ? undefined : matchSupportedQuestion(app.id, question)?.question;
   const prior = transcript(history);
   emit({
     type: "context",

@@ -75,6 +75,10 @@ function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden):
 
 async function main(): Promise<number> {
   const app = getApp(evalApp(process.argv.slice(2), process.env));
+  // The benchmark is blind by default: the agent is not told the golden question's tools, wording or citations
+  // and its answer is not checked against the golden pass criteria before it streams. `--assisted` measures the
+  // supported-question hints instead (product feature, not the benchmark).
+  if (!process.argv.includes("--assisted")) process.env.AGENT_BLIND = "1";
   const golden = GOLDEN_SETS[app.eval.goldenSet] ?? [];
   // EVAL_ONLY=id,id runs a subset while iterating; EVAL_CATEGORY=c one category; the gate runs all of them.
   const only = process.env.EVAL_ONLY?.split(",").map((id) => id.trim()).filter(Boolean);
