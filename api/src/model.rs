@@ -36,6 +36,15 @@ pub enum Param {
     WaveM,
     WindMs,
     FireFrp,
+    /// NOAA Coral Reef Watch CoralTemp SST, °C, daily 5 km (L3). Kept apart from `SstC` so the
+    /// GOES SST frames, the hotspot conditions and the buoy/satellite conflict check never mix it in.
+    Sst,
+    /// CRW SST anomaly against the 1985-2012 climatology, °C.
+    SstAnomaly,
+    /// CRW degree heating weeks, °C-weeks: accumulated heat stress over 12 weeks.
+    Dhw,
+    /// CRW bleaching alert area, 0-4 (no stress, watch, warning, alert 1, alert 2): the current state.
+    Baa,
 }
 
 impl Param {
@@ -50,6 +59,10 @@ impl Param {
             Param::WaveM => "wave_m",
             Param::WindMs => "wind_ms",
             Param::FireFrp => "fire_frp",
+            Param::Sst => "sst",
+            Param::SstAnomaly => "sst_anomaly",
+            Param::Dhw => "dhw",
+            Param::Baa => "baa",
         }
     }
 }

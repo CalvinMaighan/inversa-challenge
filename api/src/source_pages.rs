@@ -11,6 +11,11 @@
 //! | `coops` | `https://tidesandcurrents.noaa.gov/stationhome.html?id=<id>` |
 //! | `nws`, `nwws` VTEC event | the Iowa Environmental Mesonet VTEC event page |
 //! | `nws` CAP message | `https://api.weather.gov/alerts/<urn:oid:…>` |
+//! | `crw` 5 km cell `<lat>,<lon>` | the PacIOOS ERDDAP table of that cell's SST, anomaly, DHW and BAA for the last 30 days |
+//!
+//! CRW publishes no page per cell; ERDDAP's `htmlTable` view of the same `dhw_5km` dataset is the
+//! human page for one cell's values. Every CRW evidence card also carries [`CRW_CREDIT`]: the products
+//! are free to use without restriction, provided NOAA Coral Reef Watch is credited and the DOI cited.
 //!
 //! NWS publishes no web page per alert (alerts.weather.gov does not resolve), so a CAP-keyed alert links
 //! its CAP id URL. VTEC-keyed rows carry no CAP id (the key outlives every CAP update), and IEM's VTEC
@@ -34,7 +39,26 @@ pub const PUBLISHERS: &[(&str, &str)] = &[
     ("tidesandcurrents.noaa.gov", "NOAA Tides & Currents"),
     ("api.weather.gov", "NWS"),
     ("mesonet.agron.iastate.edu", "IEM VTEC browser"),
+    ("pae-paha.pacioos.hawaii.edu", "NOAA Coral Reef Watch (PacIOOS ERDDAP)"),
 ];
+
+/// DOI CRW asks users to cite for the CoralTemp v3.1 5 km product suite (Skirving et al. 2020,
+/// Remote Sensing 12, 3856). The dataset's `license` attribute asks for "the appropriate DOI"; the
+/// CRW citation page lists this one for the v3.1 suite.
+pub const CRW_DOI: &str = "https://doi.org/10.3390/rs12233856";
+
+/// Credit line for every NOAA Coral Reef Watch value shown (dataset `license` attribute,
+/// `https://pae-paha.pacioos.hawaii.edu/erddap/info/dhw_5km/index.html`). The OSTIA academic-use
+/// clause in the same attribute covers only the 1985-2002 climatology inputs.
+pub const CRW_CREDIT: &str = "Data: NOAA Coral Reef Watch (CRW), CoralTemp v3.1 daily global 5 km heat stress products, \
+served by PacIOOS ERDDAP (dhw_5km). Free to use without restriction; credit NOAA Coral Reef Watch and cite \
+https://doi.org/10.3390/rs12233856.";
+
+/// The credit line and DOI a source's records must carry, if its licence asks for them. Reading
+/// evidence puts them in `record.credit` and `record.doi`.
+pub fn credit(source: &str) -> Option<(&'static str, &'static str)> {
+    (source == "crw").then_some((CRW_CREDIT, CRW_DOI))
+}
 
 fn all(s: &str, ok: impl Fn(char) -> bool, max: usize) -> Option<&str> {
     (!s.is_empty() && s.len() <= max && s.chars().all(ok)).then_some(s)
@@ -66,8 +90,24 @@ fn page_for(source: &str, ext_id: &str) -> Option<String> {
         "ndbc" => format!("https://www.ndbc.noaa.gov/station_page.php?station={}", alnum(ext_id)?.to_ascii_lowercase()),
         "coops" => format!("https://tidesandcurrents.noaa.gov/stationhome.html?id={}", digits(ext_id)?),
         "nws" | "nwws" => alert_page(ext_id)?,
+        "crw" => crw_page(ext_id)?,
         _ => return None,
     })
+}
+
+/// `<lat>,<lon>` of a CRW cell centre (`poll::crw`) to its ERDDAP table for the last 30 days.
+fn crw_page(ext_id: &str) -> Option<String> {
+    all(ext_id, |c| c.is_ascii_digit() || matches!(c, '-' | '.' | ','), 20)?;
+    let (lat, lon) = ext_id.split_once(',')?;
+    let (lat, lon): (f64, f64) = (lat.parse().ok()?, lon.parse().ok()?);
+    if !((-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon)) {
+        return None;
+    }
+    // ERDDAP time arithmetic is in seconds: last-2592000 is 30 days before the newest product.
+    let sel = format!("%5B(last-2592000):1:(last)%5D%5B({lat:.3})%5D%5B({lon:.3})%5D");
+    Some(format!(
+        "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.htmlTable?CRW_SST{sel},CRW_SSTANOMALY{sel},CRW_DHW{sel},CRW_BAA{sel}"
+    ))
 }
 
 /// `vtec:<office>.<phen>.<sig>.<etn>.<year>:<zones>` (`poll::nws::vtec_ext_id`) or a CAP `urn:oid:` id.
@@ -101,7 +141,7 @@ pub fn publisher(url: &str) -> Option<&'static str> {
 mod tests {
     use super::*;
     use crate::ingest::poll::bio::testing::python;
-    use crate::ingest::poll::{coops, gbif, inat, nas, ndbc, nws, openmeteo, usgs};
+    use crate::ingest::poll::{coops, crw, gbif, inat, nas, ndbc, nws, openmeteo, usgs};
     use crate::model::Row;
 
     fn fixture(rel: &str) -> Vec<u8> {
@@ -155,6 +195,8 @@ mod tests {
         let vtec = alerts.iter().find(|a| a.starts_with("vtec:KKEY.SC.Y.0019")).unwrap().clone();
         let cap = alerts.iter().find(|a| a.starts_with("urn:oid:")).unwrap().clone();
         let method = usgs.iter().find(|s| s.contains(':')).unwrap().clone();
+        let crw = station_ids(crw::normalize_payload(&fixture("crw/fl-keys.json")).unwrap());
+        let looe_key = crw.iter().find(|s| *s == "24.525,-81.375").unwrap().clone();
         [
             ("inat", inat[0].clone()),
             ("gbif", gbif[0].clone()),
@@ -165,6 +207,7 @@ mod tests {
             ("coops", coops[0].clone()),
             ("nws", vtec),
             ("nws", cap),
+            ("crw", looe_key),
         ]
         .into_iter()
         .map(|(source, ext)| {
@@ -296,7 +339,7 @@ mod tests {
     #[test]
     fn source_page_url_hosts_allowlisted() {
         let links = fixture_links();
-        assert_eq!(links.len(), 9);
+        assert_eq!(links.len(), 10);
         let mut hosts = std::collections::BTreeSet::new();
         for (source, ext, url) in &links {
             assert!(url.starts_with("https://"), "{source} {ext}: {url}");
@@ -310,6 +353,24 @@ mod tests {
         assert_eq!(publisher("https://www.gbif.org.evil.test/occurrence/1"), None);
         assert_eq!(publisher("https://evil.test/?https://www.gbif.org/"), None);
         assert_eq!(publisher("https://www.inaturalist.org/observations/1"), Some("iNaturalist"));
+    }
+
+    /// L3: a CRW cell links its ERDDAP table; the licence credit and DOI travel with the source.
+    #[test]
+    fn crw_source_page_and_credit() {
+        let sel = "%5B(last-2592000):1:(last)%5D%5B(24.525)%5D%5B(-81.375)%5D";
+        assert_eq!(
+            source_page_url("crw", "24.525,-81.375").as_deref(),
+            Some(format!("https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.htmlTable?CRW_SST{sel},CRW_SSTANOMALY{sel},CRW_DHW{sel},CRW_BAA{sel}").as_str())
+        );
+        assert_eq!(publisher(&source_page_url("crw", "12.525,-81.625").unwrap()), Some("NOAA Coral Reef Watch (PacIOOS ERDDAP)"));
+        for bad in ["24.525", "24.525,-81.375,1", "91,0", "0,181", "24.5;x,1", "", "a,b"] {
+            assert_eq!(source_page_url("crw", bad), None, "{bad:?}");
+        }
+        let (line, doi) = credit("crw").unwrap();
+        assert_eq!(doi, CRW_DOI);
+        assert!(line.contains("NOAA Coral Reef Watch") && line.contains(CRW_DOI) && line.contains("without restriction"));
+        assert_eq!(credit("inat"), None);
     }
 
     /// G4: fetch one generated page per source from the publisher. Network; run with

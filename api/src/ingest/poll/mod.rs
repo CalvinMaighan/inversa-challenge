@@ -1,5 +1,6 @@
 pub mod bio;
 pub mod coops;
+pub mod crw;
 pub mod gbif;
 pub mod inat;
 pub mod nas;
@@ -19,5 +20,8 @@ use crate::state::Config;
 pub fn all(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     let mut out = physical::sources(config, app);
     out.extend(bio::sources(config, app));
+    if app.cfg.has_feed(crw::SOURCE_ID) {
+        out.push(Arc::new(crw::Crw::new(app.clone())));
+    }
     out
 }

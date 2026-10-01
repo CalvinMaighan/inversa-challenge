@@ -12,6 +12,9 @@ use crate::state::AppState;
 pub enum Mode {
     Push,
     Poll,
+    /// Polled as a backstop and woken early by an unsigned provider nudge
+    /// (`POST /v1/{app}/ingest/nudge/{source}/{token}`, `ingest::push::nudge`).
+    Webhook,
 }
 
 impl Mode {
@@ -19,6 +22,7 @@ impl Mode {
         match self {
             Mode::Push => "push",
             Mode::Poll => "poll",
+            Mode::Webhook => "webhook",
         }
     }
 }

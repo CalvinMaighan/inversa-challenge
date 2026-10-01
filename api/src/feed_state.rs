@@ -43,7 +43,7 @@ pub enum Health {
 #[serde(rename_all = "camelCase")]
 pub struct FeedState {
     pub source: String,
-    /// "push" or "poll".
+    /// "push", "poll" or "webhook" (a poller the provider nudges on change; the note says so).
     pub mode: String,
     pub state: Health,
     pub newest_observed_at: Option<i64>,
@@ -259,6 +259,19 @@ fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
     let note = match (state, note, last_error) {
         (Health::Stale | Health::Lagging, Some(n), Some(err)) => Some(format!("{n}; last fetch failed: {err}")),
         (_, n, _) => n,
+    };
+    // A webhook source always says how it is driven, after whatever explains its state.
+    let note = if source.mode == "webhook" {
+        let backstop = match governor::snapshot(&source.id) {
+            Some(g) => format!("webhook nudge on dataset change; poll backstop every {}", human(g.min_interval.as_secs() as i64)),
+            None => "webhook nudge on dataset change; poll backstop".to_string(),
+        };
+        Some(match note {
+            Some(n) => format!("{n}; {backstop}"),
+            None => backstop,
+        })
+    } else {
+        note
     };
 
     FeedState {

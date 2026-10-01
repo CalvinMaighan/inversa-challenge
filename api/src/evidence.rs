@@ -526,7 +526,7 @@ async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
             let Some((value, flag, raw_id, conflict, source, ext_id, name, lat, lon, kind)) = row else {
                 return Ok(None);
             };
-            let record = json!({
+            let mut record = json!({
                 "station": {"id": station.to_string(), "source": source, "extId": ext_id, "name": name,
                             "lat": lat, "lon": lon, "kind": kind},
                 "param": param,
@@ -536,6 +536,11 @@ async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 "origin": origin,
                 "conflict": conflict,
             });
+            // Licences that require attribution (NOAA CRW) travel with the record.
+            if let Some((credit, doi)) = crate::source_pages::credit(&source) {
+                record["credit"] = json!(credit);
+                record["doi"] = json!(doi);
+            }
             let mut links = Vec::new();
             if let (Some(k), Some(v), "ok") = (PhysKind::of(&param, &origin), value, flag.as_str()) {
                 links.extend(reading_conflicts(c, &app, k, &ReadingAt { lat, lon, at, value: v })?);

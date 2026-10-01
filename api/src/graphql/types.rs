@@ -83,6 +83,7 @@ db_text!(Quality { Research => "research", NeedsId => "needs_id", Casual => "cas
 db_text!(Param {
     LstC => "lst_c", AirC => "air_c", WaterC => "water_c", SstC => "sst_c", RainMm => "rain_mm",
     StageM => "stage_m", WaveM => "wave_m", WindMs => "wind_ms", FireFrp => "fire_frp",
+    Sst => "sst", SstAnomaly => "sst_anomaly", Dhw => "dhw", Baa => "baa",
 });
 db_text!(ReadingOrigin { Measured => "measured", Satellite => "satellite", Modeled => "modeled" });
 db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missing => "missing" });
@@ -131,6 +132,10 @@ pub enum Param {
     WaveM,
     WindMs,
     FireFrp,
+    Sst,
+    SstAnomaly,
+    Dhw,
+    Baa,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
@@ -163,7 +168,8 @@ pub struct FeedState {
 impl From<feed_state::FeedState> for FeedState {
     fn from(s: feed_state::FeedState) -> Self {
         FeedState {
-            // `sources.mode` is constrained to push|poll by the migration.
+            // `sources.mode` is push|poll|webhook (migration 0006). A webhook source is a poller
+            // the provider nudges, so it stays POLL here; the SDL and the web chips know two modes.
             mode: if s.mode == "push" { FeedMode::Push } else { FeedMode::Poll },
             source: s.source,
             state: s.state.into(),

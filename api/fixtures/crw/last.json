@@ -1,0 +1,10 @@
+{
+  "table": {
+    "columnNames": ["time"],
+    "columnTypes": ["String"],
+    "columnUnits": ["UTC"],
+    "rows": [
+      ["2026-09-29T12:00:00Z"]
+    ]
+  }
+}

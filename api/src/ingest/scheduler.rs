@@ -94,7 +94,7 @@ fn intern(s: &str) -> &'static str {
     pool.entry(s.to_string()).or_insert_with(|| Box::leak(s.to_string().into_boxed_str()))
 }
 
-/// Static description of a feed the config lists but no adapter serves yet (`crw`, `nwps`).
+/// Static description of a feed the config lists but no adapter serves yet (`nwps`).
 fn pending_info(feed: &crate::app::config::FeedCfg) -> SourceInfo {
     let leak = |s: Option<&str>, fallback: &'static str| -> &'static str { s.map(intern).unwrap_or(fallback) };
     SourceInfo {
@@ -243,11 +243,22 @@ async fn supervise(state: AppState, source: Arc<dyn Source>, sup: Supervision) {
 async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<()> {
     let info = source.info();
     let gov: Arc<Governor> = governor::for_source(info.id, source.min_interval());
+    // A `webhook` source sleeps until its backstop poll or a provider nudge, whichever is first.
+    let nudge = (info.mode == crate::ingest::source::Mode::Webhook).then(|| state.nudges.waker(info.id));
     let mut cursor = load_cursor(&state, info.id).await?;
     loop {
         let wait = gov.wait(Instant::now());
         if !wait.is_zero() {
-            tokio::time::sleep(wait).await;
+            match &nudge {
+                // A nudge never cuts a 429/5xx backoff short: the provider asked us to slow down.
+                Some(n) if !gov.snapshot(Instant::now()).backing_off() => {
+                    tokio::select! {
+                        _ = tokio::time::sleep(wait) => {}
+                        _ = n.notified() => tracing::info!(source = info.id, "nudged: fetching before the backstop poll"),
+                    }
+                }
+                _ => tokio::time::sleep(wait).await,
+            }
         }
         let fetched_at = now_ms();
         let result = source.fetch(&FetchCtx { state: &state, cursor: cursor.clone() }).await;
@@ -1284,8 +1295,8 @@ mod tests {
     }
 
     /// C-A1/G6: only the feeds an app's config lists are planned for it. The python app plans
-    /// every adapter; Lionfish Watch leaves NWS, USGS and NWWS out and registers its pending CRW
-    /// adapter as disabled; a fake config without the iNat feed does not plan iNat.
+    /// every adapter; Lionfish Watch leaves NWS, USGS and NWWS out and runs CRW (L3) as a webhook
+    /// source; a fake config without the iNat feed does not plan iNat.
     #[tokio::test]
     async fn app_scheduler_plans_only_configured_feeds() {
         let python = test_state();
@@ -1295,11 +1306,12 @@ mod tests {
 
         let lionfish = crate::app::test_support::test_state_for("lionfish");
         let p = plan(&lionfish);
-        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo", "inat", "nas", "gbif"]);
+        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "crw"]);
         assert!(!p.known_ids().contains(&"nws") && !p.known_ids().contains(&"nwws") && !p.known_ids().contains(&"usgs"));
-        let crw = p.known.iter().find(|(i, _)| i.id == "crw").expect("pending crw registered");
+        let crw = p.known.iter().find(|(i, _)| i.id == "crw").expect("crw registered");
         assert_eq!(crw.0.name, "NOAA Coral Reef Watch");
-        assert_eq!(crw.1.as_deref(), Some("adapter for crw not implemented yet"));
+        assert_eq!(crw.0.mode, crate::ingest::source::Mode::Webhook);
+        assert_eq!(crw.1.as_deref(), Some("INVERSA_SOURCES=off"), "tests run with sources off");
         assert!(p.known.iter().any(|(i, r)| i.id == "goes19" && r.as_deref().is_some_and(|r| r.contains("GOES_SQS_URL"))));
 
         let carp = crate::app::test_support::test_state_for("carp");

@@ -130,6 +130,7 @@ pub fn app(registry: AppRegistry) -> Router {
     let per_app = Router::new()
         .merge(crate::graphql::routes())
         .merge(crate::ingest::push::hook::routes())
+        .merge(crate::ingest::push::nudge::routes())
         .merge(crate::frames::routes())
         .merge(crate::media::routes());
     Router::new().route("/health", get(health)).nest("/v1/{app}", per_app).with_state(registry)

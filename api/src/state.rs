@@ -6,6 +6,7 @@ use crate::app::config::App;
 use crate::app::AppArchive;
 use crate::archive::{Archive, MemArchive};
 use crate::db::Db;
+use crate::ingest::push::nudge::Nudges;
 use crate::realtime::Hub;
 
 /// Process configuration, read once from the environment (PLAN.md C13). Secrets stay optional so
@@ -18,6 +19,9 @@ pub struct Config {
     /// Contact string sent in User-Agent (NWS requires one).
     pub user_agent: String,
     pub ingest_hook_secret: Option<String>,
+    /// `INGEST_NUDGE_TOKEN`: the path token provider nudges (ERDDAP subscriptions) must carry.
+    /// Providers cannot sign, so the token is the whole authentication; unset disables nudges.
+    pub ingest_nudge_token: Option<String>,
     pub r2: Option<R2Config>,
     /// `GOES_SQS_URL`: the queue every app listing `goes19` consumes unless it has its own.
     pub goes_sqs_url: Option<String>,
@@ -59,6 +63,7 @@ impl Config {
             user_agent: env("INVERSA_USER_AGENT")
                 .unwrap_or_else(|| "inversa-challenge (calvinmaighan@gmail.com)".into()),
             ingest_hook_secret: env("INGEST_HOOK_SECRET"),
+            ingest_nudge_token: env("INGEST_NUDGE_TOKEN"),
             r2,
             goes_sqs_url: env("GOES_SQS_URL"),
             goes_sqs_urls: crate::app::config::APP_IDS
@@ -85,6 +90,7 @@ impl Config {
             data_dir: std::env::temp_dir(),
             user_agent: "inversa-tests".into(),
             ingest_hook_secret: Some("test-hook-secret".into()),
+            ingest_nudge_token: Some("test-nudge-token".into()),
             r2: None,
             goes_sqs_url: None,
             goes_sqs_urls: Vec::new(),
@@ -111,6 +117,8 @@ pub struct AppState {
     pub archive: Arc<dyn Archive>,
     pub http: reqwest::Client,
     pub config: Arc<Config>,
+    /// Wake-ups for `webhook` sources (`ingest::push::nudge`).
+    pub nudges: Arc<Nudges>,
 }
 
 pub fn http_client(config: &Config) -> reqwest::Client {
@@ -132,7 +140,7 @@ impl AppState {
         let obs = Db::open_with(&dir, "observations", |conn| app.resolve_taxa(conn))?;
         let team = Db::open(&dir, "team")?;
         let archive: Arc<dyn Archive> = Arc::new(AppArchive::new(archive, app.id()));
-        Ok(AppState { app: Arc::new(app), obs, team, hub: Hub::default(), archive, http, config })
+        Ok(AppState { app: Arc::new(app), obs, team, hub: Hub::default(), archive, http, config, nudges: Arc::default() })
     }
 
     pub fn memory(config: Config, mut app: App) -> Self {
@@ -146,6 +154,7 @@ impl AppState {
             archive,
             http: http_client(&config),
             config: Arc::new(config),
+            nudges: Arc::default(),
         }
     }
 }

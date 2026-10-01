@@ -1,6 +1,7 @@
 pub mod goes_grid;
 pub mod goes_sqs;
 pub mod hook;
+pub mod nudge;
 pub mod nwws;
 
 use std::sync::Arc;

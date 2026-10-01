@@ -22,9 +22,10 @@ use crate::model::TaxonRef;
 pub const APP_IDS: [&str; 3] = ["carp", "lionfish", "python"];
 pub const DEFAULT_APP: &str = "carp";
 
-/// Every source id a `feeds[]` entry may name, with the mode its adapter runs in. `crw` and
-/// `nwps` have no adapter yet (leaves L3 and C2); a config may list them, and the scheduler
-/// registers them as down with that reason so the feed chips are honest.
+/// Every source id a `feeds[]` entry may name, with the mode its adapter runs in. `nwps` has no
+/// adapter yet (leaf C2); a config may list it, and the scheduler registers it as down with that
+/// reason so the feed chips are honest. `crw` is a poller here; at runtime it also takes ERDDAP
+/// nudges and reports itself as `webhook` (`ingest::poll::crw`).
 pub const SOURCES: [(&str, Mode); 13] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
@@ -42,7 +43,7 @@ pub const SOURCES: [(&str, Mode); 13] = [
 ];
 
 /// Sources listed in `SOURCES` whose adapter does not exist yet.
-pub const PENDING_SOURCES: [&str; 2] = ["crw", "nwps"];
+pub const PENDING_SOURCES: [&str; 1] = ["nwps"];
 
 /// Cells per axis the scoring grid must divide into: the hotspot grid is 2 cells, the
 /// environment (GOES g5) grid 5 cells, so a region edge is a whole number of 10 cells.
