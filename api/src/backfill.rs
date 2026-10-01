@@ -243,6 +243,7 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
     let days = args.days.unwrap_or_else(|| inat::backfill_days(&target.app));
     // The end of the area-count window: now, or the fixtures' recording time.
     let mut window_end = crate::state::now_ms();
+    let mut skipped: Vec<&'static str> = Vec::new();
     let tallies: Vec<(&'static str, Tally)> = if args.fixtures {
         let root = fixtures_root();
         let mut out = Vec::new();
@@ -309,21 +310,23 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         // The river feeds (carp): N days of USGS readings, one NWPS poll (thresholds before
         // anything that is categorised), the gridpoint forecast, the alerts check, then N days
         // of archived issuances. Each is one fetch through the pipeline, governed as a poll.
+        // A slow or unreachable upstream (a USGS timeout, say) is retried, then skipped with a notice: the
+        // live scheduler fills the feed on its next poll, and one flaky source must not discard the rest.
         if app.cfg.has_feed(usgs::SOURCE_ID) && !app.is_species() {
             let src = Usgs::new(&target.config, app.clone()).with_history_days(days);
-            out.push((usgs::SOURCE_ID, fetch_once(&target, &src).await?));
+            soft_fetch(&target, usgs::SOURCE_ID, &src, &mut out, &mut skipped).await;
         }
         if app.cfg.has_feed(nwps::SOURCE_ID) {
-            out.push((nwps::SOURCE_ID, fetch_once(&target, &nwps::Nwps::new(app.clone())).await?));
+            soft_fetch(&target, nwps::SOURCE_ID, &nwps::Nwps::new(app.clone()), &mut out, &mut skipped).await;
         }
         if app.cfg.has_feed(nws_forecast::SOURCE_ID) {
-            out.push((nws_forecast::SOURCE_ID, fetch_once(&target, &nws_forecast::NwsForecast::new(&target.config, app.clone())).await?));
+            soft_fetch(&target, nws_forecast::SOURCE_ID, &nws_forecast::NwsForecast::new(&target.config, app.clone()), &mut out, &mut skipped).await;
         }
         if app.cfg.has_feed("nws-alerts") {
-            out.push(("nws-alerts", fetch_once(&target, &nws::Nws::new(&target.config, app.clone())).await?));
+            soft_fetch(&target, "nws-alerts", &nws::Nws::new(&target.config, app.clone()), &mut out, &mut skipped).await;
         }
         if app.cfg.has_feed(iem::SOURCE_ID) {
-            out.push((iem::SOURCE_ID, fetch_once(&target, &Iem::new(app.clone()).with_days(days as i64)).await?));
+            soft_fetch(&target, iem::SOURCE_ID, &Iem::new(app.clone()).with_days(days as i64), &mut out, &mut skipped).await;
         }
         out
     };
@@ -375,8 +378,23 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         println!("forecast snapshots per site: {}", per_site.iter().map(|(s, n)| format!("{s}={n}")).collect::<Vec<_>>().join(" "));
     }
     anyhow::ensure!(errors == 0, "{errors} payloads failed to normalize (see fetch_runs)");
+    if !skipped.is_empty() {
+        println!("BACKFILL-PARTIAL skipped={} (unreachable now; the running API fills them on its next poll)", skipped.join(","));
+        return Ok(());
+    }
     println!("{}", if args.dry_run { "BACKFILL-DRY-RUN-OK" } else { "BACKFILL-OK" });
     Ok(())
+}
+
+/// One governed fetch through the pipeline with [`retry`]; a source that still fails is recorded in `skipped`.
+async fn soft_fetch(target: &AppState, id: &'static str, src: &dyn Source, out: &mut Vec<(&'static str, Tally)>, skipped: &mut Vec<&'static str>) {
+    match retry(id, || fetch_once(target, src)).await {
+        Ok(tally) => out.push((id, tally)),
+        Err(e) => {
+            eprintln!("SKIPPED {id}: {e:#}");
+            skipped.push(id);
+        }
+    }
 }
 
 /// Start of the UTC day `days` before `end_ms`: the iNat `d1` boundary.

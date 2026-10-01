@@ -23,6 +23,8 @@ import { RelayHost } from "./relay";
 import { createSignaling, resolveSignalUrl, type IceServer, type Signaling, type SignalPeer } from "./signal";
 
 export const ANNOUNCE_MS = 20_000;
+/** While signaling is unreachable the announce period doubles per failure, up to this. */
+export const ANNOUNCE_MAX_MS = 5 * 60_000;
 export const POLL_MS = 500;
 /** Cursor updates to peers, at most this often. */
 export const CURSOR_MS = 100;
@@ -80,6 +82,8 @@ export function startPeers(o: StartPeersOptions): TeamLink {
   let relay: { channel: Channel; host: RelayHost } | null = null;
   let closed = false;
   let announceTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive failed announces: one log line per outage, a longer wait per failure. */
+  let announceFailures = 0;
   let pollTimer: ReturnType<typeof setTimeout> | null = null;
   let polling = false;
 
@@ -238,12 +242,16 @@ export function startPeers(o: StartPeersOptions): TeamLink {
       mergeList(list);
       // A stranger's offer may be waiting: one drain per announce keeps discovery within the announce period.
       await drain();
+      if (announceFailures > 0) console.info("[rtc] signaling is back; peers will reconnect");
+      announceFailures = 0;
     } catch (err) {
-      console.warn("[rtc] announce", err);
+      // Signaling being down is an expected state (offline, the worker not started): say so once, retry quietly.
+      if (announceFailures === 0) console.warn(`[rtc] signaling unreachable, retrying with backoff: ${err instanceof Error ? err.message : String(err)}`);
+      announceFailures += 1;
     }
     if (closed) return;
     ensurePolling();
-    announceTimer = setTimeout(() => void announce(), ANNOUNCE_MS);
+    announceTimer = setTimeout(() => void announce(), Math.min(ANNOUNCE_MS * 2 ** Math.min(announceFailures, 5), ANNOUNCE_MAX_MS));
   };
 
   void signal
