@@ -295,6 +295,7 @@ fn decode_raw(bytes: &[u8], raw: &RawRef) -> Value {
 
 async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
     let sid: i64 = key.parse().map_err(|_| bad_id(id, "sighting:<integer id>"))?;
+    let app_id = state.app.id().to_string();
     let found = state
         .obs
         .read(move |c| {
@@ -327,7 +328,7 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                             "quality": r.get::<_, String>(10)?,
                             "photoUrl": r.get::<_, Option<String>>(11)?,
                             // Same-origin copy for pages under COEP (`media.rs`).
-                            "mediaUrl": r.get::<_, Option<String>>(11)?.map(|_| format!("/v1/media/{sid}")),
+                            "mediaUrl": r.get::<_, Option<String>>(11)?.map(|_| format!("/v1/{app_id}/media/{sid}")),
                             "canonicalId": r.get::<_, Option<i64>>(13)?.map(|v| v.to_string()),
                             "conflict": r.get::<_, bool>(14)?,
                             "ingestedAt": iso(r.get(15)?),

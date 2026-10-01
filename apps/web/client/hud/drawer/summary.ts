@@ -22,7 +22,7 @@ export type PlainSummary = {
   title: string;
   /** The rest of the line, in order. */
   parts: string[];
-  /** Same-origin photo of the observation (`/v1/media/<id>`), when the observer took one. */
+  /** Same-origin photo of the observation (`/v1/<app>/media/<id>`), when the observer took one. */
   photo: string | null;
   /** The species card, for sightings only. */
   species?: SpeciesCard;

@@ -488,7 +488,7 @@ async fn resolver_evidence() {
     let ev = &body["data"]["evidence"];
     assert_eq!(ev["kind"], "sighting", "{body}");
     assert_eq!(ev["record"]["taxon"]["scientificName"], "Python bivittatus");
-    assert_eq!(ev["record"]["mediaUrl"], format!("/v1/media/{a}"));
+    assert_eq!(ev["record"]["mediaUrl"], format!("/v1/{}/media/{a}", state.app.id()));
     assert_eq!(ev["links"], json!([{"id": format!("sighting:{b}"), "relation": "duplicates", "source": "gbif"}]));
     assert_eq!(ev["feed"]["source"], "inat");
     assert_eq!(ev["raw"], Value::Null);
