@@ -112,6 +112,22 @@ describe("stream bridge", () => {
     expect(bridge.finishError).toBeUndefined();
   });
 
+  test("a streamed tool call is announced from its first delta (name, no args); the full tool_start with args follows at tool/call, same id", () => {
+    const { of } = run((s) => {
+      s.send("turn/start");
+      s.send("assistant/chunk", { chunk: { type: "tool-call-delta", index: 0, id: "c9", name: "hotspots", argumentsDelta: "" } });
+      s.send("assistant/chunk", { chunk: { type: "tool-call-delta", index: 0, id: "c9", name: "hotspots", argumentsDelta: '{"species":' } });
+      s.send("assistant/chunk", { chunk: { type: "tool-call-delta", index: 0, id: "c9", name: "hotspots", argumentsDelta: '"python"}' } });
+      s.send("assistant/message", { message: { content: [{ type: "tool-call", id: "c9", name: "hotspots", arguments: '{"species":"python"}' }] } });
+      s.send("tool/call", { name: "hotspots", callId: "c9", arguments: '{"species":"python"}' });
+    });
+    expect(of("tool_start")).toEqual([
+      { type: "tool_start", toolCallId: "c9", capabilityName: "hotspots" },
+      { type: "tool_start", toolCallId: "c9", capabilityName: "hotspots", args: { species: "python" } },
+    ]);
+    expect(of("status").map((event) => event.state)).toEqual(["thinking", "reading", "reading"]);
+  });
+
   test("holdFinal streams a lead-in before a tool call at once, holds the final answer, and a discarded draft never reaches the client", () => {
     const { bridge, of } = run((s, ledger) => {
       ledger.add([{ id: "status:MCGL1", kind: "alert", label: "MCGL1" }]);

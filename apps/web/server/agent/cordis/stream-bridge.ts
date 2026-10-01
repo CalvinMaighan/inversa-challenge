@@ -78,6 +78,8 @@ export function attachStreamBridge(
   const toolCalls: ToolCallRecord[] = [];
   const toolStarted = new Map<string, number>();
   const toolNames = new Map<string, string>();
+  /** Tool calls announced to the client from their first streamed delta, before their arguments finished. */
+  const announced = new Set<string>();
   const cited: string[] = [];
   const removed = new Set<string>();
   let text = "";
@@ -179,6 +181,19 @@ export function attachStreamBridge(
     }
     if (chunk.type === "reasoning-delta") {
       onEvent({ type: "reasoning_delta", text: chunk.text });
+      return;
+    }
+    if (chunk.type === "tool-call-delta") {
+      // The model's first output is often a tool call whose arguments stream for a few hundred ms: the client
+      // learns the tool as soon as its name is known (a `tool_start` without args; the full one follows at
+      // `tool/call`, same id), so "Reading data" shows at the first token, not at the end of the arguments.
+      const callId = String(chunk.id);
+      if (chunk.name && !announced.has(callId)) {
+        announced.add(callId);
+        generating = false;
+        onEvent({ type: "status", state: "reading" });
+        onEvent({ type: "tool_start", toolCallId: callId, capabilityName: chunk.name });
+      }
       return;
     }
     if (chunk.type === "finish" && chunk.reason.kind === "error") {
