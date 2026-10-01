@@ -127,6 +127,15 @@ describe("briefing", () => {
     expect(b.missing.some((m) => m.startsWith("24 h stage change: USGS history starts"))).toBe(true);
   });
 
+  test("weather line: air, wind and the chance of precipitation with units, named as weather, not a stage forecast", () => {
+    const usgs = usgsSeries(usgsReadings(krz, [{ at: "2026-10-01T06:00:00Z", stageFt: 1.47 }]), krz);
+    const weather = { airC: { t: NOW, v: 22.8 }, windMs: { t: NOW, v: 4.47 }, popPct: { t: NOW, v: 84 } };
+    const b = briefing({ site: krz, asOfMs: NOW, live: true, zone: ZONE, status: status(), forecast: fresh, previous: null, usgs, usgsWindow: usgs, alerts: [], alertsCheckedMs: NOW, weather, review: deriveReview(base()) });
+    expect(b.expected).toContain("NWS gridpoint forecast near now: 23 °C air, wind 4.5 m/s, 84 % chance of precipitation (modelled weather, not a stage forecast).");
+    const replay = briefing({ site: krz, asOfMs: NOW, live: false, zone: ZONE, status: status(), forecast: fresh, previous: null, usgs, usgsWindow: usgs, alerts: [], alertsCheckedMs: NOW, weather, review: deriveReview(base()) });
+    expect(replay.expected.some((e) => e.includes("chance of precipitation"))).toBe(false);
+  });
+
   test("flow: never measured, not held yet, or no readings at all are three different sentences", () => {
     const krzWindow = usgsSeries(usgsReadings(krz, [{ at: "2026-10-01T06:00:00Z", stageFt: 1.47 }]), krz);
     const mcg = site("MCGL1");
