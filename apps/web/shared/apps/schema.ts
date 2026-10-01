@@ -27,7 +27,23 @@ export function boardIdFor(id: AppId): string {
  * Every globe layer the client can draw. An app's `layers[]` may also name layers the client does not draw yet
  * (lionfish `heat`, carp `locations`); those are listed in the config and skipped by the client.
  */
-export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"] as const;
+export const LAYER_IDS = [
+  "sightings",
+  "hotspots",
+  "lst",
+  "sst",
+  "stations",
+  "alerts",
+  "missions",
+  "peers",
+  "notes",
+  // GE5 water and weather overlays (docs/GODS_EYE.md GC5), served through the Axum overlay proxy.
+  "sst-map",
+  "radar",
+  "clouds",
+  "lightning",
+  "cyclones",
+] as const;
 export type LayerId = (typeof LAYER_IDS)[number];
 
 export function isLayerId(value: unknown): value is LayerId {

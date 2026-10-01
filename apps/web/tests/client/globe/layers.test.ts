@@ -36,7 +36,8 @@ describe("layer contract", () => {
   test("every LAYER_ID has exactly one layer, in draw order rasters → areas → points → people", () => {
     const layers = createLayers(fakeContext());
     expect(layers.map((l) => l.id).sort()).toEqual([...LAYER_IDS].sort());
-    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "sightings", "missions", "notes", "peers"]);
+    // GE5 appends the water and weather overlays (their own imagery stack, storms on top of everything).
+    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "sightings", "missions", "notes", "peers", "sst-map", "radar", "clouds", "lightning", "cyclones"]);
   });
 
   test("init / enable / update / disable / stats / destroy on a fake viewer, for all nine layers", async () => {

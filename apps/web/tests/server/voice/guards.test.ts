@@ -89,8 +89,9 @@ describe("ui tool validation", () => {
   test("voice tools per app: toggle_layer offers only the app's layers and species (C-A5)", () => {
     const toggle = (id: "carp" | "lionfish" | "python") => uiToolsFor(getApp(id)).find((t) => t.name === "toggle_layer")!;
     const props = (id: "carp" | "lionfish" | "python") => (toggle(id).parameters as { properties: Record<string, { enum?: string[] }> }).properties;
-    // Config order; carp's `locations` layer has no client layer yet, so voice cannot toggle it.
-    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes"]);
+    // Config order; carp's `locations` layer has no client layer yet, so voice cannot toggle it. The GE5 water
+    // and weather overlays follow (docs/GODS_EYE.md GC5).
+    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes", "sst-map", "radar", "clouds", "lightning", "cyclones"]);
     expect(props("carp").species?.enum).toBeUndefined();
     expect(toggle("carp").description).not.toContain("python");
     expect(props("lionfish").species!.enum).toEqual(["lionfish"]);

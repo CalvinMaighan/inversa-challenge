@@ -44,6 +44,7 @@
     "e2e:evidence": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; doppler run --project inversa --config dev -- bun e2e/evidence.ts",
     "e2e:developer": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/developer.ts",
     "e2e:media": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/media.ts",
+    "e2e:overlays": "bunx playwright install chromium-headless-shell >/dev/null 2>&1; bun e2e/overlays.ts",
     "perf:poll": "bun e2e/perf-poll.ts"
   },
   "dependencies": {
