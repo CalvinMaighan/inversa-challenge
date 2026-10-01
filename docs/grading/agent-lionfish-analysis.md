@@ -15,8 +15,10 @@ Scope: the Lionfish Watch agent (`apps/web/server/agent/tools/lionfish.ts`, the 
 | G4 series B, final code (c33c0fc) | 59/65, 62/65, 58/65 | three consecutive runs, ungrounded 0, boundary 8/8 |
 | Holdout series A (03cde3c) | 35/40, 35/40 | boundary 6/6, ungrounded 0 |
 | Holdout series B, final code (c33c0fc) | 33/40, 37/40 | boundary 6/6, ungrounded 0 |
+| Holdout series C, final code (c33c0fc) | 36/40, 34/40 | boundary 6/6, ungrounded 0; the gate-check pair after the G5 EXPECT was tightened to the 90% bar |
+| gate-check.mjs main series (c33c0fc) | last run 60/65 | ungrounded 0 |
 
-Honest residual failure rate, final code: main set 9.7% (19 failures over 195 question-runs, 58 to 62 of 65 per run); held-out set 12.5% (10 failures over 80). Ungrounded numbers: 0 in every run after round 2. Boundary: 100% in every run (8/8 main, 6/6 held-out). The gate bar (95% overall, every category 90%) was met in one of six final runs (63/65); the typical run sits at 92% with a spread of plus or minus three questions between runs of the same code.
+Honest residual failure rate, final code: main set 9.7% (19 failures over 195 question-runs, 58 to 62 of 65 per run); held-out set 12.5% (20 failures over 160, 33 to 37 of 40 per run; 90% reached in one run of four, never twice in a row). Ungrounded numbers: 0 in every run after round 2. Boundary: 100% in every run (8/8 main, 6/6 held-out). The gate bar (95% overall, every category 90%) was met in one of six final runs (63/65); the typical run sits at 92% with a spread of plus or minus three questions between runs of the same code.
 
 ## Why the spread is what it is
 
@@ -68,4 +70,4 @@ Each entry: the question, what the agent did, why, the fix, and whether the fix 
 
 ## Cost
 
-A full lionfish run costs at most $0.26 (about 2.4 M input tokens, 42 k output, OpenRouter list price; cache reads are billed lower). The 14 lionfish runs, 9 python runs, 8 holdout runs and the verbose subsets of this leaf came to at most $8.25.
+A full lionfish run costs at most $0.26 (about 2.4 M input tokens, 42 k output, OpenRouter list price; cache reads are billed lower). The 17 lionfish runs, 12 python runs, 12 holdout runs (including the gate-check re-run of every live CHECK) and the verbose subsets of this leaf came to at most $10.50.
