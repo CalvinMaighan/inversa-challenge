@@ -1,0 +1,114 @@
+{
+  "id": "lionfish",
+  "name": "Lionfish Watch",
+  "icon": "lionfish",
+  "tagline": "Survey priorities for lionfish across four Caribbean areas",
+  "question": "Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions?",
+  "kind": "species",
+  "taxa": [
+    {
+      "id": "lionfish",
+      "name": "Lionfish",
+      "scientificName": "Pterois volitans/miles",
+      "inatTaxonId": 47284,
+      "inatLineageIds": [47280, 123459],
+      "gbifKey": 2334432,
+      "nasGenus": "Pterois",
+      "nasSpecies": null,
+      "iconicGroup": "Actinopterygii",
+      "color": "#a06cd5",
+      "halfLifeDays": 60,
+      "rules": "lionfish"
+    }
+  ],
+  "regions": [
+    {
+      "id": "fl-keys",
+      "name": "Florida Keys / South Florida",
+      "bbox": [-83.2, 24.3, -79.8, 27.5],
+      "cellDeg": 0.01,
+      "camera": { "lat": 25.4, "lon": -81.3, "heightM": 480000 }
+    },
+    {
+      "id": "mx-caribbean",
+      "name": "Mexican Caribbean",
+      "bbox": [-87.9, 18.3, -86.6, 21.7],
+      "cellDeg": 0.01,
+      "camera": { "lat": 20.0, "lon": -87.2, "heightM": 420000 }
+    },
+    {
+      "id": "belize",
+      "name": "Belize",
+      "bbox": [-88.5, 16.0, -87.3, 18.2],
+      "cellDeg": 0.01,
+      "camera": { "lat": 17.1, "lon": -87.9, "heightM": 320000 },
+      "thin": true
+    },
+    {
+      "id": "co-caribbean",
+      "name": "Colombian Caribbean",
+      "bbox": [-81.8, 9.7, -74.0, 13.5],
+      "cellDeg": 0.01,
+      "camera": { "lat": 11.6, "lon": -77.9, "heightM": 900000 },
+      "thin": true
+    }
+  ],
+  "locations": [],
+  "feeds": [
+    { "source": "inat", "mode": "poll", "params": { "queries": ["focus"] } },
+    { "source": "gbif", "mode": "poll", "params": { "dedupeAgainst": "inat" } },
+    { "source": "nas", "mode": "poll", "params": { "state": null } },
+    { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },
+    { "source": "openmeteo", "mode": "poll", "params": { "stepDeg": 0.25, "marine": ["wave_height", "wave_period", "ocean_current_velocity", "ocean_current_direction"] } },
+    { "source": "ndbc", "mode": "poll", "params": { "note": "Florida only; no sea-temperature buoys in the other areas" } },
+    { "source": "coops", "mode": "poll", "params": { "note": "Florida only" } },
+    { "source": "goes19", "mode": "push", "params": { "products": ["ABI-L2-SSTF"] } },
+    { "source": "web", "mode": "push", "params": {} }
+  ],
+  "score": {
+    "label": "Survey priority (four components shown separately; no single risk percent)",
+    "components": [
+      { "id": "recentReports", "label": "Recent reports", "weight": 1, "description": "iNaturalist records by observed date in the window; sightings are not abundance." },
+      { "id": "idQuality", "label": "Identification quality", "weight": 1, "description": "Research grade share and duplicate handling (GBIF copies of iNat are not corroboration)." },
+      { "id": "heatStress", "label": "Reef heat stress", "weight": 1, "description": "NOAA CRW DHW (accumulated) and bleaching alert level (current). Context, not proof of lionfish damage." },
+      { "id": "completeness", "label": "Data completeness", "weight": 1, "description": "Feed freshness and coverage gaps (NAS stale outside Florida, no buoys outside Florida)." }
+    ]
+  },
+  "windows": { "defaultHours": 720, "optionsHours": [168, 720, 2160] },
+  "layers": [
+    { "id": "sightings", "label": "Lionfish reports", "defaultOn": true },
+    { "id": "hotspots", "label": "Survey priority", "defaultOn": true },
+    { "id": "sst", "label": "Sea surface temperature (GOES-19)", "defaultOn": false },
+    { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": true },
+    { "id": "marine", "label": "Waves and currents (Open-Meteo)", "defaultOn": false }
+  ],
+  "legend": {
+    "sightings": "One dot per report, by observed date. Submitted date can lag years.",
+    "hotspots": "Priority components shown separately; weights are configurable and labelled.",
+    "sst": "GOES-19 full-disk SST; satellite and buoy can disagree.",
+    "heat": "Degree heating weeks (accumulated) and bleaching alert level (current) from NOAA Coral Reef Watch.",
+    "marine": "Field conditions only; kept apart from ecological priority."
+  },
+  "copy": {
+    "title": "Lionfish Watch",
+    "shortTitle": "Lionfish",
+    "sightingsNote": "Sightings are not abundance: more reports can mean more observers; no reports can mean no sampling.",
+    "scopeNote": "Lionfish in four areas: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean.",
+    "thinAreaNote": "Thin area: too few recent records for a ranked score; heat stress and history are still shown."
+  },
+  "helperQuestions": [
+    "Show recent lionfish reports near reefs with elevated heat stress in Belize.",
+    "Compare this month with the previous month in the Mexican Caribbean.",
+    "Why did you highlight this area?",
+    "Which areas have newly submitted reports of older sightings?",
+    "Where are waves forecast calmer over the next three days?",
+    "Where does this number come from?"
+  ],
+  "agent": {
+    "persona": "You are the Lionfish Watch analyst. You prioritise survey areas from recent lionfish reports, identification quality, reef heat stress and data completeness, always shown as separate components, and you say when data is thin, stale or conflicting.",
+    "scope": "Lionfish (Pterois volitans/miles) in the Florida Keys, the Mexican Caribbean, Belize and the Colombian Caribbean.",
+    "tools": ["sightings", "readings", "hotspots", "explainCell", "evidence", "feeds", "speciesCounts", "taxa", "view"],
+    "refusal": "Lionfish Watch covers lionfish in four areas: Florida Keys, Mexican Caribbean, Belize and the Colombian Caribbean. It does not estimate population growth or an invasion-risk percentage."
+  },
+  "eval": { "goldenSet": "lionfish" }
+}

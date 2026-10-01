@@ -150,8 +150,7 @@ pub fn normalize_product(station_id: &str, product: &str, bytes: &[u8]) -> anyho
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, recorded, FakeFetch};
-    use crate::ingest::poll::physical::REGION;
+    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, python_region, recorded, FakeFetch};
     use crate::model::{Flag, ReadingRow};
 
     const RECORDED_AT: i64 = 1_790_800_400_000;
@@ -172,7 +171,8 @@ mod tests {
     #[test]
     fn coops_stations_in_region() {
         assert_eq!(STATIONS.len(), 7);
-        assert!(STATIONS.iter().all(|s| REGION.contains(s.lat, s.lon)));
+        let region = python_region();
+        assert!(STATIONS.iter().all(|s| region.contains(s.lat, s.lon)));
         assert!(!STATIONS.iter().any(|s| s.id == "8725110"), "Naples 8725110 has no data");
     }
 

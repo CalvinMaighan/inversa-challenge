@@ -720,7 +720,7 @@ mod tests {
 
     #[tokio::test]
     async fn apply_and_publish_emits_op_events() {
-        let state = AppState::memory(Config::for_tests());
+        let state = AppState::memory(Config::for_tests(), crate::app::config::App::builtin("python").unwrap());
         let mut rx = state.hub.subscribe();
         let ops = sample_ops(3);
         let result = apply_and_publish(&state, "b1", ops.clone()).await.unwrap();

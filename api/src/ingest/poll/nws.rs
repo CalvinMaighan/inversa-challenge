@@ -22,37 +22,61 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::app::config::App;
 use crate::ingest::governor;
-use crate::ingest::poll::physical::{self, parse_rfc3339_ms, REGION};
+use crate::ingest::poll::physical::{self, parse_rfc3339_ms, BBox};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::{AlertRow, Row};
 use crate::state::Config;
 
+pub const API: &str = "https://api.weather.gov/alerts/active";
+/// The python app's query (`params.area` FL,AM,GM), the recorded fixture's URL.
+#[cfg(test)]
 pub const URL: &str = "https://api.weather.gov/alerts/active?area=FL,AM,GM";
 
-/// Forecast offices whose zones are the region (VTEC office ids).
+/// Forecast offices of the python app (VTEC office ids); the NWWS-OI push source, which only
+/// the python app lists, filters products by them.
 pub const REGION_OFFICES: [&str; 2] = ["KMFL", "KKEY"];
 
-/// SAME (FIPS) codes of the Florida counties that intersect the region bbox.
-const REGION_COUNTIES: [&str; 17] = [
-    "012011", // Broward
-    "012015", // Charlotte
-    "012021", // Collier
-    "012027", // DeSoto
-    "012043", // Glades
-    "012049", // Hardee
-    "012051", // Hendry
-    "012055", // Highlands
-    "012071", // Lee
-    "012081", // Manatee
-    "012085", // Martin
-    "012086", // Miami-Dade
-    "012087", // Monroe
-    "012093", // Okeechobee
-    "012099", // Palm Beach
-    "012111", // St. Lucie
-    "012115", // Sarasota
-];
+/// What an app's `nws` feed covers, from its config: the region boxes (polygon alerts) plus the
+/// feed's `params`: `area` (the API query), `offices` (VTEC/AWIPS office ids), `senders`
+/// (`senderName` values) and `sameCodes` (county FIPS codes) for zone-based alerts.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Scope {
+    pub regions: Vec<BBox>,
+    pub area: String,
+    pub offices: Vec<String>,
+    pub senders: Vec<String>,
+    pub same_codes: Vec<String>,
+}
+
+impl Scope {
+    pub fn for_app(app: &App) -> Scope {
+        let params = app.cfg.feed("nws").map(|f| &f.params);
+        let list = |key: &str| -> Vec<String> {
+            params
+                .and_then(|p| p.get(key))
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect())
+                .unwrap_or_default()
+        };
+        Scope {
+            regions: physical::region_boxes(app),
+            area: params.and_then(|p| p.get("area")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            offices: list("offices"),
+            senders: list("senders"),
+            same_codes: list("sameCodes"),
+        }
+    }
+
+    pub fn url(&self) -> String {
+        if self.area.is_empty() {
+            API.to_string()
+        } else {
+            format!("{API}?area={}", self.area)
+        }
+    }
+}
 
 /// Conditional-request validators, persisted as the source cursor.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -65,12 +89,13 @@ struct Validators {
 
 pub struct Nws {
     user_agent: String,
+    scope: Scope,
     validators: Mutex<Option<Validators>>,
 }
 
 impl Nws {
-    pub fn new(config: &Config) -> Self {
-        Nws { user_agent: config.user_agent.clone(), validators: Mutex::new(None) }
+    pub fn new(config: &Config, app: std::sync::Arc<App>) -> Self {
+        Nws { user_agent: config.user_agent.clone(), scope: Scope::for_app(&app), validators: Mutex::new(None) }
     }
 }
 
@@ -91,10 +116,11 @@ impl Source for Nws {
         let known = self.validators.lock().expect("validators").clone().or_else(|| {
             ctx.cursor.as_deref().and_then(|c| serde_json::from_str::<Validators>(c).ok())
         });
+        let url = self.scope.url();
         let mut req = ctx
             .state
             .http
-            .get(URL)
+            .get(&url)
             .header(USER_AGENT, &self.user_agent)
             .header(ACCEPT, "application/geo+json");
         if let Some(v) = &known {
@@ -117,22 +143,22 @@ impl Source for Nws {
         let bytes = res.bytes().await.context("nws alerts body")?.to_vec();
         let cursor = (validators != Validators::default()).then(|| serde_json::to_string(&validators)).transpose()?;
         *self.validators.lock().expect("validators") = Some(validators);
-        Ok(vec![physical::payload(URL, &content_type, bytes, status, cursor)])
+        Ok(vec![physical::payload(&url, &content_type, bytes, status, cursor)])
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
-        normalize_alerts(&raw.bytes)
+        normalize_alerts(&raw.bytes, &self.scope)
     }
 }
 
-/// CAP GeoJSON FeatureCollection to alert rows for the region.
-pub fn normalize_alerts(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
+/// CAP GeoJSON FeatureCollection to alert rows for the scope.
+pub fn normalize_alerts(bytes: &[u8], scope: &Scope) -> anyhow::Result<Vec<Row>> {
     let doc: Value = serde_json::from_slice(bytes).context("alerts json")?;
     let features = doc.get("features").and_then(Value::as_array).context("alerts: no features array")?;
     let mut rows = Vec::new();
     for f in features {
         let p = &f["properties"];
-        if p["status"].as_str() != Some("Actual") || !in_region(f) {
+        if p["status"].as_str() != Some("Actual") || !in_region(f, scope) {
             continue;
         }
         if let Some(row) = alert_row(f) {
@@ -158,18 +184,20 @@ fn primary_vtec(p: &Value) -> Option<Vtec> {
         .cloned()
 }
 
-fn in_region(f: &Value) -> bool {
+fn in_region(f: &Value, scope: &Scope) -> bool {
     let p = &f["properties"];
-    if geometry_intersects(&f["geometry"], &REGION) {
+    if scope.regions.iter().any(|r| geometry_intersects(&f["geometry"], r)) {
         return true;
     }
-    if strings(&p["geocode"]["SAME"]).iter().any(|s| REGION_COUNTIES.contains(s)) {
+    if strings(&p["geocode"]["SAME"]).iter().any(|s| scope.same_codes.iter().any(|c| c == s)) {
         return true;
     }
-    let office_from_vtec = strings(&p["parameters"]["VTEC"]).into_iter().filter_map(Vtec::parse).any(|v| REGION_OFFICES.contains(&v.office.as_str()));
-    let office_from_awips =
-        strings(&p["parameters"]["AWIPSidentifier"]).iter().any(|a| a.len() == 6 && REGION_OFFICES.iter().any(|o| o[1..] == a[3..]));
-    let office_from_sender = matches!(p["senderName"].as_str(), Some("NWS Miami FL" | "NWS Key West FL"));
+    let office_from_vtec =
+        strings(&p["parameters"]["VTEC"]).into_iter().filter_map(Vtec::parse).any(|v| scope.offices.contains(&v.office));
+    let office_from_awips = strings(&p["parameters"]["AWIPSidentifier"])
+        .iter()
+        .any(|a| a.len() == 6 && scope.offices.iter().any(|o| o.len() == 4 && o[1..] == a[3..]));
+    let office_from_sender = p["senderName"].as_str().is_some_and(|s| scope.senders.iter().any(|x| x == s));
     office_from_vtec || office_from_awips || office_from_sender
 }
 
@@ -503,15 +531,19 @@ fn segments_cross(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) ->
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, recorded, FakeFetch};
+    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, python_app, python_region, recorded, FakeFetch};
     use crate::model::Row;
 
     const FIXTURE: &str = "nws/alerts_active_fl_am_gm.json";
     /// 2026-09-30T20:30:15Z, when the fixture was recorded.
     const RECORDED_AT: i64 = 1_790_800_215_000;
 
+    fn python_scope() -> Scope {
+        Scope::for_app(&python_app())
+    }
+
     fn alerts() -> Vec<AlertRow> {
-        normalize_alerts(&fixture(FIXTURE))
+        normalize_alerts(&fixture(FIXTURE), &python_scope())
             .unwrap()
             .into_iter()
             .map(|r| match r {
@@ -592,7 +624,7 @@ mod tests {
             "geometry": null,
             "properties": {"id": "urn:test", "status": "Test", "event": "Test Message", "senderName": "NWS Miami FL"}
         }]});
-        let rows = normalize_alerts(doc.to_string().as_bytes()).unwrap();
+        let rows = normalize_alerts(doc.to_string().as_bytes(), &python_scope()).unwrap();
         assert_eq!(rows.len(), 1, "status Test dropped");
         let Row::Alert(a) = &rows[0] else { panic!() };
         assert_eq!(a.ext_id, "vtec:KMFL.FZ.W.0001.2026:FLZ063");
@@ -626,21 +658,41 @@ mod tests {
         let poly = |pts: &[(f64, f64)]| {
             serde_json::json!({"type": "Polygon", "coordinates": [pts.iter().map(|(x, y)| [*x, *y]).collect::<Vec<_>>()]})
         };
+        let region = python_region();
         // Entirely inside.
-        assert!(geometry_intersects(&poly(&[(-80.5, 25.0), (-80.4, 25.0), (-80.4, 25.1), (-80.5, 25.0)]), &REGION));
+        assert!(geometry_intersects(&poly(&[(-80.5, 25.0), (-80.4, 25.0), (-80.4, 25.1), (-80.5, 25.0)]), &region));
         // Encloses the whole bbox (no vertex inside).
-        assert!(geometry_intersects(&poly(&[(-90.0, 20.0), (-70.0, 20.0), (-70.0, 30.0), (-90.0, 30.0), (-90.0, 20.0)]), &REGION));
+        assert!(geometry_intersects(&poly(&[(-90.0, 20.0), (-70.0, 20.0), (-70.0, 30.0), (-90.0, 30.0), (-90.0, 20.0)]), &region));
         // A thin band crossing the bbox with every vertex outside.
-        assert!(geometry_intersects(&poly(&[(-85.0, 25.0), (-78.0, 25.0), (-78.0, 25.1), (-85.0, 25.1), (-85.0, 25.0)]), &REGION));
+        assert!(geometry_intersects(&poly(&[(-85.0, 25.0), (-78.0, 25.0), (-78.0, 25.1), (-85.0, 25.1), (-85.0, 25.0)]), &region));
         // North of the box.
-        assert!(!geometry_intersects(&poly(&[(-81.5, 29.08), (-81.69, 29.32), (-81.57, 29.35), (-81.5, 29.08)]), &REGION));
-        assert!(!geometry_intersects(&Value::Null, &REGION));
+        assert!(!geometry_intersects(&poly(&[(-81.5, 29.08), (-81.69, 29.32), (-81.57, 29.35), (-81.5, 29.08)]), &region));
+        assert!(!geometry_intersects(&Value::Null, &region));
+    }
+
+    /// The scope comes from the feed's params: the python app queries FL,AM,GM and keys its
+    /// zone-based alerts on the Miami and Key West offices; the carp skeleton queries LA and keeps
+    /// none of the Florida fixture's alerts.
+    #[test]
+    fn nws_scope_from_config() {
+        let scope = python_scope();
+        assert_eq!(scope.url(), URL);
+        assert_eq!(scope.offices, ["KMFL", "KKEY"]);
+        assert_eq!(scope.senders, ["NWS Miami FL", "NWS Key West FL"]);
+        assert_eq!(scope.same_codes.len(), 17);
+        assert!(scope.same_codes.contains(&"012086".to_string()), "Miami-Dade");
+        assert_eq!(scope.regions, vec![python_region()]);
+        let carp = Scope::for_app(&crate::app::config::App::builtin("carp").unwrap());
+        assert_eq!(carp.url(), "https://api.weather.gov/alerts/active?area=LA");
+        assert_eq!(carp.offices, ["KLIX", "KSHV", "KLCH", "KJAN"]);
+        assert!(normalize_alerts(&fixture(FIXTURE), &carp).unwrap().is_empty(), "no Florida alert reaches the carp app");
+        assert_eq!(alerts().len(), 6, "the python scope keeps the recorded six");
     }
 
     #[tokio::test]
     async fn nws_idempotent() {
         let raw = recorded(URL, "application/geo+json", fixture(FIXTURE), 200, RECORDED_AT);
-        let (state, first) = assert_idempotent(FakeFetch { inner: Nws::new(&Config::for_tests()), payloads: vec![raw] }).await;
+        let (state, first) = assert_idempotent(FakeFetch { inner: Nws::new(&Config::for_tests(), python_app()), payloads: vec![raw] }).await;
         assert_eq!(first[0].rows_written, 6);
         let n: i64 = state.obs.read(|c| c.query_row("select count(*) from alerts where source_id = 'nws'", [], |r| r.get(0))).await.unwrap();
         assert_eq!(n, 6);

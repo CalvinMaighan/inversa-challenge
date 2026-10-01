@@ -7,7 +7,10 @@
 //! `ack` deletes the message after the rows commit. Messages that carry no wanted object are
 //! deleted at once. Undeliverable downloads are left on the queue for the visibility timeout to redeliver.
 //!
-//! Enabled only when `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are set (PLAN C13).
+//! Enabled only when `GOES_SQS_URL` (or the app's `GOES_SQS_URL_<APP>`), `AWS_ACCESS_KEY_ID` and
+//! `AWS_SECRET_ACCESS_KEY` are set (PLAN C13). Each app listing `goes19` runs its own consumer
+//! over its own regions; the feed's `params.products` (ABI product prefixes) narrows which
+//! objects it takes, so Lionfish Watch decodes SSTF only while the python app takes all four.
 
 #[path = "goes/decode.rs"]
 pub mod decode;
@@ -22,6 +25,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::app::config::App;
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::Row;
 use crate::state::Config;
@@ -32,18 +36,18 @@ pub const BUCKET_URL: &str = "https://noaa-goes19.s3.amazonaws.com/";
 const WAIT_SECONDS: u32 = 20;
 const MAX_MESSAGES: u32 = 10;
 
-pub fn sources(config: &Config) -> Vec<Arc<dyn Source>> {
-    match configure(config) {
+pub fn sources(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
+    match configure(config, app) {
         Ok(s) => vec![Arc::new(s)],
         Err(_) => vec![],
     }
 }
 
-/// The SQS source, or why it cannot run (the reason becomes the feed-state note).
-pub fn configure(config: &Config) -> std::result::Result<GoesSqs, String> {
-    match (&config.goes_sqs_url, &config.aws_access_key_id, &config.aws_secret_access_key) {
+/// The SQS source for `app`'s regions, or why it cannot run (the reason becomes the feed-state note).
+pub fn configure(config: &Config, app: &Arc<App>) -> std::result::Result<GoesSqs, String> {
+    match (config.goes_sqs_url_for(app.id()), &config.aws_access_key_id, &config.aws_secret_access_key) {
         (Some(url), Some(key), Some(secret)) => {
-            GoesSqs::new(url, key, secret).map_err(|e| format!("GOES_SQS_URL rejected: {e:#}"))
+            GoesSqs::new(url, key, secret, app.clone()).map_err(|e| format!("GOES_SQS_URL rejected: {e:#}"))
         }
         (url, key, secret) => {
             let missing: Vec<&str> =
@@ -68,25 +72,50 @@ pub fn info() -> SourceInfo {
     }
 }
 
-/// Pure: one ABI L2 object (its bucket URL or key names the product) to rows. Used by the SQS
-/// source and by fixture/archive replay, which has no queue.
-pub fn normalize_object(raw: &RawPayload) -> Result<Vec<Row>> {
+/// ABI product prefixes the app's `goes19` feed takes (`params.products`); empty = every product.
+pub fn products(app: &App) -> Vec<String> {
+    app.cfg
+        .feed(SOURCE_ID)
+        .and_then(|f| f.params.get("products"))
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|p| p.as_str().map(str::to_string)).collect())
+        .unwrap_or_default()
+}
+
+/// `wanted`, narrowed to the app's product list.
+pub fn wanted_for(app: &App, key: &str) -> Option<Product> {
+    let product = wanted(key)?;
+    let listed = products(app);
+    (listed.is_empty() || listed.iter().any(|p| p == product.prefix())).then_some(product)
+}
+
+/// Pure: one ABI L2 object (its bucket URL or key names the product) to rows for `app`'s
+/// regions. Used by the SQS source and by fixture/archive replay, which has no queue. A product
+/// the app's feed does not list yields no rows (the replay of a shared fixture set).
+pub fn normalize_object(raw: &RawPayload, app: &App) -> Result<Vec<Row>> {
     let key = raw.source_url.strip_prefix(BUCKET_URL).unwrap_or(&raw.source_url);
     let product = Product::from_key(key).ok_or_else(|| anyhow!("not a GOES product key: {key}"))?;
-    let decoded = decode::decode_bytes(&raw.bytes, product)?;
-    let rows = decode::rows(&decoded);
-    let w = decoded.window;
+    let listed = products(app);
+    if !listed.is_empty() && !listed.iter().any(|p| p == product.prefix()) {
+        tracing::info!(app = app.id(), key = %key, "goes object skipped: product not in the app's feed");
+        return Ok(Vec::new());
+    }
+    let decoded = decode::decode_bytes(&raw.bytes, product, app)?;
+    let rows = decode::rows(&decoded, app);
+    let windows: Vec<String> = decoded.windows.iter().map(|w| format!("x {}..{} y {}..{}", w.x0, w.x1, w.y0, w.y1)).collect();
     tracing::info!(
+        app = app.id(),
         key = %key,
         rows_in = rows.len(),
         observed_at = decoded.observed_at,
-        window = %format!("x {}..{} y {}..{}", w.x0, w.x1, w.y0, w.y1),
+        windows = %windows.join("; "),
         "goes object decoded"
     );
     Ok(rows)
 }
 
 pub struct GoesSqs {
+    app: Arc<App>,
     queue_url: String,
     /// `https://sqs.<region>.amazonaws.com/`
     endpoint: String,
@@ -97,7 +126,7 @@ pub struct GoesSqs {
 }
 
 impl GoesSqs {
-    pub fn new(queue_url: &str, key_id: &str, secret: &str) -> Result<Self> {
+    pub fn new(queue_url: &str, key_id: &str, secret: &str, app: Arc<App>) -> Result<Self> {
         let rest = queue_url.strip_prefix("https://").ok_or_else(|| anyhow!("queue url must be https"))?;
         let host = rest.split('/').next().unwrap_or_default().to_string();
         let parts: Vec<&str> = host.split('.').collect();
@@ -108,6 +137,7 @@ impl GoesSqs {
             _ => bail!("unrecognised SQS host {host}"),
         };
         Ok(GoesSqs {
+            app,
             queue_url: queue_url.to_string(),
             endpoint: format!("https://{host}/"),
             host,
@@ -275,7 +305,7 @@ impl Source for GoesSqs {
             .await?;
         let mut out = Vec::new();
         for msg in parse_receive(&res) {
-            let keys: Vec<(String, Product)> = msg.keys.iter().filter_map(|k| wanted(k).map(|p| (k.clone(), p))).collect();
+            let keys: Vec<(String, Product)> = msg.keys.iter().filter_map(|k| wanted_for(&self.app, k).map(|p| (k.clone(), p))).collect();
             if keys.is_empty() {
                 tracing::debug!("goes sqs: no wanted object in message, deleting ({:?})", msg.keys);
                 self.delete(http, &msg.receipt).await?;
@@ -292,7 +322,7 @@ impl Source for GoesSqs {
     }
 
     fn normalize(&self, raw: &RawPayload) -> Result<Vec<Row>> {
-        normalize_object(raw)
+        normalize_object(raw, &self.app)
     }
 
     async fn ack(&self, ctx: &FetchCtx<'_>, raw: &RawPayload) -> Result<()> {
@@ -429,30 +459,36 @@ mod tests {
         );
     }
 
+    fn python() -> Arc<App> {
+        Arc::new(crate::hotspot::score::testkit::python_app())
+    }
+
     #[test]
     fn goes_sqs_source_is_enabled_only_with_queue_and_keys() {
+        let app = python();
         let mut config = Config::for_tests();
-        assert!(sources(&config).is_empty());
+        assert!(sources(&config, &app).is_empty());
         config.goes_sqs_url = Some("https://sqs.us-east-1.amazonaws.com/123456789012/goes19-nodd".into());
         config.aws_access_key_id = Some("AKIDEXAMPLE".into());
-        assert!(sources(&config).is_empty(), "secret missing");
+        assert!(sources(&config, &app).is_empty(), "secret missing");
         config.aws_secret_access_key = Some("secret".into());
-        let s = sources(&config);
+        let s = sources(&config, &app);
         assert_eq!(s.len(), 1);
         assert_eq!(s[0].info().id, "goes19");
         assert_eq!(s[0].info().mode, Mode::Push);
         assert_eq!(s[0].min_interval(), Duration::ZERO);
-        let g = GoesSqs::new(config.goes_sqs_url.as_deref().unwrap(), "k", "s").unwrap();
+        let g = GoesSqs::new(config.goes_sqs_url.as_deref().unwrap(), "k", "s", app.clone()).unwrap();
         assert_eq!(g.region, "us-east-1");
         assert_eq!(g.endpoint, "https://sqs.us-east-1.amazonaws.com/");
-        assert!(GoesSqs::new("http://sqs.us-east-1.amazonaws.com/1/q", "k", "s").is_err());
-        assert!(GoesSqs::new("https://example.com/1/q", "k", "s").is_err());
+        assert!(GoesSqs::new("http://sqs.us-east-1.amazonaws.com/1/q", "k", "s", app.clone()).is_err());
+        assert!(GoesSqs::new("https://example.com/1/q", "k", "s", app).is_err());
     }
 
     #[test]
     fn goes_sqs_normalize_decodes_fixture_bytes() {
+        let app = python();
         let path = decode::tests::fixture(Product::Fdc).unwrap();
-        let g = GoesSqs::new("https://sqs.us-east-1.amazonaws.com/1/q", "k", "s").unwrap();
+        let g = GoesSqs::new("https://sqs.us-east-1.amazonaws.com/1/q", "k", "s", app.clone()).unwrap();
         let raw = RawPayload {
             source_url: format!("{BUCKET_URL}ABI-L2-FDCC/2026/272/15/{}", path.file_name().unwrap().to_str().unwrap()),
             content_type: "application/x-netcdf".into(),
@@ -463,7 +499,27 @@ mod tests {
             ack: Some("AQEB".into()),
         };
         let rows = g.normalize(&raw).unwrap();
-        assert_eq!(rows.len(), decode::rows(&decode::decode_file(&path, Product::Fdc).unwrap()).len());
-        assert!(g.normalize(&RawPayload { source_url: "https://x/y.nc".into(), ..raw }).is_err());
+        assert_eq!(rows.len(), decode::rows(&decode::decode_file(&path, Product::Fdc, &app).unwrap(), &app).len());
+        assert!(g.normalize(&RawPayload { source_url: "https://x/y.nc".into(), ..raw.clone() }).is_err());
+        // Lionfish Watch lists SSTF only: the fire product is skipped (no rows, no error), and
+        // the queue consumer never downloads it.
+        let lf = crate::ingest::poll::bio::testing::lionfish();
+        assert_eq!(products(&lf), ["ABI-L2-SSTF"]);
+        assert!(products(&app).contains(&"ABI-L2-FDCC".to_string()));
+        let g = GoesSqs::new("https://sqs.us-east-1.amazonaws.com/1/q", "k", "s", lf.clone()).unwrap();
+        assert!(g.normalize(&raw).unwrap().is_empty());
+        let fdc_key = "ABI-L2-FDCC/2026/272/15/OR_ABI-L2-FDCC-M6_G19_s20262721531171_e2_c3.nc";
+        assert_eq!(wanted_for(&lf, fdc_key), None);
+        assert_eq!(wanted_for(&app, fdc_key), Some(Product::Fdc));
+        assert_eq!(wanted_for(&lf, "ABI-L2-SSTF/2026/272/15/OR_ABI-L2-SSTF-M6_G19_s1_e2_c3.nc"), Some(Product::Sst));
+        // Per-app queue URLs take precedence over the shared one.
+        let mut config = Config::for_tests();
+        config.goes_sqs_url = Some("https://sqs.us-east-1.amazonaws.com/1/shared".into());
+        config.goes_sqs_urls = vec![("lionfish".into(), "https://sqs.us-east-1.amazonaws.com/1/lionfish".into())];
+        assert_eq!(config.goes_sqs_url_for("lionfish"), Some("https://sqs.us-east-1.amazonaws.com/1/lionfish"));
+        assert_eq!(config.goes_sqs_url_for("python"), Some("https://sqs.us-east-1.amazonaws.com/1/shared"));
+        config.aws_access_key_id = Some("k".into());
+        config.aws_secret_access_key = Some("s".into());
+        assert_eq!(configure(&config, &lf).unwrap().queue_url, "https://sqs.us-east-1.amazonaws.com/1/lionfish");
     }
 }

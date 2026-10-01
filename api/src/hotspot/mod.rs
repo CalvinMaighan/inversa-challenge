@@ -1,68 +1,14 @@
 //! Explainable hotspot scoring (PRD section 8, T11).
 //!
-//! `score = density × activity × access` per 0.01° cell (PLAN.md C15) and frame time.
-//! `score` holds the kernel density and the per-cell product, `rules` the per-species
-//! activity and access rule tables, `backtest` the top-10% hit-rate check.
+//! `score = density × activity × access` per scoring cell and frame time, per region of the
+//! app (PLAN.md C-A4: grids come from `regions[]`, taxa from `taxa[]`; nothing here names a
+//! species or a bbox). `score` holds the kernel density and the per-cell product, `rules` the
+//! named activity and access rule sets a taxon's config picks, `backtest` the top-10% hit-rate
+//! check.
 
 pub mod backtest;
 pub mod rules;
 pub mod score;
-
-/// Focus species, in EVF1 species order (PLAN.md C4). The discriminant is `taxa.id`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Species {
-    Python = 1,
-    Tegu = 2,
-    Iguana = 3,
-    Lionfish = 4,
-}
-
-pub const SPECIES: [Species; 4] = [Species::Python, Species::Tegu, Species::Iguana, Species::Lionfish];
-
-impl Species {
-    /// Accepts the name (`python`) or the taxon id (`1`).
-    pub fn parse(s: &str) -> Option<Species> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "python" | "1" => Some(Species::Python),
-            "tegu" | "2" => Some(Species::Tegu),
-            "iguana" | "3" => Some(Species::Iguana),
-            "lionfish" | "4" => Some(Species::Lionfish),
-            _ => None,
-        }
-    }
-
-    pub fn from_taxon_id(id: i64) -> Option<Species> {
-        SPECIES.iter().copied().find(|s| s.taxon_id() == id)
-    }
-
-    pub fn name(self) -> &'static str {
-        match self {
-            Species::Python => "python",
-            Species::Tegu => "tegu",
-            Species::Iguana => "iguana",
-            Species::Lionfish => "lionfish",
-        }
-    }
-
-    pub fn taxon_id(self) -> i64 {
-        self as i64
-    }
-
-    /// Position in the EVF1 hotspot section.
-    pub fn index(self) -> usize {
-        self as usize - 1
-    }
-
-    /// Density decay half-life (PRD section 8).
-    pub fn half_life_days(self) -> f64 {
-        match self {
-            Species::Python => 21.0,
-            Species::Tegu => 14.0,
-            Species::Iguana => 14.0,
-            Species::Lionfish => 60.0,
-        }
-    }
-}
 
 /// A regular lat/lon grid anchored at its south-west corner; cells are row-major from that corner.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -75,9 +21,6 @@ pub struct Grid {
 }
 
 impl Grid {
-    /// PLAN.md C15: west −83.2, south 24.3, 0.01°, 340 × 320.
-    pub const REGION: Grid = Grid { west: -83.2, south: 24.3, cell_deg: 0.01, cols: 340, rows: 320 };
-
     pub fn cells(&self) -> usize {
         self.cols as usize * self.rows as usize
     }
@@ -137,26 +80,26 @@ impl Grid {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::app::config::App;
 
     #[test]
     fn hotspot_grid_cell_ids_round_trip() {
-        let g = Grid::REGION;
+        let app = App::builtin("python").unwrap();
+        let g = app.regions[0].grid;
         assert_eq!(g.cells(), 108_800);
-        assert_eq!(g.col_row(-83.2, 24.3), Some((0, 0)));
-        assert_eq!(g.col_row(-83.19, 24.31), Some((1, 1)));
-        assert_eq!(g.col_row(-79.8, 27.5), None);
-        assert_eq!(g.col_row(-79.805, 27.495), Some((339, 319)));
+        assert_eq!(g.col_row(g.west, g.south), Some((0, 0)));
+        assert_eq!(g.col_row(g.west + 0.01, g.south + 0.01), Some((1, 1)));
+        assert_eq!(g.col_row(g.east(), g.north()), None);
+        assert_eq!(g.col_row(g.east() - 0.005, g.north() - 0.005), Some((339, 319)));
         let idx = g.index(12, 7);
         assert_eq!(g.cell_id(idx), "12:7");
         assert_eq!(g.parse_cell("12:7"), Some(idx));
         assert_eq!(g.parse_cell("340:7"), None);
         let (lon, lat) = g.center(idx);
-        assert!((lon - (-83.2 + 12.5 * 0.01)).abs() < 1e-9);
-        assert!((lat - (24.3 + 7.5 * 0.01)).abs() < 1e-9);
-        assert_eq!(Species::parse("Lionfish"), Some(Species::Lionfish));
-        assert_eq!(Species::parse("2"), Some(Species::Tegu));
-        assert_eq!(Species::parse("manatee"), None);
-        assert_eq!(Species::Iguana.index(), 2);
+        assert!((lon - (g.west + 12.5 * 0.01)).abs() < 1e-9);
+        assert!((lat - (g.south + 7.5 * 0.01)).abs() < 1e-9);
+        assert_eq!(app.taxon("Lionfish").map(|t| t.id()), Some("lionfish"));
+        assert_eq!(app.taxon("manatee"), None);
+        assert_eq!(app.taxon("iguana").unwrap().idx, 2);
     }
 }

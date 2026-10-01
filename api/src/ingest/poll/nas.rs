@@ -1,11 +1,12 @@
 //! USGS Nonindigenous Aquatic Species (NAS) API v2 poller (T9, PRD §2): polled daily; curated
 //! records that lag weeks.
 //!
-//! `occurrence/search?genus=<g>&state=FL&year=<y>&offset=&limit=` for Python, Salvator, Iguana
-//! and Pterois. `year` takes a single year, so a walk is genus x year, each paged by
-//! `offset`/`limit`. The daily poll re-reads the current and previous year (late records land
-//! there); the backfill walks the baseline years. `state=FL` covers the whole state, so
-//! `normalize` keeps only the bbox.
+//! `occurrence/search?genus=<g>[&state=<s>]&year=<y>&offset=&limit=` for every genus the app's
+//! taxa name (`taxa[].nasGenus`). `year` takes a single year, so a walk is genus x year, each
+//! paged by `offset`/`limit`. The daily poll re-reads the current and previous year (late
+//! records land there); the backfill walks the baseline years. The `state` filter comes from the
+//! feed's `params.state` (`FL` for the python app; null for Lionfish Watch, whose regions lie
+//! outside the US, since NAS has no bbox parameter); `normalize` keeps only the app's regions.
 //!
 //! Measured on 2026-09-30: NAS holds Python (9,329 FL records) and Pterois (7,026) but returns
 //! nothing for Salvator or Iguana (its lizard list is Varanus only). The two genera are still
@@ -15,19 +16,20 @@
 //! Records without a day are skipped: they cannot be placed on the 15-minute timeline or
 //! deduplicated within 24 h.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 
-use super::bio::{self, Focus, Pacer, Pager};
+use super::bio::{self, Pacer, Pager};
+use crate::app::config::App;
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::{Quality, Row, SightingRow, TaxonRef};
 
 pub const ID: &str = "nas";
 pub const API: &str = "https://nas.er.usgs.gov/api/v2/occurrence/search";
-pub const GENERA: [&str; 4] = ["Python", "Salvator", "Iguana", "Pterois"];
 pub const REQUEST_INTERVAL: Duration = Duration::from_secs(1);
 pub const CADENCE: Duration = Duration::from_secs(24 * 3600);
 pub const PAGE_LIMIT: usize = 500;
@@ -35,17 +37,38 @@ pub const PAGE_LIMIT: usize = 500;
 pub const LIVE_YEARS: i32 = 2;
 
 pub struct Nas {
-    pacer: Pacer,
+    app: Arc<App>,
+    pacer: Arc<Pacer>,
 }
 
 impl Nas {
-    pub fn new() -> Self {
-        Nas { pacer: Pacer::new(REQUEST_INTERVAL) }
+    pub fn new(app: Arc<App>) -> Self {
+        Nas { app, pacer: Pacer::shared(ID, REQUEST_INTERVAL) }
     }
 
     pub fn pacer(&self) -> &Pacer {
         &self.pacer
     }
+
+    pub fn pager(&self, from_year: i32, to_year: i32) -> NasPager {
+        NasPager::new(&self.app, from_year, to_year)
+    }
+}
+
+/// Distinct genera of the app's taxa, in taxa order.
+pub fn genera(app: &App) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for g in app.taxa.iter().filter_map(|t| t.cfg.nas_genus.clone()) {
+        if !out.contains(&g) {
+            out.push(g);
+        }
+    }
+    out
+}
+
+/// The `state=` filter of the feed (`params.state`), if any.
+pub fn state_filter(app: &App) -> Option<String> {
+    app.cfg.feed(ID).and_then(|f| f.params.get("state")).and_then(|v| v.as_str()).map(str::to_string)
 }
 
 #[async_trait]
@@ -63,26 +86,27 @@ impl Source for Nas {
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
         let year = chrono::Utc::now().year();
-        let mut pager = NasPager::new(year - LIVE_YEARS + 1, year);
+        let mut pager = self.pager(year - LIVE_YEARS + 1, year);
         bio::collect_pages(ctx.state, &self.pacer, &mut pager, None).await
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
-        normalize(&raw.bytes)
+        normalize(&raw.bytes, &self.app)
     }
 }
 
 /// genus x year x offset.
 pub struct NasPager {
-    queries: Vec<(&'static str, i32)>,
+    queries: Vec<(String, i32)>,
+    state: Option<String>,
     offset: usize,
     limit: usize,
 }
 
 impl NasPager {
-    pub fn new(from_year: i32, to_year: i32) -> Self {
-        let queries = GENERA.iter().flat_map(|g| (from_year..=to_year).map(move |y| (*g, y))).collect();
-        NasPager { queries, offset: 0, limit: PAGE_LIMIT }
+    pub fn new(app: &App, from_year: i32, to_year: i32) -> Self {
+        let queries = genera(app).into_iter().flat_map(|g| (from_year..=to_year).map(move |y| (g.clone(), y))).collect();
+        NasPager { queries, state: state_filter(app), offset: 0, limit: PAGE_LIMIT }
     }
 }
 
@@ -97,7 +121,8 @@ struct Page {
 impl Pager for NasPager {
     fn next_url(&self) -> Option<String> {
         let (genus, year) = self.queries.first()?;
-        Some(format!("{API}?genus={genus}&state=FL&year={year}&offset={}&limit={}", self.offset, self.limit))
+        let state = self.state.as_deref().map(|s| format!("&state={s}")).unwrap_or_default();
+        Some(format!("{API}?genus={genus}{state}&year={year}&offset={}&limit={}", self.offset, self.limit))
     }
 
     fn advance(&mut self, body: &[u8]) -> anyhow::Result<()> {
@@ -142,35 +167,28 @@ struct Record {
     day: Option<u32>,
 }
 
-fn taxon(r: &Record) -> Option<TaxonRef> {
+fn taxon(r: &Record, app: &App) -> Option<TaxonRef> {
     let genus = r.genus.as_deref().unwrap_or("").trim();
     let species = r.species.as_deref().unwrap_or("").trim();
-    let focus = match (genus, species) {
-        ("Python", "bivittatus") => Some(Focus::Python),
-        ("Salvator", "merianae") => Some(Focus::Tegu),
-        ("Iguana", "iguana") => Some(Focus::Iguana),
-        ("Pterois", _) => Some(Focus::Lionfish),
-        _ => None,
-    };
-    if let Some(f) = focus {
-        return Some(f.taxon());
+    if let Some(f) = bio::taxon_for_nas(app, genus, species) {
+        return Some(f.taxon_ref());
     }
     let name = r.scientific_name.as_deref().map(str::trim).filter(|n| !n.is_empty())?;
     Some(TaxonRef::named(name, r.common_name.clone().unwrap_or_default()))
 }
 
-/// Pure: one search page to rows, bbox only, day-precision dates only.
-pub fn normalize(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
+/// Pure: one search page to rows, the app's regions only, day-precision dates only.
+pub fn normalize(bytes: &[u8], app: &App) -> anyhow::Result<Vec<Row>> {
     let page: Page = serde_json::from_slice(bytes)?;
     let mut rows = Vec::new();
     for r in &page.results {
         let (Some(lat), Some(lon)) = (r.lat, r.lon) else { continue };
-        if !bio::in_region(lat, lon) {
+        if !bio::in_region(app, lat, lon) {
             continue;
         }
         let (Some(y), Some(m), Some(d)) = (r.year, r.month, r.day) else { continue };
         let Some(date) = NaiveDate::from_ymd_opt(y, m, d) else { continue };
-        let Some(taxon) = taxon(r) else { continue };
+        let Some(taxon) = taxon(r, app) else { continue };
         rows.push(Row::Sighting(SightingRow {
             ext_id: r.key.to_string(),
             taxon,
@@ -188,10 +206,11 @@ pub fn normalize(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::poll::bio::testing::{lionfish, python};
     use crate::ingest::poll::inat::tests::fixture;
 
     fn sightings(bytes: &[u8]) -> Vec<SightingRow> {
-        normalize(bytes)
+        normalize(bytes, &python())
             .unwrap()
             .into_iter()
             .map(|r| match r {
@@ -216,6 +235,12 @@ mod tests {
 
         assert!(sightings(&fixture("nas/salvator-2026-p1.json")).is_empty());
         assert!(sightings(&fixture("nas/iguana-2026-p1.json")).is_empty());
+        // Lionfish Watch keeps the Florida Pterois records (its fl-keys region) and nothing of the python page as a focus taxon.
+        let lf = super::super::bio::testing::lionfish();
+        let rows = normalize(&fixture("nas/pterois-2026-p1.json"), &lf).unwrap();
+        assert_eq!(rows.len(), 11);
+        let rows = normalize(&fixture("nas/python-2026-p1.json"), &lf).unwrap();
+        assert!(rows.iter().all(|r| matches!(r, Row::Sighting(s) if s.taxon.scientific_name == "Python bivittatus" && s.taxon.inat_taxon_id.is_none())));
     }
 
     #[test]
@@ -236,7 +261,7 @@ mod tests {
 
     #[test]
     fn nas_pager_walks_genus_year_offset() {
-        let mut p = NasPager::new(2025, 2026);
+        let mut p = NasPager::new(&python(), 2025, 2026);
         p.limit = 2;
         assert_eq!(
             p.next_url().unwrap(),
@@ -254,5 +279,12 @@ mod tests {
         }
         assert_eq!(urls, 2 + 7, "4 genera x 2 years, one extra page for Python 2025");
         assert_eq!(p.cursor(), None);
+        // Lionfish Watch: one genus, no state filter (NAS has no bbox parameter; normalize filters).
+        let p = NasPager::new(&lionfish(), 2026, 2026);
+        assert_eq!(
+            p.next_url().unwrap(),
+            "https://nas.er.usgs.gov/api/v2/occurrence/search?genus=Pterois&year=2026&offset=0&limit=500"
+        );
+        assert_eq!(genera(&python()), ["Python", "Salvator", "Iguana", "Pterois"]);
     }
 }

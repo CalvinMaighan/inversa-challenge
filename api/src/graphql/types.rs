@@ -6,6 +6,7 @@ use async_graphql::{
 };
 use chrono::{DateTime, SecondsFormat};
 
+use crate::app::config::App;
 use crate::feed_state;
 
 /// RFC 3339 timestamp, carried as unix milliseconds (the storage format of every time column).
@@ -42,15 +43,13 @@ pub struct BBox {
 }
 
 impl BBox {
-    /// The app region (PLAN.md C15).
-    pub const REGION: BBox = BBox { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
-
-    /// Rejects NaN, inverted boxes and boxes reaching outside [`BBox::REGION`] (1e-9 degrees of
-    /// slack for decimal round-off).
-    pub fn validate(&self) -> async_graphql::Result<()> {
+    /// Rejects NaN, inverted boxes and boxes reaching outside the app's regions (their bounding
+    /// box, `App::hull`; 1e-9 degrees of slack for decimal round-off). A single-region app keeps
+    /// the pre-pivot rule: inside its one region.
+    pub fn validate(&self, app: &App) -> async_graphql::Result<()> {
         const EPS: f64 = 1e-9;
         let BBox { west, south, east, north } = *self;
-        let r = BBox::REGION;
+        let r = app.hull();
         if !(west < east && south < north) {
             return Err(format!("invalid bbox {self:?}: need west < east and south < north").into());
         }

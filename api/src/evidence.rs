@@ -8,7 +8,7 @@
 //! | `reading` | `<station_id>:<param>:<observed_at ms>:<origin>` | the row and its station |
 //! | `alert` | `alerts.id` | the row, `areaGeojson` parsed |
 //! | `fetch` | `fetch_runs.id` | the run |
-//! | `hotspot` | `<species>:<col>:<row>:<frame ms>` | the explain terms |
+//! | `hotspot` | `<species>:<cell id>:<frame ms>` (cell id `<col>:<row>`, or `<region>:<col>:<row>` in a multi-region app) | the explain terms |
 //! | `backtest` | `<species>:<days>` | the backtest summary with `perDay` |
 //!
 //! Row-backed kinds also carry the raw payload from the Archive (gunzipped; parsed as JSON when
@@ -31,8 +31,9 @@ use async_graphql::{ErrorExtensions, ID};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
+use crate::app::config::{App, Taxon};
 use crate::graphql::types::{Evidence, EvidenceLink, FeedState};
-use crate::hotspot::{self, Grid, Species};
+use crate::hotspot;
 use crate::source_pages::source_page_url;
 use crate::state::AppState;
 
@@ -418,10 +419,9 @@ impl PhysKind {
     }
 }
 
-/// `(col, row)` of the 0.01° app cell (C14) containing a point.
-fn cell_of(lat: f64, lon: f64) -> (i64, i64) {
-    let g = Grid::REGION;
-    (((lon - g.west) / g.cell_deg + 1e-9).floor() as i64, ((lat - g.south) / g.cell_deg + 1e-9).floor() as i64)
+/// `(region, col, row)` of the scoring cell (C14) containing a point; `None` outside every region.
+fn cell_of(app: &App, lat: f64, lon: f64) -> Option<(u8, u32, u32)> {
+    crate::ingest::quality_phys::cell_of(app, lat, lon)
 }
 
 fn distance_km(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
@@ -438,7 +438,7 @@ struct ReadingAt {
 }
 
 /// Readings that break a T8 rule together with `me`.
-fn reading_conflicts(c: &Connection, kind: PhysKind, me: &ReadingAt) -> rusqlite::Result<Vec<EvidenceLink>> {
+fn reading_conflicts(c: &Connection, app: &App, kind: PhysKind, me: &ReadingAt) -> rusqlite::Result<Vec<EvidenceLink>> {
     let (param, origin) = kind.partner();
     let sst = matches!(kind, PhysKind::SatSst | PhysKind::BuoySst);
     // Coarse box first (index on stations(lat, lon)), exact test after.
@@ -479,7 +479,7 @@ fn reading_conflicts(c: &Connection, kind: PhysKind, me: &ReadingAt) -> rusqlite
         let near = if sst {
             distance_km(me.lat, me.lon, lat, lon) <= SST_MAX_KM
         } else {
-            cell_of(me.lat, me.lon) == cell_of(lat, lon)
+            matches!((cell_of(app, me.lat, me.lon), cell_of(app, lat, lon)), (Some(a), Some(b)) if a == b)
         };
         if near && kind.disagrees(me.value, value) {
             out.push(link(format!("reading:{station}:{param}:{at}:{origin}"), "conflict", &source));
@@ -498,6 +498,7 @@ async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
     let station: i64 = station.parse().map_err(|_| bad_id(id, SHAPE))?;
     let at: i64 = at.parse().map_err(|_| bad_id(id, SHAPE))?;
     let (param, origin) = (param.to_string(), origin.to_string());
+    let app = state.app.clone();
     let found = state
         .obs
         .read(move |c| {
@@ -537,7 +538,7 @@ async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
             });
             let mut links = Vec::new();
             if let (Some(k), Some(v), "ok") = (PhysKind::of(&param, &origin), value, flag.as_str()) {
-                links.extend(reading_conflicts(c, k, &ReadingAt { lat, lon, at, value: v })?);
+                links.extend(reading_conflicts(c, &app, k, &ReadingAt { lat, lon, at, value: v })?);
             }
             links.extend(fetch_link(c, &source, raw_id)?);
             let raw = raw_ref(c, raw_id)?;
@@ -666,23 +667,33 @@ async fn fetch(state: &AppState, id: &str, key: &str) -> Res<Found> {
     found.ok_or_else(|| not_found(id))
 }
 
-fn parse_species(id: &str, s: &str, shape: &str) -> Res<Species> {
-    Species::parse(s).ok_or_else(|| bad_id(id, shape))
+fn parse_species<'a>(app: &'a App, id: &str, s: &str, shape: &str) -> Res<&'a Taxon> {
+    app.taxon(s).ok_or_else(|| bad_id(id, shape))
 }
 
 async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
-    const SHAPE: &str = "hotspot:<species>:<col>:<row>:<frame ms> on the 340 x 320 grid";
+    let app = &state.app;
+    let shape = format!("hotspot:<species>:{}:<frame ms>", app.cell_shape());
+    if !app.is_species() {
+        return Err(bad_id(id, &format!("{shape} (app {} has no hotspot grid)", app.id())));
+    }
     let parts: Vec<&str> = key.split(':').collect();
-    let [species, col, row, at] = parts.as_slice() else { return Err(bad_id(id, SHAPE)) };
-    let sp = parse_species(id, species, SHAPE)?;
-    let cell = format!("{col}:{row}");
-    let idx = Grid::REGION.parse_cell(&cell).ok_or_else(|| bad_id(id, SHAPE))?;
-    let at: i64 = at.parse().map_err(|_| bad_id(id, SHAPE))?;
-    let ex = hotspot::score::explain(&state.obs, &cell, sp, at).await?;
-    let (lon, lat) = Grid::REGION.center(idx);
+    // species, then the cell id (2 or 3 parts), then the frame time.
+    let (species, cell_parts, at) = match parts.as_slice() {
+        [species, col, row, at] => (*species, vec![*col, *row], *at),
+        [species, region, col, row, at] => (*species, vec![*region, *col, *row], *at),
+        _ => return Err(bad_id(id, &shape)),
+    };
+    let sp = parse_species(app, id, species, &shape)?;
+    let cell = cell_parts.join(":");
+    let (region, idx) = app.parse_cell(&cell).ok_or_else(|| bad_id(id, &shape))?;
+    let at: i64 = at.parse().map_err(|_| bad_id(id, &shape))?;
+    let ex = hotspot::score::explain(&state.obs, app, &cell, sp, at).await?;
+    let (lon, lat) = region.grid.center(idx);
     let record = json!({
         "cell": cell,
-        "species": sp.name(),
+        "region": region.id(),
+        "species": sp.id(),
         "at": iso(at),
         "lat": lat,
         "lon": lon,
@@ -694,12 +705,16 @@ async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
 
 async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
     const SHAPE: &str = "backtest:<species>:<days 1-366>";
+    let app = &state.app;
+    if !app.is_species() {
+        return Err(bad_id(id, &format!("{SHAPE} (app {} has no hotspot grid)", app.id())));
+    }
     let (species, days) = key.split_once(':').ok_or_else(|| bad_id(id, SHAPE))?;
-    let sp = parse_species(id, species, SHAPE)?;
+    let sp = parse_species(app, id, species, SHAPE)?;
     let days: u32 = days.parse().ok().filter(|d| (1..=366).contains(d)).ok_or_else(|| bad_id(id, SHAPE))?;
-    let b = hotspot::backtest::backtest(&state.obs, sp, days).await?;
+    let b = hotspot::backtest::backtest(&state.obs, app, sp, days).await?;
     let record = json!({
-        "species": sp.name(),
+        "species": sp.id(),
         "days": b.days,
         "hitRate": b.hit_rate,
         "baseline": b.baseline,
@@ -1022,7 +1037,7 @@ mod tests {
         use crate::hotspot::score::testkit::{insert_sighting, DAY, HOUR};
         let state = test_state();
         seed_sources(&state.obs).await;
-        let g = Grid::REGION;
+        let g = state.app.regions[0].grid;
         let today = hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
         let (lon, lat) = g.center(g.index(100, 100));
         insert_sighting(&state.obs, "inat", 1, lat, lon, today - 3 * DAY + 5 * HOUR, "research", None).await;

@@ -327,10 +327,11 @@ pub async fn backfill_ids_from_archive(state: &AppState) -> anyhow::Result<usize
                 continue;
             }
         };
+        let app = state.app.clone();
         let refs = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<crate::model::TaxonRef>> {
             let mut bytes = Vec::new();
             flate2::read::GzDecoder::new(&gz[..]).read_to_end(&mut bytes)?;
-            Ok(crate::ingest::poll::inat::normalize(&bytes)?
+            Ok(crate::ingest::poll::inat::normalize(&bytes, &app)?
                 .into_iter()
                 .filter_map(|row| match row {
                     crate::model::Row::Sighting(s) if s.taxon.inat_taxon_id.is_some() => Some(s.taxon),
@@ -490,7 +491,7 @@ mod tests {
         use crate::ingest::scheduler::ingest_payload;
 
         let state = test_state();
-        let src = crate::ingest::poll::inat::Inat::new();
+        let src = crate::ingest::poll::inat::Inat::new(state.app.clone());
         let out = ingest_payload(&state, &src, payload("https://api.inaturalist.org/v1/observations?introduced=true", inat_fixture("inat/introduced-p1.json")), None)
             .await
             .unwrap();

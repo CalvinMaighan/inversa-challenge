@@ -1,6 +1,6 @@
-//! Open-Meteo forecast and marine models (T8, PRD §2), hourly, on a 0.25° grid over the region:
-//! cell centres from 24.425°N / 83.075°W, 13 rows x 14 columns = 182 points, one request per API
-//! with comma-separated coordinates.
+//! Open-Meteo forecast and marine models (T8, PRD §2), hourly, on a 0.25° grid over every
+//! region of the app (the python region: 13 rows x 14 columns = 182 points), one request per
+//! API with comma-separated coordinates.
 //!
 //! - Forecast: `temperature_2m` (air_c), `precipitation` (rain_mm), `wind_speed_10m` (wind_ms,
 //!   requested in m/s), yesterday plus 48 h ahead.
@@ -12,15 +12,16 @@
 //! All rows are `origin = modeled`, station kind `grid`, `ext_id` = "lat,lon" of the requested
 //! point (3 decimals; Open-Meteo snaps to its own model cell, reported separately in the body).
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use async_trait::async_trait;
 use serde_json::Value;
 
+use crate::app::config::App;
 use crate::ingest::governor;
-use crate::ingest::poll::physical::{self, reading, REGION};
+use crate::ingest::poll::physical::{self, reading, BBox};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::{Origin, Param, Row, StationKind, StationRef};
 
@@ -33,15 +34,19 @@ const FORECAST_VARS: [(&str, Param); 3] =
     [("temperature_2m", Param::AirC), ("precipitation", Param::RainMm), ("wind_speed_10m", Param::WindMs)];
 const MARINE_VARS: [(&str, Param); 2] = [("wave_height", Param::WaveM), ("sea_surface_temperature", Param::SstC)];
 
-/// Grid cell centres over the region, south-west first, row-major.
-pub fn grid() -> Vec<(f64, f64)> {
+/// Grid cell centres over every region, region by region, south-west first, row-major.
+pub fn grid(regions: &[BBox]) -> Vec<(f64, f64)> {
     // Every cell centre inside the box (the last row/column may be a partial cell).
     let centres = |from: f64, to: f64| -> Vec<f64> {
         (0..).map(|i| round3(from + STEP_DEG * (i as f64 + 0.5))).take_while(|v| *v <= to).collect()
     };
-    let lats = centres(REGION.south, REGION.north);
-    let lons = centres(REGION.west, REGION.east);
-    lats.iter().flat_map(|lat| lons.iter().map(move |lon| (*lat, *lon))).collect()
+    let mut out = Vec::new();
+    for r in regions {
+        let lats = centres(r.south, r.north);
+        let lons = centres(r.west, r.east);
+        out.extend(lats.iter().flat_map(|lat| lons.iter().map(move |lon| (*lat, *lon))));
+    }
+    out
 }
 
 fn round3(v: f64) -> f64 {
@@ -91,18 +96,13 @@ struct SeaMask {
 }
 
 pub struct OpenMeteo {
+    regions: Vec<BBox>,
     sea: Mutex<Option<SeaMask>>,
 }
 
 impl OpenMeteo {
-    pub fn new() -> Self {
-        OpenMeteo { sea: Mutex::new(None) }
-    }
-}
-
-impl Default for OpenMeteo {
-    fn default() -> Self {
-        Self::new()
+    pub fn new(app: Arc<App>) -> Self {
+        OpenMeteo { regions: physical::region_boxes(&app), sea: Mutex::new(None) }
     }
 }
 
@@ -130,7 +130,7 @@ impl Source for OpenMeteo {
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
         let http = &ctx.state.http;
-        let all = grid();
+        let all = grid(&self.regions);
         let forecast = get(http, &forecast_url(&all)).await?;
 
         let known_sea = {
@@ -226,7 +226,7 @@ pub fn normalize_payload(raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, fixture_str, recorded, FakeFetch};
+    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, fixture_str, python_app, python_region, recorded, FakeFetch};
     use crate::model::{Flag, ReadingRow};
 
     const RECORDED_AT: i64 = 1_790_800_600_000;
@@ -248,13 +248,20 @@ mod tests {
 
     #[test]
     fn openmeteo_grid_covers_region() {
-        let g = grid();
+        let region = python_region();
+        let g = grid(&[region]);
         assert_eq!(g.len(), 13 * 14);
-        assert_eq!(g[0], (24.425, -83.075));
-        assert_eq!(*g.last().unwrap(), (27.425, -79.825));
-        assert!(g.iter().all(|(lat, lon)| REGION.contains(*lat, *lon)));
+        assert_eq!(g[0], (round3(region.south + 0.125), round3(region.west + 0.125)));
+        assert_eq!(*g.last().unwrap(), (round3(region.north - 0.075), round3(region.east - 0.025)));
+        assert!(g.iter().all(|(lat, lon)| region.contains(*lat, *lon)));
         let url = forecast_url(&g);
         assert_eq!(points_from_url(&url).unwrap(), g);
+        // Several regions: each gets its own centres, in region order.
+        let lf = crate::app::config::App::builtin("lionfish").unwrap();
+        let boxes = physical::region_boxes(&lf);
+        let multi = grid(&boxes);
+        assert_eq!(multi.len(), boxes.iter().map(|b| grid(&[*b]).len()).sum::<usize>());
+        assert!(multi.iter().all(|(lat, lon)| boxes.iter().any(|b| b.contains(*lat, *lon))));
     }
 
     #[test]
@@ -301,7 +308,7 @@ mod tests {
 
     #[tokio::test]
     async fn openmeteo_idempotent() {
-        let (_, first) = assert_idempotent(FakeFetch { inner: OpenMeteo::new(), payloads: vec![raw("forecast"), raw("marine")] }).await;
+        let (_, first) = assert_idempotent(FakeFetch { inner: OpenMeteo::new(python_app()), payloads: vec![raw("forecast"), raw("marine")] }).await;
         assert_eq!(first.len(), 2);
     }
 }

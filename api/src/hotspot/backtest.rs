@@ -1,14 +1,15 @@
 //! Top-10% hit-rate backtest (T11, PRD section 8).
 //!
-//! For each UTC day D in the window, the grid is scored at D 00:00 using only data observed
-//! before D. A sighting observed during D is a hit when its cell ranks in the top 10% of
-//! cells by score (and the score is above zero, so an empty grid never "hits"). The hit rate
-//! is hits over sightings across all days, reported next to the 10% chance baseline.
+//! For each UTC day D in the window, every region's grid is scored at D 00:00 using only data
+//! observed before D. A sighting observed during D is a hit when its cell ranks in the top 10%
+//! of its region's cells by score (and the score is above zero, so an empty grid never "hits").
+//! The hit rate is hits over sightings across all days and regions, reported next to the 10%
+//! chance baseline.
 
 use rayon::prelude::*;
 
 use super::score::{Snapshot, DAY_MS};
-use super::{Grid, Species};
+use crate::app::config::{App, Taxon};
 use crate::db::Db;
 
 pub const BASELINE: f64 = 0.1;
@@ -24,7 +25,8 @@ pub struct BacktestDay {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Backtest {
-    pub species: Species,
+    /// The taxon's config id (`python`).
+    pub species: String,
     pub days: u32,
     pub hit_rate: f64,
     pub baseline: f64,
@@ -45,42 +47,50 @@ pub fn top_threshold(scores: &[f32]) -> f32 {
 }
 
 /// The last `days` full UTC days before now.
-pub async fn backtest(db: &Db, species: Species, days: u32) -> anyhow::Result<Backtest> {
-    backtest_until(db, species, days, chrono::Utc::now().timestamp_millis()).await
+pub async fn backtest(db: &Db, app: &App, taxon: &Taxon, days: u32) -> anyhow::Result<Backtest> {
+    backtest_until(db, app, taxon, days, chrono::Utc::now().timestamp_millis()).await
 }
 
 /// The last `days` full UTC days before `end_ms`.
-pub async fn backtest_until(db: &Db, species: Species, days: u32, end_ms: i64) -> anyhow::Result<Backtest> {
+pub async fn backtest_until(db: &Db, app: &App, taxon: &Taxon, days: u32, end_ms: i64) -> anyhow::Result<Backtest> {
     anyhow::ensure!((1..=366).contains(&days), "days must be 1..=366, got {days}");
     let end_day = floor_day(end_ms);
     let from = end_day - days as i64 * DAY_MS;
-    let snap = Snapshot::load_day_boundaries(db, Grid::REGION, from, end_day).await?;
-    let per_day = tokio::task::spawn_blocking(move || {
-        (0..days as i64)
-            .into_par_iter()
-            .map(|i| {
-                let day = from + i * DAY_MS;
-                let scores = snap.score_grid(species, day);
-                let threshold = top_threshold(&scores);
-                let (mut sightings, mut hits) = (0u32, 0u32);
-                for s in snap.sightings.iter().filter(|s| {
-                    s.observed_at >= day && s.observed_at < day + DAY_MS && !s.duplicate() && s.taxon_id == species.taxon_id()
-                }) {
-                    sightings += 1;
-                    let score = scores[snap.grid.index(s.col, s.row)];
-                    if score >= threshold {
-                        hits += 1;
+    let mut per_day: Vec<BacktestDay> = (0..days as i64).map(|i| BacktestDay { day: from + i * DAY_MS, sightings: 0, hits: 0 }).collect();
+    for region in &app.regions {
+        let snap = Snapshot::load_day_boundaries(db, &app.taxa, region.grid, from, end_day).await?;
+        let taxon = taxon.clone();
+        let region_days = tokio::task::spawn_blocking(move || {
+            (0..days as i64)
+                .into_par_iter()
+                .map(|i| {
+                    let day = from + i * DAY_MS;
+                    let scores = snap.score_grid(&taxon, day);
+                    let threshold = top_threshold(&scores);
+                    let (mut sightings, mut hits) = (0u32, 0u32);
+                    for s in snap.sightings.iter().filter(|s| {
+                        s.observed_at >= day && s.observed_at < day + DAY_MS && !s.duplicate() && s.taxon_id == taxon.taxon_id
+                    }) {
+                        sightings += 1;
+                        let score = scores[snap.grid.index(s.col, s.row)];
+                        if score >= threshold {
+                            hits += 1;
+                        }
                     }
-                }
-                BacktestDay { day, sightings, hits }
-            })
-            .collect::<Vec<_>>()
-    })
-    .await?;
+                    (sightings, hits)
+                })
+                .collect::<Vec<_>>()
+        })
+        .await?;
+        for (d, (s, h)) in per_day.iter_mut().zip(region_days) {
+            d.sightings += s;
+            d.hits += h;
+        }
+    }
     let total: u32 = per_day.iter().map(|d| d.sightings).sum();
     let hits: u32 = per_day.iter().map(|d| d.hits).sum();
     let hit_rate = if total == 0 { 0.0 } else { hits as f64 / total as f64 };
-    Ok(Backtest { species, days, hit_rate, baseline: BASELINE, per_day })
+    Ok(Backtest { species: taxon.id().to_string(), days, hit_rate, baseline: BASELINE, per_day })
 }
 
 #[cfg(test)]
@@ -106,18 +116,19 @@ mod tests {
         use crate::hotspot::score::CondParam;
         let db = Db::memory("observations");
         seed_sources(&db).await;
-        let g = Grid::REGION;
+        let app = python_app();
+        let g = app.regions[0].grid;
         let d0 = floor_day(ms(2025, 4, 10, 0));
         let idx = g.index(100, 100);
         let (lon, lat) = g.center(idx);
         let st = insert_station(&db, "nws", "KMIA", lat, lon, "grid").await;
         // 12 °C an hour before day 1 counts; 30 °C at noon of day 0 is never a midnight condition.
         insert_readings(&db, vec![(st, "air_c", Some(30.0), d0 + 12 * HOUR), (st, "air_c", Some(12.0), d0 + DAY - HOUR)]).await;
-        let snap = Snapshot::load_day_boundaries(&db, g, d0, d0 + 2 * DAY).await.unwrap();
+        let snap = Snapshot::load_day_boundaries(&db, &app.taxa, g, d0, d0 + 2 * DAY).await.unwrap();
         assert_eq!(snap.conditions(d0 + DAY).value(CondParam::AirC, idx), Some(12.0));
         assert_eq!(snap.conditions(d0).value(CondParam::AirC, idx), None);
         assert_eq!(snap.conditions(d0 + 13 * HOUR).value(CondParam::AirC, idx), None, "noon reading not loaded");
-        let full = Snapshot::load(&db, g, d0, d0 + 2 * DAY).await.unwrap();
+        let full = Snapshot::load(&db, &app.taxa, g, d0, d0 + 2 * DAY).await.unwrap();
         assert_eq!(full.conditions(d0 + 13 * HOUR).value(CondParam::AirC, idx), Some(30.0));
     }
 
@@ -125,7 +136,9 @@ mod tests {
     async fn backtest_seeded_hit_rate() {
         let db = Db::memory("observations");
         seed_sources(&db).await;
-        let g = Grid::REGION;
+        let app = python_app();
+        let python = app.taxon("python").unwrap();
+        let g = app.regions[0].grid;
         let d0 = floor_day(ms(2025, 4, 10, 0));
         let (lon_a, lat_a) = g.center(g.index(100, 100));
         let (lon_b, lat_b) = g.center(g.index(300, 300));
@@ -141,18 +154,19 @@ mod tests {
         insert_sighting(&db, "inat", 1, lat_c, lon_c, d0 + DAY + HOUR, "research", None).await;
         insert_sighting(&db, "inat", 2, lat_b, lon_b, d0 + DAY + HOUR, "research", None).await;
         // Day 2: nothing.
-        let bt = backtest_until(&db, Species::Python, 3, d0 + 3 * DAY).await.unwrap();
+        let bt = backtest_until(&db, &app, python, 3, d0 + 3 * DAY).await.unwrap();
         assert_eq!(bt.baseline, 0.1);
         assert_eq!(bt.days, 3);
+        assert_eq!(bt.species, "python");
         assert_eq!(bt.per_day.len(), 3);
         assert_eq!(bt.per_day[0], BacktestDay { day: d0, sightings: 2, hits: 1 });
         assert_eq!(bt.per_day[1], BacktestDay { day: d0 + DAY, sightings: 1, hits: 1 });
         assert_eq!(bt.per_day[2], BacktestDay { day: d0 + 2 * DAY, sightings: 0, hits: 0 });
         assert!((bt.hit_rate - 2.0 / 3.0).abs() < 1e-9);
         // No sightings at all: a measured zero, not an error.
-        let empty = backtest_until(&db, Species::Lionfish, 2, d0 + 3 * DAY).await.unwrap();
+        let empty = backtest_until(&db, &app, app.taxon("lionfish").unwrap(), 2, d0 + 3 * DAY).await.unwrap();
         assert_eq!(empty.hit_rate, 0.0);
         assert!(empty.per_day.iter().all(|d| d.sightings == 0));
-        assert!(backtest_until(&db, Species::Python, 0, d0).await.is_err());
+        assert!(backtest_until(&db, &app, python, 0, d0).await.is_err());
     }
 }

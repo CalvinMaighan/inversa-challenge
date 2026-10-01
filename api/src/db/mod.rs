@@ -90,11 +90,18 @@ fn open_flags() -> OpenFlags {
 
 impl Db {
     pub fn open(dir: &Path, name: &str) -> anyhow::Result<Self> {
+        Self::open_with(dir, name, |_| Ok(()))
+    }
+
+    /// `open`, then `init` on the first connection after the migrations and before any reader or
+    /// writer exists (per-app setup such as syncing the taxa table with the app config).
+    pub fn open_with(dir: &Path, name: &str, init: impl FnOnce(&mut Connection) -> rusqlite::Result<()>) -> anyhow::Result<Self> {
         let name = static_name(name);
         let path = dir.join(format!("{name}.db"));
         let mut conn = Connection::open_with_flags(&path, open_flags())?;
         configure(&conn)?;
         migrate(&mut conn, name)?;
+        init(&mut conn)?;
         Self::start(conn, name, || Connection::open_with_flags(&path, open_flags()))
     }
 
@@ -106,6 +113,11 @@ impl Db {
     /// fail. memdb has no WAL: a commit briefly waits for in-flight reads, which `busy_timeout`
     /// covers. Each call gets a fresh database, freed when the last clone drops.
     pub fn memory(name: &str) -> Self {
+        Self::memory_with(name, |_| Ok(()))
+    }
+
+    /// `memory`, with `init` run after the migrations (see `open_with`).
+    pub fn memory_with(name: &str, init: impl FnOnce(&mut Connection) -> rusqlite::Result<()>) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let name = static_name(name);
         let uri = format!(
@@ -116,6 +128,7 @@ impl Db {
         let mut conn = Connection::open_with_flags(&uri, open_flags()).expect("open memory db");
         conn.execute_batch("pragma busy_timeout = 5000; pragma foreign_keys = on;").expect("memory db pragmas");
         migrate(&mut conn, name).expect("migrate memory db");
+        init(&mut conn).expect("init memory db");
         Self::start(conn, name, || Connection::open_with_flags(&uri, open_flags())).expect("start memory db")
     }
 

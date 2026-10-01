@@ -8,8 +8,9 @@
 //!   `sst_c` that differs by more than [`SST_MAX_DIFF_C`]. GOES SST is a skin temperature
 //!   retrieval; buoys read the bulk temperature at ~1 m, and a >1.5 °C gap is beyond normal
 //!   skin/bulk and retrieval error.
-//! - **LST vs air:** a satellite `lst_c` and a measured `air_c` in the same 0.01° app cell
-//!   (PLAN.md C14) within ±1 h whose difference `lst - air` falls outside [`SKIN_OFFSET_C`].
+//! - **LST vs air:** a satellite `lst_c` and a measured `air_c` in the same scoring cell of
+//!   the same region (PLAN.md C14, C-A4) within ±1 h whose difference `lst - air` falls outside
+//!   [`SKIN_OFFSET_C`]. Stations outside every region are in no cell and never pair.
 //!   Land skin runs a few degrees below air at night (radiative cooling) and up to ~10-15 °C
 //!   above it under full sun, so [-5, +15] °C is the plausible band; outside it one of the two
 //!   is suspect (sub-pixel cloud, a wet or shaded sensor, a mislocated pixel).
@@ -23,6 +24,8 @@ use std::collections::HashSet;
 
 use rusqlite::{params, Transaction};
 
+use crate::app::config::App;
+
 /// Pairing tolerance in time, ms.
 pub const PAIR_WINDOW_MS: i64 = 3_600_000;
 /// Satellite pixel to buoy distance, km.
@@ -32,18 +35,13 @@ pub const SST_MAX_DIFF_C: f64 = 1.5;
 /// Plausible `lst - air` range, °C.
 pub const SKIN_OFFSET_C: (f64, f64) = (-5.0, 15.0);
 
-/// App grid (PLAN.md C14): 0.01° cells anchored at the region's south-west corner.
-pub const CELL_DEG: f64 = 0.01;
-const GRID_WEST: f64 = -83.2;
-const GRID_SOUTH: f64 = 24.3;
-
-/// `(col, row)` of the 0.01° app cell containing a point.
-pub fn cell_of(lat: f64, lon: f64) -> (i64, i64) {
-    // The epsilon keeps cell centres and edges written as decimals (25.37 = 107 cells) in the
-    // cell their decimal value names.
-    let col = ((lon - GRID_WEST) / CELL_DEG + 1e-9).floor() as i64;
-    let row = ((lat - GRID_SOUTH) / CELL_DEG + 1e-9).floor() as i64;
-    (col, row)
+/// `(region, col, row)` of the scoring cell containing a point, or `None` outside every region.
+/// The grid's own epsilon keeps cell centres and edges written as decimals (25.37 = 107 cells)
+/// in the cell their decimal value names.
+pub fn cell_of(app: &App, lat: f64, lon: f64) -> Option<(u8, u32, u32)> {
+    let region = app.region_of(lat, lon)?;
+    let (col, row) = region.grid.col_row(lon, lat)?;
+    Some((region.idx, col, row))
 }
 
 /// Great-circle distance, km.
@@ -91,14 +89,14 @@ type Key = (i64, Kind, i64);
 const KINDS_SQL: &str = "((r.param = 'sst_c' and r.origin in ('satellite', 'measured'))
     or (r.param = 'lst_c' and r.origin = 'satellite') or (r.param = 'air_c' and r.origin = 'measured'))";
 
-pub fn post_write(tx: &Transaction, source_id: &str, from_ms: i64, to_ms: i64) -> rusqlite::Result<()> {
+pub fn post_write(tx: &Transaction, app: &App, source_id: &str, from_ms: i64, to_ms: i64) -> rusqlite::Result<()> {
     if !touches_checked_kinds(tx, source_id, from_ms, to_ms)? {
         return Ok(());
     }
     let (anchor_from, anchor_to) = (from_ms - 2 * PAIR_WINDOW_MS, to_ms + 2 * PAIR_WINDOW_MS);
     let mut conflicts: HashSet<Key> = HashSet::new();
     sst_conflicts(tx, anchor_from, anchor_to, &mut conflicts)?;
-    lst_conflicts(tx, anchor_from, anchor_to, &mut conflicts)?;
+    lst_conflicts(tx, app, anchor_from, anchor_to, &mut conflicts)?;
 
     // Recompute: clear flags that no longer have a conflicting partner...
     let (eval_from, eval_to) = (from_ms - PAIR_WINDOW_MS, to_ms + PAIR_WINDOW_MS);
@@ -182,7 +180,7 @@ fn sst_conflicts(tx: &Transaction, from: i64, to: i64, out: &mut HashSet<Key>) -
 
 /// Measured air temperature anchors in the window against satellite LST in the same app cell
 /// within ±1 h.
-fn lst_conflicts(tx: &Transaction, from: i64, to: i64, out: &mut HashSet<Key>) -> rusqlite::Result<()> {
+fn lst_conflicts(tx: &Transaction, app: &App, from: i64, to: i64, out: &mut HashSet<Key>) -> rusqlite::Result<()> {
     let mut stmt = tx.prepare_cached(
         "select a.station_id, a.observed_at, a.value, st.lat, st.lon,
                 l.station_id, l.observed_at, l.value, ls.lat, ls.lon
@@ -204,7 +202,8 @@ fn lst_conflicts(tx: &Transaction, from: i64, to: i64, out: &mut HashSet<Key>) -
     let (lo, hi) = SKIN_OFFSET_C;
     for row in rows {
         let ((a_id, a_at, air, a_lat, a_lon), (l_id, l_at, lst, l_lat, l_lon)) = row?;
-        if cell_of(a_lat, a_lon) != cell_of(l_lat, l_lon) {
+        let (Some(a_cell), Some(l_cell)) = (cell_of(app, a_lat, a_lon), cell_of(app, l_lat, l_lon)) else { continue };
+        if a_cell != l_cell {
             continue;
         }
         let offset = lst - air;
@@ -299,10 +298,15 @@ mod tests {
 
     #[test]
     fn quality_phys_cells_and_distance() {
-        assert_eq!(cell_of(24.3, -83.2), (0, 0));
-        assert_eq!(cell_of(24.305, -83.195), (0, 0));
-        assert_eq!(cell_of(25.37, -80.0), (320, 107));
-        assert_eq!(cell_of(27.499, -79.801), (339, 319));
+        let app = crate::hotspot::score::testkit::python_app();
+        let g = app.regions[0].grid;
+        assert_eq!(cell_of(&app, g.south, g.west), Some((0, 0, 0)));
+        assert_eq!(cell_of(&app, g.south + 0.005, g.west + 0.005), Some((0, 0, 0)));
+        assert_eq!(cell_of(&app, 25.37, -80.0), Some((0, 320, 107)));
+        assert_eq!(cell_of(&app, g.north() - 0.001, g.east() - 0.001), Some((0, 339, 319)));
+        assert_eq!(cell_of(&app, g.north() + 1.0, g.east()), None, "outside every region");
+        let lf = crate::ingest::poll::bio::testing::lionfish();
+        assert_eq!(cell_of(&lf, 20.5, -87.0).map(|c| c.0), Some(1), "Cozumel is in region 1 of Lionfish Watch");
         let d = distance_km(24.628, -81.109, 24.646, -81.109);
         assert!((d - 2.0).abs() < 0.01, "{d}");
     }

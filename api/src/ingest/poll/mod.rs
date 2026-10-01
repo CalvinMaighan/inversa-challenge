@@ -11,12 +11,13 @@ pub mod usgs;
 
 use std::sync::Arc;
 
+use crate::app::config::App;
 use crate::ingest::source::Source;
 use crate::state::Config;
 
-/// Every polled source.
-pub fn all(config: &Config) -> Vec<Arc<dyn Source>> {
-    let mut out = physical::sources(config);
-    out.extend(bio::sources(config));
+/// Every polled source the app's `feeds[]` lists.
+pub fn all(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
+    let mut out = physical::sources(config, app);
+    out.extend(bio::sources(config, app));
     out
 }

@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inversa.calvinmaighan.dev/spec/apps/app-config.schema.json",
+  "title": "AppConfig",
+  "description": "One app of the three-app engine (PLAN.md C-A3). Rust (api/src/app/config.rs, serde) and TS (apps/web/shared/apps, zod) load the same files; a conformance test loads all three in both.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "icon", "tagline", "question", "kind", "taxa", "regions", "locations", "feeds", "score", "windows", "layers", "legend", "copy", "helperQuestions", "agent", "eval"],
+  "properties": {
+    "id": { "type": "string", "enum": ["carp", "lionfish", "python"], "description": "App id; also the route prefix (/v1/{id}/...), the data dir (<INVERSA_DATA_DIR>/{id}) and the room prefix ({id}:main)." },
+    "name": { "type": "string", "minLength": 1 },
+    "icon": { "type": "string", "minLength": 1, "description": "Icon id in apps/web/shared/species-icons.ts." },
+    "tagline": { "type": "string" },
+    "question": { "type": "string", "minLength": 1, "description": "The one question the app answers (docs/APPS.md)." },
+    "kind": { "type": "string", "enum": ["species", "conditions"], "description": "species: hotspot grid, frames, taxa. conditions: readings, forecast snapshots and alerts per location; no hotspot grid." },
+    "provisional": { "type": "boolean", "description": "True while the app's locations/regions are placeholders awaiting a data proof." },
+    "taxa": {
+      "type": "array",
+      "description": "Focus taxa in frame order (TaxonIdx = position). Empty for conditions apps.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "scientificName", "halfLifeDays", "color", "rules"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1, "description": "Common name." },
+          "scientificName": { "type": "string", "minLength": 1, "description": "Matches taxa.scientific_name (unique) in observations.db." },
+          "inatTaxonId": { "type": "integer", "minimum": 1 },
+          "inatLineageIds": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "description": "Further iNat taxon ids that collapse to this taxon (e.g. the species under a genus)." },
+          "gbifKey": { "type": "integer", "minimum": 1, "description": "GBIF backbone key; matched against speciesKey and genusKey." },
+          "nasGenus": { "type": "string" },
+          "nasSpecies": { "type": ["string", "null"], "description": "NAS species epithet; null matches any species of the genus." },
+          "iconicGroup": { "type": "string" },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
+          "halfLifeDays": { "type": "number", "exclusiveMinimum": 0 },
+          "rules": { "type": "string", "enum": ["python", "tegu", "iguana", "lionfish"], "description": "Named activity/access rule set in api/src/hotspot/rules.rs." }
+        }
+      }
+    },
+    "regions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "bbox", "cellDeg", "camera"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "bbox": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" }, "description": "[west, south, east, north] in degrees. Width and height must be whole multiples of 10 x cellDeg (the hotspot grid is 2 x cellDeg, the environment grid 5 x cellDeg)." },
+          "cellDeg": { "type": "number", "exclusiveMinimum": 0, "description": "Scoring cell size in degrees (0.01 for every current app)." },
+          "camera": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lat", "lon", "heightM"],
+            "properties": { "lat": { "type": "number" }, "lon": { "type": "number" }, "heightM": { "type": "number", "exclusiveMinimum": 0 } }
+          },
+          "thin": { "type": "boolean", "description": "Data proof found too few recent records for a ranked score; the UI labels it." }
+        }
+      }
+    },
+    "locations": {
+      "type": "array",
+      "description": "Named points (conditions apps). Provisional until a data proof lands.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "lat", "lon"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "name": { "type": "string", "minLength": 1 },
+          "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+          "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+          "usgs": { "type": ["string", "null"], "description": "USGS site number." },
+          "nwps": { "type": ["string", "null"], "description": "NOAA NWPS gauge id (lid)." },
+          "nws": { "type": ["string", "null"], "description": "NWS forecast zone or office." },
+          "provisional": { "type": "boolean" }
+        }
+      }
+    },
+    "feeds": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "mode"],
+        "properties": {
+          "source": { "type": "string", "enum": ["inat", "nas", "gbif", "nws", "usgs", "ndbc", "coops", "openmeteo", "goes19", "nwws", "web", "crw", "nwps"] },
+          "mode": { "type": "string", "enum": ["push", "poll"] },
+          "name": { "type": "string" },
+          "homepage": { "type": "string" },
+          "params": { "type": "object", "description": "Adapter parameters (stations, variables, sectors). Free-form per adapter." }
+        }
+      }
+    },
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "components"],
+      "properties": {
+        "label": { "type": "string", "description": "What the score is called in the UI; it is a labelled heuristic, never a probability." },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "weight"],
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "weight": { "type": "number", "minimum": 0 },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "windows": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultHours", "optionsHours"],
+      "properties": {
+        "defaultHours": { "type": "integer", "minimum": 1 },
+        "optionsHours": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "defaultOn"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "defaultOn": { "type": "boolean" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "legend": { "type": "object", "additionalProperties": { "type": "string" } },
+    "copy": { "type": "object", "additionalProperties": { "type": "string" } },
+    "helperQuestions": { "type": "array", "items": { "type": "string" } },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["persona", "scope", "tools", "refusal"],
+      "properties": {
+        "persona": { "type": "string" },
+        "scope": { "type": "string" },
+        "tools": { "type": "array", "items": { "type": "string" }, "description": "Tool allowlist (names from apps/web/server/agent/tools)." },
+        "refusal": { "type": "string", "description": "Text for out-of-scope questions; names what the app covers." }
+      }
+    },
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goldenSet"],
+      "properties": { "goldenSet": { "type": "string" } }
+    }
+  }
+}

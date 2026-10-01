@@ -1,10 +1,10 @@
 //! GBIF occurrence search poller (T9, PRD §2): polled daily; deep history, including a mirror
 //! of iNaturalist research-grade observations.
 //!
-//! Query: the bbox as `decimalLatitude`/`decimalLongitude` ranges plus the four taxonKeys
-//! (backbone `species/match`, 2026-09-30): Python bivittatus 4820533, Salvator merianae 5227370,
-//! Iguana iguana 2459658, and the genus Pterois 2334432 (covers P. volitans 2334438 and
-//! P. miles 2334433). Paged by `offset`/`limit` (300 max; GBIF stops at offset 100,000).
+//! Query, per region of the app: its bbox as `decimalLatitude`/`decimalLongitude` ranges plus
+//! the config's taxonKeys (`taxa[].gbifKey`, backbone `species/match`; a genus key such as
+//! Pterois 2334432 covers its species). Paged by `offset`/`limit` (300 max; GBIF stops at offset
+//! 100,000).
 //!
 //! - **Daily poll:** `modified=<from>,*`, where `from` is the last successful poll day minus
 //!   [`MODIFIED_LAG`], since records reach the index days after their `modified` stamp. The
@@ -25,12 +25,14 @@
 //! `2026-01-11T01:50:00-05:00`), so naive times are read as US Eastern. Ranges are kept only
 //! when they fall on one day; month- or year-precision dates are skipped.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::Deserialize;
 
-use super::bio::{self, Focus, Pacer, Pager};
+use super::bio::{self, Pacer, Pager};
+use crate::app::config::{App, BBox};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::{Quality, Row, SightingRow, TaxonRef};
 
@@ -38,11 +40,6 @@ pub const ID: &str = "gbif";
 pub const API: &str = "https://api.gbif.org/v1/occurrence/search";
 /// GBIF dataset key of "iNaturalist Research-grade Observations".
 pub const INAT_DATASET_KEY: &str = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
-pub const PYTHON_KEY: i64 = 4820533;
-pub const TEGU_KEY: i64 = 5227370;
-pub const IGUANA_KEY: i64 = 2459658;
-pub const PTEROIS_GENUS_KEY: i64 = 2334432;
-pub const TAXON_KEYS: [i64; 4] = [PYTHON_KEY, TEGU_KEY, IGUANA_KEY, PTEROIS_GENUS_KEY];
 pub const REQUEST_INTERVAL: Duration = Duration::from_secs(1);
 pub const CADENCE: Duration = Duration::from_secs(24 * 3600);
 pub const PAGE_LIMIT: usize = 300;
@@ -53,17 +50,28 @@ pub const MAX_OFFSET: usize = 10_000;
 pub const MODIFIED_LAG: chrono::Duration = chrono::Duration::days(30);
 
 pub struct Gbif {
-    pacer: Pacer,
+    app: Arc<App>,
+    pacer: Arc<Pacer>,
 }
 
 impl Gbif {
-    pub fn new() -> Self {
-        Gbif { pacer: Pacer::new(REQUEST_INTERVAL) }
+    pub fn new(app: Arc<App>) -> Self {
+        Gbif { app, pacer: Pacer::shared(ID, REQUEST_INTERVAL) }
     }
 
     pub fn pacer(&self) -> &Pacer {
         &self.pacer
     }
+
+    /// A pager over every region of this app.
+    pub fn pager(&self, filter: Filter, final_cursor: Option<String>) -> GbifPager {
+        GbifPager::new(&self.app, filter, final_cursor)
+    }
+}
+
+/// `taxonKey=` list: the config's GBIF keys, in taxa order.
+pub fn taxon_keys(app: &App) -> Vec<i64> {
+    app.taxa.iter().filter_map(|t| t.cfg.gbif_key).collect()
 }
 
 #[async_trait]
@@ -83,12 +91,12 @@ impl Source for Gbif {
         let today = chrono::Utc::now().date_naive();
         let last = ctx.cursor.as_deref().and_then(|c| chrono::NaiveDate::parse_from_str(c, "%Y-%m-%d").ok());
         let from = last.unwrap_or(today) - MODIFIED_LAG;
-        let mut pager = GbifPager::new(Filter::Modified { from }, Some(today.format("%Y-%m-%d").to_string()));
+        let mut pager = self.pager(Filter::Modified { from }, Some(today.format("%Y-%m-%d").to_string()));
         bio::collect_pages(ctx.state, &self.pacer, &mut pager, None).await
     }
 
     fn normalize(&self, raw: &RawPayload) -> anyhow::Result<Vec<Row>> {
-        normalize(&raw.bytes)
+        normalize(&raw.bytes, &self.app)
     }
 }
 
@@ -101,9 +109,11 @@ pub enum Filter {
 }
 
 pub struct GbifPager {
-    /// Windows still to walk; the first is current. An `EventDate` range is one window per
-    /// calendar year so each stays under [`MAX_OFFSET`].
-    windows: std::collections::VecDeque<Filter>,
+    /// (region bbox, window) pairs still to walk; the first is current. An `EventDate` range is
+    /// one window per calendar year so each stays under [`MAX_OFFSET`]; every window is walked
+    /// once per region.
+    windows: std::collections::VecDeque<(BBox, Filter)>,
+    keys: Vec<i64>,
     offset: usize,
     limit: usize,
     /// Cursor to hand out with the final page only, so a failed walk does not advance it.
@@ -111,8 +121,13 @@ pub struct GbifPager {
 }
 
 impl GbifPager {
-    pub fn new(filter: Filter, final_cursor: Option<String>) -> Self {
-        GbifPager { windows: split_by_year(filter).into(), offset: 0, limit: PAGE_LIMIT, final_cursor }
+    pub fn new(app: &App, filter: Filter, final_cursor: Option<String>) -> Self {
+        let windows = app
+            .regions
+            .iter()
+            .flat_map(|r| split_by_year(filter).into_iter().map(move |w| (r.cfg.bbox, w)))
+            .collect();
+        GbifPager { windows, keys: taxon_keys(app), offset: 0, limit: PAGE_LIMIT, final_cursor }
     }
 
     /// The current window is exhausted: move to the next one from offset 0.
@@ -137,18 +152,15 @@ pub fn split_by_year(filter: Filter) -> Vec<Filter> {
     }
 }
 
-pub fn search_url(filter: Filter, offset: usize, limit: usize) -> String {
-    let keys: String = TAXON_KEYS.iter().map(|k| format!("&taxonKey={k}")).collect();
+pub fn search_url(filter: Filter, offset: usize, limit: usize, bbox: &BBox, taxon_keys: &[i64]) -> String {
+    let keys: String = taxon_keys.iter().map(|k| format!("&taxonKey={k}")).collect();
     let filter = match filter {
         Filter::Modified { from } => format!("modified={},*", from.format("%Y-%m-%d")),
         Filter::EventDate { from, to } => format!("eventDate={},{}", from.format("%Y-%m-%d"), to.format("%Y-%m-%d")),
     };
     format!(
         "{API}?decimalLatitude={},{}&decimalLongitude={},{}{keys}&occurrenceStatus=PRESENT&hasCoordinate=true&hasGeospatialIssue=false&{filter}&limit={limit}&offset={offset}",
-        bio::SOUTH,
-        bio::NORTH,
-        bio::WEST,
-        bio::EAST
+        bbox.south, bbox.north, bbox.west, bbox.east
     )
 }
 
@@ -162,7 +174,7 @@ struct PageHead {
 
 impl Pager for GbifPager {
     fn next_url(&self) -> Option<String> {
-        self.windows.front().map(|&w| search_url(w, self.offset, self.limit))
+        self.windows.front().map(|(b, w)| search_url(*w, self.offset, self.limit, b, &self.keys))
     }
 
     fn advance(&mut self, body: &[u8]) -> anyhow::Result<()> {
@@ -235,16 +247,9 @@ pub fn mirrored_inat_id(ext_id: &str) -> Option<&str> {
     (!catalog.is_empty()).then_some(catalog)
 }
 
-fn taxon(o: &Occurrence) -> Option<TaxonRef> {
-    let focus = match (o.species_key, o.genus_key) {
-        (Some(PYTHON_KEY), _) => Some(Focus::Python),
-        (Some(TEGU_KEY), _) => Some(Focus::Tegu),
-        (Some(IGUANA_KEY), _) => Some(Focus::Iguana),
-        (_, Some(PTEROIS_GENUS_KEY)) => Some(Focus::Lionfish),
-        _ => None,
-    };
-    if let Some(f) = focus {
-        return Some(f.taxon());
+fn taxon(o: &Occurrence, app: &App) -> Option<TaxonRef> {
+    if let Some(f) = bio::taxon_for_gbif(app, o.species_key, o.genus_key) {
+        return Some(f.taxon_ref());
     }
     let name = o.species.as_deref().or(o.scientific_name.as_deref()).map(str::trim).filter(|n| !n.is_empty())?;
     Some(TaxonRef::named(name, o.vernacular_name.clone().unwrap_or_default()))
@@ -262,7 +267,7 @@ fn event_ms(s: &str) -> Option<i64> {
 }
 
 /// Pure: one search page to rows.
-pub fn normalize(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
+pub fn normalize(bytes: &[u8], app: &App) -> anyhow::Result<Vec<Row>> {
     let page: Page = serde_json::from_slice(bytes)?;
     let mut rows = Vec::with_capacity(page.results.len());
     for o in &page.results {
@@ -271,7 +276,7 @@ pub fn normalize(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
         }
         let (Some(lat), Some(lon)) = (o.decimal_latitude, o.decimal_longitude) else { continue };
         let Some(observed_at) = o.event_date.as_deref().and_then(event_ms) else { continue };
-        let Some(taxon) = taxon(o) else { continue };
+        let Some(taxon) = taxon(o, app) else { continue };
         let dataset = o.dataset_key.as_deref().unwrap_or("");
         let catalog = o.catalog_number.as_deref().unwrap_or("").trim();
         let quality = if dataset == INAT_DATASET_KEY { Quality::Research } else { Quality::Curated };
@@ -298,10 +303,14 @@ pub fn normalize(bytes: &[u8]) -> anyhow::Result<Vec<Row>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::poll::bio::testing::{lionfish, python};
     use crate::ingest::poll::inat::tests::fixture;
 
+    const PYTHON_KEY: i64 = 4820533;
+    const PTEROIS_GENUS_KEY: i64 = 2334432;
+
     fn sightings(bytes: &[u8]) -> Vec<SightingRow> {
-        normalize(bytes)
+        normalize(bytes, &python())
             .unwrap()
             .into_iter()
             .map(|r| match r {
@@ -331,6 +340,13 @@ mod tests {
         let day = s.iter().find(|s| s.ext_id.ends_with(":6251984586")).unwrap();
         assert_eq!(day.observed_at, bio::parse_time_ms("2026-05-02T12:00:00-04:00").unwrap());
         assert_eq!(day.taxon.scientific_name, "Iguana iguana");
+        // Under the lionfish app only Pterois collapses to a focus taxon; the iguana keeps its GBIF name.
+        let rows = normalize(&fixture("gbif/modified-p1.json"), &lionfish()).unwrap();
+        let iguana = rows.iter().find_map(|r| match r {
+            Row::Sighting(s) if s.ext_id.ends_with(":6251984586") => Some(s),
+            _ => None,
+        });
+        assert_eq!(iguana.unwrap().taxon.inat_taxon_id, None, "not a focus ref");
     }
 
     #[test]
@@ -360,14 +376,19 @@ mod tests {
 
     #[test]
     fn gbif_pager_pages_and_hands_cursor_on_last_page() {
+        let app = python();
         let from = chrono::NaiveDate::from_ymd_opt(2026, 8, 31).unwrap();
-        let mut p = GbifPager::new(Filter::Modified { from }, Some("2026-09-30".into()));
+        let mut p = GbifPager::new(&app, Filter::Modified { from }, Some("2026-09-30".into()));
         let url = p.next_url().unwrap();
+        let b = app.regions[0].bbox();
         assert_eq!(
             url,
-            "https://api.gbif.org/v1/occurrence/search?decimalLatitude=24.3,27.5&decimalLongitude=-83.2,-79.8\
-             &taxonKey=4820533&taxonKey=5227370&taxonKey=2459658&taxonKey=2334432&occurrenceStatus=PRESENT\
-             &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=300&offset=0"
+            format!(
+                "https://api.gbif.org/v1/occurrence/search?decimalLatitude={},{}&decimalLongitude={},{}\
+                 &taxonKey=4820533&taxonKey=5227370&taxonKey=2459658&taxonKey=2334432&occurrenceStatus=PRESENT\
+                 &hasCoordinate=true&hasGeospatialIssue=false&modified=2026-08-31,*&limit=300&offset=0",
+                b.south, b.north, b.west, b.east
+            )
         );
         let full = serde_json::to_vec(&serde_json::json!({ "endOfRecords": false, "results": vec![serde_json::json!({}); 300] })).unwrap();
         p.advance(&full).unwrap();
@@ -378,14 +399,29 @@ mod tests {
         assert_eq!(p.cursor().as_deref(), Some("2026-09-30"));
 
         let to = chrono::NaiveDate::from_ymd_opt(2026, 9, 30).unwrap();
-        let base = GbifPager::new(Filter::EventDate { from, to }, None);
+        let base = GbifPager::new(&app, Filter::EventDate { from, to }, None);
         assert!(base.next_url().unwrap().contains("&eventDate=2026-08-31,2026-09-30&"));
+
+        // Four regions: the same window is walked once per region bbox, one taxon key.
+        let lf = lionfish();
+        let mut p = GbifPager::new(&lf, Filter::Modified { from }, Some("done".into()));
+        let mut boxes = Vec::new();
+        while let Some(url) = p.next_url() {
+            assert!(url.contains("&taxonKey=2334432&") && !url.contains("4820533"), "{url}");
+            boxes.push(url.split("decimalLongitude=").nth(1).unwrap().split('&').next().unwrap().to_string());
+            assert_eq!(p.cursor(), None);
+            p.advance(br#"{"endOfRecords":true,"results":[{}]}"#).unwrap();
+        }
+        let want: Vec<String> = lf.regions.iter().map(|r| format!("{},{}", r.bbox().west, r.bbox().east)).collect();
+        assert_eq!(boxes, want);
+        assert_eq!(p.cursor().as_deref(), Some("done"));
     }
 
     #[test]
     fn gbif_pager_walks_a_baseline_year_by_year() {
+        let app = python();
         let d = |y, m, day| chrono::NaiveDate::from_ymd_opt(y, m, day).unwrap();
-        let mut p = GbifPager::new(Filter::EventDate { from: d(2024, 9, 30), to: d(2026, 9, 30) }, Some("done".into()));
+        let mut p = GbifPager::new(&app, Filter::EventDate { from: d(2024, 9, 30), to: d(2026, 9, 30) }, Some("done".into()));
         let full = serde_json::to_vec(&serde_json::json!({ "endOfRecords": false, "results": vec![serde_json::json!({}); 300] })).unwrap();
         let last = br#"{"endOfRecords":true,"results":[{}]}"#;
         let mut seen = Vec::new();
@@ -411,7 +447,7 @@ mod tests {
         assert_eq!(p.cursor().as_deref(), Some("done"));
 
         // A window that reaches the offset limit moves on instead of requesting a stalling page.
-        let mut p = GbifPager::new(Filter::EventDate { from: d(2025, 1, 1), to: d(2026, 1, 31) }, None);
+        let mut p = GbifPager::new(&app, Filter::EventDate { from: d(2025, 1, 1), to: d(2026, 1, 31) }, None);
         let mut pages = 0;
         while p.next_url().is_some_and(|u| u.contains("2025-01-01,2025-12-31")) {
             p.advance(&full).unwrap();

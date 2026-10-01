@@ -1,6 +1,8 @@
-//! Decode one GOES-19 ABI L2 NetCDF4 object (HDF5 on disk) into GOES-grid rows (T7).
+//! Decode one GOES-19 ABI L2 NetCDF4 object (HDF5 on disk) into GOES-grid rows (T7), one
+//! window per app region (PLAN.md C-A4).
 //!
-//! Only the bbox hyperslab of each variable is read. Product rules, from each file's
+//! Only each region's bbox hyperslab of each variable is read; a region the file's sector does
+//! not reach (CONUS vs the Colombian Caribbean) reads nothing and yields no rows. Product rules, from each file's
 //! `flag_values`/`flag_meanings` (checked against the fixtures in `api/fixtures/goes`):
 //!
 //! - LSTC `LST` (u16, K). Domain: land. The LST `DQF` (0 high, 1 medium, 2 low quality, 3 no
@@ -26,7 +28,8 @@ use anyhow::{Context, Result};
 use hdf5_metno as hdf5;
 use ndarray::{s, Array2};
 
-use crate::ingest::push::goes_grid::{cell_center, cell_id, Cell, FixedGrid, GridMap, Pixel, Proj, Window};
+use crate::app::config::{App, Region};
+use crate::ingest::push::goes_grid::{Cell, FixedGrid, GridMap, Pixel, Proj, Window};
 use crate::model::{Origin, Param, ReadingRow, Row, StationKind, StationRef};
 
 /// Unix ms of the J2000 epoch (2000-01-01T12:00:00Z), the origin of the files' `t` variable.
@@ -81,13 +84,23 @@ pub struct Decoded {
     pub product: Product,
     /// Scan mid-point, unix ms.
     pub observed_at: i64,
-    pub window: Window,
+    /// The pixel window read for each region, in region order (empty when the sector misses it).
+    pub windows: Vec<Window>,
+    /// Every region's cells, tagged with `Cell::region`.
     pub cells: Vec<Cell>,
+}
+
+#[cfg(test)]
+impl Decoded {
+    /// Region 0's window (the pre-pivot single-region view).
+    pub fn window(&self) -> Window {
+        self.windows[0]
+    }
 }
 
 /// Decode from bytes in memory. HDF5 needs a path, so the bytes go through a temp file that is
 /// removed afterwards; the function stays deterministic for a given payload.
-pub fn decode_bytes(bytes: &[u8], product: Product) -> Result<Decoded> {
+pub fn decode_bytes(bytes: &[u8], product: Product, app: &App) -> Result<Decoded> {
     struct Temp(PathBuf);
     impl Drop for Temp {
         fn drop(&mut self) {
@@ -96,18 +109,35 @@ pub fn decode_bytes(bytes: &[u8], product: Product) -> Result<Decoded> {
     }
     let tmp = Temp(std::env::temp_dir().join(format!("goes-{}.nc", uuid::Uuid::now_v7())));
     std::fs::write(&tmp.0, bytes).with_context(|| format!("write {}", tmp.0.display()))?;
-    decode_file(&tmp.0, product)
+    decode_file(&tmp.0, product, app)
 }
 
-pub fn decode_file(path: &Path, product: Product) -> Result<Decoded> {
+pub fn decode_file(path: &Path, product: Product, app: &App) -> Result<Decoded> {
     let file = hdf5::File::open(path).with_context(|| format!("open {}", path.display()))?;
     let grid = fixed_grid(&file)?;
-    let map = GridMap::for_grid(&grid);
-    let w = map.window;
     let t: f64 = file.dataset("t")?.read_scalar().context("t")?;
     let observed_at = J2000_UNIX_MS + (t * 1000.0).round() as i64;
+    let mut windows = Vec::with_capacity(app.regions.len());
+    let mut cells = Vec::new();
+    for region in &app.regions {
+        let map = GridMap::for_grid(&grid, &region.layout.env);
+        windows.push(map.window);
+        if !map.covers() {
+            continue;
+        }
+        let mut region_cells = decode_region(&file, product, &map)?;
+        for c in &mut region_cells {
+            c.region = region.idx;
+        }
+        cells.extend(region_cells);
+    }
+    Ok(Decoded { product, observed_at, windows, cells })
+}
 
-    let cells = match product {
+/// One region's window of the product, aggregated to its GOES cells.
+fn decode_region(file: &hdf5::File, product: Product, map: &GridMap) -> Result<Vec<Cell>> {
+    let w = map.window;
+    Ok(match product {
         Product::Lst => {
             let ds = file.dataset("LST")?;
             let (scale, offset) = (attr_f64(&ds, "scale_factor")?, attr_f64(&ds, "add_offset")?);
@@ -178,17 +208,29 @@ pub fn decode_file(path: &Path, product: Product) -> Result<Decoded> {
             // DQF 0 good_quality_qf, 6 degraded_quality_qf; 1 bad, 2 space, 255 fill are skipped.
             map.aggregate(|i| if bcm[i] == 1.0 && (q[i] == 0.0 || q[i] == 6.0) { Pixel::Cloud } else { Pixel::Skip })
         }
-    };
-    Ok(Decoded { product, observed_at, window: w, cells })
+    })
+}
+
+/// Station ext id of a GOES cell: `g5:<col>:<row>` in a single-region app (unchanged from before
+/// the pivot), `g5:<region>:<col>:<row>` when the app has several regions, so two regions'
+/// cells never share an id.
+pub fn cell_ext_id(app: &App, region: &Region, idx: usize) -> String {
+    let cell = region.layout.env.cell_id(idx);
+    if app.single_region() {
+        format!("g5:{cell}")
+    } else {
+        format!("g5:{}:{cell}", region.id())
+    }
 }
 
 /// Rows for the ingest pipeline: one satellite reading per aggregated cell, station = the cell.
-pub fn rows(d: &Decoded) -> Vec<Row> {
+pub fn rows(d: &Decoded, app: &App) -> Vec<Row> {
     d.cells
         .iter()
         .map(|c| {
-            let id = cell_id(c.idx);
-            let (lat, lon) = cell_center(c.idx);
+            let region = &app.regions[c.region as usize];
+            let id = cell_ext_id(app, region, c.idx);
+            let (lon, lat) = region.layout.env.center(c.idx);
             Row::Reading(ReadingRow {
                 station: StationRef { name: format!("GOES cell {id}"), ext_id: id, lat, lon, kind: StationKind::GoesCell },
                 param: d.product.param(),
@@ -240,8 +282,16 @@ fn window(ds: &hdf5::Dataset, w: &Window) -> Result<Vec<f64>> {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::ingest::push::goes_grid::CELLS;
     use crate::model::Flag;
+
+    fn python() -> App {
+        crate::hotspot::score::testkit::python_app()
+    }
+
+    /// Cells of the python region's GOES grid (68 x 64).
+    fn cells_n() -> usize {
+        python().regions[0].layout.env.cells()
+    }
 
     /// First fixture whose name starts with `OR_<product prefix>`; `None` when absent.
     pub fn fixture(product: Product) -> Option<PathBuf> {
@@ -262,14 +312,16 @@ pub(crate) mod tests {
     }
 
     fn check_station(r: &Row, param: Param) {
+        let env = python().regions[0].layout.env;
         match r {
             Row::Reading(r) => {
                 assert!(r.station.ext_id.starts_with("g5:"), "{}", r.station.ext_id);
+                assert_eq!(r.station.ext_id.matches(':').count(), 2, "single-region id g5:<col>:<row>: {}", r.station.ext_id);
                 assert_eq!(r.station.name, format!("GOES cell {}", r.station.ext_id));
                 assert_eq!(r.station.kind, StationKind::GoesCell);
                 assert_eq!(r.param, param);
                 assert_eq!(r.origin, Origin::Satellite);
-                assert!((24.3..27.5).contains(&r.station.lat) && (-83.2..-79.8).contains(&r.station.lon));
+                assert!((env.south..env.north()).contains(&r.station.lat) && (env.west..env.east()).contains(&r.station.lon));
             }
             other => panic!("{other:?}"),
         }
@@ -278,31 +330,49 @@ pub(crate) mod tests {
     #[test]
     fn goes_fixture_lst_land_cells_have_values_and_flags() {
         let path = fixture(Product::Lst).expect("LSTC fixture present (api/fixtures/goes/fetch.sh)");
-        let d = decode_file(&path, Product::Lst).unwrap();
+        let app = python();
+        let d = decode_file(&path, Product::Lst, &app).unwrap();
         let (ok, cloud, bad, missing) =
             (count(&d, Flag::Ok), count(&d, Flag::Cloud), count(&d, Flag::BadDqf), count(&d, Flag::Missing));
-        eprintln!("LSTC window {:?} land cells {} ok {ok} cloud {cloud} bad_dqf {bad} missing {missing}", d.window, d.cells.len());
+        eprintln!("LSTC window {:?} land cells {} ok {ok} cloud {cloud} bad_dqf {bad} missing {missing}", d.window(), d.cells.len());
         assert!((d.observed_at - conus_scan_ms()).abs() < 2_000, "observed_at {}", d.observed_at);
-        assert!(d.cells.len() > CELLS / 5 && d.cells.len() < CELLS * 3 / 4, "land cells only, not the sea");
+        let cells_n = cells_n();
+        assert!(d.cells.len() > cells_n / 5 && d.cells.len() < cells_n * 3 / 4, "land cells only, not the sea");
         assert!(ok > 0, "some clear land cells");
         assert!(cloud > 0, "cloudy land cells are flagged, not dropped");
         assert!(d.cells.iter().filter(|c| c.flag == Flag::Ok).all(|c| (0.0..60.0).contains(&c.value.unwrap())));
-        let rows = rows(&d);
+        let rows = rows(&d, &app);
         assert_eq!(rows.len(), d.cells.len());
         rows.iter().for_each(|r| check_station(r, Param::LstC));
         // The south-west corner cell (Gulf of Mexico) is outside the land domain.
         assert!(rows.iter().all(|r| !matches!(r, Row::Reading(r) if r.station.ext_id == "g5:0:0")));
+
+        // Lionfish Watch on the same CONUS file: the Keys region decodes with its own window and
+        // region-qualified ids; Colombia is outside the sector and yields nothing.
+        let lf = crate::ingest::poll::bio::testing::lionfish();
+        let d2 = decode_file(&path, Product::Lst, &lf).unwrap();
+        assert_eq!(d2.windows.len(), 4);
+        assert_eq!(d2.windows[0], d.window(), "fl-keys shares the python bbox and window");
+        let co = lf.region("co-caribbean").unwrap();
+        assert_eq!(d2.windows[co.idx as usize].width(), 0, "no CONUS pixels over Colombia");
+        assert!(d2.cells.iter().all(|c| c.region != co.idx));
+        let fl: Vec<&Cell> = d2.cells.iter().filter(|c| c.region == 0).collect();
+        assert_eq!(fl.len(), d.cells.len(), "same land cells as the python decode");
+        let rows2 = super::rows(&d2, &lf);
+        assert!(rows2.iter().all(|r| matches!(r, Row::Reading(r) if r.station.ext_id.starts_with("g5:") && r.station.ext_id.matches(':').count() == 3)), "g5:<region>:<col>:<row>");
+        assert!(rows2.iter().any(|r| matches!(r, Row::Reading(r) if r.station.ext_id.starts_with("g5:fl-keys:"))));
     }
 
     #[test]
     fn goes_fixture_acm_has_cloud_cells() {
         let path = fixture(Product::Acm).expect("ACMC fixture present (api/fixtures/goes/fetch.sh)");
-        let d = decode_file(&path, Product::Acm).unwrap();
-        eprintln!("ACMC window {:?} cloud cells {}", d.window, d.cells.len());
+        let app = python();
+        let d = decode_file(&path, Product::Acm, &app).unwrap();
+        eprintln!("ACMC window {:?} cloud cells {}", d.window(), d.cells.len());
         assert!((d.observed_at - conus_scan_ms()).abs() < 2_000);
-        assert!(!d.cells.is_empty() && d.cells.len() < CELLS, "cloudy cells only");
+        assert!(!d.cells.is_empty() && d.cells.len() < cells_n(), "cloudy cells only");
         assert!(d.cells.iter().all(|c| c.flag == Flag::Cloud && c.value.is_none()));
-        let rows = rows(&d);
+        let rows = rows(&d, &app);
         rows.iter().for_each(|r| check_station(r, Param::LstC));
         assert!(rows.iter().all(|r| matches!(r, Row::Reading(r) if r.flag == Flag::Cloud && r.value.is_none())));
     }
@@ -310,11 +380,12 @@ pub(crate) mod tests {
     #[test]
     fn goes_fixture_fdc_rows_are_fires_only() {
         let path = fixture(Product::Fdc).expect("FDCC fixture present (api/fixtures/goes/fetch.sh)");
-        let d = decode_file(&path, Product::Fdc).unwrap();
-        eprintln!("FDCC window {:?} fire cells {}", d.window, d.cells.len());
-        assert!(d.cells.len() < CELLS / 10, "fires are sparse");
+        let app = python();
+        let d = decode_file(&path, Product::Fdc, &app).unwrap();
+        eprintln!("FDCC window {:?} fire cells {}", d.window(), d.cells.len());
+        assert!(d.cells.len() < cells_n() / 10, "fires are sparse");
         assert!(d.cells.iter().all(|c| c.flag == Flag::Ok && c.value.unwrap() > 0.0));
-        rows(&d).iter().for_each(|r| check_station(r, Param::FireFrp));
+        rows(&d, &app).iter().for_each(|r| check_station(r, Param::FireFrp));
     }
 
     #[test]
@@ -323,13 +394,14 @@ pub(crate) mod tests {
             eprintln!("SSTF fixture absent (run api/fixtures/goes/fetch.sh); skipping");
             return;
         };
-        let d = decode_file(&path, Product::Sst).unwrap();
+        let app = python();
+        let d = decode_file(&path, Product::Sst, &app).unwrap();
         let (ok, bad) = (count(&d, Flag::Ok), count(&d, Flag::BadDqf));
-        eprintln!("SSTF window {:?} water cells {} ok {ok} bad_dqf {bad}", d.window, d.cells.len());
-        assert!(d.cells.len() > CELLS / 3 && d.cells.len() < CELLS, "water cells only, not the land");
+        eprintln!("SSTF window {:?} water cells {} ok {ok} bad_dqf {bad}", d.window(), d.cells.len());
+        assert!(d.cells.len() > cells_n() / 3 && d.cells.len() < cells_n(), "water cells only, not the land");
         assert!(ok > 0 && bad > 0);
         assert!(d.cells.iter().filter(|c| c.flag == Flag::Ok).all(|c| (15.0..40.0).contains(&c.value.unwrap())));
-        let rows = rows(&d);
+        let rows = rows(&d, &app);
         rows.iter().for_each(|r| check_station(r, Param::SstC));
         assert!(rows.iter().any(|r| matches!(r, Row::Reading(r) if r.station.ext_id == "g5:0:0")), "Gulf corner is water");
     }
@@ -338,15 +410,16 @@ pub(crate) mod tests {
     /// top-of-hour scan), so rows/day = rows per hourly scan set x 24.
     #[test]
     fn goes_fixture_rows_per_scan_under_daily_budget() {
+        let app = python();
         let mut per_scan = 0;
         for p in Product::ALL {
             let Some(path) = fixture(p) else {
                 assert_eq!(p, Product::Sst, "{p:?} fixture is committed");
                 // SSTF is fetched on demand; without it count every water cell, the worst case.
-                per_scan += CELLS;
+                per_scan += cells_n();
                 continue;
             };
-            let n = rows(&decode_file(&path, p).unwrap()).len();
+            let n = rows(&decode_file(&path, p, &app).unwrap(), &app).len();
             eprintln!("GOES rows/scan {:?} {n}", p);
             per_scan += n;
         }
@@ -357,9 +430,10 @@ pub(crate) mod tests {
     #[test]
     fn goes_fixture_decode_bytes_matches_file() {
         let path = fixture(Product::Fdc).unwrap();
+        let app = python();
         let bytes = std::fs::read(&path).unwrap();
-        let a = decode_bytes(&bytes, Product::Fdc).unwrap();
-        let b = decode_file(&path, Product::Fdc).unwrap();
+        let a = decode_bytes(&bytes, Product::Fdc, &app).unwrap();
+        let b = decode_file(&path, Product::Fdc, &app).unwrap();
         assert_eq!(a.observed_at, b.observed_at);
         assert_eq!(a.cells, b.cells);
         assert!(Product::from_key("ABI-L2-LSTC/2026/272/15/OR_ABI-L2-LSTC-M6_G19_s1_e2_c3.nc") == Some(Product::Lst));
