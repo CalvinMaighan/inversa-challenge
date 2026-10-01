@@ -191,7 +191,14 @@ export const notes = {
     const all = data.board.notes.map((n) => noteRow(n, keys)).filter((r): r is NoteRow => r !== null);
     const rows = selectNotes(all, bbox, window, species);
     const shown = rows.slice(0, MAX_MODEL_ROWS);
-    const evidenceRows = shown.map((r) => evidence("note", r.id, `${r.callsign || "note"} · ${r.createdAt} · ${r.text.slice(0, 60)}`));
+    const noteEvidence = (r: NoteRow) => evidence("note", r.id, `${r.callsign || "note"} · ${r.createdAt} · ${r.text.slice(0, 60)}`);
+    const evidenceRows = shown.map(noteEvidence);
+    // Nothing in a narrow window: the newest notes of the last 7 days in the same area, so the answer can say
+    // "none today; the latest was …" with a marker instead of a bare "none".
+    const widerFrom = new Date(to.getTime() - MAX_HOURS * HOUR_MS);
+    const wider = rows.length === 0 && from.getTime() > widerFrom.getTime() ? selectNotes(all, bbox, { from: widerFrom.toISOString(), to: window.to }, species).slice(0, 3) : [];
+    const widerEvidence = wider.map(noteEvidence);
+    evidenceRows.push(...widerEvidence);
     const bySpecies: Record<string, number> = {};
     for (const r of rows) bySpecies[r.species ?? "untagged"] = (bySpecies[r.species ?? "untagged"] ?? 0) + 1;
     const days = Math.max(1, Math.round((to.getTime() - from.getTime()) / (24 * HOUR_MS)));
@@ -207,6 +214,12 @@ export const notes = {
         onBoard: all.length,
         bySpecies,
         truncated: rows.length > shown.length,
+        ...(wider.length
+          ? {
+              noneInWindow: `no note in the window; the newest of the last ${MAX_HOURS / 24} days in this area follow (say the window had none, then name these as earlier notes with their markers)`,
+              earlier: wider.map((r, i) => ({ evidenceId: widerEvidence[i]!.id, author: r.callsign || r.createdBy.slice(0, 8), createdAt: r.createdAt, text: r.text.length > MODEL_TEXT_CHARS ? `${r.text.slice(0, MODEL_TEXT_CHARS)}…` : r.text })),
+            }
+          : {}),
         rows: shown.map((r, i) => ({
           evidenceId: evidenceRows[i]!.id,
           author: r.callsign || r.createdBy.slice(0, 8),

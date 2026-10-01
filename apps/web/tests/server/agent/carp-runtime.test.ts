@@ -7,7 +7,7 @@ import { ofType, resetState } from "./helpers";
 
 import { CARP_FIXTURE_NOW } from "@/eval/stub-carp";
 import { startStub, type Stub } from "@/eval/stub-server";
-import { agentSystemPrompt, questionHint, viewContext } from "@/server/agent/prompt";
+import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { runTurn } from "@/server/agent/run-turn";
 import { foreignSpeciesPattern, scopeGuard } from "@/server/agent/scope";
 import { buildAgentRegistry, CAPABILITY_NAMES } from "@/server/agent/tools/capabilities";
@@ -148,12 +148,9 @@ describe("agent carp", () => {
     expect(stub.requests).toHaveLength(0);
   });
 
-  test("agent carp: a supported question adds its tools-and-wording line to the turn context; the static prompt only names the mechanism", () => {
-    expect(PROMPT).toContain("## Supported questions");
-    expect(PROMPT).not.toContain('"Which locations need operational review today?"');
-    const hint = questionHint(CARP, "Which locations need operational review today?");
-    expect(hint).toMatch(/^Supported question \(match 1\.00\): - "Which locations need operational review today\?": call site_status, then set_view; wording: 'needs operational review', 'because'; cite feed usgs, feed nwps, feed nws\.$/);
-    expect(questionHint(CARP, "Tell me a joke about rivers")).toBeNull();
+  test("agent carp: the prompt and the turn context never carry a supported-question hint (the benchmark is blind)", () => {
+    expect(PROMPT).not.toContain("Supported question");
+    expect(viewContext(undefined, NOW, CARP)).not.toMatch(/supported question|call .* then/i);
   });
 
   test("agent carp: the refusal text is the config's and names what the app covers", () => {

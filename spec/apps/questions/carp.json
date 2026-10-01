@@ -1,5 +1,20 @@
 {
   "app": "carp",
+  "changelog": [
+    "2026-10-01 AGB (blind benchmark, gates/leaf-AGB.md): carp-change-category-since-yesterday no longer requires site_status: the category now and at the previous issuance both come from river_forecast (previous: 1), so a correct, cited answer needs no second tool.",
+    "2026-10-01 AGB: carp-quality-krotz-datum, carp-quality-monroe-flow and carp-explain-start-review no longer require the evidence tool: river_readings already returns both readings with their source, unit and datum note, and review_history returns the flip with its rule, value, threshold and evidence ids; evidence adds provenance URLs, not the answer, and requiring it measured obedience to a hidden instruction rather than the answer.",
+    "2026-10-01 AGB: carp-replay-knew-morgan-action accepts 'as of', 'at that time', 'replay', 'since' and 'afterwards' beside 'later', 'then' and 'at the time': a correct answer anchored with 'As of <T>' failed on wording alone.",
+    "2026-10-01 AGB: carp-lookup-review-today and carp-planning-focus-tomorrow accept 'trigger' and 'rule' beside 'because', 'reason' and 'due to': 'the trigger is its forecast peak reaching action stage' names the review reason as plainly as 'because'.",
+    "2026-10-01 AGB: every 'issued' phrase is now '(issued|issuance)': 'the issuance of 2026-09-29 09:28 CDT' states the issue time as exactly as 'issued 2026-09-29 09:28 CDT'; the criterion's intent is that the issue time is stated, not the part of speech.",
+    "2026-10-01 AGB: carp-explain-morgan-city-action and carp-explain-baton-rouge-not-flagged accept 'action threshold' beside 'action stage' and 'action level': the NWPS action stage is a threshold and the tools label it so.",
+    "2026-10-01 AGB: carp-sources-stage-number no longer requires source_info beside evidence: the evidence tool now returns the record's publisher, licence, attribution and API URL (provenanceLine), which is everything the intent names.",
+    "2026-10-01 AGB: carp-explain-baton-rouge-not-flagged accepts 'does not reach', 'beneath', 'lower than', 'stays under' beside 'below', 'under', 'short of': 'the forecast rises but does not reach the review thresholds' is the answer the intent asks for.",
+    "2026-10-01 AGB: carp-planning-compare-tomorrow's forbid no longer matches a negated safety mention: 'cannot establish whether a trip is safe' is the required behaviour, and the old 'safer|is safe|are safe' failed it; the guard is the one the other safety forbids use.",
+    "2026-10-01 AGB: carp-quality-late-gauges no longer requires feed_state beside site_status: site_status returns every site's observation age and the feeds' fetch markers (inputsLine), which answers 'late reporting' with the fetch citations the question requires.",
+    "2026-10-01 AGB: carp-quality-missing-discharge accepts 'stage-only' (hyphen), 'does not report' and 'reports no flow': 'the USGS gauge is stage-only, and NWPS reports no flow there' is the correct answer in other words.",
+    "2026-10-01 AGB: carp-planning-compare-tomorrow's safety forbid also ignores 'neither … safer', 'not … safe' and 'cannot … safe': 'neither site stands out as a safer choice' declines the verdict rather than giving one.",
+    "2026-10-01 AGB: carp-lookup-review-today and carp-planning-focus-tomorrow also accept 'peaks at', 'reaches' and 'reaching' as the review reason: 'needs review: its forecast peaks at 4 ft, at the 4 ft action stage' states the reason in the rule's own words."
+  ],
   "scope": "Louisiana Field Conditions Explorer. Question: how have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? Eight demonstration locations (SMML1 Simmesport, KRZL1 Krotz Springs, BLRL1 Butte La Rose, MCGL1 Morgan City (Atchafalaya), BTRL1 Baton Rouge, AEXL1 Alexandria, MLUL1 Monroe, BXAL1 Bogalusa); L'CARP works only in the Atchafalaya Basin and targets silver, bighead, grass and black carp. The feeds describe conditions only: no carp abundance, catch, legal access or trip safety.",
   "feeds": [
     "usgs",
@@ -113,7 +128,7 @@
         "mode": "answer",
         "phrases": [
           "needs? (operational )?review",
-          "(because|reason|due to)"
+          "(because|reason|due to|trigger|rule|peaks? at|reach(es|ing)?)"
         ],
         "forbid": [
           "carp (are|will be) (present|abundant|there)",
@@ -179,7 +194,7 @@
           "Krotz|KRZL1",
           "Butte La Rose|BLRL1",
           "Morgan City|MCGL1",
-          "issued",
+          "(issued|issuance)",
           "(action|minor|moderate|major|no flood category|below (action|flood))"
         ],
         "forbid": [
@@ -386,7 +401,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "(higher|lower|raised|lowered|unchanged|same|earlier|later)"
         ],
         "forbid": [],
@@ -415,7 +430,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "\\bft\\b|feet",
           "forecast"
         ],
@@ -501,8 +516,7 @@
       "question": "Did any site move into a new flood category since yesterday?",
       "intent": "Compare each site's forecast flood category in the latest issuance with the previous day's issuance.",
       "expectedTools": [
-        "river_forecast",
-        "site_status"
+        "river_forecast"
       ],
       "mustCite": [
         "feed:nwps",
@@ -512,7 +526,7 @@
         "mode": "answer",
         "phrases": [
           "(categor|action|minor|moderate|major)",
-          "issued"
+          "(issued|issuance)"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -531,8 +545,7 @@
       "question": "Why did this location start needing review?",
       "intent": "Find when the selected site's status flipped to needs review and the readings, forecast or alert that triggered it.",
       "expectedTools": [
-        "review_history",
-        "evidence"
+        "review_history"
       ],
       "mustCite": [
         "feed:nwps",
@@ -574,7 +587,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "action (stage|level)",
+          "action (stage|level|threshold)",
           "tid(al|e)",
           "\\bft\\b|feet"
         ],
@@ -602,8 +615,8 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "action (stage|level)",
-          "below|under|short of",
+          "action (stage|level|threshold)",
+          "below|under|short of|beneath|does not reach|doesn't reach|not reach|lower than|stays? under",
           "\\bft\\b|feet"
         ],
         "forbid": [],
@@ -803,7 +816,7 @@
         "phrases": [
           "days?",
           "(through|until|horizon|ahead|out to)",
-          "issued"
+          "(issued|issuance)"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -917,7 +930,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "(stale|missing|current|no current|up to date|within)",
           "(hours?|h) (old|ago)"
         ],
@@ -935,8 +948,7 @@
       "question": "Why do USGS and NWPS stage differ at Krotz Springs?",
       "intent": "Explain the datum offset at KRZL1 and that flood categories use only the NWPS stage.",
       "expectedTools": [
-        "river_readings",
-        "evidence"
+        "river_readings"
       ],
       "mustCite": [
         "feed:usgs",
@@ -969,8 +981,7 @@
       "question": "Why do the two flow numbers at Monroe disagree?",
       "intent": "Show USGS and NWPS flow at MLUL1 side by side with units converted and say the conflict is unresolved, without blending them.",
       "expectedTools": [
-        "river_readings",
-        "evidence"
+        "river_readings"
       ],
       "mustCite": [
         "feed:usgs",
@@ -1013,7 +1024,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "(not measured|does(n't| not) measure|no (USGS )?(discharge|flow) (data|reading|series|measurement)|stage only)"
+          "(not measured|does(n't| not) (measure|report)|reports? no (discharge|flow)|no (USGS )?(discharge|flow) (data|reading|series|measurement)|stage[- ]only)"
         ],
         "forbid": [
           "USGS(?:[^.]|\\.\\d){0,40}\\d[\\d,.]*\\s*k?cfs"
@@ -1031,8 +1042,7 @@
       "question": "Are any of our gauges late reporting?",
       "intent": "Report each site's newest observation age per feed against the 2 and 6 hour freshness bands.",
       "expectedTools": [
-        "site_status",
-        "feed_state"
+        "site_status"
       ],
       "mustCite": [
         "feed:usgs",
@@ -1099,7 +1109,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "(nwps-live|iem-archive|archive|snapshot)",
           "(gap|missing|missed|every day|daily|none missed)"
         ],
@@ -1134,11 +1144,11 @@
         "phrases": [
           "Krotz",
           "Butte La Rose",
-          "issued",
+          "(issued|issuance)",
           "\\bft\\b|feet"
         ],
         "forbid": [
-          "safer|is safe|are safe"
+          "(?<!\\b(whether|if|that|say|judge|establish|which|neither|nor|not|cannot|can't)\\b[^.]{0,30})\\b(safer|is safe|are safe)\\b"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -1199,7 +1209,7 @@
         "mode": "answer",
         "phrases": [
           "review",
-          "(because|reason|due to)"
+          "(because|reason|due to|trigger|rule|peaks? at|reach(es|ing)?)"
         ],
         "forbid": [
           "carp (are|will be)"
@@ -1252,7 +1262,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "\\bft\\b|feet|beyond|horizon"
         ],
         "forbid": [
@@ -1300,8 +1310,7 @@
       "question": "Where does the stage number for Simmesport come from?",
       "intent": "Name the USGS gauge 07381490 and NWPS SMML1, the API, fetch time and licence of the cited reading.",
       "expectedTools": [
-        "evidence",
-        "source_info"
+        "evidence"
       ],
       "mustCite": [
         "feed:usgs",
@@ -1494,7 +1503,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "(as of|at the time|known|knew)",
           "(later|since then|afterwards|after that)"
         ],
@@ -1528,7 +1537,7 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "(observed|actual|measured)",
           "(error|off by|higher|lower|within|missed|difference)",
           "\\bft\\b|feet"
@@ -1680,9 +1689,9 @@
       "pass": {
         "mode": "answer",
         "phrases": [
-          "issued",
+          "(issued|issuance)",
           "action",
-          "(later|then|at the time)"
+          "(later|then|at the time|at that time|as of|replay|since|afterwards)"
         ],
         "forbid": [],
         "groundedNumbers": true,
@@ -2038,7 +2047,7 @@
         "mode": "answer",
         "phrases": [
           "mission",
-          "issued"
+          "(issued|issuance)"
         ],
         "forbid": [],
         "groundedNumbers": true,

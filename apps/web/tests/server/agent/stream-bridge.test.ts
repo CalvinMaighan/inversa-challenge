@@ -118,6 +118,8 @@ describe("stream bridge", () => {
       s.send("turn/start");
       s.send("assistant/chunk", { chunk: text("Checking the sites.").chunk });
       s.send("assistant/message", { message: { content: [{ type: "text", text: "Checking the sites." }, { type: "tool-call", id: "c1", name: "site_status", arguments: "{}" }] } });
+      s.send("tool/call", { name: "site_status", callId: "c1", arguments: "{}" });
+      s.send("tool/result", { message: { source: { callId: "c1" }, content: [{ isError: false, content: [{ type: "text", text: "{}" }] }] }, meta: { capabilityName: "site_status", ok: true, data: {} } });
       s.send("assistant/chunk", { chunk: text("Draft [e:status:MCGL1] [e:status:BOGUS]").chunk });
       s.send("assistant/message", { message: { content: [{ type: "text", text: "Draft [e:status:MCGL1] [e:status:BOGUS]" }] } });
     }, { holdFinal: true });
@@ -130,8 +132,18 @@ describe("stream bridge", () => {
     bridge.releaseHeld();
     expect(of("content_delta").map((e) => e.text).join("")).toBe("Checking the sites.");
 
+    // A first message with no tool call behind it (a refusal) streams at once even in hold mode.
+    const refusal = run((s) => {
+      s.send("assistant/chunk", { chunk: text("This app covers river conditions only.").chunk });
+      s.send("assistant/message", { message: { content: [{ type: "text", text: "This app covers river conditions only." }] } });
+    }, { holdFinal: true });
+    expect(refusal.of("content_delta").map((e) => e.text).join("")).toBe("This app covers river conditions only.");
+    expect(refusal.bridge.heldText()).toBeUndefined();
+
     const released = run((s, ledger) => {
       ledger.add([{ id: "status:MCGL1", kind: "alert", label: "MCGL1" }]);
+      s.send("tool/call", { name: "site_status", callId: "c1", arguments: "{}" });
+      s.send("tool/result", { message: { source: { callId: "c1" }, content: [{ isError: false, content: [{ type: "text", text: "{}" }] }] }, meta: { capabilityName: "site_status", ok: true, data: {} } });
       s.send("assistant/chunk", { chunk: text("Final [e:status:MCGL1] [e:status:BOGUS].").chunk });
       s.send("assistant/message", { message: { content: [{ type: "text", text: "Final [e:status:MCGL1] [e:status:BOGUS]." }] } });
     }, { holdFinal: true });
@@ -141,6 +153,35 @@ describe("stream bridge", () => {
     expect(released.of("citation").map((e) => e.id)).toEqual(["status:MCGL1"]);
     expect(released.bridge.heldText()).toBeUndefined();
     expect(released.bridge.finalText()).toBe("Final [e:status:MCGL1].");
+  });
+
+  test("a revision that the provider fails or leaves empty is recorded, not streamed as an error, and the draft can be released instead", () => {
+    let scripted!: ReturnType<typeof scriptedAgent>;
+    const { bridge, of } = run((s, ledger) => {
+      scripted = s;
+      ledger.add([{ id: "status:MCGL1", kind: "alert", label: "MCGL1" }]);
+      s.send("tool/call", { name: "site_status", callId: "c1", arguments: "{}" });
+      s.send("tool/result", { message: { source: { callId: "c1" }, content: [{ isError: false, content: [{ type: "text", text: "{}" }] }] }, meta: { capabilityName: "site_status", ok: true, data: {} } });
+      s.send("assistant/chunk", { chunk: text("Draft [e:status:MCGL1].").chunk });
+      s.send("assistant/message", { message: { content: [{ type: "text", text: "Draft [e:status:MCGL1]." }] } });
+    }, { holdFinal: true });
+    const draft = bridge.heldText()!;
+    bridge.beginRevision();
+    expect(bridge.heldText()).toBeUndefined();
+    // The provider returns nothing and the harness reports an error: recorded in the revision result, not streamed.
+    scripted.fail(new Error("Provider returned an empty response"));
+    scripted.send("assistant/message", { message: { content: [] } });
+    const revision = bridge.endRevision();
+    expect(revision).toEqual({ text: "", error: "Provider returned an empty response" });
+    expect(of("error")).toEqual([]);
+    expect(bridge.finishError).toBeUndefined();
+    bridge.releaseText(draft);
+    expect(of("content_delta").map((e) => e.text).join("")).toBe("Draft [e:status:MCGL1].");
+    expect(of("citation").map((e) => e.id)).toEqual(["status:MCGL1"]);
+    expect(bridge.heldText()).toBeUndefined();
+    // Outside a revision the same failure is an error event, as before.
+    scripted.fail(new Error("boom"));
+    expect(of("error").map((e) => e.message)).toEqual(["boom"]);
   });
 
   test("a denied tool call becomes tool_end ok=false with the denial text", () => {

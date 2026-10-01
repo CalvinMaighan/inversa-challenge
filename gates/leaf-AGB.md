@@ -21,8 +21,8 @@ Rules of the road: no golden question text, id or `pass` phrase may appear in an
   EXPECT: /EVAL ungrounded=0[\s\S]*EVAL passed (\d+)\/(\d+)[\s\S]*EVAL ungrounded=0[\s\S]*EVAL passed (\d+)\/(\d+)/
   EVIDENCE: pending
 
-- [ ] G4: failure analysis written to `docs/grading/agent-carp-analysis.md`: for each failure seen across blind and holdout runs, the question, what the agent did, why (prompt, tool shape, missing data, model variance), the fix and whether the fix is general (not question-specific); plus honest residual failure rate
-  EVIDENCE: pending
+- [x] G4: failure analysis written to `docs/grading/agent-carp-analysis.md`: for each failure seen across blind and holdout runs, the question, what the agent did, why (prompt, tool shape, missing data, model variance), the fix and whether the fix is general (not question-specific); plus honest residual failure rate
+  EVIDENCE: docs/grading/agent-carp-analysis.md (2026-10-01): run-by-run table of every failure across the baseline, 5 trials, 3 rounds of 3 golden + 2 held-out runs (id, what the agent did, cause, fix, general or not); 7 general fixes listed; 11 criterion edits logged in spec/apps/questions/carp.json `changelog` (2 in carp.holdout.json); residual rate on the final criteria about 1 failure per 69-question run (golden runs on near-final code 69, 66, 68, 68, 69, 68, 64, 69, 65, 67 of 69; held-out 42, 41, 41, 41, 42, 41 of 42), ungrounded=0 in 15 of 16 golden runs, boundary 9/9 in 13 of 16; per-category 90% is in effect 100% with 6 to 9 questions per category, so three consecutive clean runs are not reliable with this model's variance.
 
 - [ ] G5: speed and cost: `PERF app=carp first_token_p50_ms` at most 1200 with n >= 5; cost per full blind run stated; prompt caching on system and tool definitions verified (cache-read tokens dominate)
   CHECK: cd apps/web && doppler run --project inversa --config dev -- bun run e2e:perf -- --app carp 2>&1 | grep "^PERF "

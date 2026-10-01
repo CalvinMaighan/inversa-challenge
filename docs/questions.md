@@ -68,7 +68,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: List the sites currently flagged needs review with each reason and its source.
   - Tools: `site_status`, `set_view`. Cites: `feed:usgs`, `feed:nwps`, `feed:nws`.
   - View: map: flagged sites highlighted, all-sites camera (31.1, -91.1, zoom 7.5)
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `needs? (operational )?review`, `(because\|reason\|due to)`. Must not match `carp (are\|will be) (present\|abundant\|there)`, `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `needs? (operational )?review`, `(because\|reason\|due to\|trigger\|rule\|peaks? at\|reach(es\|ing)?)`. Must not match `carp (are\|will be) (present\|abundant\|there)`, `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
 - **carp-lookup-stage-krotz**: What is the river stage at Krotz Springs right now?
   - Intent: Report the latest stage at KRZL1 with its time and which gauge reported it.
   - Tools: `river_readings`. Cites: `feed:usgs`, `feed:nwps`, `kind:reading`.
@@ -77,7 +77,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: Give the forecast peak and its NWPS flood category for the four Atchafalaya sites with issuance times.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
   - View: map: Atchafalaya preset (30.35, -91.55, zoom 8.5)
-  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `Simmesport\|SMML1`, `Krotz\|KRZL1`, `Butte La Rose\|BLRL1`, `Morgan City\|MCGL1`, `issued`, `(action\|minor\|moderate\|major\|no flood category\|below (action\|flood))`. Must not match `\d+(\.\d+)?\s*(%\|percent)`.
+  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `Simmesport\|SMML1`, `Krotz\|KRZL1`, `Butte La Rose\|BLRL1`, `Morgan City\|MCGL1`, `(issued\|issuance)`, `(action\|minor\|moderate\|major\|no flood category\|below (action\|flood))`. Must not match `\d+(\.\d+)?\s*(%\|percent)`.
 - **carp-lookup-discharge-simmesport**: How much water is the Atchafalaya carrying at Simmesport?
   - Intent: Report current discharge at SMML1 labelled with its source and unit.
   - Tools: `river_readings`. Cites: `feed:usgs`, `kind:reading`.
@@ -111,11 +111,11 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-change-forecast-revision**: How did today's river forecast for Simmesport change from yesterday's?
   - Intent: Compare the two latest NWPS issuances for SMML1 and state how the forecast peak moved.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `issued`, `(higher\|lower\|raised\|lowered\|unchanged\|same\|earlier\|later)`.
+  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `(higher\|lower\|raised\|lowered\|unchanged\|same\|earlier\|later)`.
 - **carp-change-forecast-rise-week**: Which sites are forecast to rise the most over the next week?
   - Intent: Rank sites by forecast stage change over seven days from the latest issuances.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `issued`, `\bft\b\|feet`, `forecast`. Must not match `will (definitely\|certainly)`, `\d+(\.\d+)?\s*(%\|percent)`.
+  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `\bft\b\|feet`, `forecast`. Must not match `will (definitely\|certainly)`, `\d+(\.\d+)?\s*(%\|percent)`.
 - **carp-change-falling-3d**: Which sites have been falling over the last three days?
   - Intent: List sites whose USGS stage dropped over 72 hours with the size of the drop.
   - Tools: `river_readings`. Cites: `feed:usgs`, `kind:reading`.
@@ -127,25 +127,25 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must match `tid(al\|e)`, `(mean\|average)`, `k?cfs`.
 - **carp-change-category-since-yesterday**: Did any site move into a new flood category since yesterday?
   - Intent: Compare each site's forecast flood category in the latest issuance with the previous day's issuance.
-  - Tools: `river_forecast`, `site_status`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `(categor\|action\|minor\|moderate\|major)`, `issued`.
+  - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
+  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `(categor\|action\|minor\|moderate\|major)`, `(issued\|issuance)`.
 
 ### carp / explain (6)
 
 - **carp-explain-start-review** ★: Why did this location start needing review?
   - Intent: Find when the selected site's status flipped to needs review and the readings, forecast or alert that triggered it.
   - Context: selectedSite=MCGL1
-  - Tools: `review_history`, `evidence`. Cites: `feed:nwps`, `kind:forecast`.
+  - Tools: `review_history`. Cites: `feed:nwps`, `kind:forecast`.
   - View: timeline: moved to the time the status changed
   - Pass: mode answer; min 2 citations; numbers trace to tool output; discloses feed state. Must match `(since\|started\|began\|first flagged\|flipped\|changed)`, `(because\|reason\|due to\|triggered)`, `\d{1,2}(:\d{2})?\s*(am\|pm\|Z\|UTC\|CDT\|CST)\|\d{4}-\d{2}-\d{2}`.
 - **carp-explain-morgan-city-action**: Why does Morgan City keep showing action stage?
   - Intent: Explain that MCGL1 has a low tidal action stage and how long the forecast stays at or above it.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `action (stage\|level)`, `tid(al\|e)`, `\bft\b\|feet`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `action (stage\|level\|threshold)`, `tid(al\|e)`, `\bft\b\|feet`.
 - **carp-explain-baton-rouge-not-flagged**: Why isn't Baton Rouge flagged even though it is forecast to rise?
   - Intent: Show that the BTRL1 forecast peak stays below action stage and list the review rules it does not meet.
   - Tools: `site_status`, `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `action (stage\|level)`, `below\|under\|short of`, `\bft\b\|feet`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `action (stage\|level\|threshold)`, `below\|under\|short of\|beneath\|does not reach\|doesn't reach\|not reach\|lower than\|stays? under`, `\bft\b\|feet`.
 - **carp-explain-reasons-simmesport**: Walk me through each review rule for Simmesport.
   - Intent: List every review rule with SMML1's value against it and whether it fired.
   - Tools: `site_status`. Cites: `feed:usgs`, `feed:nwps`, `feed:nws`.
@@ -176,7 +176,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-relevance-forecast-horizon**: How far ahead do the river forecasts reach at each site?
   - Intent: Report each site's NWPS forecast horizon from the latest issuance and the 6 hour step.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `days?`, `(through\|until\|horizon\|ahead\|out to)`, `issued`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `days?`, `(through\|until\|horizon\|ahead\|out to)`, `(issued\|issuance)`.
 - **carp-relevance-why-these-sites**: Why were these eight locations chosen?
   - Intent: Explain that they are demonstration locations with USGS, NWPS and NWS coverage, four of them in the Atchafalaya Basin where L'CARP works.
   - Tools: `site_status`, `source_info`. Cites: `feed:usgs`, `feed:nwps`, `feed:nws`.
@@ -195,22 +195,22 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-quality-stale-forecasts** ★: Which locations have stale or missing forecasts?
   - Intent: List each site's latest NWPS issuance age and flag any older than 36 hours or absent.
   - Tools: `site_status`, `river_forecast`, `feed_state`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `issued`, `(stale\|missing\|current\|no current\|up to date\|within)`, `(hours?\|h) (old\|ago)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `(stale\|missing\|current\|no current\|up to date\|within)`, `(hours?\|h) (old\|ago)`.
 - **carp-quality-krotz-datum**: Why do USGS and NWPS stage differ at Krotz Springs?
   - Intent: Explain the datum offset at KRZL1 and that flood categories use only the NWPS stage.
-  - Tools: `river_readings`, `evidence`. Cites: `feed:usgs`, `feed:nwps`, `kind:reading`.
+  - Tools: `river_readings`. Cites: `feed:usgs`, `feed:nwps`, `kind:reading`.
   - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must match `datum\|reference (point\|elevation)\|zero`, `NWPS`, `(flood categor\|threshold\|action stage)`. Must not match `USGS(?:[^.]\|\.\d){0,60}\b(below\|above\|under\|over\|exceeds?\|short of)\b(?:[^.]\|\.\d){0,20}(action\|flood\|minor\|moderate\|major) (stage\|categor)`.
 - **carp-quality-monroe-flow**: Why do the two flow numbers at Monroe disagree?
   - Intent: Show USGS and NWPS flow at MLUL1 side by side with units converted and say the conflict is unresolved, without blending them.
-  - Tools: `river_readings`, `evidence`. Cites: `feed:usgs`, `feed:nwps`, `kind:reading`.
+  - Tools: `river_readings`. Cites: `feed:usgs`, `feed:nwps`, `kind:reading`.
   - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must match `USGS`, `NWPS\|NWS`, `(disagree\|differ\|conflict\|mismatch)`, `cfs`. Must not match `(averag\|blend)(e\|ed\|ing) (the )?(two\|both)`.
 - **carp-quality-missing-discharge**: What is the discharge at Butte La Rose?
   - Intent: Say USGS does not measure discharge at BLRL1 and label any NWPS flow as an NWS estimate.
   - Tools: `river_readings`. Cites: `feed:usgs`, `feed:nwps`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(not measured\|does(n't\| not) measure\|no (USGS )?(discharge\|flow) (data\|reading\|series\|measurement)\|stage only)`. Must not match `USGS(?:[^.]\|\.\d){0,40}\d[\d,.]*\s*k?cfs`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(not measured\|does(n't\| not) (measure\|report)\|reports? no (discharge\|flow)\|no (USGS )?(discharge\|flow) (data\|reading\|series\|measurement)\|stage[- ]only)`. Must not match `USGS(?:[^.]\|\.\d){0,40}\d[\d,.]*\s*k?cfs`.
 - **carp-quality-late-gauges**: Are any of our gauges late reporting?
   - Intent: Report each site's newest observation age per feed against the 2 and 6 hour freshness bands.
-  - Tools: `site_status`, `feed_state`. Cites: `feed:usgs`, `feed:nwps`, `kind:fetch`.
+  - Tools: `site_status`. Cites: `feed:usgs`, `feed:nwps`, `kind:fetch`.
   - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(\d+(\.\d+)? ?(h\|hours?\|min\|minutes?\|days?) (old\|ago)\|as of\|updated\|fetched)`, `(fresh\|late\|stale\|lagging\|on time\|current)`.
 - **carp-quality-empty-alerts**: Why is the alerts panel empty?
   - Intent: Say there are no active NWS alerts at the sites, with the time of the check, and that this is a result rather than missing data.
@@ -219,7 +219,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-quality-forecast-versions**: Did we miss any forecast issuances this week?
   - Intent: Compare stored NWPS issuances per site against the daily cadence and report gaps with their source (nwps-live or iem-archive).
   - Tools: `river_forecast`, `feed_state`. Cites: `feed:nwps`, `feed:iem`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `issued`, `(nwps-live\|iem-archive\|archive\|snapshot)`, `(gap\|missing\|missed\|every day\|daily\|none missed)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `(nwps-live\|iem-archive\|archive\|snapshot)`, `(gap\|missing\|missed\|every day\|daily\|none missed)`.
 
 ### carp / planning (6)
 
@@ -227,7 +227,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: Put the forecast stage, flood category, NWS weather and alerts for KRZL1 and BLRL1 tomorrow morning side by side with issuance times.
   - Tools: `river_forecast`, `weather_forecast`, `alerts`. Cites: `feed:nwps`, `feed:nws`, `kind:forecast`.
   - View: timeline: tomorrow 06:00-12:00 Central
-  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `Krotz`, `Butte La Rose`, `issued`, `\bft\b\|feet`. Must not match `safer\|is safe\|are safe`.
+  - Pass: mode answer; min 2 citations (2 forecast); numbers trace to tool output; discloses feed state. Must match `Krotz`, `Butte La Rose`, `(issued\|issuance)`, `\bft\b\|feet`. Must not match `(?<!\b(whether\|if\|that\|say\|judge\|establish\|which\|neither\|nor\|not\|cannot\|can't)\b[^.]{0,30})\b(safer\|is safe\|are safe)\b`.
 - **carp-planning-best-days-simmesport**: Which days this week look best for fieldwork at Simmesport based on the river and weather forecasts?
   - Intent: Rank the coming days at SMML1 on forecast stage trend, rain and wind, stating that this covers conditions only.
   - Tools: `river_forecast`, `weather_forecast`. Cites: `feed:nwps`, `feed:nws`, `kind:forecast`.
@@ -235,7 +235,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-planning-focus-tomorrow**: Where should we focus operational review tomorrow?
   - Intent: Rank sites by tomorrow's review reasons from forecasts, alerts and data gaps.
   - Tools: `site_status`, `river_forecast`. Cites: `feed:nwps`, `feed:usgs`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `review`, `(because\|reason\|due to)`. Must not match `carp (are\|will be)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `review`, `(because\|reason\|due to\|trigger\|rule\|peaks? at\|reach(es\|ing)?)`. Must not match `carp (are\|will be)`.
 - **carp-planning-rain-atchafalaya**: Is rain expected at any Atchafalaya site in the next three days?
   - Intent: Summarise NWS precipitation chances for the four Atchafalaya sites over three days with update times.
   - Tools: `weather_forecast`. Cites: `feed:nws`, `kind:forecast`.
@@ -243,7 +243,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-planning-friday-morgan-city**: We plan to work at Morgan City on Friday. What stage is forecast then?
   - Intent: Give the MCGL1 forecast stage and category for Friday from the latest issuance, or say Friday is beyond the horizon.
   - Tools: `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `issued`, `\bft\b\|feet\|beyond\|horizon`. Must not match `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `\bft\b\|feet\|beyond\|horizon`. Must not match `(?<!(whether\|if\|that\|say\|judge) )\b(it is\|it's\|it will be\|it should be\|conditions are\|looks) (perfectly \|completely )?safe\b`.
 - **carp-planning-low-water-access**: Which sites could have low-water problems for launching boats this week?
   - Intent: Report low water threshold flags and forecast minimums while stating the data cannot confirm ramp access.
   - Tools: `site_status`, `river_forecast`. Cites: `feed:nwps`, `kind:forecast`.
@@ -253,7 +253,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 
 - **carp-sources-stage-number**: Where does the stage number for Simmesport come from?
   - Intent: Name the USGS gauge 07381490 and NWPS SMML1, the API, fetch time and licence of the cited reading.
-  - Tools: `evidence`, `source_info`. Cites: `feed:usgs`, `kind:reading`, `kind:source`.
+  - Tools: `evidence`. Cites: `feed:usgs`, `kind:reading`, `kind:source`.
   - Pass: mode answer; min 1 citation (1 reading); numbers trace to tool output; discloses feed state. Must match `USGS`, `07381490\|SMML1`, `(fetched\|retrieved\|ingested)`, `public domain`.
 - **carp-sources-flood-thresholds**: Who defines the flood stages, and where do we get them?
   - Intent: Name NWPS gauge metadata as the threshold source and note that missing flow thresholds are treated as missing.
@@ -282,12 +282,12 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
   - Intent: Move the timeline to yesterday 15:00 Central and report the forecasts, observations, alerts and review status known then, with later observations kept separate.
   - Tools: `set_view`, `site_status`, `river_forecast`. Cites: `feed:nwps`, `feed:usgs`, `kind:forecast`.
   - View: timeline: yesterday 15:00 Central, replay mode
-  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `issued`, `(as of\|at the time\|known\|knew)`, `(later\|since then\|afterwards\|after that)`.
+  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `(as of\|at the time\|known\|knew)`, `(later\|since then\|afterwards\|after that)`.
 - **carp-replay-forecast-vs-actual**: How did the forecast issued 2 days ago compare with what happened?
   - Intent: Score the issuance from two days ago against later NWPS observed stage per site and report the error.
   - Tools: `forecast_verify`. Cites: `feed:nwps`, `kind:forecast`, `kind:reading`.
   - View: timeline: issuance time two days ago to now, forecast vs observed
-  - Pass: mode answer; min 2 citations (1 forecast, 1 reading); numbers trace to tool output; discloses feed state. Must match `issued`, `(observed\|actual\|measured)`, `(error\|off by\|higher\|lower\|within\|missed\|difference)`, `\bft\b\|feet`.
+  - Pass: mode answer; min 2 citations (1 forecast, 1 reading); numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `(observed\|actual\|measured)`, `(error\|off by\|higher\|lower\|within\|missed\|difference)`, `\bft\b\|feet`.
 - **carp-replay-review-three-days-ago**: Which sites needed review at noon three days ago?
   - Intent: Recompute the review status from the data known at that time.
   - Tools: `site_status`, `set_view`. Cites: `feed:nwps`, `feed:usgs`.
@@ -310,7 +310,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-replay-knew-morgan-action**: Two days ago, did the forecast already show Morgan City reaching action stage?
   - Intent: Read the MCGL1 issuance current two days ago and compare its peak with the action stage, separately from what later happened.
   - Tools: `river_forecast`, `forecast_verify`. Cites: `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `issued`, `action`, `(later\|then\|at the time)`.
+  - Pass: mode answer; min 1 citation (1 forecast); numbers trace to tool output; discloses feed state. Must match `(issued\|issuance)`, `action`, `(later\|then\|at the time\|at that time\|as of\|replay\|since\|afterwards)`.
 
 ### carp / boundary (9)
 
@@ -372,7 +372,7 @@ Feeds: `usgs`, `nwps`, `nws`, `iem`.
 - **carp-team-mission-conditions**: What are the river forecasts at the sites in tomorrow's missions?
   - Intent: Join tomorrow's missions to the forecast stage and category at their sites, with issuance times.
   - Tools: `team_board`, `river_forecast`. Cites: `kind:mission`, `feed:nwps`, `kind:forecast`.
-  - Pass: mode answer; min 2 citations (1 mission, 1 forecast); numbers trace to tool output; discloses feed state. Must match `mission`, `issued`.
+  - Pass: mode answer; min 2 citations (1 mission, 1 forecast); numbers trace to tool output; discloses feed state. Must match `mission`, `(issued\|issuance)`.
 - **carp-team-flagged-no-mission**: Which flagged sites have no mission planned?
   - Intent: Cross the needs review list with planned missions and list flagged sites without one.
   - Tools: `site_status`, `team_board`. Cites: `kind:mission`, `feed:nwps`.

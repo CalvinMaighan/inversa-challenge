@@ -541,7 +541,7 @@ function statusSeriesQuery(n: number): string {
 export const reviewHistory = {
   name: "review_history",
   description:
-    "Transitions of one site's review status over a window (default the last 7 days): when it entered or left review and which rule and evidence caused it. Use it for 'why did this location start needing review' and 'when did X get flagged'. Cite the evidence ids in each transition's rules.",
+    "Transitions of one site's review status over a window (default the last 7 days): when it entered or left review and which rule and evidence caused it. Use it for why or when a site entered or left review. Cite the evidence ids in each transition's rules.",
   inputSchema: reviewHistoryInput,
   async execute(input: z.infer<typeof reviewHistoryInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const site = resolveSites(ctx.app, [given(input.site) ?? ctx.view?.site ?? input.site])[0]!;
@@ -691,6 +691,15 @@ export const riverReadings = {
     const query = `${READINGS_QUERY.replace("feeds { ...FeedFields }", `${source === "usgs" ? "" : [...Array(sites.length).keys()].map((i) => `s${i}: siteStatusAt(site: $s${i}, asOf: $to) { site asOf observation { observedAt ingestedAt source stageFt flowKcfs } thresholds { actionFt minorFt moderateFt majorFt } category }`).join("\n  ")}\n  feeds { ...FeedFields }`)}`;
     const withSites = source === "usgs" ? query : query.replace("query AgentRiverReadings(", `query AgentRiverReadings(${[...Array(sites.length).keys()].map((i) => `$s${i}: ID!, `).join("")}`);
     const data = await gqlWithFeeds<Record<string, unknown> & { readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentRiverReadings", withSites, { bbox: appBBox(ctx.app), from: iso(from), to: iso(to), params: gqlParams, ...(source === "usgs" ? {} : siteVars(sites)) }, ctx);
+    // A window shorter than a day can miss a gauge that stopped reporting hours ago. When a USGS series is empty
+    // in such a window, the newest reading of the last 7 days is reported with its age instead of "no series": a
+    // stopped gauge is a late one, not an unmeasured parameter.
+    const WIDER_HOURS = 24 * 7;
+    let wider: GqlReading[] = [];
+    if (source !== "nwps" && to - from < 24 * HOUR_MS && sites.some((site) => params.some((param) => !usgsRows(data.readings, site).some((r) => r.param.toLowerCase() === (param === "stage" ? "stage_m" : "discharge_cfs"))))) {
+      const back = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentRiverReadings", READINGS_QUERY, { bbox: appBBox(ctx.app), from: iso(to - WIDER_HOURS * HOUR_MS), to: iso(to), params: gqlParams }, ctx);
+      wider = back.readings;
+    }
     const evidenceRows: Evidence[] = [];
     const seen = new Set<string>();
     const add = (id: string, label: string, feed: string) => {
@@ -712,6 +721,13 @@ export const riverReadings = {
           const series = usgs.filter((r) => r.param.toLowerCase() === gqlParam);
           const summary = summarize(series, param === "stage");
           if (!summary) {
+            const earlier = series.length === 0 ? summarize(usgsRows(wider, site).filter((r) => r.param.toLowerCase() === gqlParam), param === "stage") : null;
+            if (earlier) {
+              const unit = param === "stage" ? "ft" : "cfs";
+              add(earlier.latest.evidenceId, `USGS ${site.usgs} ${param} ${earlier.latest.value} ${unit} · ${earlier.latest.at}`, "usgs");
+              out.push({ site: site.lid, name: site.name, source: "usgs", station: site.usgs, param, unit, notMeasured: false, latest: earlier.latest, ageHours: hoursBetween(to, ms(earlier.latest.at)), note: `no USGS ${param} reading in the asked window (${window.from} to ${window.to}); the newest known reading is ${earlier.latest.value} ${unit} at ${earlier.latest.at}, ${hoursBetween(to, ms(earlier.latest.at))} hours old: the gauge stopped reporting, say so with the age` });
+              continue;
+            }
             out.push({ site: site.lid, name: site.name, source: "usgs", station: site.usgs, param, unit: param === "stage" ? "ft" : "cfs", notMeasured: series.length === 0, latest: null, note: series.length === 0 ? `USGS gauge ${site.usgs} reports no ${param} series${param === "discharge" ? " (stage only; NWPS flow, where present, is an NWS estimate in kcfs, not a USGS measurement)" : ""}` : `no usable ${param} value in the window` });
             continue;
           }
@@ -780,6 +796,7 @@ export const riverReadings = {
         {
           window: { from: iso(from), to: iso(to), hours: r1((to - from) / HOUR_MS), label: `last ${r1((to - from) / HOUR_MS) === 24 ? "24 hours" : r1((to - from) / HOUR_MS) % 24 === 0 ? `${(to - from) / (24 * HOUR_MS)} days` : `${r1((to - from) / HOUR_MS)} hours`}`, toLocal: localTime(ctx.app, to), say: "name the window as its label ('last 24 hours', 'last 7 days')" },
           units: "stage ft (USGS stored as stage_m metres, converted; NWPS native ft), discharge cfs (USGS), flow kcfs (NWPS, 1 kcfs = 1000 cfs). Label every number with its source. Flood categories use NWPS stage only.",
+          ...(sites.some((s) => s.tidal) ? { tidalSites: `${sites.filter((s) => s.tidal).map((s) => `${s.lid} ${s.short}`).join(", ")}: tidal, so instantaneous stage and discharge swing with the tide; answer with the 24 h mean (mean24h) and say 'tidal' and 'mean'` } : {}),
           rows,
         },
         evidenceRows,
