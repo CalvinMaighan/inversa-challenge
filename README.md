@@ -69,61 +69,66 @@ The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/
 
 ## UI
 
-![The chat column with an answer and its data panels, the globe framed and bracketed beside it](docs/evidence/layout-desktop.png)
+![First load: the chat column with its welcome on the left, sightings on the globe, the species chips top left and two icon buttons top right](docs/evidence/simplify-after.png)
+
+The UI puts sightings first and is written for someone new to the field. On first load the globe shows only sightings: one dot per invasive animal reported in the last 48 hours. Weather stations, alerts, hotspots and temperature layers are off and sit under About, in **More data (for experts)**. An alert the agent cites still shows as a bracket.
 
 The page has two panes. The **chat column** sits on the left: always open, full height and 420 px wide. Drag its right edge to make it anywhere from 360 to 560 px wide, and your browser keeps that width. It has two tabs:
 - **Agent**: the thread and the composer, with a mic button for voice and a send button.
 - **Notes**: the team board. Field notes first (write what you saw, pinned to a spot on the globe), then team chat and who is online, with crew missions folded away at the bottom.
 
-A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the top bar, the timeline and the evidence drawer inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
+A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the species chips, two icon buttons, the timeline and the evidence card inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
 
-On a first visit, a hint above the composer offers example questions you can click, such as "Iguana sightings near Homestead and water levels" and "Where should python crews go tonight?".
+On a first visit, a welcome above the composer says what the map is in two sentences, describes each species in one line ("Burmese python — giant constrictor eating Everglades wildlife"), and offers example questions you can click, such as "Iguana sightings near Homestead and water levels" and "Where should python crews go tonight?". Dismiss it and it stays dismissed.
+
+Click a dot and the evidence card opens with a plain summary first, for example "Green iguana spotted near Coral Gables · 2 h ago · confirmed by the iNaturalist community", the photo when there is one, and "Open at iNaturalist ↗". The id, the normalized record, the raw payload, the source feed, links and revisions sit under a collapsed **Details for experts**.
+
+![The species chips filtered to iguana, with the evidence card open on one sighting](docs/evidence/simplify-iguana.png)
 
 ### What the colours on the globe mean
 
-**Layers**, at the top right of the globe, opens the same legend on screen. It has a switch for each layer and species and shows how many items each layer is drawing right now.
+The species chips at the top left carry the sighting colours. The full legend, with a switch and a live count for every layer, is under About (ⓘ) in **More data (for experts)**. The **Layers** rows there turn the expert layers on.
 
 | Mark | Meaning |
 |---|---|
-| Squares: blue `#4fb3ff`, teal `#3fd6c6`, violet `#c89bff` | In-situ stations that reported in the two hours before the cursor: a USGS water gauge, an NDBC buoy, or a NOAA (CO-OPS) tide gauge. |
-| Dots: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python, Argentine tegu, green iguana and red lionfish. Grey `#b8c0cc` dots are other introduced species. Dots fade over 24 h. A red ring means the IDs conflict. Zoom in to see species badges. |
-| Haze from violet to yellow | Hotspots, on a heuristic score from low to high. Layers can pin the haze to a single species. |
-| Ramp from blue to red | Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). Both are off by default. |
-| Outlined areas: red, orange, amber, teal | NWS alerts in effect at the cursor, coloured by severity: extreme, severe, moderate, minor. |
+| Dots: amber `#e3b341`, orange `#ff7a45`, green `#5fd068`, pink `#ff5c9a` | Sightings of Burmese python, Argentine tegu, green iguana and red lionfish. Grey `#b8c0cc` dots are other introduced species. Dots show the last 48 hours and fade with age, so the newest are brightest. A red ring means the IDs conflict, and a white ring marks the selected sighting. Zoom in to see species badges. |
+| Squares: blue `#4fb3ff`, teal `#3fd6c6`, violet `#c89bff` | Expert layer, off by default. In-situ stations that reported in the two hours before the cursor: a USGS water gauge, an NDBC buoy, or a NOAA (CO-OPS) tide gauge. |
+| Haze from violet to yellow | Expert layer, off by default. Hotspots, on a heuristic score from low to high. The legend can pin the haze to a single species. |
+| Ramp from blue to red | Expert layers, off by default. Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). |
+| Outlined areas: red, orange, amber, teal | Expert layer, off by default. NWS alerts in effect at the cursor, coloured by severity: extreme, severe, moderate, minor. |
 | Outlined pins in a teammate's colour | Field notes: what someone on the team wrote at that spot. Hover to read the first line, click to open it. |
 | Diamonds: yellow, orange, green | Missions on the team board that are planned, in progress or done. |
 | Small coloured dots with callsigns | Team cursors: teammates on the same board. |
-| Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline, red means no data, amber means cloud, and grey means quiet: no sightings for 12 h or more. |
-| Brackets with labels | What the agent cited or highlighted, and the current selection. |
+| Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline's thin bottom lane, red means no satellite data, amber means cloud, and grey means no sightings for 12 h or more; hover the timeline to see which. |
+| Brackets | What the agent cited or highlighted, and the current selection. Only the selection, the hovered row and citations get a text label, 12 at most. Station readings are bracketed only when cited. |
 
-Hover any marker to see what it is and its key value, for example "USGS gauge · Shark River · stage 1.21 m · 12 min ago". Click a marker to open its record.
+Hover a sighting to see the species first, then how sure the ID is, for example "Green iguana · research · iNat · 2 h ago". Click it to open its record.
 
 ### Controls
 
-The **?** button in the top bar opens a help sheet that lists every control. Its content comes from one file, [`apps/web/client/hud/help/content.ts`](apps/web/client/hud/help/content.ts). A unit test fails when this table and that file disagree.
+**Help**, inside About, opens a help sheet that lists every control. Its content comes from one file, [`apps/web/client/hud/help/content.ts`](apps/web/client/hud/help/content.ts). A unit test fails when this table and that file disagree.
 
 | Where | Control | What it does |
 |---|---|---|
-| Top bar | Feed chips | One chip per data source. The colour shows health: green is nominal, amber is lagging, dashed amber is stale, and red is down. Each chip also shows whether the source pushes or is polled, and its lag. |
-| Top bar | LIVE / REPLAY | LIVE means the cursor is at the live edge. REPLAY means you are looking at the past. |
-| Top bar | Clocks and CURSOR | Shows the cursor's time in UTC and in Miami time, and the latitude and longitude under the pointer. |
-| Top bar | Focus | Dims the globe outside a circle around the selection. |
-| Top bar | Theme: light / dark / tac | Switches the colour mode and remembers your choice. |
-| Top bar | ? | Opens the help sheet. |
-| Globe | Layers | Layer and species switches, the legend, and live counts. |
-| Globe | Hover a marker | Shows a tooltip with the marker's name and key value. |
-| Globe | Evidence drawer | Opens the record behind a marker, citation or bracket, with the raw payload, source feed, links and revisions. |
-| Globe | Share links | The address bar always holds the camera, time, layers, species and selection. |
-| Timeline | Play / pause (Space) | Plays the frames forward at the chosen speed. |
-| Timeline | Step ◂ ▸ | Moves one 15-minute frame. |
+| Map | Species chips | Top left: one chip per animal with its colour and how many were seen in the last 48 hours. Click to show or hide one; Alt-click (or press and hold) to show only that one; All brings every species back. The globe, the legend, the timeline line and the agent's view all follow it. |
+| Map | Sighting dots | One per animal reported in the last 48 hours, brightest when newest. Hover for the species and the ID's grade; click to open the record. |
+| Map | Evidence card | A plain summary (what, where, when, how sure), the photo, and the publisher link, with the raw record under Details for experts. |
+| Map | About (ⓘ) | Top right: what this map is, how fresh its data is in plain words, Focus, Help, Data sources and More data (for experts). A small dot on it shows the worst feed's colour when a source is delayed. |
+| Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale or down), push or poll, and lag, worst first. |
+| Map | More data (for experts) | Inside About: a switch, legend and live count for every layer, plus the data-gaps key. |
+| Map | Focus | Inside About: dims the globe outside a circle around the selection. |
+| Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
+| Map | Help | Inside About: opens the help sheet. |
+| Map | Share links | The address bar always holds the camera, time, layers, species and selection. |
+| Timeline | Play / pause (Space) | Plays time forward at the chosen speed. |
 | Timeline | Speed | Sets playback speed in frames per second. |
-| Timeline | Live | Jumps back to now. |
+| Timeline | LIVE / REPLAY | Shows whether you are looking at now or the past; click it while replaying to jump to now. |
 | Timeline | Date jump | Loads any UTC day, including days outside the 30-day window. |
-| Timeline | Scrubber | Drag through time. The line is sightings, amber bands are alerts, and hatching marks gaps. |
+| Timeline | Scrubber | Drag through time, or step with the arrow keys. The line is sightings (following the species chips); hatching marks gaps. |
 | Chat column | Agent tab | Ask the agent. Answers cite evidence, show their tool rows and data panels, and fly the globe. |
 | Chat column | Notes tab | Write a note about what you saw (pick a spot on the globe, or start from a sighting's card), read everyone's notes live, chat with the team and see who is online. Crew missions fold out at the bottom. |
 | Chat column | Mic | Talk instead of typing. Press it again to stop. |
-| Chat column | Citations [1] [2] … | Open the cited record in the evidence drawer. |
+| Chat column | Citations [1] [2] … | Open the cited record in the evidence card. |
 | Chat column | Data panels and Expand | Show the tables and charts behind an answer. Expand opens them wide next to the column. |
 | Chat column | Column edge | Drag it, or use the arrow keys, to resize the column. On phones, drag the sheet's handle instead. |
 
@@ -250,7 +255,9 @@ The agent also strips any `[e:<id>]` citation whose id no tool returned in that 
 | `bun run eval` | 15 golden questions to the live model (under doppler) with tools answering from a fixture GraphQL stub; checks tools called, citation validity, citations per evidence kind and required phrases | varies run to run: 15/15, 15/15, 14/15 and 14/15 over four runs (quality 5/5, 5/5, 5/5, 4/5), about $0.02 a run |
 | `bun run check` | lint, typecheck, `bun run test`, `bun run test:api`; prints `CHECK-OK` | `CHECK-OK` |
 | `bun run --cwd apps/web e2e:agent`, `e2e:globe`, `e2e:scrub`, `e2e:dbworker` | Playwright against a production build; `e2e:agent` runs `next dev` with the live model under doppler | see the leaf gates below |
-| `bun run --cwd apps/web e2e:layout` | Playwright on the real stack, on free ports. It checks the chat column on the left and the globe on the right (bounding boxes), the resize and its persistence, the legend's switches against `LAYERS` and the globe's layer stats, a hover tooltip over a real station, the Notes tab and its unread dot, the help sheet, contrast in all three themes, and the phone sheet at 375 px | `gates/leaf-T40.md` G6, G18 |
+| `bun run --cwd apps/web e2e:layout` | Playwright on the real stack, on free ports. It checks the chat column on the left and the globe on the right (bounding boxes), the resize and its persistence, the legend's switches against `LAYERS` and the globe's layer stats, a hover tooltip over a real station, the Missions tab and its unread dot, the help sheet, contrast in all three themes, and the phone sheet at 375 px | `gates/leaf-T40.md` G6, G18 |
+| `bun run --cwd apps/web e2e:firstload` | Playwright on the real stack at 1440×900: what a newcomer sees at load. Only sightings draw (stations, alerts and hotspots 0), the drawn count equals Axum's distinct sightings for the same 48 h window, the chrome is two icon buttons with no text, the data attribution is clickable, both popovers hand focus back on Esc, and the controls and labels on screen are counted | `gates/leaf-T41.md` G8, G9 |
+| `bun run --cwd apps/web e2e:species` | Playwright on the real stack: the species chips' counts equal the globe's stats, Alt-click shows only iguanas (fewer than all), and a click on an iguana dot opens its evidence card with the plain summary | `gates/leaf-T41.md` G3 |
 | `bun run --cwd apps/web e2e:notes` | Two browsers on the dev stack (`next dev`, a real Axum, the signal Worker, free ports). A picks a spot on the globe and posts a field note; B sees the list entry and the pin (timed); B is offered no Edit or Delete on it; A edits, B sees the edit; A deletes, the pin goes on B; B offline, A posts, B reconnects and converges. Then the live agent answers "What have people noted near Homestead today?" from the board. Screenshots `docs/evidence/notes-*.png` | `gates/leaf-T43.md` G3, G6 |
 | `bun run --cwd apps/signal-worker e2e` | two peers against `wrangler dev --local`; prints `EXCHANGE-OK` | `gates/leaf-T20.md` G3 |
 

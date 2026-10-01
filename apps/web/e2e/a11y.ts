@@ -5,18 +5,20 @@
  *   bun run e2e:a11y           build, run, print the AXE, KEYBOARD, MOBILE and REDUCED-MOTION lines
  *   E2E_SKIP_BUILD=1 …         reuse the last e2e build
  *
- * The layout is T40's: the chat column (Agent and Missions tabs) left of the globe pane, a bottom sheet with
- * collapsed / half / full snaps on phones; the Layers legend, the "?" help sheet and the evidence drawer in the
- * globe pane.
+ * The layout is T40's with T41's chrome: the chat column (Agent and Missions tabs) left of the globe pane, a
+ * bottom sheet with collapsed / half / full snaps on phones; in the globe pane the species chips, the About (ⓘ)
+ * and Theme icon buttons with their popovers (the Layers legend and Help inside About), the help sheet and the
+ * evidence drawer.
  *
  * 1. axe-core (from node_modules, injected into the page) scans the ops page `/` at 1440×900 with data loaded,
- *    after a cited answer, with the evidence drawer open, with the Layers legend open, with the help sheet
- *    open and on the Missions tab; and at 375×812 in each phone state below. Serious and critical violations
- *    are counted once per rule and element: `AXE serious=<n> critical=<n>`.
+ *    after a cited answer, with the evidence drawer open, with the Layers legend open, with the theme popover
+ *    open, with the help sheet open and on the Missions tab; and at 375×812 in each phone state below. Serious
+ *    and critical violations are counted once per rule and element: `AXE serious=<n> critical=<n>`.
  * 2. Keyboard only (Tab, Shift+Tab, Enter, Esc, arrows): reach the chat composer, type and send, reach a
  *    citation, open the drawer (focus moves into it), close it with Esc (focus returns to the citation), reach
- *    the timeline scrubber and move it with the arrow keys, open the Layers legend and Tab into it, close it
- *    with Esc (focus returns to Layers), open the help sheet and close it with Esc (focus returns to "?"),
+ *    the timeline scrubber and move it with the arrow keys, toggle a species chip with Enter, open About and
+ *    its More data section and Tab into the legend, close it with Esc (focus returns to About), open and close
+ *    Theme the same way, open the help sheet from About and close it with Esc (focus returns to About),
  *    switch to the Missions tab with the arrow keys and Tab into it. Every stop must show a focus ring (a
  *    non-zero outline that no ancestor clips). `KEYBOARD-OK` when all of that held.
  * 3. 375×812 screenshots in docs/evidence/mobile/: main view (sheet collapsed to the composer), chat as a half
@@ -49,6 +51,12 @@ const QUESTION_BOX = '[data-chat-column] textarea[aria-label="Question"]';
 const CITATION = "[data-chat-column] [data-evidence-id]";
 const DRAWER = "[data-testid=hud-drawer]";
 const SCRUBBER = "[data-hud-scrubber]";
+/** T41: the About (ⓘ) and Theme icon buttons; Layers and Help live inside About. */
+const STATUS_BUTTON = "[data-testid=status-button]";
+const STATUS_POPOVER = "[data-testid=status-popover]";
+const THEME_BUTTON = "[data-testid=theme-button]";
+const THEME_POPOVER = "[data-testid=theme-popover]";
+const IGUANA_CHIP = '[data-species-chip="iguana"]';
 const LAYERS_BUTTON = "[data-testid=layers-button]";
 const LEGEND = "[data-testid=layers-legend]";
 const HELP_BUTTON = "[data-testid=help-button]";
@@ -336,7 +344,7 @@ async function mobileState(page: Page, name: string, sheet: string | null): Prom
 
 async function waitForData(page: Page): Promise<void> {
   await page.waitForFunction(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0 && window.__inversa?.globe() !== null, undefined, { timeout: LOAD_TIMEOUT_MS });
-  await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "hotspots")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
+  await page.waitForFunction(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0, undefined, { timeout: LOAD_TIMEOUT_MS });
   await page.waitForTimeout(2_000);
 }
 
@@ -385,7 +393,7 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await page.waitForTimeout(500);
   if (!(await focusIn(page, DRAWER))) fail("opening evidence from a citation did not move focus into the drawer");
   await recordStop(page);
-  await page.locator(`${DRAWER} section[aria-label="Normalized record"]`).waitFor({ timeout: 30_000 });
+  await page.locator(`${DRAWER} section[aria-label="Normalized record"]`).waitFor({ state: "attached", timeout: 30_000 });
   await axeScan(page, "1440 drawer");
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), DRAWER, { timeout: 10_000 });
@@ -405,20 +413,49 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   mkdirSync(path.join(REPO_DIR, "docs/evidence"), { recursive: true });
   await page.screenshot({ path: path.join(REPO_DIR, "docs/evidence/a11y-scrubber-focus.png") });
 
-  // Layers legend: open with Enter, Tab into it, Esc back to the button.
-  const toLayers = await tabTo(page, LAYERS_BUTTON);
+  // Species bar (T41): reach a chip, Enter hides that species, Enter again shows it.
+  const toChip = await tabTo(page, IGUANA_CHIP);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.iguana === false, undefined, { timeout: 10_000 });
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => (window.__inversa!.state("LAYERS") as { species: Record<string, unknown> }).species.iguana !== false, undefined, { timeout: 10_000 });
+  await recordStop(page);
+  log(`species chip after ${toChip} Tab: Enter hid and showed iguana`);
+
+  // About (ⓘ): Enter opens it with focus inside; More data opens the Layers legend; Tab reaches the legend; Esc
+  // closes the popover and hands focus back to the button.
+  const toAbout = await tabTo(page, STATUS_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(STATUS_POPOVER).waitFor({ timeout: 10_000 });
+  if (!(await focusIn(page, STATUS_POPOVER))) fail("opening About did not move focus into its popover");
+  await tabTo(page, LAYERS_BUTTON);
   await page.keyboard.press("Enter");
   await page.locator(LEGEND).waitFor({ timeout: 10_000 });
   await page.keyboard.press("Tab");
   await recordStop(page);
-  if (!(await focusIn(page, LEGEND))) fail("Tab after opening Layers did not land in the legend");
+  if (!(await focusIn(page, LEGEND))) fail("Tab after opening More data did not land in the legend");
   await axeScan(page, "1440 legend");
   await page.keyboard.press("Escape");
-  await page.waitForFunction((sel) => !document.querySelector(sel), LEGEND, { timeout: 10_000 });
-  if (!(await isFocused(page, LAYERS_BUTTON))) fail("Esc closed the legend but focus did not return to Layers");
-  log(`legend after ${toLayers} Tab: opened, entered, Esc back to Layers`);
+  await page.waitForFunction((sel) => !document.querySelector(sel), STATUS_POPOVER, { timeout: 10_000 });
+  if (!(await isFocused(page, STATUS_BUTTON))) fail("Esc closed About but focus did not return to its button");
+  log(`About after ${toAbout} Tab: opened, More data → legend entered, Esc back to the button`);
 
-  // Help sheet: Enter opens it (focus on its close button), Esc closes it back to "?".
+  // Theme: Enter opens the choices, Esc returns to the button.
+  const toTheme = await tabTo(page, THEME_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(THEME_POPOVER).waitFor({ timeout: 10_000 });
+  await page.keyboard.press("Tab");
+  await recordStop(page);
+  await axeScan(page, "1440 theme");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction((sel) => !document.querySelector(sel), THEME_POPOVER, { timeout: 10_000 });
+  if (!(await isFocused(page, THEME_BUTTON))) fail("Esc closed Theme but focus did not return to its button");
+  log(`Theme after ${toTheme} Tab: opened, Esc back to the button`);
+
+  // Help sheet (About → Help): focus moves into the sheet, Esc closes it back to the About button.
+  await tabTo(page, STATUS_BUTTON);
+  await page.keyboard.press("Enter");
+  await page.locator(STATUS_POPOVER).waitFor({ timeout: 10_000 });
   const toHelp = await tabTo(page, HELP_BUTTON);
   await page.keyboard.press("Enter");
   await page.locator(HELP).waitFor({ timeout: 10_000 });
@@ -428,8 +465,8 @@ async function desktop(browser: Browser, origin: string): Promise<DesktopResult>
   await axeScan(page, "1440 help");
   await page.keyboard.press("Escape");
   await page.waitForFunction((sel) => !document.querySelector(sel), HELP, { timeout: 10_000 });
-  if (!(await isFocused(page, HELP_BUTTON))) fail("Esc closed help but focus did not return to the help button");
-  log(`help after ${toHelp} Tab: opened, Esc back to "?"`);
+  if (!(await isFocused(page, STATUS_BUTTON))) fail("Esc closed help but focus did not return to the About button");
+  log(`help after ${toHelp} Tab inside About: opened, Esc back to the About button`);
 
   // Missions tab: reach the selected tab, arrow to Missions, Tab into the board.
   const toTab = await tabTo(page, AGENT_TAB);
@@ -486,16 +523,21 @@ async function phone(browser: Browser, origin: string, citation: string): Promis
   await page.goto(`${origin}/#v=1&e=${encodeURIComponent(citation)}`, { waitUntil: "load" });
   await page.reload({ waitUntil: "load" });
   await waitForData(page);
-  await page.locator(`${DRAWER} section[aria-label="Normalized record"]`).waitFor({ timeout: 30_000 });
+  await page.locator(`${DRAWER} section[aria-label="Normalized record"]`).waitFor({ state: "attached", timeout: 30_000 });
   await mobileState(page, "drawer-sheet", DRAWER);
   await page.locator(DRAWER).getByRole("button", { name: "Close panel" }).tap();
   await page.waitForFunction((sel) => !document.querySelector(sel), DRAWER, { timeout: 10_000 });
 
+  // About on a phone: the popover, then More data (the legend), closed with its button.
+  await page.locator(STATUS_BUTTON).tap();
+  await page.locator(STATUS_POPOVER).waitFor({ timeout: 10_000 });
   await page.locator(LAYERS_BUTTON).tap();
   await page.locator(LEGEND).waitFor({ timeout: 10_000 });
   await mobileState(page, "legend", null);
-  await page.locator(LEGEND).getByRole("button", { name: "Close layers" }).tap();
+  await page.locator(STATUS_BUTTON).tap();
+  await page.waitForFunction((sel) => !document.querySelector(sel), STATUS_POPOVER, { timeout: 10_000 });
 
+  await page.locator(STATUS_BUTTON).tap();
   await page.locator(HELP_BUTTON).tap();
   await page.locator(HELP).waitFor({ timeout: 10_000 });
   await mobileState(page, "help", null);

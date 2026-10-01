@@ -8,7 +8,7 @@ import { compactIso, decodeShareLink, encodeShareLink, type ShareState } from "c
 import { applyShareState, readShareState } from "client/hud/share-link-store";
 import type { HudSelection } from "client/hud/selection";
 import { state } from "client/state";
-import { LAYERS, type LayersState } from "client/state/layers";
+import { LAYERS, SPECIES_FILTER_IDS, type LayersState } from "client/state/layers";
 import { SELECTION } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
@@ -22,7 +22,7 @@ const sample: ShareState = {
   camera: { lat: 25.7617, lon: -80.1918, altitudeM: 45000, heading: 12.5, pitch: -62 },
   at: "2026-09-30T20:30:00.000Z",
   layers: [SIGHTINGS, HOTSPOTS, LST, ALERTS],
-  species: [PYTHON, IGUANA],
+  species: [PYTHON, IGUANA, "other"],
   evidenceId: "reading:ndbc_vakf1:water_c:1727700000000:measured",
 };
 
@@ -55,8 +55,10 @@ describe("share link encode/decode", () => {
   });
 
   test("share link omits the species filter when every species is on", () => {
-    const hash = encodeShareLink({ species: [...SPECIES_IDS] });
+    const hash = encodeShareLink({ species: [...SPECIES_FILTER_IDS] });
     expect(new URLSearchParams(hash).has("sp")).toBe(false);
+    // The four focus species without `other` is a filter: it travels.
+    expect(decodeShareLink(encodeShareLink({ species: [...SPECIES_IDS] })).species).toEqual([...SPECIES_IDS]);
     expect(decodeShareLink(hash).species).toBeUndefined();
   });
 
@@ -110,7 +112,7 @@ describe("share link store", () => {
     expect(get<TimeState>(TIME)!.playing).toBe(false);
     const layers = get<LayersState>(LAYERS)!;
     expect(LAYER_IDS.filter((id) => layers.visible[id])).toEqual(sample.layers!);
-    expect(SPECIES_IDS.filter((id) => layers.species[id])).toEqual(sample.species!);
+    expect(SPECIES_FILTER_IDS.filter((id) => layers.species[id])).toEqual(sample.species!);
     const selection = get<HudSelection>(SELECTION)!;
     expect(selection.evidenceId).toBe(sample.evidenceId!);
     expect(selection.drawerOpen).toBe(true);

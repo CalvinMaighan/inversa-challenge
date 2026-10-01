@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { MAX_HIGHLIGHT, placeTargets, targetPriority, wantedTargets } from "client/hud/overlay/targets";
+import { labelledTargets, MAX_HIGHLIGHT, MAX_LABELS, placeTargets, targetPriority, wantedTargets } from "client/hud/overlay/targets";
 import type { AgentHighlightTarget } from "client/state/agent";
 
 const at = (i: number): AgentHighlightTarget => ({ id: `sighting:${i}`, label: `Green iguana · research`, lon: Number((-80.4 - i / 1000).toFixed(3)), lat: 25.5 });
@@ -27,6 +27,31 @@ describe("HUD brackets for the agent's highlight (PLAN.md C17)", () => {
     expect(wanted[2]!.at).toEqual({ lon: -80.403, lat: 25.5 });
     expect(wanted[3]!.at).toBeUndefined();
     expect(wanted[2]!.label).toBe("SIGHTING Green iguana · research");
+  });
+
+  test("fewer brackets: station readings in a highlight are left out unless cited, selected or hovered", () => {
+    const reading = (n: number): AgentHighlightTarget => ({ id: `reading:usgs_${n}:stage_m:1759190400000:measured`, label: `Gauge ${n}`, lon: -80.5, lat: 25.6 });
+    const cited = reading(2).id;
+    const wanted = wantedTargets(null, [[cited, "Gauge 2 stage"]], { targets: [at(1), reading(1), reading(2), reading(3)], hover: reading(3) });
+    expect(wanted.map((w) => w.id)).toEqual([cited, "sighting:1", reading(3).id]);
+    expect(wanted.find((w) => w.id === reading(3).id)?.hovered).toBe(true);
+  });
+
+  test("fewer labels: only the selection, the hovered row and citations get text, strongest first, at most 12", () => {
+    const t = (id: string, role: "selected" | "cited" | "hovered" | "highlight", priority: number) => ({
+      id,
+      selected: role === "selected",
+      cited: role === "cited",
+      hovered: role === "hovered",
+      priority,
+    });
+    const many = Array.from({ length: 20 }, (_, i) => t(`sighting:${i}`, "cited", 50 - i));
+    const list = [t("sighting:h", "highlight", 30), ...many, t("sighting:sel", "selected", 100), t("sighting:hov", "hovered", 90)];
+    const labelled = labelledTargets(list);
+    expect(labelled).toHaveLength(MAX_LABELS);
+    expect(MAX_LABELS).toBe(12);
+    expect(labelled.slice(0, 3).map((x) => x.id)).toEqual(["sighting:sel", "sighting:hov", "sighting:0"]);
+    expect(labelled.some((x) => x.id === "sighting:h")).toBe(false);
   });
 
   test("highlight: capped at 50, and the hovered row joins even past the cap", () => {

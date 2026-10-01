@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { getGlobe, onGlobeReady, type GlobeApi, type ScreenPoint } from "client/globe/api";
 import styled from "client/styled";
@@ -10,7 +10,7 @@ import { CELL_DEG, cellCenter, parseHotspotId } from "../drawer/evidence";
 import { openEvidence } from "../selection";
 import { acquireAlpha, bracketSegments, monoWidth } from "./brackets";
 import { LabelArbiter, type LabelCandidate, type Rect } from "./label-arbiter";
-import { useTargets, type Target } from "./targets";
+import { labelledTargets, useTargets, type Target } from "./targets";
 
 /** Label metrics: 11 px JetBrains Mono advances about 6.6 px per glyph. */
 const LABEL_ADVANCE = 6.6;
@@ -131,7 +131,8 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
   const targets = useTargets();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelEls = useRef(new Map<string, HTMLButtonElement>());
-  const live = useRef<{ targets: Target[]; focus: boolean }>({ targets: [], focus: false });
+  const labelled = useMemo(() => labelledTargets(targets), [targets]);
+  const live = useRef<{ targets: Target[]; labelled: ReadonlySet<string>; focus: boolean }>({ targets: [], labelled: new Set(), focus: false });
   const drawRef = useRef<() => void>(() => {});
 
   useEffect(() => {
@@ -149,7 +150,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
       if (!ctx) return;
       ctx.clearRect(0, 0, w, h);
       const globe = api && getGlobe() === api ? api : null;
-      const { targets: list, focus: scoped } = live.current;
+      const { targets: list, labelled: labelIds, focus: scoped } = live.current;
       const colors = readColors(canvas);
       const now = performance.now();
       const still = prefersReducedMotion();
@@ -198,7 +199,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
           ctx.fillStyle = colors.selected;
           ctx.fill();
         }
-        candidates.push({ key: t.id, x: p.x, y: p.y, w: monoWidth(t.label, LABEL_ADVANCE, LABEL_PAD) + 2, h: LABEL_HEIGHT, bracket: half, priority: t.priority });
+        if (labelIds.has(t.id)) candidates.push({ key: t.id, x: p.x, y: p.y, w: monoWidth(t.label, LABEL_ADVANCE, LABEL_PAD) + 2, h: LABEL_HEIGHT, bracket: half, priority: t.priority });
       }
       ctx.globalAlpha = 1;
       for (const id of [...firstSeen.keys()]) if (!list.some((t) => t.id === id)) firstSeen.delete(id);
@@ -254,11 +255,11 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
 
   // `layout` changes when a panel opens or closes: the label obstacles moved, so labels are placed again.
   useEffect(() => {
-    live.current = { targets, focus };
+    live.current = { targets, labelled: new Set(labelled.map((t) => t.id)), focus };
     const globe = getGlobe();
     if (globe) globe.requestRender();
     else drawRef.current();
-  }, [targets, focus, layout]);
+  }, [targets, labelled, focus, layout]);
 
   const register = useCallback((id: string, el: HTMLButtonElement | null) => {
     if (el) labelEls.current.set(id, el);
@@ -269,7 +270,7 @@ export default function DetectionOverlay({ focus, layout }: { focus: boolean; la
     <>
       <Layer ref={canvasRef} aria-hidden="true" data-testid="hud-overlay" />
       <Labels data-testid="hud-labels">
-        {targets.map((t) => (
+        {labelled.map((t) => (
           <LabelButton
             key={t.id}
             ref={(el) => register(t.id, el)}

@@ -23,7 +23,7 @@ export type CapabilityOutput = {
   count: number;
 };
 
-export type AgentView = { bbox: BBox; time: string; layers: string[]; selection: string | null };
+export type AgentView = { bbox: BBox; time: string; layers: string[]; species?: string[]; selection: string | null };
 
 export type CapabilityContext = {
   signal?: AbortSignal;

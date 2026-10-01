@@ -55,6 +55,8 @@ export type LayerContext = {
   /** Bumped whenever a grid, meta or sightings set is published, so layers can key redraws on it. */
   revision(): number;
   layers(): LayersState;
+  /** Selected evidence id (SELECTION), for layers that emphasise it. Optional for stand-in contexts. */
+  selection?(): string | null;
   missions(): MissionsState;
   peers(): readonly Peer[];
   /** Live field notes on the team board (NOTES.pins, T43). */

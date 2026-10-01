@@ -1,91 +1,24 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, setLayerSpeciesPin, setLayerVisible, setSpeciesVisible, type LayersState, type SpeciesId } from "client/state/layers";
 import styled from "client/styled";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
-import { Icon, IconButton, Mono, NARROW_PANE } from "../primitives";
+import { Mono } from "../primitives";
 import { SPECIES_NAMES } from "../tooltip/model";
 import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
 
-const Anchor = styled.div`
-  position: absolute;
-  z-index: 5;
-  top: var(--hud-top);
-  right: var(--hud-right, var(--gap-m));
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  max-height: calc(100% - var(--hud-top) - var(--hud-bottom) - var(--gap-s));
-  pointer-events: none;
-
-  & > * {
-    pointer-events: auto;
-  }
-
-  /* A narrow pane cannot fit the drawer and the legend side by side: the legend moves to the left edge. */
-  ${NARROW_PANE} {
-    [data-drawer-open] & {
-      right: auto;
-      left: max(var(--gap-m), env(safe-area-inset-left));
-      align-items: flex-start;
-    }
-  }
-`;
-
-const Toggle = styled(IconButton)`
-  background: var(--surface);
-  box-shadow: var(--shadow);
-`;
-
-const Sheet = styled.section`
-  display: flex;
-  flex-direction: column;
-  width: min(320px, calc(100cqw - 2 * var(--gap-m)));
-  min-height: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
-  color: var(--text);
-`;
-
-const Head = styled.header`
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  padding: 6px 6px 6px var(--gap-m);
-  border-bottom: 1px solid var(--border);
-
-  h2 {
-    flex: 1;
-    margin: 0;
-    font: 600 var(--font-xs) / 1.2 var(--font-mono);
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text);
-  }
-`;
-
-const Body = styled.div`
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-`;
-
 const Row = styled.div`
-  padding: var(--gap-s) var(--gap-m);
+  padding: var(--gap-s) 0;
   border-bottom: 1px solid var(--border);
 
-  &[data-off] > :not(:first-child) {
-    opacity: 0.55;
+  /* An off layer dims its swatches and ramp, never its text (which keeps full contrast; the count reads "off"). */
+  &[data-off] i {
+    opacity: 0.45;
   }
 `;
 
@@ -309,51 +242,20 @@ function GapsRow() {
 }
 
 /**
- * Layers and legend (T40), top right of the globe pane: what every colour on the globe means, a switch per
- * layer and per species, and what each layer draws right now (GlobeApi `stats()`).
+ * Layers and legend (T40, T41): what every colour on the globe means, a switch per layer and per species, and
+ * what each layer draws right now (GlobeApi `stats()`). Lives in the About popover under "More data (for
+ * experts)"; the species bar is the everyday filter. Samples the globe only while `active` (the section open).
  */
-export default function LegendPanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export default function LegendBody({ active }: { active: boolean }) {
   const layers = useActiveState<LayersState>(LAYERS)[0] ?? LAYERS.defaults;
-  const stats = useGlobeStats(open);
+  const stats = useGlobeStats(active);
   const rows = useMemo(() => legendRows({ ...LAYERS.defaults, ...layers }, stats), [layers, stats]);
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  // Closing from inside the sheet (Esc, its close button) would drop focus on <body>: hand it back to Layers.
-  const closeFromInside = () => {
-    onOpenChange(false);
-    toggleRef.current?.focus({ preventScroll: true });
-  };
   return (
-    <Anchor data-hud-obstacle="" data-testid="hud-legend">
-      <Toggle ref={toggleRef} type="button" $active={open} aria-expanded={open} aria-controls="layers-legend" onClick={() => onOpenChange(!open)} data-testid="layers-button" title="Layers and legend">
-        <Icon name="layers" />
-        Layers
-      </Toggle>
-      {open ? (
-        <Sheet
-          id="layers-legend"
-          aria-label="Layers and legend"
-          data-testid="layers-legend"
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              closeFromInside();
-            }
-          }}
-        >
-          <Head>
-            <h2>Layers & legend</h2>
-            <IconButton type="button" aria-label="Close layers" onClick={closeFromInside}>
-              <Icon name="close" />
-            </IconButton>
-          </Head>
-          <Body>
-            {rows.map((row) => (
-              <LegendRowView key={row.layer} row={row} />
-            ))}
-            <GapsRow />
-          </Body>
-        </Sheet>
-      ) : null}
-    </Anchor>
+    <section aria-label="Layers and legend" data-testid="layers-legend">
+      {rows.map((row) => (
+        <LegendRowView key={row.layer} row={row} />
+      ))}
+      <GapsRow />
+    </section>
   );
 }

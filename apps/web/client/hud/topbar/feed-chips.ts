@@ -88,6 +88,13 @@ export function feedSummary(feeds: readonly FeedState[]): { state: FeedHealth; t
   return { state, tone: TONE[state], degraded: feeds.filter((f) => f.state !== "nominal").length };
 }
 
+const SEVERITY: Record<FeedHealth, number> = { down: 0, stale: 1, lagging: 2, nominal: 3 };
+
+/** The status popover's order: worst feeds first, then by display name. */
+export function sortFeedsForStatus(feeds: readonly FeedState[]): FeedState[] {
+  return [...feeds].sort((a, b) => SEVERITY[a.state] - SEVERITY[b.state] || feedLabel(a.source).localeCompare(feedLabel(b.source)));
+}
+
 const HEALTH = new Set<FeedHealth>(["nominal", "lagging", "stale", "down"]);
 
 /**

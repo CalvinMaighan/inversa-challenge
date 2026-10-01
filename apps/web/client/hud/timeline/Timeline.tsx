@@ -1,23 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { get, set } from "@calvinjs/active-state";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import { enabledSpecies, otherTaxaShown } from "client/globe/species";
+import { LAYERS, type LayersState } from "client/state/layers";
 import { THEME } from "client/state/theme";
 import { retime, TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
-import { frameIndexAt } from "client/threads/api";
+import { frameIndexAt, type FrameSightings } from "client/threads/api";
+import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import { Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
-import { useCell } from "../store";
-import { alertRows } from "../Sync";
+import { Dot, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
 import { formatClocks, isLive } from "../topbar/clock";
-import { alertBands } from "./alerts";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
 import { stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
+import { filteredCounts } from "./sparkline";
 import { useFrameGrid, useFrameSightings } from "./use-frame-grid";
+
+const [SIGHTINGS] = LAYER_IDS;
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32] as const;
 
@@ -45,36 +48,33 @@ const Controls = styled.div`
   font-size: 12px;
 `;
 
+const LiveButton = styled.button<{ $live: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in oklch, ${(p) => (p.$live ? "var(--ok)" : "var(--warn)")} 60%, transparent);
+  border-radius: var(--radius-s);
+  background: color-mix(in oklch, ${(p) => (p.$live ? "var(--ok)" : "var(--warn)")} 12%, transparent);
+  color: var(--text);
+  font: 600 11px / 1 var(--font-mono);
+  letter-spacing: 0.06em;
+  cursor: ${(p) => (p.$live ? "default" : "pointer")};
+`;
+
 const Readout = styled(Mono)`
-  margin-left: var(--gap-s);
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-`;
 
-const Legend = styled.span`
-  margin-left: auto;
-  display: flex;
-  gap: var(--gap-s);
-  color: var(--muted);
-  font: 600 10px / 1 var(--font-mono);
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-  i {
-    display: inline-block;
-    width: 10px;
-    height: 8px;
-    margin-right: 3px;
-    vertical-align: -1px;
-  }
+  /* A phone has the date and LIVE/REPLAY; the clock would only show cut off. */
   ${MOBILE} {
     display: none;
   }
-`;
-
-const Swatch = styled.i<{ $color: string; $hatch?: boolean }>`
-  background: ${(p) =>
-    p.$hatch ? `repeating-linear-gradient(135deg, ${p.$color} 0 1.5px, transparent 1.5px 4px)` : p.$color};
 `;
 
 const Select = styled.select`
@@ -107,13 +107,6 @@ const DateInput = styled.input`
   }
   ${MOBILE} {
     margin-left: 0;
-  }
-`;
-
-/** Step buttons: phones drop them (drag the scrubber, or its arrow keys) so the controls fit one row. */
-const StepButton = styled(IconButton)`
-  ${MOBILE} {
-    display: none;
   }
 `;
 
@@ -209,13 +202,6 @@ function setStep(step: number) {
   });
 }
 
-function nudge(delta: number) {
-  const t = get<TimeState>(TIME) ?? TIME.defaults;
-  const from = Date.parse(t.from);
-  const to = Date.parse(t.to);
-  setStep(stepAt(Date.parse(t.at ?? t.to), from, to) + delta);
-}
-
 function togglePlay() {
   set<TimeState>(TIME, (prev = TIME.defaults) => {
     if (prev.playing) return { ...prev, playing: false };
@@ -223,6 +209,12 @@ function togglePlay() {
     const atEnd = isLive(prev);
     return { ...prev, playing: true, at: atEnd ? prev.from : (prev.at ?? prev.to) };
   });
+}
+
+/** The sparkline's per-frame counts under the species filter, or null without sighting sections. */
+function sparkCounts(sightings: FrameSightings | null, filter: LayersState["species"]): Uint32Array | null {
+  if (!sightings) return null;
+  return filteredCounts(sightings.counts.length, (i) => sightings.records(i), enabledSpecies(filter, SIGHTINGS), otherTaxaShown(filter, SIGHTINGS));
 }
 
 /** Advance TIME.at by one step every `1000 / speed` ms while playing; stop on the live edge. */
@@ -261,19 +253,21 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   const [theme] = useActiveState(THEME);
   const { grid, meta, version } = useFrameGrid();
   const sightings = useFrameSightings();
-  const alerts = useCell(alertRows);
+  const species = useActiveState<LayersState, LayersState["species"]>(LAYERS, (l) => l.species)[0] ?? LAYERS.defaults.species;
   const at = useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? "";
   const steps = windowSteps(from, to);
 
   // Counts only mean something when they index the same frames as the grid.
   const counts = sightings && meta && sightings.counts.length === meta.frameCount ? sightings.counts : null;
+  // The line follows the species filter, as the globe does; the gap lane keeps every sighting (a quiet stretch
+  // is a gap in the data, whatever is filtered).
+  const shown = useMemo(() => sparkCounts(counts ? sightings : null, species), [counts, sightings, species]);
   // Recomputed per grid write, not per scrub step. `version` is the dependency that tracks SAB writes.
   const flags = useMemo(
     () => (grid && meta ? frameGapFlags(grid, counts, meta.stepMinutes * 60_000) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- version changes when the grid's contents change
     [grid, meta, version, counts],
   );
-  const bands = useMemo(() => alertBands(alerts, from, to), [alerts, from, to]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -290,8 +284,8 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     canvas.width = Math.round(width * dpr);
     canvas.height = Math.round(TRACK.height * dpr);
-    drawTrack(ctx, width, dpr, { fromMs: from, toMs: to, meta, flags, counts, bands }, readColors(canvas));
-  }, [width, from, to, meta, flags, counts, bands, theme]);
+    drawTrack(ctx, width, dpr, { fromMs: from, toMs: to, meta, flags, counts: shown }, readColors(canvas));
+  }, [width, from, to, meta, flags, shown, theme]);
 
   const onPointerMove = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -304,19 +298,18 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
       const clock = formatClocks(ms);
       const lines = [`${clock.date} ${clock.utc}`];
       if (frame === null) lines.push("outside the loaded frames");
-      else if (counts) lines.push(`${counts[frame]} sightings`);
+      else if (shown) lines.push(`${shown[frame]} sightings`);
       const f = frame !== null && flags ? flags[frame]! : 0;
-      if (f & GAP_FLAG.ENV_MISSING) lines.push("no satellite data");
-      else if (f & GAP_FLAG.CLOUD) lines.push("cloud / masked");
-      if (f & GAP_FLAG.NO_SIGHTINGS) lines.push("no sightings ≥12 h");
-      if (f & GAP_FLAG.UNLOADED) lines.push("frame not loaded");
-      for (const band of bands) if (ms >= band.startMs && ms < band.endMs) lines.push(`${band.event} (${band.severity})`);
+      if (f & GAP_FLAG.ENV_MISSING) lines.push("gap: no satellite data");
+      else if (f & GAP_FLAG.CLOUD) lines.push("gap: cloud over the satellite view");
+      if (f & GAP_FLAG.NO_SIGHTINGS) lines.push("gap: no sightings for 12 h or more");
+      if (f & GAP_FLAG.UNLOADED) lines.push("not loaded yet");
       tip.textContent = lines.join("\n");
       tip.style.visibility = "visible";
       const tipWidth = tip.offsetWidth;
       tip.style.transform = `translateX(${Math.min(rect.width - tipWidth, Math.max(0, fx * rect.width - tipWidth / 2))}px)`;
     },
-    [bands, counts, flags, meta, from, to, width],
+    [shown, flags, meta, from, to, width],
   );
 
   const step = stepAt(Date.parse(at), from, to);
@@ -380,17 +373,12 @@ function PlayControls() {
   const at = useActiveState<TimeState, string>(TIME, (t) => t.at ?? t.to)[0] ?? "";
   usePlayback(playing, speed);
   const c = formatClocks(Date.parse(at));
+  const showingNow = live && !playing;
   return (
     <Controls>
-      <StepButton type="button" onClick={() => nudge(-1)} aria-label="Step back 15 minutes" title="Step back (15 min)">
-        <Icon name="prev" />
-      </StepButton>
       <IconButton type="button" onClick={togglePlay} $active={playing} aria-label={playing ? "Pause" : "Play"} aria-pressed={playing} data-testid="hud-play">
         <Icon name={playing ? "pause" : "play"} />
       </IconButton>
-      <StepButton type="button" onClick={() => nudge(1)} aria-label="Step forward 15 minutes" title="Step forward (15 min)">
-        <Icon name="next" />
-      </StepButton>
       <Select
         aria-label="Playback speed, frames per second"
         value={speed}
@@ -402,40 +390,26 @@ function PlayControls() {
           </option>
         ))}
       </Select>
-      <IconButton
+      {/* Live versus replay lives here (T41): the state, and the way back to now. */}
+      <LiveButton
         type="button"
-        $active={live}
-        disabled={live && !playing}
-        onClick={() => set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(Date.now()), playing: false }))}
-        title="Jump to the live edge"
+        $live={showingNow}
+        aria-disabled={showingNow}
+        aria-label={showingNow ? "LIVE, showing now" : `${playing ? "REPLAY, playing" : "REPLAY"}: jump to now`}
+        title={showingNow ? "Showing now" : "Showing the past: click to jump to now"}
+        data-testid="hud-live"
+        aria-live="polite"
+        onClick={() => {
+          if (!showingNow) set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(Date.now()), playing: false }));
+        }}
       >
-        <Icon name="live" />
-        Live
-      </IconButton>
+        <Dot $tone={showingNow ? "ok" : "warn"} $pulse={showingNow || playing} />
+        {showingNow ? "LIVE" : playing ? "REPLAY ▸" : "REPLAY"}
+      </LiveButton>
       <DateJump at={at} />
-      <Readout>{c.utc}</Readout>
-      <Legend aria-hidden="true">
-        <span>
-          <Swatch $color="var(--accent)" />
-          sightings
-        </span>
-        <span>
-          <Swatch $color="var(--warn)" />
-          alerts
-        </span>
-        <span>
-          <Swatch $color="var(--danger)" $hatch />
-          no data
-        </span>
-        <span>
-          <Swatch $color="var(--warn)" $hatch />
-          cloud
-        </span>
-        <span>
-          <Swatch $color="var(--muted)" $hatch />
-          quiet
-        </span>
-      </Legend>
+      <Readout title="Time cursor, UTC and Florida time">
+        {c.utc.slice(0, 5)}Z · {c.local.slice(0, 5)} {c.zone}
+      </Readout>
     </Controls>
   );
 }
@@ -450,8 +424,25 @@ export default function Timeline() {
       togglePlay();
     }
   };
+  const ref = useRef<HTMLDivElement>(null);
+  // The globe's data attribution sits in the globe layer, under the HUD: lift it above the timeline, which would
+  // otherwise cover it and take its clicks (GlobeView reads --globe-credits-bottom).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const pane = el?.closest<HTMLElement>('[data-slot="globe-pane"]');
+    if (!el || !pane || typeof ResizeObserver !== "function") return;
+    const apply = () => pane.style.setProperty("--globe-credits-bottom", `${Math.ceil(pane.getBoundingClientRect().bottom - el.getBoundingClientRect().top + 4)}px`);
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    observer.observe(pane);
+    apply();
+    return () => {
+      observer.disconnect();
+      pane.style.removeProperty("--globe-credits-bottom");
+    };
+  }, []);
   return (
-    <Root as="section" data-hud-obstacle="" aria-label="Timeline" data-testid="hud-timeline" onKeyDown={onKeyDown}>
+    <Root as="section" ref={ref} data-hud-obstacle="" aria-label="Timeline" data-testid="hud-timeline" onKeyDown={onKeyDown}>
       <PlayControls />
       <TimelineTrack from={Date.parse(from)} to={Date.parse(to)} />
     </Root>

@@ -36,8 +36,7 @@ describe("legend", () => {
     expect(row.swatches.map((s) => s.label)).toEqual(["Burmese python", "Argentine tegu", "Green iguana", "Red lionfish", "Other introduced species"]);
     expect(row.swatches.map((s) => s.color)).toEqual([...SPECIES_COLORS, OTHER_TAXON_COLOR]);
     expect(row.swatches.map((s) => s.count)).toEqual([2, 0, 6, 0, 1]);
-    expect(row.swatches.slice(0, 4).map((s) => s.species)).toEqual([...SPECIES_IDS]);
-    expect(row.swatches[4]!.species).toBeUndefined();
+    expect(row.swatches.map((s) => s.species)).toEqual([...SPECIES_IDS, "other"]);
   });
 
   test("species toggles reflect the LAYERS filter", () => {

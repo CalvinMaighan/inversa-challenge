@@ -39,6 +39,16 @@ describe("agent request view", () => {
     });
   });
 
+  test("the species filter travels only when it hides something", () => {
+    const all = { python: true, tegu: true, iguana: true, lionfish: true, other: true };
+    expect(agentView({ layers: { visible: { sightings: true }, species: all } }, NOW).species).toBeUndefined();
+    expect(agentView({ layers: { visible: { sightings: true }, species: { ...all, python: false, tegu: false, lionfish: false, other: false } } }, NOW).species).toEqual([
+      "iguana",
+    ]);
+    // A hotspot pin is not a species.
+    expect(agentView({ layers: { species: { ...all, hotspots: "python" } } }, NOW).species).toBeUndefined();
+  });
+
   test("bbox validation", () => {
     expect(validBBox({ west: -81, south: 25, east: -80, north: 26 })).toBe(true);
     expect(validBBox({ west: -81, south: 25, east: -80 })).toBe(false);
