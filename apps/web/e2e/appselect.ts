@@ -155,17 +155,16 @@ async function main(): Promise<string> {
     const switchMs = Math.round(await timedSwitch(page, "lionfish", lionfish.helperQuestions[0]!));
     const layers = (await page.evaluate(() => window.__inversa!.state("LAYERS"))) as { visible: Record<string, boolean>; sightingHours: number };
     if (layers.visible.lst !== false || layers.visible.sightings !== true || layers.sightingHours !== 720) fail(`lionfish layers ${JSON.stringify(layers)}`);
-    // The map preset: the globe flies to the middle of lionfish's four areas, shifted west so they sit clear of the
-    // survey panel (leaf UL frames them in the free part of the screen), and VIEW (which the camera writes
-    // back once it settles) ends up there.
-    const centre = { lat: (9.7 + 27.5) / 2, lon: (-88.5 + -74.0) / 2 };
+    // The map preset: the globe flies to frame lionfish's four areas in the part of the screen the HUD leaves free
+    // (leaf UL/GRB fit), and VIEW (which the camera writes back once it settles) ends up showing all four.
+    const hull = { west: -88.5, south: 9.7, east: -74.0, north: 27.5 };
     await page
       .waitForFunction(
-        (c) => {
-          const v = window.__inversa!.state("VIEW") as { lat: number; lon: number };
-          return Math.abs(v.lat - c.lat) < 2 && Math.abs(v.lon - c.lon) < 4;
+        (h) => {
+          const v = window.__inversa!.state("VIEW") as { bbox: { west: number; south: number; east: number; north: number }; altitudeM: number };
+          return v.bbox.west <= h.west && v.bbox.south <= h.south && v.bbox.east >= h.east && v.bbox.north >= h.north && v.altitudeM < 12_000_000;
         },
-        centre,
+        hull,
         { timeout: 15_000 },
       )
       .catch(() => page.evaluate(() => window.__inversa!.state("VIEW")).then((v) => fail(`lionfish preset: VIEW ${JSON.stringify(v)}`)));
