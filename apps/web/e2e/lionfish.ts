@@ -143,12 +143,6 @@ async function apiIndependent(stack: Stack): Promise<{ independent: number; copi
 }
 
 async function main(): Promise<void> {
-  // The API's lionfish frame build can deadlock under rayon: `hotspot::lionfish::Index::{crw,marine}_nearest`
-  // run `OnceLock::get_or_init(nearest_index)`, and `nearest_index` uses `par_chunks_mut` while the frames are
-  // themselves built with `par_iter`, so a worker that steals a frame job blocks on the OnceLock it is still
-  // initialising (0 % CPU, `backfill` never prints `frames: rebuilt`; seen 6 of 7 runs on 2026-10-01). One rayon
-  // thread runs the same code sequentially. Remove once api/ fixes the init (owner: L5).
-  process.env.RAYON_NUM_THREADS ??= "1";
   buildApi(log);
   buildWeb(log);
   const stack = await startStack({ name: "lionfish", app: "lionfish", apps: ["lionfish"] });

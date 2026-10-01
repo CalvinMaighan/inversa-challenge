@@ -655,7 +655,9 @@ pub fn nearest_index(grid: &Grid, pts: &[(f64, f64)], max_cells: u32) -> Vec<u32
     let max_d2 = (max_cells as f64) * (max_cells as f64) + 1e-6;
     let max_ring = (bc.max(br)) + 1;
     let mut out = vec![u32::MAX; cells];
-    out.par_chunks_mut(cols as usize).enumerate().for_each(|(row, chunk)| {
+    // Sequential on purpose: callers run this inside `OnceLock::get_or_init` from rayon workers, and a parallel body
+    // there lets the initialising thread steal a job that blocks on the same lock (deadlock seen in L5 + UL).
+    out.chunks_mut(cols as usize).enumerate().for_each(|(row, chunk)| {
         let by0 = row as i64 / B;
         for (col, slot) in chunk.iter_mut().enumerate() {
             let bx0 = col as i64 / B;
