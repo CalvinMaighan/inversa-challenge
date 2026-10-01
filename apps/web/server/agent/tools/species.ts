@@ -14,8 +14,6 @@ import type { BBox } from "@/shared/agent/events";
 import type { TableView } from "@/shared/agent/results";
 import { SPECIES_IDS } from "@/shared/voice/ui-tools";
 
-const [, , , LIONFISH] = SPECIES_IDS;
-
 export const INAT_AUTOCOMPLETE = "https://api.inaturalist.org/v1/taxa/autocomplete";
 const INAT_TIMEOUT_MS = 8_000;
 
@@ -53,22 +51,49 @@ export function speciesLabel(taxon: Pick<GqlTaxon, "commonName" | "scientificNam
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
-/** The focus key a name means, if any: "python", "burmese python", "Python bivittatus", "tegus" … */
+const [PYTHON, TEGU, IGUANA, LIONFISH] = SPECIES_IDS;
+
+/** Other names people use for the focus species (lower case, singular). A rock python or a rhino iguana is not one. */
+const FOCUS_ALIASES: Record<string, SpeciesKey> = {
+  "argentine tegu": TEGU,
+  "black and white tegu": TEGU,
+  "argentine black-and-white tegu": TEGU,
+  "burmese python": PYTHON,
+  "green iguana": IGUANA,
+  "red lionfish": LIONFISH,
+  "common lionfish": LIONFISH,
+  "devil firefish": LIONFISH,
+  pterois: LIONFISH,
+  "pterois volitans": LIONFISH,
+  "pterois miles": LIONFISH,
+};
+
+/** The focus key a name means, if any: "python", "burmese pythons", "Python bivittatus", "tegus", "red lionfish" … */
 export function focusKeyOf(name: string): SpeciesKey | null {
-  const n = norm(name).replace(/s$/, "");
+  const whole = norm(name);
+  const singular = whole.replace(/(es|s)$/, "");
   for (const s of SPECIES) {
-    if (n === s.key || n === norm(s.common).replace(/s$/, "") || n === norm(s.scientific)) return s.key;
-    if (n.endsWith(` ${s.key}`) && s.key !== LIONFISH) return s.key;
+    for (const n of [whole, singular]) {
+      if (n === s.key || n === norm(s.common) || n === norm(s.scientific) || n === norm(s.scientific).replace(/\/.*$/, "")) return s.key;
+      const alias = FOCUS_ALIASES[n];
+      if (alias) return alias;
+    }
   }
-  // "red lionfish", "lionfishes", "Pterois volitans": the lionfish row stands for the genus.
-  if (new RegExp(`^(red )?${LIONFISH}(es)?$`).test(norm(name)) || /^pterois/.test(norm(name))) return LIONFISH;
   return null;
 }
 
-/** Best local match for a name among `taxa(q)` rows: exact common or Latin name first, else the first row. */
+/**
+ * Best local match for a name among `taxa(q)` rows: an exact common or Latin name, else a common name that
+ * starts with it ("anole" is many anoles: the first in id order), else the first row.
+ */
 export function pickTaxon(name: string, rows: GqlTaxon[]): GqlTaxon | null {
   const n = norm(name);
-  return rows.find((t) => norm(t.commonName) === n || norm(t.scientificName) === n) ?? rows[0] ?? null;
+  return (
+    rows.find((t) => norm(t.commonName) === n || norm(t.scientificName) === n) ??
+    rows.find((t) => norm(t.commonName).startsWith(n) || norm(t.scientificName).startsWith(n)) ??
+    rows[0] ??
+    null
+  );
 }
 
 type InatHit = { id: number; name: string; preferred_common_name?: string | null; iconic_taxon_name?: string | null };

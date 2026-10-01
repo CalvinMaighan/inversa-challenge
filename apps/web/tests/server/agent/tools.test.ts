@@ -7,6 +7,7 @@ import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { cellCenter, cellFor, parseEvidenceId } from "@/server/agent/tools/evidence";
 import { lookupGazetteer } from "@/server/agent/tools/gazetteer";
+import { focusKeyOf, pickTaxon } from "@/server/agent/tools/species";
 import { viewOf } from "@/server/agent/tools/views";
 import type { TableView } from "@/shared/agent/results";
 import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
@@ -88,6 +89,35 @@ describe("capability tools", () => {
     expect(table.columns.map((c) => c.key)).toEqual(["species", "scientific", "group", "count", "latest"]);
     expect(table.rows[1]).toMatchObject({ evidenceId: "sighting:5001", species: "Brown anole", scientific: "Anolis sagrei", count: 3, sourcePageUrl: "https://www.inaturalist.org/taxa/116461" });
     expect(viewOf(out)!.highlight).toEqual(["sighting:2002", "sighting:5001", "sighting:3002", "sighting:6001"]);
+  });
+
+  test("focus names (T44): keys, common and Latin names, plurals and aliases map to the focus four; look-alikes do not", () => {
+    for (const [name, key] of [
+      ["python", "python"],
+      ["Burmese pythons", "python"],
+      ["Python bivittatus", "python"],
+      ["tegus", "tegu"],
+      ["Argentine tegu", "tegu"],
+      ["Argentine black and white tegu", "tegu"],
+      ["Green iguana", "iguana"],
+      ["iguanas", "iguana"],
+      ["lionfish", "lionfish"],
+      ["Red lionfish", "lionfish"],
+      ["lionfishes", "lionfish"],
+      ["Pterois volitans", "lionfish"],
+    ] as const) {
+      expect([name, focusKeyOf(name)]).toEqual([name, key]);
+    }
+    for (const name of ["African rock python", "rhinoceros iguana", "brown anole", "Python sebae", ""]) expect([name, focusKeyOf(name)]).toEqual([name, null]);
+    const rows = [
+      { id: "9", scientificName: "Anolis distichus", commonName: "Bark Anole", focus: false },
+      { id: "5", scientificName: "Anolis sagrei", commonName: "Brown Anole", focus: false },
+    ];
+    expect(pickTaxon("brown anole", rows)?.id).toBe("5");
+    expect(pickTaxon("Anolis sagrei", rows)?.id).toBe("5");
+    expect(pickTaxon("anole", rows)?.id).toBe("9");
+    expect(pickTaxon("bark", rows)?.id).toBe("9");
+    expect(pickTaxon("x", [])).toBeNull();
   });
 
   test("sightings (T44) takes any species name: focus keys cost no lookup, other names resolve through taxa(q), unknown ones are reported, never substituted", async () => {
