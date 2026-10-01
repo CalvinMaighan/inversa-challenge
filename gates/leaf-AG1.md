@@ -1,0 +1,45 @@
+# Gates: AG1 agent runtime per app + carp tools + carp benchmark (fable)
+
+Contract: PLAN.md C-A5 (per-app persona/scope/allowlist from config); questions in `spec/apps/questions/carp.json` (source of truth: ids, categories, `expectedTools`, `mustCite`, `pass` criteria, `newTools` specs for `site_status`, `river_readings`, `river_forecast`, `forecast_verify`, `review_history`, `weather_forecast`, `source_info`, `evidence`, `team_board`), grading rubric `docs/grading/rubric.md` (what eval must print), existing agent in `apps/web/server/agent/**` (registry, prompt, tools, cache, budget, run-turn), eval harness `apps/web/eval/**`. GraphQL shapes: C3/C4 (`forecasts`, `siteStatusAt`, `forecastVerify`, `readings`, `alerts`, `feeds`, `board`) and C5 concurrent (`siteReview`, `reviewHistory`, `reviewBoard`; code to these names, reconcile at merge). You own: `apps/web/server/agent/**`, `apps/web/app/api/agent/**`, `apps/web/eval/**`, `apps/web/shared/agent/**`, `spec/apps/carp.json` `agent` block, mirrored tests, and `apps/web/e2e/agent.ts` carp path. Do not touch UI (UC) or `api/`. The agent is real: OpenRouter via Doppler `inversa/dev` (model `openai/gpt-6-luna` per memory), no mock agent. Commit on your worktree branch, no push.
+
+Eval harness requirements (the grader parses these lines, per app, `--app carp`): `EVAL app=carp model=<id> questions=<N>`, then `EVAL category <c> passed P/T` for each of the 10 categories, `EVAL ungrounded=<n> checked=<n>`, `EVAL passed P/T`; exit non-zero on any failure. The checker for each question uses its `pass` criteria (phrases, `forbid` patterns, required tools, citations as `feed:`/`kind:`/`source:`/`mission:`/`message:`), a numbers-trace check (every number in the answer must appear in tool output, units allowed to convert) and a feed-state disclosure check. The stub GraphQL server serves recorded/fixture carp data including the eventful scene from C5 (`api/fixtures/carp_scene`) and a seeded board; context fields in questions are injected as the selected site/time.
+
+- [ ] G1: per-app runtime: system prompt, tool allowlist, scope guard and refusal text are built from the app config; carp prompt states the boundary (conditions only; no abundance, catch, access, trip safety; demonstration locations; L'CARP reported active in Atchafalaya Basin for silver, grass, bighead and black carp), UTC and Central time handling, "known at time T" semantics; tests named `agent carp`
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "agent carp" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G2: the carp tools in the question file's `newTools` exist with the specified inputs/outputs (units and source labels on every value, `asOf` everywhere, -9999 as missing, `notMeasured` flags, datum notes, provenance `nwps-live`/`iem-archive`), each registered only for carp (or all apps for `source_info`, `evidence`, `team_board`), each returns citations in the evidence record format; unit tests per tool against the fixture server; tests named `carp tool`
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "carp tool" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G3: scope and boundary: tests prove refusal or caveat for carp abundance, expected catch, legal access, safe trip, other regions (outside Louisiana), other species, plus prompt-injection in tool output and in a note; tests named `carp boundary`
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "carp boundary" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G4: the eval harness loads `spec/apps/questions/carp.json` as the golden set (all 69 questions), applies `context`, and prints the required EVAL lines; a unit test proves the numbers-trace check rejects an answer with an invented number and accepts a unit-converted one; test named `eval trace`
+  CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "eval trace" 2>&1 | grep -E "pass|fail"
+  EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
+  EVIDENCE: pending
+
+- [ ] G5: live benchmark, three consecutive runs: every category passes in all three, `ungrounded=0`, no stale data narrated as live, no causal/abundance claims; print the three EVAL summary lines; prompt/tool fixes between runs are allowed but the final three runs must be consecutive on the final code (quote them with timestamps). Cost stays within the daily cap (state tokens or dollars per run)
+  CHECK: cd apps/web && for i in 1 2 3; do doppler run --project inversa --config dev -- bun run eval/run.ts --app carp 2>&1 | grep -E "^EVAL (passed|ungrounded)"; done
+  EXPECT: /EVAL passed (\d+)\/\1[\s\S]*EVAL passed (\d+)\/\2[\s\S]*EVAL passed (\d+)\/\3/
+  EVIDENCE: pending
+
+- [ ] G6: speed: first-token p50 at most 1200 ms over at least 5 samples with the cache cold and `cachedQuery` near zero on repeat; prints `PERF app=carp first_token_p50_ms=<n> n=<n> cached_query_ms=<n>`
+  CHECK: cd apps/web && doppler run --project inversa --config dev -- bun run e2e:perf -- --app carp 2>&1 | grep "^PERF "
+  EXPECT: /PERF app=carp first_token_p50_ms=([0-9]{1,3}|1[01][0-9]{2}|1200) n=([5-9]|[1-9][0-9]) cached_query_ms=\d/
+  EVIDENCE: pending
+
+- [ ] G7: the agent drives the UI: `set_view` supports carp presets, site selection, as-of time and a replay flag, so "show me what we knew yesterday afternoon" changes the map/timeline state; e2e `e2e:agent --app carp` prints `AGENT app=carp flow=ok tools=<n> citation=ok view=ok`
+  CHECK: cd apps/web && doppler run --project inversa --config dev -- bun run e2e:agent -- --app carp 2>&1 | grep "^AGENT "
+  EXPECT: /AGENT app=carp flow=ok tools=[1-9]\d* citation=ok view=ok/
+  EVIDENCE: pending
+
+- [ ] G8: web tests, typecheck, lint clean; python and lionfish agent tests still pass (state counts)
+  CHECK: bun run --cwd apps/web test 2>&1 | grep -E "^ *[0-9]+ fail" && bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
+  EXPECT: /^ *0 fail[\s\S]*CLEAN/m
+  EVIDENCE: pending
