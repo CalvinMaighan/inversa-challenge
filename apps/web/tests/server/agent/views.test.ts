@@ -174,14 +174,15 @@ describe("C17 views per tool", () => {
     const cells = view.result as CellsView;
     expect(cells.view).toBe("cells");
     expect(cells.species).toBe("python");
+    // Scored by the stub at the reference time (FX): the cold night's 7.8 °C air reading puts the activity term at 0.3×.
     expect(cells.cells.map((c) => c.evidenceId)).toEqual([
       "hotspot:python:243:145:1768446000000",
       "hotspot:python:244:147:1768446000000",
-      "hotspot:python:228:84:1768446000000",
+      "hotspot:python:245:148:1768446000000",
     ]);
-    expect(cells.cells.map((c) => c.score)).toEqual([0.82, 0.74, 0.51]);
+    expect(cells.cells.map((c) => c.score)).toEqual([0.35, 0.34, 0.31]);
     expect(view.highlight).toEqual(cells.cells.map((c) => c.evidenceId));
-    expect(view.bbox).toEqual({ west: -80.965, south: 25.095, east: -80.705, north: 25.825 });
+    expect(view.bbox).toEqual({ west: -80.855, south: 25.67, east: -80.655, north: 25.87 });
   });
 
   test("C17 view: explain_cell → explain with term bars", async () => {

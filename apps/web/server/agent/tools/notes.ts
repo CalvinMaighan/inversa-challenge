@@ -12,6 +12,7 @@ import { evidence, speciesKeys } from "@/server/agent/tools/evidence";
 import { gql } from "@/server/agent/tools/gql";
 import { given, givenTime } from "@/server/agent/tools/shared";
 import { resolveSites, sitesBox, type SiteRef } from "@/server/agent/tools/sites";
+import { focusKeyOf } from "@/server/agent/tools/species";
 import { extentOf, MAX_HIGHLIGHT, MAX_VIEW_ROWS, withView, type ToolViewData } from "@/server/agent/tools/views";
 import type { BBox } from "@/shared/agent/events";
 import type { TableView } from "@/shared/agent/results";
@@ -95,7 +96,7 @@ const timeSchema = z
 const notesInput = z.object({
   bbox: bboxSchema.optional(),
   site: z.string().min(2).max(80).optional().describe("A configured location (conditions apps): NWPS id, name or town. Replaces bbox."),
-  species: z.string().min(1).max(64).optional().describe("Only notes tagged with this focus species key."),
+  species: z.string().min(1).max(64).optional().describe("Only notes tagged with this app's species (its key, common or scientific name). Omit for every note."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
   hours: z.number().min(1).max(MAX_HOURS).optional().describe("Lookback from `to` (default 168 = 7 days; 'today' is 24)."),
@@ -169,8 +170,12 @@ export const notes = {
     }
     const site = sites.length === 1 ? sites[0]! : null;
     const placeIgnored = siteName && sites.length === 0 ? `"${siteName}" is not a configured location; every note in the region is shown` : null;
-    // A species tag only means something in a species app; a conditions app's notes are untagged.
-    const species = ctx.app.taxa.length > 0 ? given(input.species) : undefined;
+    // A species tag only means something in a species app; a conditions app's notes are untagged. The name is resolved
+    // like everywhere else ("Burmese python", "pythons" are the key `python`); a name that is not the app's species
+    // filters nothing, with a note, rather than matching no row.
+    const speciesName = ctx.app.taxa.length > 0 ? given(input.species) : undefined;
+    const species = speciesName ? (focusKeyOf(ctx.app, speciesName) ?? undefined) : undefined;
+    const speciesIgnored = speciesName && !species ? `"${speciesName}" is not this app's species; notes of every species tag are shown` : null;
     const bbox = sites.length > 0 ? sitesBox(sites, 0.1) : resolveBbox(input.bbox, ctx);
     const edge = ctx.now.getTime() + LIVE_EDGE_SLACK_MS;
     const toText = givenTime(input.to);
@@ -209,6 +214,7 @@ export const notes = {
         bbox,
         ...(site ? { site: site.lid, siteName: site.name } : sites.length > 1 ? { sites: sites.map((s) => s.lid) } : {}),
         ...(placeIgnored ? { placeIgnored } : {}),
+        ...(speciesIgnored ? { speciesIgnored } : {}),
         window,
         total: rows.length,
         onBoard: all.length,

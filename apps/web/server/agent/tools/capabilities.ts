@@ -392,7 +392,7 @@ const speciesCountsInput = z.object({
 const speciesCounts = {
   name: "species_counts",
   description:
-    "Which species were seen in an area and window (this app tracks one), with its count and newest sighting to cite. Default window: the last 7 days. Use it for 'what invasive animals…', 'which species…', 'what has been reported…' questions; use sightings for the records of the species: how many reports came in, duplicates, late reports.",
+    "Which species were seen in an area and window (this app tracks one), with its count and newest sighting to cite. Default window: the last 7 days. Only for 'what invasive animals…', 'which species…', 'what has been reported…' questions. Never for how many reports, duplicates, late or needs-ID records, or a listing of sightings: those need sightings (every record with its marker).",
   inputSchema: speciesCountsInput,
   async execute(input: z.infer<typeof speciesCountsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
@@ -420,6 +420,9 @@ const speciesCounts = {
           rows.length === 0
             ? `No ${name.toLowerCase()} was reported in this area and window.`
             : "Counts are distinct sightings (duplicates stand behind their first report). The cite marker is the newest sighting: give the count and paste the marker right after.",
+        // The one-species scope in a sentence the answer pastes: other animals are context, the app ranks and plans for this one.
+        scopeLine: `Any other animal is background context here and is not counted: this app ranks cells and plans for the ${name} alone. Paste this sentence in every answer about what animals or species were seen.`,
+        next: "A question about how many reports came in, which were duplicates or late, or their grades needs the records themselves: call sightings for the same area and window in this same turn, cite every record counted, and say the count is of distinct animals after the duplicates were set aside.",
         rows: rows.slice(0, MAX_MODEL_ROWS).map((row) => ({
           species: row.species,
           scientificName: row.scientificName,
