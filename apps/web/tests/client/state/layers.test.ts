@@ -17,7 +17,7 @@ import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 init(state);
 
-const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
 const now = () => get<LayersState>(LAYERS)!;
 
 describe("LAYERS", () => {
@@ -27,9 +27,9 @@ describe("LAYERS", () => {
     expect(Object.keys(LAYERS.defaults.species)).toEqual([...SPECIES_FILTER_IDS]);
   });
 
-  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; team marks on", () => {
+  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; team marks and field notes on", () => {
     const on = LAYER_IDS.filter((id) => LAYERS.defaults.visible[id]);
-    expect(on).toEqual([SIGHTINGS, MISSIONS, PEERS]);
+    expect(on).toEqual([SIGHTINGS, MISSIONS, PEERS, NOTES]);
     for (const id of [STATIONS, ALERTS, HOTSPOTS, LST, SST]) expect(LAYERS.defaults.visible[id]).toBe(false);
     expect(SPECIES_FILTER_IDS.every((id) => LAYERS.defaults.species[id])).toBe(true);
   });
