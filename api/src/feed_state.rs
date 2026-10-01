@@ -77,8 +77,9 @@ struct Inputs {
     source: SourceRow,
     runs: Vec<RunRow>,
     newest_observed_at: Option<i64>,
-    /// Alert-only feed (no sightings or stations): quiet weather is not stale data, so freshness
-    /// is the newest successful fetch rather than the newest alert onset.
+    /// Sparse feed: alerts only, or a polled feed of sightings without stations. Quiet weather is not stale data and a rare
+    /// species can go a day without a new record, so freshness is the newest successful fetch rather than the
+    /// newest record. The age of the newest record is still reported, in the note.
     event_feed: bool,
 }
 
@@ -164,7 +165,9 @@ fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
                 Ok(RunRow { id: r.get(0)?, fetched_at: r.get(1)?, status: r.get(2)?, error: r.get(3)? })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        let (newest_observed_at, event_feed) = newest_observed_at(conn, &source.id, now_ms)?;
+        let (newest_observed_at, alerts_only, sightings_only) = newest_observed_at(conn, &source.id, now_ms)?;
+        // A polled sightings feed is sparse too; a pushed one is judged by the age of what it receives.
+        let event_feed = alerts_only || (sightings_only && source.mode == "poll");
         out.push(Inputs { source, runs, newest_observed_at, event_feed });
     }
     Ok(out)
@@ -175,7 +178,7 @@ fn load(conn: &Connection, now_ms: i64) -> rusqlite::Result<Vec<Inputs>> {
 ///
 /// Each table gets an existence check first (index-backed for sightings and stations; alerts is
 /// small), so a source never pays for a max() scan over a table it does not write to.
-fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqlite::Result<(Option<i64>, bool)> {
+fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqlite::Result<(Option<i64>, bool, bool)> {
     const PROBES: [(&str, &str); 3] = [
         (
             "select exists(select 1 from sightings where source_id = ?1)",
@@ -224,9 +227,10 @@ fn newest_observed_at(conn: &Connection, source_id: &str, now_ms: i64) -> rusqli
             .flatten();
         newest = newest.max(max);
     }
-    // Alerts only: sightings and stations empty, alerts present.
-    let event_feed = !has[0] && !has[1] && has[2];
-    Ok((newest, event_feed))
+    // Alerts only (sightings and stations empty, alerts present); sightings without stations.
+    let alerts_only = !has[0] && !has[1] && has[2];
+    let sightings_only = has[0] && !has[1];
+    Ok((newest, alerts_only, sightings_only))
 }
 
 fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
@@ -273,6 +277,8 @@ fn classify(inputs: Inputs, now_ms: i64) -> FeedState {
         (Health::Nominal, Some(format!("last fetch failed: {err}")))
     } else if newest_observed_at.is_none() {
         (Health::Nominal, Some("fetching; no observations stored yet".to_string()))
+    } else if let Some(age) = newest_observed_at.map(|t| (now_ms - t).max(0) / 1000).filter(|&a| event_feed && a > lagging_after_s) {
+        (Health::Nominal, Some(format!("newest record is {} old; this source reports sparsely, and the last check succeeded", human(age))))
     } else {
         (Health::Nominal, None)
     };
@@ -371,6 +377,23 @@ mod tests {
         .unwrap();
     }
 
+    /// A station reading: a continuous source, so the age of its newest reading is its freshness.
+    async fn reading(db: &Db, source: &'static str, _ext: &'static str, observed_at: i64) {
+        db.write(move |tx| {
+            tx.execute(
+                "insert or ignore into stations (source_id, ext_id, name, lat, lon, kind) values (?1, 'st', 'Station', 25.5, -80.9, 'gage')",
+                [source],
+            )?;
+            tx.execute(
+                "insert into readings (station_id, param, value, observed_at, origin)
+                 values ((select id from stations where source_id = ?1 and ext_id = 'st'), 'stage_m', 1.2, ?2, 'measured')",
+                params![source, observed_at],
+            )
+        })
+        .await
+        .unwrap();
+    }
+
     async fn only(db: &Db) -> FeedState {
         let mut states = compute(db, NOW).await.unwrap();
         assert_eq!(states.len(), 1);
@@ -381,9 +404,9 @@ mod tests {
     async fn nominal_when_fresh() {
         let db = db_with_source("inat").await;
         run(&db, "inat", NOW - MIN, "ok").await;
-        sighting(&db, "inat", "1", NOW - 3 * MIN).await;
+        reading(&db, "inat", "1", NOW - 3 * MIN).await;
         // Future-dated rows (forecasts) must not count as fresh data.
-        sighting(&db, "inat", "2", NOW + 60 * MIN).await;
+        reading(&db, "inat", "2", NOW + 60 * MIN).await;
         let s = only(&db).await;
         assert_eq!(s.state, Health::Nominal, "{s:?}");
         assert_eq!(s.mode, "poll");
@@ -439,7 +462,7 @@ mod tests {
         let db = db_with_source("inat").await;
         run(&db, "inat", NOW - MIN, "ok").await;
         // cadence 120 s + 120 s grace = 240 s; 5 min is past it but under the 30 min max latency.
-        sighting(&db, "inat", "1", NOW - 5 * MIN).await;
+        reading(&db, "inat", "1", NOW - 5 * MIN).await;
         let s = only(&db).await;
         assert_eq!(s.state, Health::Lagging, "{s:?}");
         assert_eq!(s.lag_seconds, Some(300));
@@ -450,7 +473,7 @@ mod tests {
     async fn stale_past_max_latency() {
         let db = db_with_source("inat").await;
         run(&db, "inat", NOW - MIN, "ok").await;
-        sighting(&db, "inat", "1", NOW - 45 * MIN).await;
+        reading(&db, "inat", "1", NOW - 45 * MIN).await;
         let s = only(&db).await;
         assert_eq!(s.state, Health::Stale, "{s:?}");
         assert_eq!(s.lag_seconds, Some(45 * 60));
@@ -464,9 +487,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sparse_sighting_feed_is_fresh_while_fetches_succeed() {
+        let db = db_with_source("inat").await;
+        run(&db, "inat", NOW - MIN, "ok").await;
+        // A rare species: the newest record is 17 h old, far past max latency, but the last check succeeded.
+        sighting(&db, "inat", "1", NOW - 17 * 60 * MIN).await;
+        let s = only(&db).await;
+        assert_eq!(s.state, Health::Nominal, "{s:?}");
+        assert_eq!(s.lag_seconds, Some(60));
+        assert_eq!(s.newest_observed_at, Some(NOW - 17 * 60 * MIN));
+        assert_eq!(s.note.as_deref(), Some("newest record is 17h old; this source reports sparsely, and the last check succeeded"));
+
+        // Fetches stop: the feed goes down however recent its newest record is.
+        let db = db_with_source("inat").await;
+        run(&db, "inat", NOW - 20 * MIN, "ok").await;
+        sighting(&db, "inat", "1", NOW - 3 * MIN).await;
+        let s = only(&db).await;
+        assert_eq!(s.state, Health::Down, "{s:?}");
+    }
+
+    #[tokio::test]
     async fn down_after_consecutive_errors() {
         let db = db_with_source("inat").await;
-        sighting(&db, "inat", "1", NOW - 2 * MIN).await;
+        reading(&db, "inat", "1", NOW - 2 * MIN).await;
         run(&db, "inat", NOW - 5 * MIN, "ok").await;
         run(&db, "inat", NOW - 3 * MIN, "error").await;
         run(&db, "inat", NOW - 2 * MIN, "error").await;
