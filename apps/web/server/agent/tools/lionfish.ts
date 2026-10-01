@@ -236,7 +236,11 @@ export const reefHeat = {
                   baaChanges,
                   citeStart: { dhw: firstDhw ? cite(firstDhw) : null, baa: firstBaa ? cite(firstBaa) : null },
                   missingDays: dayRows.filter((row) => row.dhwCWeeks === null).map((row) => row.date),
-                  daily: thin(dayRows, 31).map((row) => ({ date: row.date, sstC: row.sstC, anomalyC: row.anomalyC, dhwCWeeks: row.dhwCWeeks, baa: row.baa })),
+                  dailySay: days <= 31 ? "A day-by-day account is one line per daily row, in date order (weekday and date, DHW and alert level), each with its cite." : "Daily rows are thinned to 31; narrate by week or month with the start, end and peak markers.",
+                  daily: thin(dayRows, 31).map((row) => {
+                    const reading = dhw.find((r) => r.observedAt === row.at);
+                    return { date: row.date, weekday: new Intl.DateTimeFormat("en-US", { timeZone: ctx.app.copy.timezone, weekday: "long" }).format(new Date(row.at)), sstC: row.sstC, anomalyC: row.anomalyC, dhwCWeeks: row.dhwCWeeks, baa: row.baa, cite: reading ? cite(reading) : null };
+                  }),
                 },
               }
             : {}),
