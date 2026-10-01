@@ -6,8 +6,8 @@
 import { SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { cellCenter, type HotspotRef } from "client/hud/drawer/evidence";
-import { type Clock, format } from "client/threads/crdt/hlc";
-import type { BoardView, EntityView, MessageView } from "client/threads/crdt/merge";
+import { type Clock, compare, format } from "client/threads/crdt/hlc";
+import { orderMessages, type BoardView, type EntityView, type MessageView } from "client/threads/crdt/merge";
 import { DELETED_FIELD, type Op } from "client/threads/crdt/types";
 
 export const MISSION_STATUSES = ["planned", "in_progress", "done"] as const;
@@ -303,6 +303,58 @@ export function totals(missions: readonly Mission[], removals: Readonly<Record<s
 }
 
 export type BoardModel = { missions: Mission[]; notes: Note[]; fieldNotes: FieldNote[]; messages: MessageView[]; removals: Record<string, number>; totals: Totals };
+
+/**
+ * Optimistic view (PRD §13 "optimistic edit, local: same frame"): this node's own ops that the db worker has not
+ * yet folded into `view`, applied on top of it on the main thread so the panel shows an edit in the frame it was
+ * made, before the worker round trip. The worker's view replaces the overlay as soon as it includes the ops.
+ *
+ * Local ops carry this node's newest HLC (the clock has received every remote op), so they win their registers.
+ * Two cases are left to the worker: undeleting (`_deleted=false`) needs the entity's other registers, which a view
+ * does not carry; and removals add their increment (each removal op is this node's running total, bumped by one,
+ * so a run of pending totals v..w adds w - v + 1).
+ */
+export function overlayOps(view: BoardView, ops: readonly Op[]): BoardView {
+  if (ops.length === 0) return view;
+  const sorted = [...ops].sort((a, b) => compare(a.hlc, b.hlc));
+  const entities = {
+    mission: new Map(view.missions.map((e) => [e.id, { ...e.fields }])),
+    note: new Map(view.notes.map((e) => [e.id, { ...e.fields }])),
+  };
+  const messages = [...view.messages];
+  const removals = { ...view.removals };
+  const pendingTotals = new Map<string, number[]>();
+  // An entity reads as deleted while `_deleted` is true, so a later field write does not bring it back (C5).
+  const deleted = new Set<string>();
+  for (const op of sorted) {
+    switch (op.entity) {
+      case "mission":
+      case "note": {
+        const bucket = entities[op.entity];
+        const key = `${op.entity}:${op.entityId}`;
+        if (op.field === DELETED_FIELD) {
+          if (op.value === true) {
+            bucket.delete(op.entityId);
+            deleted.add(key);
+          }
+          break;
+        }
+        if (deleted.has(key)) break;
+        bucket.set(op.entityId, { ...bucket.get(op.entityId), [op.field]: op.value ?? null });
+        break;
+      }
+      case "message":
+        if (!messages.some((m) => m.id === op.entityId)) messages.push({ id: op.entityId, body: String(op.value), hlc: op.hlc, nodeId: op.nodeId });
+        break;
+      case "removal":
+        pendingTotals.set(op.entityId, [...(pendingTotals.get(op.entityId) ?? []), Number(op.value)]);
+        break;
+    }
+  }
+  for (const [id, values] of pendingTotals) removals[id] = (removals[id] ?? 0) + Math.max(...values) - Math.min(...values) + 1;
+  const list = (m: Map<string, Record<string, unknown>>): EntityView[] => [...m].map(([id, fields]) => ({ id, fields }));
+  return { missions: list(entities.mission), notes: list(entities.note), messages: orderMessages(messages), removals };
+}
 
 /** Everything the panel renders, derived once per board change. Missions and field notes newest first. */
 export function boardModel(view: BoardView): BoardModel {

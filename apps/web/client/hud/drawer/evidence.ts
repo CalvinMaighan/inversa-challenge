@@ -9,7 +9,7 @@ import { parseEvidenceId } from "client/state/selection";
 import { REGION_BBOX } from "client/state/view";
 import { gqlRequest } from "client/threads/api";
 
-import { FEED_FIELDS, normalizeFeedState } from "../topbar/feed-chips";
+import { FEED_FIELDS, feedLabel, formatLag, normalizeFeedState } from "../topbar/feed-chips";
 
 export type EvidenceLink = { id: string; relation: string; source: string };
 
@@ -199,6 +199,47 @@ export function evidenceBadges(evidence: Pick<Evidence, "links" | "record">): { 
   };
   if (count.conflicts === 0 && evidence.record.conflict === true) count.conflicts = 1;
   return (Object.keys(count) as BadgeGroup[]).filter((g) => count[g] > 0).map((group) => ({ group, count: count[group] }));
+}
+
+/** A sighting stored more than a day after it was observed is late (the API's frame flag 4, `LATE_MS`). */
+export const LATE_SECONDS = 24 * 3600;
+
+export type QualityBadge = {
+  badge: "late" | "missing" | "failed" | "feed" | "duplicate" | "conflict";
+  /** Plain words for the summary (T41); the technical detail stays under "Details for experts". */
+  label: string;
+  state?: FeedState["state"];
+};
+
+const FLAG_WORDS: Record<string, string> = {
+  cloud: "Cloud cover — no reading",
+  bad_dqf: "Bad satellite data — no reading",
+  missing: "No reading",
+};
+const FEED_WORDS: Record<string, string> = { lagging: "delayed", stale: "out of date", down: "not updating" };
+
+/**
+ * The PRD §7 cases of one record, in plain words for the evidence summary: a late report (with how late), a
+ * reading with no usable value (cloud, bad DQF, missing), a failed data check, a duplicate or a disagreement
+ * between sources, and the record's feed when it is not running normally.
+ */
+export function qualityBadges(evidence: Pick<Evidence, "kind" | "record" | "ingestLagSeconds" | "feed" | "links">): QualityBadge[] {
+  const out: QualityBadge[] = [];
+  const lag = evidence.ingestLagSeconds;
+  if (evidence.kind === "sighting" && lag !== null && lag > LATE_SECONDS) out.push({ badge: "late", label: `Late report — reached us ${formatLag(lag)} after it was seen` });
+  const flag = typeof evidence.record.flag === "string" ? evidence.record.flag.toLowerCase() : null;
+  if (evidence.kind === "reading" && flag && flag !== "ok") out.push({ badge: "missing", label: FLAG_WORDS[flag] ?? "No reading" });
+  if (evidence.kind === "fetch" && String(evidence.record.status ?? "").toLowerCase() === "error") out.push({ badge: "failed", label: "Data check failed" });
+  const groups = groupLinks(evidence.links);
+  if (groups.duplicate_of.length > 0) out.push({ badge: "duplicate", label: "Same animal as an earlier report" });
+  else if (groups.duplicates.length > 0) {
+    const n = new Set(groups.duplicates.map((l) => l.id)).size;
+    out.push({ badge: "duplicate", label: `Also reported ${n === 1 ? "once more" : `${n} more times`} elsewhere` });
+  }
+  if (groups.conflicts.length > 0 || evidence.record.conflict === true) out.push({ badge: "conflict", label: "Sources disagree" });
+  const feed = evidence.feed;
+  if (feed && feed.state !== "nominal") out.push({ badge: "feed", label: `${feedLabel(feed.source)} data ${FEED_WORDS[feed.state] ?? feed.state}`, state: feed.state });
+  return out;
 }
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);

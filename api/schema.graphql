@@ -67,6 +67,11 @@ type Sighting {
   photoUrl: String
   canonicalId: ID
   conflict: Boolean!
+  """
+  When the record was first stored. `ingestedAt - observedAt` is its ingest lag; over 24 h
+  the record is late (frame flag 4).
+  """
+  ingestedAt: Time!
 }
 
 type Station {

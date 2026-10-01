@@ -13,7 +13,18 @@ import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../p
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
 import NoteCard, { AddNoteButton } from "../notes/NoteCard";
-import { evidenceBadges, evidenceLocation, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
+import {
+  evidenceBadges,
+  evidenceLocation,
+  loadEvidence,
+  parseBacktestId,
+  parseHotspotId,
+  qualityBadges,
+  recordRevisions,
+  type BadgeGroup,
+  type Evidence,
+  type QualityBadge,
+} from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
 import { plainSummary } from "./summary";
@@ -104,6 +115,34 @@ const BADGE: Record<BadgeGroup, { label: (n: number) => string; tone: Tone }> = 
   revisions: { label: (n) => `${n} REVISION${n === 1 ? "" : "S"}`, tone: "warn" },
   conflicts: { label: (n) => `${n} CONFLICT${n === 1 ? "" : "S"}`, tone: "danger" },
 };
+
+/** A data-quality flag in the plain summary: a toned chip in UI type that wraps, unlike the technical pills. */
+const Flag = styled(Pill)`
+  height: auto;
+  min-height: 22px;
+  padding: 3px 8px;
+  white-space: normal;
+  font: 500 12px / 1.35 var(--font-ui);
+  letter-spacing: normal;
+`;
+
+const QUALITY_TONE: Record<QualityBadge["badge"], Tone> = { late: "warn", missing: "muted", failed: "danger", feed: "warn", duplicate: "muted", conflict: "danger" };
+const FEED_TONE: Record<string, Tone> = { lagging: "warn", stale: "stale", down: "danger" };
+
+/** PRD §7 in plain words, right under the summary: late, no reading, failed check, duplicate, disagreement, feed. */
+function QualityBadges({ evidence }: { evidence: Evidence }) {
+  const badges = qualityBadges(evidence);
+  if (badges.length === 0) return null;
+  return (
+    <Badges aria-label="Data quality" data-testid="hud-drawer-quality" style={{ marginTop: "calc(-1 * var(--gap-s))", marginBottom: "var(--gap-m)" }}>
+      {badges.map((b) => (
+        <Flag key={b.badge} $tone={b.state ? (FEED_TONE[b.state] ?? "warn") : QUALITY_TONE[b.badge]} data-quality={b.badge}>
+          {b.label}
+        </Flag>
+      ))}
+    </Badges>
+  );
+}
 
 const utc = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? `${new Date(iso).toISOString().slice(0, 19).replace("T", " ")}Z` : "—");
 
@@ -214,6 +253,12 @@ function Record({ evidence }: { evidence: Evidence }) {
               "—"
             )}
           </dd>
+          {evidence.feed?.note && (
+            <>
+              <dt>Feed note</dt>
+              <dd data-testid="hud-drawer-feed-note">{evidence.feed.note}</dd>
+            </>
+          )}
           {evidence.rawKey && (
             <>
               <dt>Raw key</dt>
@@ -377,6 +422,7 @@ export default function EvidenceDrawer() {
       data-testid="hud-drawer"
     >
       {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
+      {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
       {note && <NoteCard id={note} />}
       {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
       {hotspot && (

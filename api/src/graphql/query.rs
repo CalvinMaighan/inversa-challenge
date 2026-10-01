@@ -127,7 +127,7 @@ impl QueryRoot {
             .read(move |c| {
                 let mut st = c.prepare_cached(&format!(
                     "select s.id, s.source_id, s.ext_id, s.lat, s.lon, s.accuracy_m, s.observed_at, s.quality, s.photo_url,
-                            s.canonical_id, s.conflict, {}
+                            s.canonical_id, s.conflict, s.ingested_at, {}
                      from sightings s join taxa t on t.id = s.taxon_id
                      where s.observed_at between ?1 and ?2
                        and s.lat between ?3 and ?4 and s.lon between ?5 and ?6
@@ -145,7 +145,7 @@ impl QueryRoot {
                             id: ID(r.get::<_, i64>(0)?.to_string()),
                             source: r.get(1)?,
                             ext_id: r.get(2)?,
-                            taxon: Taxon::from_row(r, 11)?,
+                            taxon: Taxon::from_row(r, 12)?,
                             lat: r.get(3)?,
                             lon: r.get(4)?,
                             accuracy_m: r.get(5)?,
@@ -154,6 +154,7 @@ impl QueryRoot {
                             photo_url: r.get(8)?,
                             canonical_id: r.get::<_, Option<i64>>(9)?.map(|id| ID(id.to_string())),
                             conflict: r.get(10)?,
+                            ingested_at: Time(r.get(11)?),
                         })
                     },
                 )?;

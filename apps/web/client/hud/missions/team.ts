@@ -14,6 +14,7 @@
  */
 import { get, set } from "@calvinjs/active-state";
 
+import { DEBUG_HOOK } from "client/debug";
 import { ensureIdentity, ME, type MeState } from "client/state/me";
 import { DEFAULT_BOARD_ID, MISSIONS, type MissionsState } from "client/state/missions";
 import { setNotePins } from "client/state/notes";
@@ -21,12 +22,13 @@ import type { Peer } from "client/state/peers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { bootThreads, type Threads } from "client/threads/boot";
 import { Clock, HlcDriftError } from "client/threads/crdt/hlc";
+import type { BoardView } from "client/threads/crdt/merge";
 import type { Op } from "client/threads/crdt/types";
 import { startPeers, type TeamLink } from "client/threads/rtc/peers";
 
 import { pinsOf } from "../notes/model";
 import { cell, type Cell } from "../store";
-import { boardModel, messageOp, type BoardModel, type OpFactory } from "./board";
+import { boardModel, messageOp, overlayOps, type BoardModel, type OpFactory } from "./board";
 
 export const RESYNC_MS = 15_000;
 
@@ -80,13 +82,21 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
   const link = startPeers({ boardId, me, threads });
   let closed = false;
 
-  const read = async () => {
-    const view = await threads.db("readBoard", { boardId });
-    if (closed) return;
-    const model = boardModel(view);
+  // The worker's last view, and this node's ops it may not include yet (`overlayOps`).
+  let view: BoardView | null = null;
+  const pending = new Map<string, Op>();
+  const publish = () => {
+    if (closed || !view) return;
+    const model = boardModel(overlayOps(view, [...pending.values()]));
     board.set(model);
     // The globe's note pins (T43) read NOTES, never the team session.
     setNotePins(pinsOf(model.fieldNotes));
+  };
+  const read = async () => {
+    const next = await threads.db("readBoard", { boardId });
+    if (closed) return;
+    view = next;
+    publish();
   };
   const sync = () =>
     threads
@@ -120,8 +130,18 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
   const factory = (): OpFactory => ({ clock, boardId, nodeId: me.nodeId });
   const edit = async (ops: Op[]) => {
     if (ops.length === 0) return;
+    // Optimistic: on screen in this frame, before the worker round trip. The overlay is dropped once a view
+    // read after the commit includes the ops (or the commit failed, so the screen goes back to the truth).
+    for (const op of ops) pending.set(op.id, op);
+    publish();
     link.broadcast(ops);
-    await threads.db("applyLocalOps", { boardId, ops });
+    try {
+      await threads.db("applyLocalOps", { boardId, ops });
+      await read();
+    } finally {
+      for (const op of ops) pending.delete(op.id);
+      publish();
+    }
   };
 
   const t: Team = {
@@ -145,13 +165,13 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
         team = null;
         teamCell.set(null);
       }
-      if (process.env.NODE_ENV !== "production") delete window.__team;
+      if (DEBUG_HOOK) delete window.__team;
     },
   };
   team = t;
   teamCell.set(t);
 
-  if (process.env.NODE_ENV !== "production") {
+  if (DEBUG_HOOK) {
     window.__team = {
       nodeId: me.nodeId,
       boardId,

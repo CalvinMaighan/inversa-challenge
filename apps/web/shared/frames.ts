@@ -6,8 +6,15 @@
 export const EVF_MAGIC = "EVF2";
 export const EVF_HEADER_BYTES = 72;
 export const SIGHTING_RECORD_BYTES = 16;
-/** i16 sentinel for a missing or flagged environment cell. */
+/** i16 sentinel: no reading for this environment cell (outside the product's domain, or nothing reported). */
 export const ENV_MISSING = -32768;
+/** i16 sentinel: the cell's pixel reported, but flagged (cloud, bad DQF, missing value). A gap to hatch. */
+export const ENV_FLAGGED = -32767;
+
+/** A centi-degree environment value, as opposed to either sentinel. */
+export function isEnvValue(centi: number): boolean {
+  return centi !== ENV_MISSING && centi !== ENV_FLAGGED;
+}
 
 /** Species order in hotspot sections; index + 1 is `taxa.id`. */
 export const EVF_SPECIES = ["python", "tegu", "iguana", "lionfish"] as const;
@@ -44,7 +51,8 @@ export type EvfHeader = {
  * Each frame body, in order:
  *   hotspot u8[speciesCount * hsCols * hsRows] (species-major, row-major from SW corner)
  *   pad to 2 bytes
- *   lst i16[envCols * envRows] (centi-degC; ENV_MISSING = missing/flagged)
+ *   lst i16[envCols * envRows] (centi-degC from a station inside the cell; ENV_FLAGGED = only flagged
+ *     readings there; ENV_MISSING = no reading)
  *   sst i16[envCols * envRows]
  *   pad to 4 bytes
  *   sightingCount u32, then records (16 B): u32 sightingId, f32 lon, f32 lat, u16 taxon, u8 quality, u8 flags

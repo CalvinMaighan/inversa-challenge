@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { allocFrameGrid, writeFrameFromEvf } from "@calvinjs/active-state/threads";
 
-import { ENV_MISSING } from "shared/frames";
+import { ENV_FLAGGED, ENV_MISSING } from "shared/frames";
 
 import { buildFixtureEvf, evfFrames, evfFrameSightings, FIXTURE_FRAMES, FIXTURE_SCRIPT, FIXTURE_STEP_MINUTES } from "client/hud/dev/fixture";
 import { framesSpanMs, stepAt, timeAtStep, windowSteps } from "client/hud/timeline/frames";
@@ -70,6 +70,18 @@ describe("gap segmentation", () => {
     ]);
     expect(Array.from(frameGapFlags(grid, null, STEP))).toEqual([0, GAP_FLAG.ENV_MISSING, GAP_FLAG.CLOUD, 0]);
     expect(CLOUD_FRACTION).toBe(0.5);
+  });
+
+  test("flagged pixels (ENV_FLAGGED) count as coverage and as missing, even if they never cleared", () => {
+    const F = ENV_FLAGGED;
+    const land = (v: number): [number, number] => [v, M];
+    // Cells 2 and 3 are cloud in every frame: still counted, so frame 0 is half cloud.
+    const grid = envGrid([
+      [land(2500), land(2500), land(F), land(F)],
+      [land(F), land(F), land(F), land(F)],
+      [land(2500), land(2500), land(2500), land(F)],
+    ]);
+    expect(Array.from(frameGapFlags(grid, null, STEP))).toEqual([GAP_FLAG.CLOUD, GAP_FLAG.ENV_MISSING, 0]);
   });
 
   test("all-zero frames are UNLOADED (never filled), not gaps, and do not vote on coverage", () => {

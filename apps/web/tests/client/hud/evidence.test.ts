@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, recordRevisions } from "client/hud/drawer/evidence";
+import { cellCenter, evidenceBadges, evidenceLocation, groupLinks, linkGroup, normalizeEvidence, parseBacktestId, parseHotspotId, qualityBadges, recordRevisions } from "client/hud/drawer/evidence";
 import { recentCitations, targetLabel } from "client/hud/overlay/targets";
 import { isDrawerOpen } from "client/hud/selection";
 import { parseEvidenceId } from "client/state/selection";
@@ -65,6 +65,25 @@ describe("evidence ids and links", () => {
     ]);
     expect(evidenceBadges({ links: [], record: { conflict: true } })).toEqual([{ group: "conflicts", count: 1 }]);
     expect(evidenceBadges({ links: [], record: {} })).toEqual([]);
+  });
+
+  test("quality badges in plain words: late, no reading, failed check, duplicate, disagreement, degraded feed", () => {
+    const feed = (state: "nominal" | "stale") => ({ source: "ndbc", mode: "poll" as const, state, newestObservedAt: null, lastFetchAt: null, lastFetchRunId: "4", lagSeconds: 1, note: null });
+    const base = { record: {}, ingestLagSeconds: null, feed: null, links: [] };
+    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 2 * 86_400 + 4 * 3600 })).toEqual([{ badge: "late", label: "Late report — reached us 2d 4h after it was seen" }]);
+    expect(qualityBadges({ ...base, kind: "sighting", ingestLagSeconds: 86_400 })).toEqual([]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "cloud", value: null } })).toEqual([{ badge: "missing", label: "Cloud cover — no reading" }]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "bad_dqf", value: null } })).toEqual([{ badge: "missing", label: "Bad satellite data — no reading" }]);
+    expect(qualityBadges({ ...base, kind: "reading", record: { flag: "ok", value: 1 } })).toEqual([]);
+    expect(qualityBadges({ ...base, kind: "fetch", record: { status: "error" }, feed: feed("stale") })).toEqual([
+      { badge: "failed", label: "Data check failed" },
+      { badge: "feed", label: "NDBC data out of date", state: "stale" },
+    ]);
+    expect(qualityBadges({ ...base, kind: "fetch", record: { status: "ok" }, feed: feed("nominal") })).toEqual([]);
+    const link = (id: string, relation: string) => ({ id, relation, source: "gbif" });
+    expect(qualityBadges({ ...base, kind: "sighting", links: [link("sighting:1", "duplicate_of")] })).toEqual([{ badge: "duplicate", label: "Same animal as an earlier report" }]);
+    expect(qualityBadges({ ...base, kind: "sighting", links: [link("sighting:7", "duplicates"), link("sighting:8", "duplicates")] }).map((b) => b.label)).toEqual(["Also reported 2 more times elsewhere"]);
+    expect(qualityBadges({ ...base, kind: "sighting", record: { conflict: true } })).toEqual([{ badge: "conflict", label: "Sources disagree" }]);
   });
 
   test("bracket locations come from lat/lon, then station, then the alert area", () => {
