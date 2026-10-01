@@ -58,7 +58,7 @@ const body = (status: string, feeds: Record<string, unknown>) => ({
 
 describe("app health from /health", () => {
   test("reads the /health body: worst feed state per app; no feeds is unknown; a feed-state error is down", () => {
-    const ok = body("ok", { carp: [feed("usgs", "nominal")], lionfish: [feed("inat", "nominal"), feed("crw", "stale"), feed("gbif", "lagging")], python: [] });
+    const ok = body("ok", { carp: [feed("usgs", "nominal")], lionfish: [feed("inat", "nominal"), { ...feed("crw", "stale"), mode: "webhook" }, feed("gbif", "lagging")], python: [] });
     expect(parseAppHealth(ok)).toEqual({ carp: "nominal", lionfish: "stale", python: "unknown" });
     const degraded = body("degraded", { carp: { error: "database is locked" }, lionfish: [], python: [feed("nws", "down")] });
     expect(parseAppHealth(degraded)).toEqual({ carp: "down", lionfish: "unknown", python: "down" });

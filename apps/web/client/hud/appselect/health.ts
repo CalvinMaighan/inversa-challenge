@@ -20,7 +20,7 @@ const RANK: Record<FeedHealth, number> = { nominal: 0, lagging: 1, stale: 2, dow
 const ms = z.number().int().nullable();
 const feedState = z.strictObject({
   source: z.string(),
-  mode: z.enum(["push", "poll"]),
+  mode: z.enum(["push", "webhook", "poll"]),
   state: z.enum(["nominal", "lagging", "stale", "down"]),
   newestObservedAt: ms,
   lastFetchAt: ms,
