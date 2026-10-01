@@ -6,6 +6,7 @@ import styled from "client/styled";
 
 import LookBar from "../look/LookBar";
 import { MOBILE } from "../primitives";
+import PlaceSearch from "../search/PlaceSearch";
 
 /**
  * The bottom-centre bar (docs/GODS_EYE.md GC1): centred under the stage, just above the timeline. It holds the
@@ -17,7 +18,12 @@ import { MOBILE } from "../primitives";
  * Each leaf appends its one entry to `ITEMS` and nothing else. The bar draws no surface of its own, so with no
  * entries it shows nothing. Popovers opened from it open upwards (`bottom: calc(100% + 6px)`).
  */
-const ITEMS: readonly ReactNode[] = [<LookBar key="look" />];
+const ITEMS: readonly ReactNode[] = [
+  // GE6: place search (client/hud/search).
+  <PlaceSearch key="search" />,
+  // GE2: the Look popover (presets and scope).
+  <LookBar key="look" />,
+];
 
 const Bar = styled.div`
   position: absolute;

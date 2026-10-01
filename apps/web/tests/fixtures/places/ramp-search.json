@@ -1,0 +1,25 @@
+{
+  "places": [
+    {
+      "id": "fixture-ramp-snake-bight",
+      "displayName": { "text": "Snake Bight Boat Ramp", "languageCode": "en" },
+      "formattedAddress": "Main Park Rd, Homestead, FL 33034, USA",
+      "location": { "latitude": 25.17, "longitude": -80.87 },
+      "types": ["park", "point_of_interest", "establishment"]
+    },
+    {
+      "id": "fixture-marina-flamingo",
+      "displayName": { "text": "Flamingo Marina", "languageCode": "en" },
+      "formattedAddress": "1 Flamingo Lodge Hwy, Homestead, FL 33034, USA",
+      "location": { "latitude": 25.1416, "longitude": -80.9238 },
+      "types": ["marina", "point_of_interest", "establishment"]
+    },
+    {
+      "id": "fixture-launch-flamingo",
+      "displayName": { "text": "Flamingo Boat Launch", "languageCode": "en" },
+      "formattedAddress": "Flamingo, FL 33034, USA",
+      "location": { "latitude": 25.1437, "longitude": -80.9201 },
+      "types": ["point_of_interest", "establishment"]
+    }
+  ]
+}

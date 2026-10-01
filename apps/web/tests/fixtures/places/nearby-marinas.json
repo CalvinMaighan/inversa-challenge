@@ -1,0 +1,18 @@
+{
+  "places": [
+    {
+      "id": "fixture-marina-flamingo",
+      "displayName": { "text": "Flamingo Marina", "languageCode": "en" },
+      "formattedAddress": "1 Flamingo Lodge Hwy, Homestead, FL 33034, USA",
+      "location": { "latitude": 25.1416, "longitude": -80.9238 },
+      "types": ["marina", "point_of_interest", "establishment"]
+    },
+    {
+      "id": "fixture-marina-far",
+      "displayName": { "text": "Far Side Marina", "languageCode": "en" },
+      "formattedAddress": "Florida Bay, FL, USA",
+      "location": { "latitude": 25.3, "longitude": -80.92 },
+      "types": ["marina", "point_of_interest", "establishment"]
+    }
+  ]
+}

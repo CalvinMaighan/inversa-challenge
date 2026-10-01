@@ -33,6 +33,7 @@ import { plainSummary } from "./summary";
 import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
 import { CARD_MAX_WIDTH_CSS, STAGE_MEDIA } from "../shell/geometry";
+import NearbyAccess from "../search/NearbyAccess";
 
 /** The drawer is the sighting card at the right of the stage (GODS_EYE GC1): its inner edge never reaches the stage centre. */
 const CardScope = styled.div`
@@ -494,6 +495,7 @@ export default function EvidenceDrawer() {
         {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
         {note && <NoteCard id={note} />}
         {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
+        {kind === "sighting" && state.status === "ready" && evidenceLocation(state.data.record) && <NearbyAccess at={evidenceLocation(state.data.record)!} />}
         {hotspot && (
           <Section>
             {showBacktest ? (

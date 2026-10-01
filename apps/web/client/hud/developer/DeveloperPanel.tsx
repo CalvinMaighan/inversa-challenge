@@ -5,6 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 import ExternalLink from "client/external-link";
 import { readGoogleCap, readGoogleCounts, writeGoogleCap } from "client/globe/quota";
 import { browserKeyStore } from "client/keys";
+import { savePlacesCapField } from "client/places/budget";
+import PlacesCapField from "client/hud/search/PlacesCapField";
 import styled from "client/styled";
 import type { BrowserKeyId, ServerKeyStatus } from "shared/keys";
 
@@ -289,6 +291,11 @@ function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: n
           sessions in this browser · {used} used this month
         </Note>
       ) : null}
+      {row.id === "google-maps" ? (
+        <Note>
+          <PlacesCapField />
+        </Note>
+      ) : null}
     </li>
   );
 }
@@ -358,12 +365,14 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
     const { browser, server: serverValues } = splitPasted(values);
     const capValue = Number(data.get("google-cap"));
     const capChanged = data.has("google-cap") && capValue !== cap;
-    if (browser.length === 0 && Object.keys(serverValues).length === 0 && !capChanged) {
+    const placesNote = savePlacesCapField(store, data);
+    if (browser.length === 0 && Object.keys(serverValues).length === 0 && !capChanged && !placesNote) {
       setMessage("Paste a key first.");
       return;
     }
     setBusy(true);
     const notes: string[] = [];
+    if (placesNote) notes.push(placesNote);
     if (capChanged) {
       const now = writeGoogleCap(store, capValue);
       notes.push(now === capValue ? `Google 3D cap set to ${now} sessions a month.` : "The cap must be a whole number from 1 to 100000.");
