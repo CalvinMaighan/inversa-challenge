@@ -3,10 +3,10 @@ import { describe, expect, test } from "bun:test";
 import { matchSupportedQuestion, questionTerms, supportedQuestions } from "@/shared/apps/questions";
 
 describe("supported questions", () => {
-  test("every app has its documented questions: carp 69, lionfish 65, python 68", () => {
+  test("every app has its documented questions: carp 69, lionfish 65, python 67", () => {
     expect(supportedQuestions("carp")).toHaveLength(69);
     expect(supportedQuestions("lionfish")).toHaveLength(65);
-    expect(supportedQuestions("python")).toHaveLength(68);
+    expect(supportedQuestions("python")).toHaveLength(67);
   });
 
   test("a question matches its documented form exactly, a paraphrase closely, an unrelated one not at all", () => {
