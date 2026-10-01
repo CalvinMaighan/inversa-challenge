@@ -205,7 +205,12 @@ function focusStop(): FocusStop | null {
     const cutX = clipX && !scrolls && (ring.left < ar.left - 0.5 || ring.right > ar.right + 0.5);
     const cutY = clipY && !scrolls && (ring.top < ar.top - 0.5 || ring.bottom > ar.bottom + 0.5);
     if (tooWide || tooTall || cutX || cutY) {
-      return { desc, ring: false, why: `ring clipped by ${a.tagName.toLowerCase()}.${[...a.classList].join(".")} (overflow ${acs.overflowX}/${acs.overflowY})` };
+      const box = (b: { left: number; top: number; right: number; bottom: number }) => [b.left, b.top, b.right, b.bottom].map(Math.round).join(",");
+      return {
+        desc,
+        ring: false,
+        why: `ring ${box(ring)} (offset ${cs.outlineOffset}) clipped by ${a.tagName.toLowerCase()}.${[...a.classList].join(".")} ${box(ar)} (overflow ${acs.overflowX}/${acs.overflowY})`,
+      };
     }
   }
   return { desc, ring: true, why: "" };
@@ -214,6 +219,9 @@ function focusStop(): FocusStop | null {
 const stops: FocusStop[] = [];
 
 async function recordStop(page: Page): Promise<void> {
+  // Two frames: the reduced-motion reset gives every property a 0.01 ms transition, so styles read in the
+  // same task as the focus change still show the unfocused start value.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const stop = await page.evaluate(focusStop);
   if (stop) stops.push(stop);
 }

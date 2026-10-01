@@ -88,7 +88,7 @@ const Body = styled.div`
 
   /* The orb keeps its corner over the sheet: the last rows scroll clear of it. */
   ${MOBILE} {
-    padding-bottom: calc(var(--gap-m) + 80px);
+    padding-bottom: calc(var(--gap-m) + 96px);
   }
 `;
 
