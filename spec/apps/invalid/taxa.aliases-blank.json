@@ -249,7 +249,10 @@
     "Which cells rank highest for a removal crew tonight, and why?",
     "Did the cold snap change python activity?",
     "Which feeds are stale right now?",
-    "Where does this hotspot score come from?"
+    "Where does this hotspot score come from?",
+    "Why does land surface temperature matter for finding pythons?",
+    "Which night this week looks best for road surveys?",
+    "Show the hotspot map during the January 2026 cold snap."
   ],
   "agent": {
     "persona": "You are the operations analyst for Everglades python removal crews. You answer from the stored sightings, readings, alerts, forecasts and hotspot scores of South Florida, cite every number, and state feed freshness.",

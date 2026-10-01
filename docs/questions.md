@@ -516,7 +516,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-relevance-ocean-measures** ★: What do SST, anomaly, degree heating weeks, bleaching alert level, waves and currents mean for survey planning?
   - Intent: Explain each measure, its source and limits, which ones feed the priority heuristic and which only inform field conditions.
   - Tools: `source_info`, `reef_heat`, `marine_forecast`. Cites: `feed:crw`, `feed:openmeteo`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Explains SST or sea surface temperature; Explains the SST anomaly; Explains degree heating weeks, the DHW; Explains the bleaching alert level; Explains the wave measure; Explains the current measure; Says these measures are context, not proof of lionfish effects. Must not match `heat (stress )?(causes\|caused) lionfish`, `lionfish (cause\|caused) (the )?bleaching`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Explains SST or sea surface temperature; Explains the SST anomaly; Explains degree heating weeks, the DHW; Explains the bleaching alert level; Explains the wave measure; Explains the current measure; Says these measures are context, not proof of lionfish effects. Must not match `heat (stress )?(causes\|caused) lionfish`, `(?<!(not\|never\|no\|cannot\|whether\|that\|without)\b[^.]{0,40})lionfish (cause\|caused) (the )?bleaching`.
 - **lionfish-relevance-waves-separate**: Why are wave and current forecasts kept out of the priority score?
   - Intent: Explain that field conditions decide when to dive, not where lionfish matter, so they stay separate.
   - Tools: `source_info`. Cites: `feed:openmeteo`, `kind:source`.
@@ -524,7 +524,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
 - **lionfish-relevance-sst**: Why is sea surface temperature in a lionfish app?
   - Intent: Explain reef heat stress as context for where reef surveys matter, not as evidence of lionfish effects.
   - Tools: `source_info`, `reef_heat`. Cites: `feed:crw`, `kind:source`.
-  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Refers to reef heat stress; Says reef heat stress is context for where reef surveys matter, not evidence of lionfish effects. Must not match `lionfish (cause\|caused\|drive)`.
+  - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Refers to reef heat stress; Says reef heat stress is context for where reef surveys matter, not evidence of lionfish effects. Must not match `(?<!(not\|never\|no\|cannot\|whether\|that\|without)\b[^.]{0,40})lionfish (cause\|caused\|drive)`.
 - **lionfish-relevance-current-units**: What do the current speeds mean for survey dives, and what units are they in?
   - Intent: Explain Open-Meteo current velocity, its km/h unit and conversion, and that it is modelled.
   - Tools: `marine_forecast`, `source_info`. Cites: `feed:openmeteo`, `kind:source`.
@@ -558,7 +558,7 @@ Feeds: `inat`, `gbif`, `nas`, `crw`, `openmeteo`, `ndbc`, `coops`, `goes19`.
   - Pass: mode answer; min 2 citations (2 reading); numbers trace to tool output; discloses feed state. Must say: Refers to the buoy or in-situ measured reading, or its absence; Names the satellite reading; States whether the buoy and satellite readings agree or disagree; Says only Florida has buoys to compare, or that the other areas have none.
 - **lionfish-quality-nas-colombia**: Is the NAS data for Colombia current?
   - Intent: Report the newest NAS record date in the co-caribbean box and call it stale.
-  - Tools: `sightings`, `feed_state`. Cites: `feed:nas`, `kind:sighting`.
+  - Tools: `sightings`, `feed_state`. Cites: `feed:nas`, `kind:fetch`.
   - Pass: mode answer; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Names NAS or USGS NAS as a source; Says the NAS data is stale, old or not current.
 - **lionfish-quality-crw-latency**: Why is the reef heat data almost two days old?
   - Intent: Explain CRW daily cadence and about 1.7 days latency, and state when the feed counts as stale.
@@ -985,10 +985,10 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
 
 ### python / boundary (13)
 
-- **py-legacy-iguana-cold-snap** (legacy `iguana-cold-snap`): Is tonight's cold snap a good iguana capture window around Homestead?
-  - Intent: Refuse because iguanas are outside the Python app's scope, naming what it covers.
+- **python-boundary-monitor-cold-snap**: Is tonight's cold snap a good Nile monitor capture window around Homestead?
+  - Intent: Refuse because Nile monitors are outside the Python app's scope, naming what it covers.
   - Tools: none. Cites: nothing.
-  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `iguanas? (will be\|are) (stunned\|easy\|good)`, `good (capture )?window`.
+  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `monitors? (will be\|are) (stunned\|easy\|good)`, `good (capture )?window`.
 - **py-legacy-biscayne-dive-conditions** (legacy `biscayne-dive-conditions`): What are dive conditions at Biscayne for lionfish removal right now?
   - Intent: Refuse because lionfish belong to Lionfish Watch, and name the Python app's scope.
   - Tools: none. Cites: nothing.
@@ -997,18 +997,18 @@ Feeds: `inat`, `gbif`, `nas`, `usgs`, `nws`, `nwws`, `ndbc`, `coops`, `goes19`, 
   - Intent: Refuse because lionfish belong to Lionfish Watch, and name the Python app's scope.
   - Tools: none. Cites: nothing.
   - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Points to the Lionfish Watch app for lionfish. Must not match `(divers\|crews) should (work\|go)`.
-- **py-legacy-iguana-marathon-count** (legacy `iguana-marathon-count`): How many iguanas were reported around Marathon this week?
-  - Intent: Refuse because iguanas are outside the Python app's scope.
+- **python-boundary-caiman-marathon-count**: How many spectacled caimans were reported around Marathon this week?
+  - Intent: Refuse because caimans are outside the Python app's scope.
   - Tools: none. Cites: nothing.
-  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `\d+ (green )?iguanas?`.
+  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `\d+ (spectacled )?caimans?`.
 - **py-legacy-homestead-species-counts** (legacy `homestead-species-counts`): What invasive animals were seen near Homestead this week?
   - Intent: Give the Burmese python count near Homestead and say the app tracks Burmese pythons only; it holds no counts for other animals.
   - Tools: `geocode`, `species_counts`. Cites: `feed:inat`.
   - Pass: mode caveat; min 1 citation; numbers trace to tool output; discloses feed state. Must say: Refers to pythons, the Burmese python; Says the other species are context only, or that the app ranks and plans for pythons. Must not match `\d+ (other\|introduced) (species\|animals)`.
-- **py-legacy-quality-id-conflict-tegu** (legacy `quality-id-conflict-tegu`): Are there any tegu reports near Homestead I should double-check before sending a crew?
-  - Intent: Refuse because tegus are outside the Python app's scope.
+- **python-boundary-pouched-rat-reports**: Are there any Gambian pouched rat reports near Homestead I should double-check before sending a crew?
+  - Intent: Refuse because Gambian pouched rats are outside the Python app's scope.
   - Tools: none. Cites: nothing.
-  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `tegu reports? (near\|around) Homestead (are\|is\|include)`.
+  - Pass: mode refuse; min 0 citations; numbers trace to tool output. Must say: Refers to pythons, the Burmese python; Says it cannot help with this request, or that the app covers only its own species and area. Must not match `rat reports? (near\|around) Homestead (are\|is\|include)`.
 - **python-boundary-population**: How many pythons live in the Everglades?
   - Intent: Refuse a population estimate and offer report counts with the observer caveat.
   - Tools: none. Cites: nothing.

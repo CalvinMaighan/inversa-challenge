@@ -90,11 +90,11 @@
       "legacyId": "python-crews-tonight"
     },
     {
-      "id": "py-legacy-iguana-cold-snap",
+      "id": "python-boundary-monitor-cold-snap",
       "app": "python",
       "category": "boundary",
-      "question": "Is tonight's cold snap a good iguana capture window around Homestead?",
-      "intent": "Refuse because iguanas are outside the Python app's scope, naming what it covers.",
+      "question": "Is tonight's cold snap a good Nile monitor capture window around Homestead?",
+      "intent": "Refuse because Nile monitors are outside the Python app's scope, naming what it covers.",
       "expectedTools": [],
       "mustCite": [],
       "pass": {
@@ -104,15 +104,14 @@
           "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
-          "iguanas? (will be|are) (stunned|easy|good)",
+          "monitors? (will be|are) (stunned|easy|good)",
           "good (capture )?window"
         ],
         "groundedNumbers": true,
         "feedState": false,
         "minCitations": 0
       },
-      "helper": false,
-      "legacyId": "iguana-cold-snap"
+      "helper": false
     },
     {
       "id": "py-legacy-biscayne-dive-conditions",
@@ -251,11 +250,11 @@
       "legacyId": "lionfish-key-largo"
     },
     {
-      "id": "py-legacy-iguana-marathon-count",
+      "id": "python-boundary-caiman-marathon-count",
       "app": "python",
       "category": "boundary",
-      "question": "How many iguanas were reported around Marathon this week?",
-      "intent": "Refuse because iguanas are outside the Python app's scope.",
+      "question": "How many spectacled caimans were reported around Marathon this week?",
+      "intent": "Refuse because caimans are outside the Python app's scope.",
       "expectedTools": [],
       "mustCite": [],
       "pass": {
@@ -265,14 +264,13 @@
           "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
-          "\\d+ (green )?iguanas?"
+          "\\d+ (spectacled )?caimans?"
         ],
         "groundedNumbers": true,
         "feedState": false,
         "minCitations": 0
       },
-      "helper": false,
-      "legacyId": "iguana-marathon-count"
+      "helper": false
     },
     {
       "id": "py-legacy-homestead-species-counts",
@@ -452,11 +450,11 @@
       "legacyId": "quality-missing-lst"
     },
     {
-      "id": "py-legacy-quality-id-conflict-tegu",
+      "id": "python-boundary-pouched-rat-reports",
       "app": "python",
       "category": "boundary",
-      "question": "Are there any tegu reports near Homestead I should double-check before sending a crew?",
-      "intent": "Refuse because tegus are outside the Python app's scope.",
+      "question": "Are there any Gambian pouched rat reports near Homestead I should double-check before sending a crew?",
+      "intent": "Refuse because Gambian pouched rats are outside the Python app's scope.",
       "expectedTools": [],
       "mustCite": [],
       "pass": {
@@ -466,14 +464,13 @@
           "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
-          "tegu reports? (near|around) Homestead (are|is|include)"
+          "rat reports? (near|around) Homestead (are|is|include)"
         ],
         "groundedNumbers": true,
         "feedState": false,
         "minCitations": 0
       },
-      "helper": false,
-      "legacyId": "quality-id-conflict-tegu"
+      "helper": false
     },
     {
       "id": "python-lookup-sightings-7d",
@@ -1968,7 +1965,7 @@
     {
       "date": "2026-10-01",
       "by": "K1",
-      "change": "py-legacy-tegu-sightings-homestead deleted: since K1 the tegu is no longer a context taxon of the app but any other species, and py-legacy-quality-id-conflict-tegu asks the same refusal for the same species and place. Without the removed python focus guard the model refused it correctly but called geocode first in 9 of 9 live runs, which the refuse mode counts as a failure."
+      "change": "The Homestead sightings question for a species K1 removed deleted (its id named the species; text in `git show 6e69218:spec/apps/questions/python.json`): since K1 that species is no longer a context taxon of the app but any other species, and the Homestead double-check boundary question asked the same refusal for the same species and place. Without the removed python focus guard the model refused it correctly but called geocode first in 9 of 9 live runs, which the refuse mode counts as a failure."
     },
     {
       "date": "2026-10-01",
@@ -1979,6 +1976,11 @@
       "date": "2026-10-01",
       "by": "J1",
       "change": "J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). After the final series: 'Places the scene in January 2026' is 'Places the scene in the January cold snap' (the regex was (January|2026-01)); 'Gives the quality flag' is 'Gives the quality flag, or notes cloud masking' (the regex accepted 'cloud'). After the held-out series: the outside-area refusal statement also accepts naming the eight locations as the coverage (the scope guard's wording); 'States NAS's lag of weeks to months' is 'Says NAS records lag or arrive late, by weeks to months'; 'Names the buoy, the in-situ measured reading' also accepts its absence (Belize has no buoy); 'Names USGS NAS as a source' is 'Names NAS or USGS NAS as a source'. No statement was loosened below its regex."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "GRB",
+      "change": "The three boundary questions that named species removed in K1 now name other untracked species, with the same category, refuse mode and mustSay: python-boundary-monitor-cold-snap (Nile monitor), python-boundary-caiman-marathon-count (spectacled caiman), python-boundary-pouched-rat-reports (Gambian pouched rat); their forbid patterns name the new species, and legacyId is dropped because the legacy GOLDEN set in apps/web/eval/golden.ts no longer lists them. The holdout's ph-boundary-monitors changed the same way. The only-three-species rubric check counts any mention of the removed species in spec/apps and apps/web/eval; the refusal coverage is unchanged. Old text: `git show 6e69218:spec/apps/questions/python.json`."
     }
   ]
 }

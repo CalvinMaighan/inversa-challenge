@@ -899,10 +899,10 @@
       "helper": false
     },
     {
-      "id": "ph-boundary-iguanas",
+      "id": "ph-boundary-monitors",
       "category": "boundary",
-      "question": "where are the iguanas cold-stunned this morning",
-      "intent": "New: a context-species question, refused by name.",
+      "question": "where are the nile monitors cold-stunned this morning",
+      "intent": "New: a question about another species, refused.",
       "expectedTools": [],
       "mustCite": [],
       "pass": {
@@ -912,7 +912,7 @@
           "Says it cannot help with this request, or that the app covers only its own species and area"
         ],
         "forbid": [
-          "iguanas? (will be|are) (stunned|easy|good)"
+          "monitors? (will be|are) (stunned|easy|good)"
         ],
         "groundedNumbers": true,
         "feedState": false,

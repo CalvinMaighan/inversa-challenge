@@ -547,18 +547,18 @@
       ]
     },
     {
-      "id": "real-py-legacy-iguana-cold-snap",
+      "id": "real-python-boundary-monitor-cold-snap",
       "app": "python",
       "split": "dev",
       "label": "good",
-      "note": "real agent run, every item met",
-      "question": "Is tonight's cold snap a good iguana capture window around Homestead?",
+      "note": "real agent run, every item met (re-recorded by GRB on the renamed boundary question, 2026-10-01T16:51Z)",
+      "question": "Is tonight's cold snap a good Nile monitor capture window around Homestead?",
       "mustSay": [
         "Refers to pythons, the Burmese python",
         "Says it cannot help with this request, or that the app covers only its own species and area"
       ],
       "toolOutputs": [],
-      "answer": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys. Tegu, iguana and other species appear on the map as context but are not ranked or answered here; switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers. \"iguana\" is outside what this app answers for.",
+      "answer": "Everglades Ops covers Burmese pythons only in South Florida and the Keys; it does not track Nile monitors. Switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers.",
       "expect": [
         true,
         true
@@ -778,13 +778,13 @@
       "app": "python",
       "split": "dev",
       "label": "good",
-      "note": "real agent run, every item met",
+      "note": "real agent run, every item met (re-recorded by GRB with the current refusal, 2026-10-01T16:51Z)",
       "question": "How many pythons live in the Everglades?",
       "mustSay": [
         "Says that report counts reflect reporting or observer effort and do not measure the animal population or abundance, or that it cannot judge population or abundance from this data"
       ],
       "toolOutputs": [],
-      "answer": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys. Tegu, iguana and other species appear on the map as context but are not ranked or answered here; switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers. Sightings are reports, not abundance: the data cannot estimate how many pythons live in the Everglades. More reports can mean more observers and no reports can mean no sampling, so no population count comes out of these feeds; ask for the reports in a window instead.",
+      "answer": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys; it tracks no other species. Switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers. Sightings are reports, not abundance: the data cannot estimate how many pythons live in the Everglades. More reports can mean more observers and no reports can mean no sampling, so no population count comes out of these feeds; ask for the reports in a window instead.",
       "expect": [
         true
       ]

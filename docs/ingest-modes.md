@@ -34,26 +34,28 @@ What the code does today; the sections below are the audit and design it came fr
 
 **Mode per feed.** `sources.mode` is the adapter's own mode (`SourceInfo.mode`), and `/health`, `feeds` and `sources` report it as is: `push`, `poll` or `webhook`. GraphQL `FeedMode` is `PUSH | POLL | WEBHOOK` (the web chips accepted only push and poll before E1; `apps/web/client/hud/topbar/feed-chips.ts` `normalizeFeedState` must accept `webhook` too, or the CRW chip is dropped). A feed is `webhook` only when a provider's change call is its main trigger (CRW); a poller a provider can also wake keeps `poll` and reports `nudge: true` in `sources`.
 
-| App | Feed id | Mode | Poll loop | Nudge route | Emitter |
-|---|---|---|---|---|---|
-| carp | `usgs` | poll | 15 min, all sites in one request | no | Rust poller |
-| carp | `nwps` | poll | 15 min loop; fetches every wake-up 12:00-18:00Z, hourly otherwise | yes (IEMBot flood products) | Rust poller |
-| carp | `nws-alerts` | poll | 60 s; every poll, empty or not, is a `fetch_runs` row | yes (IEMBot) | Rust poller |
-| carp | `nws-forecast` | poll | 60 min; stored only when `updateTime` changes | yes | Rust poller |
-| carp | `iem` | poll | daily (backfill at boot) | yes | Rust poller |
-| carp | `nwws` | push | XMPP session (down until `NWWS_USER`/`NWWS_PASS`) | no | Rust XMPP client |
-| lionfish | `crw` | webhook | 3 h backstop; data cadence 60 h | yes (ERDDAP) | Rust poller |
-| lionfish | `inat` | poll | 10 min (`cadenceMinutes`), conditional GET | no | Rust poller |
-| lionfish | `gbif` | poll | daily | no | Rust poller |
-| lionfish | `nas` | poll | weekly (`cadenceDays`) | no | Rust poller |
-| lionfish | `ndbc` | poll | 10 min, one bulk file | no | Rust poller |
-| lionfish | `openmeteo-marine` | poll | `meta.json` every 15 min, data on a new run | no | Rust poller |
-| lionfish | `goes19-sst` | push | SQS long poll (down until the queue secrets are set) | no | Rust SQS consumer |
-| python | `inat` | poll | 2 min (default `CADENCE`) | no | Rust poller |
-| python | `gbif`, `nas` | poll | daily | no | Rust poller |
-| python | `nws` | poll | 60 s | no | Rust poller |
-| python | `usgs`, `ndbc`, `coops`, `openmeteo` | poll | 15 min, 10 min, 6 min, 60 min | no | Rust poller |
-| python | `goes19`, `nwws` | push | SQS, XMPP (down until their secrets are set) | no | Rust consumers |
+The last column says why each poll has no push, with the ledger row that holds the search and the provider's docs.
+
+| App | Feed id | Mode | Poll loop | Nudge route | Emitter | Push search (ledger row) and provider docs |
+|---|---|---|---|---|---|---|
+| carp | `usgs` | poll | 15 min, all sites in one request | no | Rust poller | No push (same search as C1): the OGC API has no subscription endpoint; WaterAlert only emails or texts a person. [OGC API](https://api.waterdata.usgs.gov/docs/ogcapi/) |
+| carp | `nwps` | poll | 15 min loop; fetches every wake-up 12:00-18:00Z, hourly otherwise | yes (IEMBot flood products) | Rust poller | No push (same search as C2): the NWPS swagger has no subscription or callback path; IEMBot only nudges it. [NWPS API](https://water.noaa.gov/about/api) |
+| carp | `nws-alerts` | poll | 60 s; every poll, empty or not, is a `fetch_runs` row | yes (IEMBot) | Rust poller | No webhook or stream on api.weather.gov (same search as C4); the push for alerts is NWWS-OI (C3), which needs an account. [api docs](https://www.weather.gov/documentation/services-web-api) |
+| carp | `nws-forecast` | poll | 60 min; stored only when `updateTime` changes | yes | Rust poller | No push (same search as C6): api.weather.gov has no subscription for gridpoint forecasts. [api docs](https://www.weather.gov/documentation/services-web-api) |
+| carp | `iem` | poll | daily (backfill at boot) | yes | Rust poller | No push (same search as C7): IEM offers CSV downloads only. [IEM HML](https://mesonet.agron.iastate.edu/request/hml.php) |
+| carp | `nwws` | push | XMPP session (down until `NWWS_USER`/`NWWS_PASS`) | no | Rust XMPP client | Push (C3). [NWWS-OI](https://www.weather.gov/nwws/nwws_oi_request) |
+| lionfish | `crw` | webhook | 3 h backstop; data cadence 60 h | yes (ERDDAP) | Rust poller | Webhook nudge (L3): ERDDAP subscription with a URL action. [ERDDAP subscriptions](https://pae-paha.pacioos.hawaii.edu/erddap/subscriptions/index.html) |
+| lionfish | `inat` | poll | 10 min (`cadenceMinutes`), conditional GET | no | Rust poller | No push (same search as L1): the subscription paths subscribe a logged-in user to one observation or project. [iNat API](https://api.inaturalist.org/v1/docs/) |
+| lionfish | `gbif` | poll | daily | no | Rust poller | No push (same search as L5): the occurrence API has no webhook or callback; a download notice only emails a person. [GBIF API](https://techdocs.gbif.org/en/data-use/api-downloads) |
+| lionfish | `nas` | poll | weekly (`cadenceDays`) | no | Rust poller | No push for records (same search as L6): NAS Alerts email and RSS announce a species new to an area, not new records. [NAS API](https://nas.er.usgs.gov/api/v2/) |
+| lionfish | `ndbc` | poll | 10 min, one bulk file | no | Rust poller | No push (same search as L7): NDBC publishes files only. [NDBC data](https://www.ndbc.noaa.gov/faq/rt_data_access.shtml) |
+| lionfish | `openmeteo-marine` | poll | `meta.json` every 15 min, data on a new run | no | Rust poller | No push or webhook in the docs (same search as L4); `meta.json` gates the data fetch. [marine API](https://open-meteo.com/en/docs/marine-weather-api) |
+| lionfish | `goes19-sst` | push | SQS long poll (down until the queue secrets are set) | no | Rust SQS consumer | Push (L9): SNS `NewGOES19Object` to SQS. [NOAA GOES on AWS](https://registry.opendata.aws/noaa-goes/) |
+| python | `inat` | poll | 2 min (default `CADENCE`) | no | Rust poller | No push (same search as L1, P1). [iNat API](https://api.inaturalist.org/v1/docs/) |
+| python | `gbif`, `nas` | poll | daily | no | Rust poller | No push (same search as L5, L6): GBIF has no webhook; NAS Alerts announce new areas, not records. [GBIF API](https://techdocs.gbif.org/en/data-use/api-downloads), [NAS API](https://nas.er.usgs.gov/api/v2/) |
+| python | `nws` | poll | 60 s | no | Rust poller | No webhook or stream on api.weather.gov (same search as C4, P7); the push for alerts is NWWS-OI (P6), which needs an account. [api docs](https://www.weather.gov/documentation/services-web-api) |
+| python | `usgs`, `ndbc`, `coops`, `openmeteo` | poll | 15 min, 10 min, 6 min, 60 min | no | Rust poller | No push for any of the four (same search as C1, L7, L8, L4): USGS has no subscription endpoint, NDBC and CO-OPS serve files and REST only, Open-Meteo has no webhook. [USGS OGC API](https://api.waterdata.usgs.gov/docs/ogcapi/), [NDBC](https://www.ndbc.noaa.gov/faq/rt_data_access.shtml), [CO-OPS](https://api.tidesandcurrents.noaa.gov/api/prod/), [Open-Meteo](https://open-meteo.com/en/docs) |
+| python | `goes19`, `nwws` | push | SQS, XMPP (down until their secrets are set) | no | Rust consumers | Push (P5, P6): SNS to SQS, and XMPP. [NOAA GOES on AWS](https://registry.opendata.aws/noaa-goes/), [NWWS-OI](https://www.weather.gov/nwws/nwws_oi_request) |
 
 In-process emitters call the pipeline (`scheduler::ingest_payload`) directly; the hook below is the same pipeline over HTTP for an emitter in another process.
 

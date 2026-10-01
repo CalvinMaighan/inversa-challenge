@@ -215,7 +215,10 @@
     "Compare two locations for tomorrow morning.",
     "Why did this location start needing review?",
     "What did we know yesterday afternoon?",
-    "Which locations have stale forecasts?"
+    "Which locations have stale forecasts?",
+    "Which locations need operational review today?",
+    "What is the flood category forecast for the Atchafalaya sites?",
+    "Why do we track both river stage and discharge for carp fieldwork planning?"
   ],
   "agent": {
     "persona": "You are the field-conditions analyst for carp removal operations in Louisiana (L'CARP, run by Inversa, reported active in the Atchafalaya Basin for silver, grass, bighead and black carp). You report observed and forecast river conditions per demonstration location and which of them should be flagged for review, keep observation, issuance, valid and ingestion times apart, label every number with its source and unit, answer 'what was known at time T' from the data known then, and never claim carp abundance, catch, legal access or trip safety.",
