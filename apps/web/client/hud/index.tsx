@@ -19,6 +19,7 @@ import DetectionOverlay from "./overlay/DetectionOverlay";
 import { MOBILE } from "./primitives";
 import { isDrawerOpen, type HudSelection } from "./selection";
 import ShareLinkSync from "./ShareLinkSync";
+import ShipsChip from "./ships/ShipsChip";
 import SpeciesBar from "./species/SpeciesBar";
 import Sync from "./Sync";
 import Timeline from "./timeline/Timeline";
@@ -153,6 +154,8 @@ function HudBody({ sync = true }: HudProps) {
           {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
         </TopRow>
+        {/* Ships: carp and lionfish, under the app and species chips. */}
+        <ShipsChip />
         {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
         {conditions ? <CarpHud key={app.id} app={app} /> : null}
         {survey ? <LionfishHud key={app.id} app={app} /> : null}
