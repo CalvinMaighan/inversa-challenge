@@ -10,7 +10,7 @@
  *    TTFB, DOMContentLoaded and load from Navigation Timing; then the app's own marks from `window.__inversa`
  *    (client/debug.ts): `hydrated` (React has mounted the shell and its effects run: the HUD takes input),
  *    `globeFirstFrame` (Cesium's first rendered frame), `gridReady` (the db worker published the 30-day frame
- *    grid), and `dataDrawn` (the hotspot layer has painted a frame of that grid). Medians are printed.
+ *    grid), and `dataDrawn` (the sightings layer, on by default since T41, has drawn a frame of that grid). Medians are printed.
  * 2. First agent token, over AGENT_QUESTIONS live questions to the real agent (GPT-6 Luna on OpenRouter) through
  *    `POST /api/agent/stream` at the page origin, as the chat card sends them. Per question: the first NDJSON
  *    line (status), the first output the model streams (a reasoning or answer delta, or a tool call), and the
@@ -53,14 +53,14 @@ async function coldLoad(stack: Stack, browser: Browser): Promise<Cold> {
     await page.goto(`${stack.origin}/`, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
     log("cold: page loaded, waiting for the first data frame");
     // Each resolves on the first animation frame at which its condition holds: the db worker's grid has frames,
-    // and the hotspot layer has painted one of them.
+    // and the sightings layer has drawn one of them.
     const at = (predicate: () => boolean | undefined) =>
       page
         .waitForFunction(`(${predicate.toString()})() ? performance.now() : false`, undefined, { timeout: LOAD_TIMEOUT_MS, polling: "raf" })
         .then(async (h) => (await h.jsonValue()) as number);
     const [gridReady, dataDrawn] = await Promise.all([
       at(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0),
-      at(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "hotspots")?.frame ?? -1) >= 0),
+      at(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0),
     ]);
     await page.waitForFunction(() => {
       const m = window.__inversa?.marks();
@@ -95,7 +95,7 @@ async function ask(stack: Stack, question: string, i: number): Promise<AgentTimi
     body: JSON.stringify({
       sessionId: `perf-${Date.now()}-${i}`,
       question,
-      view: { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "hotspots"], selection: null },
+      view: { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "notes"], selection: null },
     }),
   });
   if (!res.ok || !res.body) throw new Error(`agent stream answered ${res.status}: ${await res.text()}`);

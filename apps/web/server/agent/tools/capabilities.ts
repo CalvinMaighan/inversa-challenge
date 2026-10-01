@@ -342,6 +342,15 @@ const sightings = {
         duplicates: duplicates.length,
         conflicts: rows.filter((row) => row.conflict).length,
         late: rows.filter((row) => lateBy(row) !== null).length,
+        // Named up front, like feedSummary.mention: each late record with how late and its citation marker.
+        ...(rows.some((row) => lateBy(row) !== null)
+          ? {
+              lateRecords: rows
+                .filter((row) => lateBy(row) !== null)
+                .slice(0, MAX_MODEL_ROWS)
+                .map((row) => ({ source: row.source, arrived: `${lateBy(row)} after it was observed`, cite: `[e:sighting:${row.id}]` })),
+            }
+          : {}),
         byQuality,
         bySpecies,
         truncated: rows.length > shown.length,

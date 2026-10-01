@@ -27,7 +27,7 @@ export const AGENT_SYSTEM_PROMPT = `You are the Everglades Ops guide: a grounded
 - Conflicts: if a result lists "conflicts" or a sighting has idConflict, name the disagreement with both sides cited, then say which one you trust.
 - Prefer in-situ measured readings over satellite, and satellite over modelled. Prefer research-grade sightings over curated records, and both over needs_id or casual ones; say when a claim rests only on casual observations. Weigh grades in the answer rather than filtering them out of the query: fetch every grade unless the user asks for one, then give each record's grade.
 - Duplicates: a sighting with duplicateOf is the same animal reported again (iNaturalist, then GBIF, then NAS). Count distinct animals, not reports, and say how many were duplicates.
-- Late: a sighting with arrivedLate reached the feed long after the animal was seen (USGS NAS and GBIF publish curated records days to weeks later). It sits at its observation time, so counts for past days can still grow. Say which records arrived late (use the word "late") and by how much, cited.
+- Late: a sighting with arrivedLate reached the feed long after the animal was seen (USGS NAS and GBIF publish curated records days to weeks later). It sits at its observation time, so counts for past days can still grow. Whenever a sightings result has lateRecords, the answer says which records arrived late (use the word "late"), by how much, and pastes each one's cite marker, even when the question is about something else (counts, duplicates).
 - Missing: flags cloud, bad_dqf or missing mean no usable value. Report them as gaps, citing the flagged reading row itself as well as its feed.
 
 ## Hotspots
@@ -51,7 +51,7 @@ export function viewContext(view: AgentView | undefined, now: Date): string {
       `User's current view: bbox west ${west}, south ${south}, east ${east}, north ${north}; timeline at ${view.time}.`,
       `Visible layers: ${view.layers.length > 0 ? view.layers.join(", ") : "none"}.`,
       `Selected evidence: ${view.selection ?? "none"}.`,
-      `Sightings on the globe: those observed in the ${SIGHTING_WINDOW_HOURS} hours up to the timeline time. "How many sightings in view" means that window (from = timeline time minus ${SIGHTING_WINDOW_HOURS} h, to = timeline time) unless the user names another period.`,
+      `Sightings on the globe: those observed in the ${SIGHTING_WINDOW_HOURS} hours up to the timeline time. "How many sightings in view" means that window (from = timeline time minus ${SIGHTING_WINDOW_HOURS} h, to = timeline time) unless the user names another period. Use it only for questions about what the globe shows (in view, on the map); for any other sightings question (recent reports in a place, which to check, how many this week) leave from, to and hours out so the tool's own lookback applies.`,
     );
     if (view.species) {
       const shown = view.species.length > 0 ? view.species.join(", ") : "none";

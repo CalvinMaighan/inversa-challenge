@@ -8,8 +8,9 @@
  *   E2E_SKIP_BUILD=1 …           reuse the last e2e build
  *
  * Cases and what must be on screen:
- * - stale:     a pushed sighting observed 3 days ago makes the `web` feed (max latency 1 d) stale: its chip is
- *              `data-state=stale`, and clicking it opens the fetch run with a FEED STALE badge and the note.
+ * - stale:     a pushed sighting observed 3 days ago makes the `web` feed (max latency 1 d) stale: its row in the
+ *              About popover's data sources (T41) is `data-state=stale` with the note, and its name opens the fetch
+ *              run, whose summary says "WEB data out of date".
  * - missing:   the fixture GOES scan's cloud and bad-DQF pixels are hatched on the LST layer (the layer's own
  *              gap count > 0); a cloud pixel's drawer says MISSING · CLOUD. A hook body that does not
  *              normalize is a failed fetch: its drawer says FETCH FAILED.
@@ -67,14 +68,18 @@ async function openPage(browser: Awaited<ReturnType<typeof chromium.launch>>, or
   return page;
 }
 
-/** Open an evidence id in the drawer through the share link, wait for its badges, and return the drawer's text. */
-async function drawer(page: Page, id: string, file: string, expect: RegExp[]): Promise<string> {
+/**
+ * Open an evidence id in the drawer through the share link, wait for it to load, screenshot it, and check its text.
+ * The plain summary and its quality flags are on top; `expert` also unfolds "Details for experts" for the shot.
+ */
+async function drawer(page: Page, id: string, file: string, expect: RegExp[], expert = false): Promise<string> {
   await page.evaluate((h) => {
     window.location.hash = h;
   }, `#e=${encodeURIComponent(id)}`);
   const el = page.locator("[data-testid=hud-drawer]");
   await page.waitForFunction((want) => document.querySelector("[data-testid=hud-drawer-id]")?.textContent === want, id, { timeout: 30_000 });
   await page.waitForFunction(() => !/Loading evidence/.test(document.querySelector("[data-testid=hud-drawer]")?.textContent ?? ""), undefined, { timeout: 30_000 });
+  if (expert) await page.evaluate(() => document.querySelector<HTMLDetailsElement>("[data-testid=drawer-expert]")?.setAttribute("open", ""));
   await page.waitForTimeout(400);
   await el.screenshot({ path: path.join(OUT, file) });
   shots += 1;
@@ -139,24 +144,31 @@ async function main() {
     const late = sightings.filter((s) => s.source === "nas" && lag(s) > DAY).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
     if (!dup || !flip || !late) throw new Error(`fixtures: duplicate ${dup?.id}, flip ${flip?.id}, late ${late?.id}`);
 
-    // ---- stale: the web chip, then its fetch run in the drawer
+    // ---- stale: the web feed's row in the About popover (T41), then its fetch run in the drawer
     const page = await openPage(browser, stack.origin, `#v=1&c=25.70000,-80.60000,160000,0,-90&l=sightings,hotspots`);
-    await page.waitForSelector("[data-feed=web][data-state=stale]", { timeout: 60_000 });
-    const chip = page.locator("[data-feed=web]");
-    await chip.scrollIntoViewIfNeeded();
+    // FEEDS comes over the `feeds` subscription, published every 15 s.
+    await page.waitForFunction(() => ((window.__inversa!.state("FEEDS") as { source: string; state: string }[] | undefined) ?? []).some((f) => f.source === "web" && f.state === "stale"), undefined, { timeout: 60_000 });
+    await page.click("[data-testid=status-button]");
+    await page.click("[data-testid=data-sources] > summary");
+    const row = page.locator("[data-testid=status-popover] [data-feed=web][data-state=stale]");
+    await row.waitFor();
+    await row.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
-    await page.locator("[data-testid=hud-topbar]").screenshot({ path: path.join(OUT, "stale-chip.png") });
+    await page.locator("[data-testid=status-popover]").screenshot({ path: path.join(OUT, "stale-feed-row.png") });
     shots += 1;
-    const chipTitle = (await chip.getAttribute("title")) ?? "";
-    if (!/stale/.test(chipTitle) || !/max latency is 1d/.test(chipTitle)) throw new Error(`web chip title: ${chipTitle}`);
-    await chip.click();
+    const rowText = `${(await row.getAttribute("title")) ?? ""} ${(await row.textContent()) ?? ""}`;
+    if (!/stale/.test(rowText) || !/max latency is 1d/.test(rowText)) throw new Error(`web feed row: ${rowText}`);
+    await row.locator("button").click();
     await page.waitForFunction(() => /^fetch:/.test(document.querySelector("[data-testid=hud-drawer-id]")?.textContent ?? ""), undefined, { timeout: 30_000 });
     await page.waitForFunction(() => Boolean(document.querySelector("[data-testid=hud-drawer-quality]")), undefined, { timeout: 30_000 });
+    await page.click("[data-testid=status-button]"); // close the popover so the drawer is in the clear
+    await page.evaluate(() => document.querySelector<HTMLDetailsElement>("[data-testid=drawer-expert]")?.setAttribute("open", ""));
+    await page.waitForTimeout(300);
     await page.locator("[data-testid=hud-drawer]").screenshot({ path: path.join(OUT, "stale-drawer.png") });
     shots += 1;
     const staleText = (await page.locator("[data-testid=hud-drawer]").textContent()) ?? "";
-    if (!/WEB FEED STALE/.test(staleText) || !/max latency is 1d/.test(staleText)) throw new Error(`stale drawer: ${staleText.slice(0, 800)}`);
-    results.push(`stale=web chip+drawer`);
+    if (!/WEB data out of date/.test(staleText) || !/max latency is 1d/.test(staleText)) throw new Error(`stale drawer: ${staleText.slice(0, 800)}`);
+    results.push(`stale=web feed row+drawer`);
 
     // ---- missing (1): cloud hatching on the LST layer at the frame after the scan, then a cloud pixel
     const frameAt = Math.floor(scanAt / 3_600_000) * 3_600_000 + 3_600_000;
@@ -181,21 +193,21 @@ async function main() {
     await globePage.screenshot({ path: path.join(OUT, "missing-cloud-globe.png") });
     shots += 1;
     log(`globe: LST frame ${gaps.layerFrame} (TIME ${gaps.time}), ${gaps.valid} valid cells`);
-    await drawer(globePage, readingId(cloud), "missing-cloud-drawer.png", [/MISSING · CLOUD/, /GOES/]);
-    await drawer(globePage, readingId(bad[0]!), "missing-bad-dqf-drawer.png", [/MISSING · BAD DQF/]);
+    await drawer(globePage, readingId(cloud), "missing-cloud-drawer.png", [/Cloud cover — no reading/, /GOES/]);
+    await drawer(globePage, readingId(bad[0]!), "missing-bad-dqf-drawer.png", [/Bad satellite data — no reading/]);
 
     // ---- missing (2): a push that does not normalize is a failed fetch
     const failed = await stack.hookRaw(JSON.stringify([{ Reading: { station: { ext_id: "broken" } } }]));
     if (failed.status !== 422) throw new Error(`broken hook body answered ${failed.status}: ${failed.text}`);
     const failedRun = (JSON.parse(failed.text) as { fetchRunId: number }).fetchRunId;
-    await drawer(globePage, `fetch:${failedRun}`, "missing-fetch-failed-drawer.png", [/FETCH FAILED/, /normalize/]);
+    await drawer(globePage, `fetch:${failedRun}`, "missing-fetch-failed-drawer.png", [/Data check failed/, /normalize/], true);
     results.push(`missing=cloud ${cloudy.length} bad_dqf ${bad.length} failed_fetch fetch:${failedRun}`);
 
     // ---- duplicate, conflict, late
-    await drawer(globePage, `sighting:${dup.id}`, "duplicate-drawer.png", [/DUPLICATE OF/, new RegExp(`sighting:${dup.canonicalId}`)]);
-    await drawer(globePage, `sighting:${dup.canonicalId}`, "duplicate-canonical-drawer.png", [/DUPLICATE/, new RegExp(`sighting:${dup.id}`)]);
+    await drawer(globePage, `sighting:${dup.id}`, "duplicate-drawer.png", [/Same animal as an earlier report/, /DUPLICATE OF/, new RegExp(`sighting:${dup.canonicalId}`)]);
+    await drawer(globePage, `sighting:${dup.canonicalId}`, "duplicate-canonical-drawer.png", [/Also reported once more elsewhere/, new RegExp(`sighting:${dup.id}`)]);
     results.push(`duplicate=sighting:${dup.id}->sighting:${dup.canonicalId}`);
-    await drawer(globePage, `sighting:${flip.id}`, "conflict-idflip-drawer.png", [/REVISION/, /CONFLICT/, /taxon:/]);
+    await drawer(globePage, `sighting:${flip.id}`, "conflict-idflip-drawer.png", [/Sources disagree/, /REVISION/, /taxon:/], true);
     // The SST pixel next to buoy 41122, 2.4 °C warmer.
     const pixelAt = Date.parse(buoy.observedAt) + 10 * 60_000;
     await stack.hook([
@@ -212,10 +224,10 @@ async function main() {
     ]);
     log(`seeded: SST pixel at ${iso(pixelAt)} next to ${buoy.station.name} ${buoy.value} °C`);
     const buoyId = readingId(buoy);
-    await drawer(globePage, buoyId, "conflict-sst-drawer.png", [/1 CONFLICT/, /t27-sst-pixel|:sst_c:/]);
+    await drawer(globePage, buoyId, "conflict-sst-drawer.png", [/Sources disagree/, /1 CONFLICT/, /:sst_c:/], true);
     results.push(`conflict=sighting:${flip.id} ${buoyId}`);
     const lateDays = Math.floor(lag(late) / DAY);
-    await drawer(globePage, `sighting:${late.id}`, "late-drawer.png", [/LATE · ARRIVED/, new RegExp(`Ingest lag${lateDays}d`)]);
+    await drawer(globePage, `sighting:${late.id}`, "late-drawer.png", [new RegExp(`Late report — reached us ${lateDays}d`), new RegExp(`Ingest lag${lateDays}d`)]);
     results.push(`late=sighting:${late.id} ${lateDays}d`);
 
     for (const line of results) console.log(`QUALITY ${line}`);
