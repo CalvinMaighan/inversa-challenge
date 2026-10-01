@@ -167,6 +167,8 @@ export const PARAM_UNITS: Record<string, string> = {
   flow_kcfs: "kcfs",
   air_f: "°F",
   wind_mph: "mph",
+  pop_pct: "%",
+  wind_gust_ms: "m/s",
 };
 
 export const PARAM_TITLES: Record<string, string> = {
@@ -184,6 +186,8 @@ export const PARAM_TITLES: Record<string, string> = {
   flow_kcfs: "Flow (NWPS)",
   air_f: "Air temperature",
   wind_mph: "Wind speed",
+  pop_pct: "Chance of precipitation",
+  wind_gust_ms: "Wind gust",
 };
 
 const ORIGIN_ORDER: Record<string, number> = { measured: 0, satellite: 1, modeled: 2 };

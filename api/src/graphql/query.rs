@@ -624,13 +624,14 @@ impl QueryRoot {
             return Err(format!("`history` must be 0..={MAX_FORECAST_HISTORY}").into());
         }
         let site2 = site.clone();
-        let (snapshot, hist, cov) = app_state(ctx)
+        let (snapshot, hist, cov, weather_run) = app_state(ctx)
             .obs
             .read(move |c| {
                 Ok((
                     forecast::query::asof(c, &site2, as_of.0)?,
                     forecast::query::history(c, &site2, as_of.0, history as usize)?,
                     forecast::query::coverage(c, &site2)?,
+                    forecast::query::weather_run(c, &site2, as_of.0)?,
                 ))
             })
             .await?;
@@ -639,6 +640,7 @@ impl QueryRoot {
             as_of,
             snapshot: snapshot.map(Into::into),
             history: hist.into_iter().map(Into::into).collect(),
+            weather_run: weather_run.map(Into::into),
             replay_coverage_start: cov.replay_coverage_start.map(Time),
             live_coverage_start: cov.live_coverage_start.map(Time),
             snapshot_count: cov.snapshots as i32,

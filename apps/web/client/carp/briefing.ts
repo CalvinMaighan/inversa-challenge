@@ -11,12 +11,12 @@ import {
   latestAt,
   thresholdList,
   type Alert,
-  type SeriesPoint,
   type Site,
   type SiteStatus,
   type Snapshot,
   type SourceConflict,
   type UsgsSeries,
+  type WeatherNow,
 } from "./model";
 import { forecastSourceLabel, type SiteReview } from "./review";
 
@@ -36,7 +36,7 @@ export type BriefingInput = {
   alerts: readonly Alert[] | null;
   /** When the alerts were checked (the as-of time, or the live query time). */
   alertsCheckedMs: number;
-  weather: { airC: SeriesPoint | null; windMs: SeriesPoint | null } | null;
+  weather: WeatherNow | null;
   review: SiteReview | null;
 };
 
@@ -78,9 +78,13 @@ export function briefing(input: BriefingInput): Briefing {
     if (alerts.length === 0) expected.push(`No active NWS alerts at the location (checked for ${at(input.alertsCheckedMs)}).`);
     else for (const a of alerts.slice(0, 3)) expected.push(`NWS ${a.event}${a.expires ? ` until ${at(Date.parse(a.expires))}` : ""}.`);
   }
-  if (live && weather && (weather.airC || weather.windMs)) {
-    const parts = [weather.airC ? `${weather.airC.v.toFixed(0)} °C air` : null, weather.windMs ? `wind ${weather.windMs.v.toFixed(1)} m/s` : null].filter(Boolean);
-    expected.push(`NWS gridpoint forecast near now: ${parts.join(", ")} (modelled).`);
+  if (live && weather && (weather.airC || weather.windMs || weather.popPct)) {
+    const parts = [
+      weather.airC ? `${weather.airC.v.toFixed(0)} °C air` : null,
+      weather.windMs ? `wind ${weather.windMs.v.toFixed(1)} m/s` : null,
+      weather.popPct ? `${weather.popPct.v.toFixed(0)} % chance of precipitation` : null,
+    ].filter(Boolean);
+    expected.push(`NWS gridpoint forecast near now: ${parts.join(", ")} (modelled weather, not a stage forecast).`);
   }
 
   // What is missing.

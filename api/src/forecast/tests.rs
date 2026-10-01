@@ -206,6 +206,30 @@ fn bitemporal_asof_uses_issued_and_ingested_for_live_rows() {
     let cov = query::coverage(&c, "MCGL1").unwrap();
     assert_eq!(cov, query::Coverage { replay_coverage_start: Some(archive), live_coverage_start: Some(d0 + HOUR), snapshots: 3 });
     assert_eq!(query::coverage(&c, "BTRL1").unwrap(), query::Coverage::default());
+
+    // An NWS gridpoint weather run issued after d1 shares the store but is never the river
+    // forecast: as-of and status keep d1, coverage ignores it, history lists it.
+    let th = mcgl1();
+    let run = d1 + 6 * HOUR;
+    let mut weather = snap("MCGL1", run, run + HOUR, Source::NwsGridpoint, "wx", vec![Point { valid_at: run, stage_ft: None, flow_kcfs: None }]);
+    weather.product = "gridpoint".into();
+    store::insert_snapshot(&c, &weather, &th).unwrap();
+    assert_eq!(query::asof(&c, "MCGL1", run + 2 * HOUR).unwrap().unwrap().issued_at, d1);
+    assert_eq!(query::status_at(&c, "MCGL1", run + 2 * HOUR, 1.0).unwrap().forecast.unwrap().issued_at, d1);
+    assert_eq!(query::coverage(&c, "MCGL1").unwrap().snapshots, 3);
+    let h = query::history(&c, "MCGL1", run + 2 * HOUR, 10).unwrap();
+    assert_eq!(h.iter().map(|s| s.issued_at).collect::<Vec<_>>(), [d1, d0, archive], "history is river issuances only");
+    let w = query::weather_run(&c, "MCGL1", run + 2 * HOUR).unwrap().unwrap();
+    assert_eq!((w.issued_at, w.ingested_at, w.product.as_str(), w.source), (run, run + HOUR, "gridpoint", Source::NwsGridpoint));
+    assert_eq!(query::weather_run(&c, "MCGL1", run - 1).unwrap(), None, "not yet issued");
+    // A site with only a weather run has no river forecast.
+    let mut only = weather.clone();
+    only.site = "BTRL1".into();
+    store::insert_snapshot(&c, &only, &th).unwrap();
+    assert_eq!(query::asof(&c, "BTRL1", i64::MAX).unwrap(), None);
+    assert_eq!(query::history(&c, "BTRL1", i64::MAX, 10).unwrap(), Vec::new());
+    assert_eq!(query::coverage(&c, "BTRL1").unwrap(), query::Coverage::default());
+    assert_eq!(query::weather_run(&c, "BTRL1", i64::MAX).unwrap().unwrap().issued_at, run);
 }
 
 #[test]

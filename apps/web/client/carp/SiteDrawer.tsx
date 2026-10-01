@@ -8,7 +8,7 @@ import styled from "client/styled";
 import type { Briefing } from "./briefing";
 import { conflictText, flowAvailability } from "./briefing";
 import { ago, cfs, ft, kcfs, localTime, utcTime } from "./format";
-import { forecastPeak, latestAt, thresholdList, type Alert, type SeriesPoint, type Site, type SiteStatus, type Snapshot, type SourceConflict, type Thresholds, type UsgsSeries } from "./model";
+import { forecastPeak, latestAt, thresholdList, type Alert, type Site, type SiteStatus, type Snapshot, type SourceConflict, type Thresholds, type UsgsSeries, type WeatherNow } from "./model";
 import { forecastSourceLabel, sourceLinks, STATUS_WORDS, type SiteReview } from "./review";
 import { StatusGlyph, STATUS_TONE } from "./StatusGlyph";
 
@@ -124,7 +124,7 @@ export type SiteEvidence = {
   usgsWindow: UsgsSeries;
   alerts: readonly Alert[] | null;
   conflicts: readonly SourceConflict[];
-  weather: { airC: SeriesPoint | null; windMs: SeriesPoint | null } | null;
+  weather: WeatherNow | null;
   loading: boolean;
   error: string | null;
 };
@@ -236,13 +236,12 @@ export function SiteDrawerView(p: SiteEvidence) {
               </>
             ) : null}
           </dd>
-          {live && weather && (weather.airC || weather.windMs) ? (
+          {live && weather && (weather.airC || weather.windMs || weather.popPct) ? (
             <>
               <dt>Weather</dt>
               <dd>
-                {weather.airC ? `${weather.airC.v.toFixed(1)} °C air` : ""}
-                {weather.airC && weather.windMs ? ", " : ""}
-                {weather.windMs ? `wind ${weather.windMs.v.toFixed(1)} m/s` : ""} <small>NWS gridpoint forecast for {when((weather.airC ?? weather.windMs)!.t, zone)}, modelled</small>
+                {[weather.airC ? `${weather.airC.v.toFixed(1)} °C air` : null, weather.windMs ? `wind ${weather.windMs.v.toFixed(1)} m/s` : null, weather.popPct ? `${weather.popPct.v.toFixed(0)} % chance of precipitation` : null].filter(Boolean).join(", ")}{" "}
+                <small>NWS gridpoint forecast for {when((weather.airC ?? weather.windMs ?? weather.popPct)!.t, zone)}, modelled weather, not a stage forecast</small>
               </dd>
             </>
           ) : null}

@@ -35,6 +35,10 @@ export const forecastId = (lid: string, issuedAt: string | number) => `forecast:
 export const nwpsObservationId = (lid: string, observedAt: string) => `reading:${readingKey(lid, "stage_m", observedAt, "measured")}`;
 
 const provenance = (source: string) => (source.toUpperCase() === "IEM_ARCHIVE" ? "iem-archive" : source.toUpperCase() === "NWS_GRIDPOINT" ? "nws-gridpoint" : "nwps-live");
+/** River issuances only: the NWS gridpoint weather run shares the forecast store but carries no stage (client/carp/model.ts isRiverForecast). */
+const isRiverSnapshot = (s: { source: string }) => s.source.toUpperCase() !== "NWS_GRIDPOINT";
+/** NWS forecast offices by id, for the agent to name the office in words. */
+const NWS_OFFICES: Record<string, string> = { LCH: "Lake Charles", LIX: "New Orleans/Baton Rouge", SHV: "Shreveport", JAN: "Jackson", MFL: "Miami", KEY: "Key West", TBW: "Tampa Bay", MLB: "Melbourne", JAX: "Jacksonville", TAE: "Tallahassee" };
 const feedOf = (source: string) => (provenance(source) === "iem-archive" ? "iem" : provenance(source) === "nws-gridpoint" ? "nws-forecast" : "nwps");
 
 const sitesInput = z.array(z.string().min(2).max(80)).max(16).optional().describe("Sites by NWPS id (SMML1), town (Krotz Springs), name, or a preset ('Atchafalaya' = the basin's four). Omit for all eight.");
@@ -176,14 +180,16 @@ export const riverForecast = {
       const view = data[`f${i}`]!;
       const status = data[`t${i}`] as unknown as Pick<GqlSiteStatus, "thresholds" | "stageFt" | "category" | "observation"> | undefined;
       const th = thresholdsOf(status?.thresholds ?? null);
-      let current = view.snapshot;
-      let earlier = view.history.filter((s) => s.issuedAt !== current?.issuedAt);
+      // The NWS gridpoint weather run shares the store (no stage); the river issuances are the rest.
+      const riverHistory = view.history.filter(isRiverSnapshot);
+      let current = view.snapshot && isRiverSnapshot(view.snapshot) ? view.snapshot : (riverHistory[0] ?? null);
+      let earlier = riverHistory.filter((s) => s.issuedAt !== current?.issuedAt);
       if (issuedAtText) {
         const wanted = ms(issuedAtText);
-        const hit = view.history.find((s) => Math.abs(ms(s.issuedAt) - wanted) < 60_000);
+        const hit = riverHistory.find((s) => Math.abs(ms(s.issuedAt) - wanted) < 60_000);
         if (hit) {
           current = hit;
-          earlier = view.history.filter((s) => ms(s.issuedAt) < ms(hit.issuedAt));
+          earlier = riverHistory.filter((s) => ms(s.issuedAt) < ms(hit.issuedAt));
         }
       }
       const thresholds = th;
@@ -865,10 +871,12 @@ export const forecastVerify = {
       sites.map((s, i) => {
         const view = data[`f${i}`];
         if (!view) return [s.lid, null];
-        if (!issuedAtText) return [s.lid, view.snapshot?.issuedAt ?? null];
+        const river = view.history.filter(isRiverSnapshot);
+        const snapshot = view.snapshot && isRiverSnapshot(view.snapshot) ? view.snapshot : (river[0] ?? null);
+        if (!issuedAtText) return [s.lid, snapshot?.issuedAt ?? null];
         const wanted = ms(issuedAtText);
-        const exact = view.history.find((snap) => Math.abs(ms(snap.issuedAt) - wanted) <= 60_000);
-        const current = view.history.find((snap) => ms(snap.issuedAt) <= wanted) ?? view.snapshot;
+        const exact = river.find((snap) => Math.abs(ms(snap.issuedAt) - wanted) <= 60_000);
+        const current = river.find((snap) => ms(snap.issuedAt) <= wanted) ?? snapshot;
         return [s.lid, exact?.issuedAt ?? current?.issuedAt ?? null];
       }),
     );
@@ -940,11 +948,15 @@ export const forecastVerify = {
 
 // ---------------------------------------------------------------- weather_forecast
 
-const WEATHER_QUERY = `query AgentWeatherForecast($bbox: BBox!, $from: Time!, $to: Time!, $params: [Param!]) {
+// `runs` (a configured site only): the site's forecast history, where the gridpoint run carries the office's
+// own update time and our fetch time; a point (python) has no site, and the feed's newest run stands in.
+const WEATHER_QUERY = `query AgentWeatherForecast($bbox: BBox!, $from: Time!, $to: Time!, $params: [Param!], $site: ID!, $withSite: Boolean!) {
   readings(bbox: $bbox, from: $from, to: $to, params: $params) { station { id source name lat lon kind } param value flag observedAt origin }
+  runs: forecasts(site: $site, asOf: $to, history: 1) @include(if: $withSite) { weatherRun { site product issuedAt ingestedAt source } }
   feeds { ...FeedFields }
 }
 `;
+type GqlWeatherRuns = { weatherRun: { site: string; product: string; issuedAt: string; ingestedAt: string; source: string } | null } | null;
 
 const weatherInput = z
   .object({
@@ -957,11 +969,37 @@ const weatherInput = z
 
 const C_TO_F = (c: number) => r1((c * 9) / 5 + 32);
 const MS_TO_MPH = (v: number) => r1(v / 0.44704);
+const MM_TO_IN = (mm: number) => r2(mm / 25.4);
+const WEATHER_PARAMS = ["AIR_C", "WIND_MS", "POP_PCT", "RAIN_MM", "WIND_GUST_MS"];
+/** The raw grid's native QPF window (api/src/ingest/poll/nws_forecast.rs): a lone last window ends 6 h after it starts. */
+const QPF_WINDOW_MS = 6 * HOUR_MS;
+
+/** Precipitation of a 12 h period from the grid's 6 h QPF windows and hourly gusts stored as readings. */
+export function periodPrecip(
+  rain: readonly { t: number; v: number | null }[],
+  gusts: readonly { t: number; v: number | null }[],
+  start: number,
+  end: number,
+): { qpfMm: number | null; windows: number; gustMs: number | null } {
+  // A window belongs to the period its start falls in; windows run to the next window's start (NWS windows
+  // are contiguous), so a period and its windows never double count.
+  let qpf: number | null = null;
+  let windows = 0;
+  for (const [i, w] of rain.entries()) {
+    const wEnd = rain[i + 1]?.t ?? w.t + QPF_WINDOW_MS;
+    if (w.t < start || w.t >= end || wEnd <= start) continue;
+    windows += 1;
+    if (w.v !== null) qpf = (qpf ?? 0) + w.v;
+  }
+  let gust: number | null = null;
+  for (const g of gusts) if (g.t >= start && g.t < end && g.v !== null && (gust === null || g.v > gust)) gust = g.v;
+  return { qpfMm: qpf === null ? null : r2(qpf), windows, gustMs: gust };
+}
 
 export const weatherForecast = {
   name: "weather_forecast",
   description:
-    "NWS gridpoint forecast periods (12 h) for a site or point from api.weather.gov, as the gridpoint adapter stores them: air temperature (°F and °C) and wind (mph and m/s, the period's upper bound) per period, with the office and grid, when the forecast was updated and fetched. Rain chance and sky text are not stored (say so if asked about rain). Cite the forecast:nws id.",
+    "NWS gridpoint forecast periods (12 h) for a site or point from api.weather.gov, as the gridpoint adapter stores them: per period the air temperature (°F and °C), wind (mph and m/s, the period's upper bound), the highest gust, the chance of precipitation (percent, NWS's own period value) and the forecast precipitation amount (QPF, in and mm, summed from the grid's 6 h windows starting in the period), with the office and grid, when the office updated the run and when we fetched it. A rain forecast is weather, not a flood or stage prediction. Cite the forecast:nws id.",
   inputSchema: weatherInput,
   async execute(input: z.infer<typeof weatherInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const siteName = given(input.site);
@@ -977,11 +1015,12 @@ export const weatherForecast = {
     // The point's own grid cell, else the nearest gridpoint within half a degree (a park has one grid per office).
     const bbox: BBox = { west: lon - 0.06, south: lat - 0.06, east: lon + 0.06, north: lat + 0.06 };
     const isGrid = (r: GqlReading) => r.origin.toLowerCase() === "modeled" && (r.station.kind.toLowerCase() === "grid" || r.station.source === "nws-forecast" || r.station.source === "nws");
-    let data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, from: iso(from), to: iso(to), params: ["AIR_C", "WIND_MS", "RAIN_MM"] }, ctx);
+    const vars = { from: iso(from), to: iso(to), params: WEATHER_PARAMS, site: site?.lid ?? "", withSite: site !== null };
+    let data = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[]; runs?: GqlWeatherRuns }>("AgentWeatherForecast", WEATHER_QUERY, { bbox, ...vars }, ctx);
     let nearest: string | null = null;
     if (!data.readings.some(isGrid) && !site) {
       const wide: BBox = { west: lon - 0.5, south: lat - 0.5, east: lon + 0.5, north: lat + 0.5 };
-      const around = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox: wide, from: iso(from), to: iso(to), params: ["AIR_C", "WIND_MS", "RAIN_MM"] }, ctx);
+      const around = await gqlWithFeeds<{ readings: GqlReading[]; feeds: GqlFeedState[] }>("AgentWeatherForecast", WEATHER_QUERY, { bbox: wide, ...vars }, ctx);
       const grids = around.readings.filter(isGrid);
       const best = grids.map((r) => r.station).sort((a, b) => Math.hypot(a.lat - lat, a.lon - lon) - Math.hypot(b.lat - lat, b.lon - lon))[0];
       if (best) {
@@ -989,17 +1028,30 @@ export const weatherForecast = {
         data = { readings: grids.filter((r) => r.station.id === best.id), feeds: around.feeds };
       }
     }
+    // The site's own gridpoint run (its office's update time, our fetch time); else the feed's newest run.
+    const run = data.runs?.weatherRun ?? null;
     const modeled = data.readings.filter(isGrid);
+    // Period rows are keyed by the 12 h period start (air, wind, PoP); QPF windows and gusts have their own times.
     const byTime = new Map<string, Partial<Record<string, number | null>>>();
+    const series = (param: string) =>
+      modeled
+        .filter((r) => r.param === param)
+        .map((r) => ({ t: ms(r.observedAt), v: r.value }))
+        .sort((a, b) => a.t - b.t);
+    const rain = series("RAIN_MM");
+    const gusts = series("WIND_GUST_MS");
     for (const r of modeled) {
+      if (r.param === "RAIN_MM" || r.param === "WIND_GUST_MS") continue;
       const slot = byTime.get(r.observedAt) ?? {};
       slot[r.param.toLowerCase()] = r.value;
       byTime.set(r.observedAt, slot);
     }
     const feed = data.feeds.find((f) => f.source === "nws-forecast") ?? data.feeds.find((f) => f.source === "nws") ?? null;
-    const updateTime = feed?.newestObservedAt ?? feed?.lastFetchAt ?? null;
+    const updateTime = run?.issuedAt ?? feed?.newestObservedAt ?? feed?.lastFetchAt ?? null;
+    const fetchedAt = run?.ingestedAt ?? feed?.lastFetchAt ?? null;
     const gridStation = modeled[0]?.station ?? null;
     const office = site?.office ?? gridStation?.name.match(/\b([A-Z]{3})\b/)?.[1] ?? "NWS";
+    const officeName = NWS_OFFICES[office] ? `${office} (${NWS_OFFICES[office]})` : office;
     const grid = site?.grid ?? (gridStation ? gridStation.id : `${lat.toFixed(3)},${lon.toFixed(3)}`);
     // No comma in an id: the citation parser splits marker groups on commas.
     const fid = `nws:${office}/${grid.replace(",", "x")}:${updateTime ? ms(updateTime) : 0}`;
@@ -1010,21 +1062,29 @@ export const weatherForecast = {
       .map(([at, slot]) => {
         const c = slot.air_c ?? null;
         const w = slot.wind_ms ?? null;
+        const start = ms(at);
+        const end = start + 12 * HOUR_MS;
+        const precip = periodPrecip(rain, gusts, start, end);
         return {
           start: at,
           startLocal: localTime(ctx.app, at),
-          end: iso(ms(at) + 12 * HOUR_MS),
+          end: iso(end),
           temperatureF: c === null ? null : C_TO_F(c),
           temperatureC: c,
           windMph: w === null ? null : MS_TO_MPH(w),
           windMs: w,
-          rainMm: slot.rain_mm ?? null,
+          gustMph: precip.gustMs === null ? null : MS_TO_MPH(precip.gustMs),
+          precipChancePct: slot.pop_pct ?? null,
+          qpfIn: precip.qpfMm === null ? null : MM_TO_IN(precip.qpfMm),
+          qpfMm: precip.qpfMm,
+          qpfWindows: precip.windows,
           cite: `[e:forecast:${fid}]`,
         };
       });
-    const evidenceRows: Evidence[] = rows.length ? [evidence("forecast", fid, `NWS gridpoint forecast ${office} ${grid} updated ${updateTime ?? "unknown"}`, feed?.source ?? "nws-forecast")] : [];
+    const anyPrecip = rows.some((r) => r.precipChancePct !== null || r.qpfMm !== null);
+    const evidenceRows: Evidence[] = rows.length ? [evidence("forecast", fid, `NWS gridpoint forecast ${officeName} ${grid} updated ${updateTime ?? "unknown"}`, feed?.source ?? "nws-forecast")] : [];
     const feeds = feedsFor(data.feeds, feed ? [feed.source] : [], ["nws"]);
-    const series: SeriesView = {
+    const seriesView: SeriesView = {
       view: "series",
       title: `NWS forecast · ${site?.short ?? `${lat.toFixed(2)}, ${lon.toFixed(2)}`}`,
       unit: "°F",
@@ -1037,8 +1097,10 @@ export const weatherForecast = {
         { key: "start", label: "Period start", kind: "time" },
         { key: "temperatureF", label: "Temp", unit: "°F", kind: "number" },
         { key: "windMph", label: "Wind", unit: "mph", kind: "number" },
+        { key: "precipChancePct", label: "Rain chance", unit: "%", kind: "number" },
+        { key: "qpfIn", label: "Rain amount", unit: "in", kind: "number" },
       ],
-      rows: rows.map((r) => ({ evidenceId: `forecast:${fid}`, start: r.start, temperatureF: r.temperatureF, windMph: r.windMph })),
+      rows: rows.map((r) => ({ evidenceId: `forecast:${fid}`, start: r.start, temperatureF: r.temperatureF, windMph: r.windMph, precipChancePct: r.precipChancePct, qpfIn: r.qpfIn })),
     };
     return withView(
       output(
@@ -1047,13 +1109,18 @@ export const weatherForecast = {
           name: site?.name ?? gridStation?.name ?? null,
           ...(nearest ? { nearest: `no gridpoint at the point itself; this is the nearest stored gridpoint, ${nearest}` } : {}),
           office,
+          officeName,
           grid,
           updateTime,
           updateLocal: updateTime ? localTime(ctx.app, updateTime) : null,
-          fetchedAt: feed?.lastFetchAt ?? null,
+          updateTimeSource: run ? "this site's own gridpoint run (the office's updateTime)" : "the feed's newest run across offices (no stored run for this site)",
+          fetchedAt,
           ageHours: updateTime ? hoursBetween(now, ms(updateTime)) : null,
           cite: rows.length ? `[e:forecast:${fid}]` : null,
-          stored: "temperature and wind per 12 h period; precipitation chance and sky text are not ingested by the gridpoint adapter (not in this result)",
+          stored: anyPrecip
+            ? "per 12 h period: temperature, wind (upper bound of the range), highest gust, precipChancePct (NWS's chance of precipitation for the period, a probability, not an amount) and qpfIn/qpfMm (the forecast amount, summed from the grid's 6 h windows starting in the period; qpfWindows counts them, 0 means no window stored). A null is 'not stated', not 0. Sky text is not ingested."
+            : "temperature and wind per 12 h period; no precipitation values are stored for this grid in this window (say so if asked about rain)",
+          honesty: "A rain forecast is weather at the grid cell, not a river stage or flood prediction: stage and flood categories come from river_forecast.",
           periods: rows,
           ...(rows.length === 0 ? { missing: `no NWS gridpoint forecast stored for ${site?.name ?? `${lat}, ${lon}`} in this window` } : {}),
         },
@@ -1061,7 +1128,7 @@ export const weatherForecast = {
         feeds,
         rows.length,
       ),
-      { result: series, more: [table], highlight: evidenceRows.map((e) => e.id), bbox: site ? sitesBox([site], 0.15) : bbox },
+      { result: seriesView, more: [table], highlight: evidenceRows.map((e) => e.id), bbox: site ? sitesBox([site], 0.15) : bbox },
     );
   },
 };

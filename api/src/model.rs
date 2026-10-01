@@ -55,6 +55,11 @@ pub enum Param {
     /// cfs (not kcfs) so a number on screen matches the USGS page; NWPS flow is kcfs and lives in
     /// the forecast store, never mixed with this (docs/evidence/carp-data-proof.md, Monroe).
     DischargeCfs,
+    /// NWS gridpoint probability of precipitation, percent, for the 12 h forecast period that
+    /// starts at `observed_at` (modeled; a chance, never an amount).
+    PopPct,
+    /// NWS gridpoint wind gust, m/s (the raw grid's km/h converted), per hour (modeled).
+    WindGustMs,
 }
 
 impl Param {
@@ -77,6 +82,8 @@ impl Param {
             Param::CurrentMs => "current_ms",
             Param::CurrentDirDeg => "current_dir_deg",
             Param::DischargeCfs => "discharge_cfs",
+            Param::PopPct => "pop_pct",
+            Param::WindGustMs => "wind_gust_ms",
         }
     }
 }

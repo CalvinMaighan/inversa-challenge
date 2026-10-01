@@ -9,6 +9,7 @@ import { startStub, type Stub } from "@/eval/stub-server";
 import { checkViews } from "@/eval/views";
 import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
+import { periodPrecip } from "@/server/agent/tools/carp";
 import { parseEvidenceId } from "@/server/agent/tools/evidence";
 import { categoryOf, forecastRiseRate, review, transitions, type Review } from "@/server/agent/tools/review";
 import { findSite, presetBox, resolveSites } from "@/server/agent/tools/sites";
@@ -394,15 +395,25 @@ describe("carp tool: forecast_verify and review_history", () => {
 });
 
 describe("carp tool: weather, alerts, sources, evidence, board, view", () => {
-  test("carp tool: weather_forecast gives °F and mph per period from the gridpoint readings, the office update time, and a comma-free forecast:nws id", async () => {
+  test("carp tool: weather_forecast gives °F, mph, the chance of precipitation and the QPF (in and mm) per period from the gridpoint readings, the office update time, and a comma-free forecast:nws id", async () => {
     const out = await run("weather_forecast", { site: "Morgan City", periods: 4 });
     expect(stub.requests.map((r) => r.operationName)).toEqual(["AgentWeatherForecast"]);
     const data = out.data as any;
-    expect(data).toMatchObject({ site: "MCGL1", office: "LCH", grid: "137,73", updateTime: "2026-10-01T06:50:35Z", fetchedAt: "2026-10-01T06:55:00Z" });
+    expect(data).toMatchObject({ site: "MCGL1", office: "LCH", officeName: "LCH (Lake Charles)", grid: "137,73", updateTime: "2026-09-30T12:46:24Z", fetchedAt: "2026-09-30T12:46:24Z" });
+    expect(data.updateTimeSource).toMatch(/own gridpoint run/);
     expect(data.periods).toHaveLength(4);
-    expect(data.periods[1]).toMatchObject({ temperatureF: 88, windMph: 10, windMs: 4.47 });
-    expect(data.stored).toMatch(/precipitation chance and sky text are not ingested/);
-    expect(data.cite).toBe("[e:forecast:nws:LCH/137x73:1790837435000]");
+    // The period from 06:00 CDT on 1 Oct: 88 F, 5 mph, 84 % chance; QPF from the 6 h windows starting 07:00 and 13:00 CDT (0 + 6.604 mm).
+    expect(data.periods[1]).toMatchObject({ start: "2026-10-01T11:00:00Z", temperatureF: 88, windMph: 5, windMs: 2.24, precipChancePct: 84, qpfMm: 6.6, qpfIn: 0.26, qpfWindows: 2 });
+    expect(data.periods[0]).toMatchObject({ start: "2026-09-30T23:00:00Z", precipChancePct: 33, qpfMm: 0.76, qpfWindows: 2 });
+    expect(typeof data.periods[1].gustMph).toBe("number");
+    expect(data.stored).toMatch(/precipChancePct .*a probability, not an amount/);
+    expect(data.honesty).toMatch(/not a river stage or flood prediction/);
+    expect(data.cite).toBe("[e:forecast:nws:LCH/137x73:1790772384000]");
+    const table = viewOf(out)!.more?.[0] as TableView;
+    expect(table.columns.map((c) => c.key)).toEqual(["start", "temperatureF", "windMph", "precipChancePct", "qpfIn"]);
+    // A period with no stored windows reports none, never 0.
+    expect(periodPrecip([], [], 0, 1)).toEqual({ qpfMm: null, windows: 0, gustMs: null });
+    expect(periodPrecip([{ t: 0, v: 1.5 }, { t: 6, v: null }, { t: 12, v: 2 }], [{ t: 3, v: 4 }, { t: 11, v: 9 }, { t: 12, v: 20 }], 0, 12)).toEqual({ qpfMm: 1.5, windows: 2, gustMs: 9 });
     expectEvidenceFormat(out, ["nws-forecast"]);
     expectView("weather_forecast", out);
     await expect(run("weather_forecast", { site: "Houston" })).rejects.toThrow(CARP.agent.refusal);

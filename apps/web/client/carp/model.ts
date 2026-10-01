@@ -257,8 +257,10 @@ export function usgsSeries(readings: readonly GqlReading[], site: Pick<Site, "la
   return { stationId, stageFt: stageFt.sort(byTime), dischargeCfs: dischargeCfs.sort(byTime) };
 }
 
-/** Modelled NWS gridpoint weather (air °C, wind m/s) nearest `atMs`, for the site's grid cell. */
-export function weatherAt(readings: readonly GqlReading[], site: Pick<Site, "lat" | "lon">, atMs: number): { airC: SeriesPoint | null; windMs: SeriesPoint | null } {
+export type WeatherNow = { airC: SeriesPoint | null; windMs: SeriesPoint | null; popPct: SeriesPoint | null };
+
+/** Modelled NWS gridpoint weather (air °C, wind m/s, chance of precipitation %) nearest `atMs`, for the site's grid cell. */
+export function weatherAt(readings: readonly GqlReading[], site: Pick<Site, "lat" | "lon">, atMs: number): WeatherNow {
   const near = (param: string): SeriesPoint | null => {
     let best: SeriesPoint | null = null;
     for (const r of readings) {
@@ -269,7 +271,7 @@ export function weatherAt(readings: readonly GqlReading[], site: Pick<Site, "lat
     }
     return best && Math.abs(best.t - atMs) <= 6 * HOUR ? best : null;
   };
-  return { airC: near("AIR_C"), windMs: near("WIND_MS") };
+  return { airC: near("AIR_C"), windMs: near("WIND_MS"), popPct: near("POP_PCT") };
 }
 
 /** Newest point at or before `atMs`. */

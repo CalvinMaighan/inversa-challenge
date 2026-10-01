@@ -43,16 +43,23 @@ const thresholdsOf = (site: Site): Thresholds => site.thresholds;
 
 // ---------------------------------------------------------------- readings and weather
 
-/** NWS gridpoint periods as modeled readings at the site's grid station (what the C4 adapter stores). */
-const weatherReadings: Reading[] = Object.entries(fixture.weather).flatMap(([lid, w]) =>
-  w.periods.flatMap((p) => {
-    const wind = Math.max(...(p.windSpeed.match(/\d+/g) ?? ["0"]).map(Number));
-    return [
-      { station: lid, param: "AIR_C", value: r2(((p.temperatureF - 32) * 5) / 9), flag: "OK", observedAt: p.start, ingestedAt: w.updateTime, origin: "MODELED" },
-      { station: lid, param: "WIND_MS", value: r2(wind * 0.44704), flag: "OK", observedAt: p.start, ingestedAt: w.updateTime, origin: "MODELED" },
-    ] as Reading[];
-  }),
-);
+/**
+ * NWS gridpoint forecasts as modeled readings at the site's grid station (what the C4 adapter stores): per 12 h
+ * period air (°C), wind (m/s, upper bound) and the chance of precipitation (%); from the raw grid the QPF (mm for the
+ * window starting at the reading) and gusts (m/s, one reading per hour of each value).
+ */
+const weatherReadings: Reading[] = Object.entries(fixture.weather).flatMap(([lid, w]) => {
+  const at = (observedAt: string, param: string, value: number | null) =>
+    ({ station: lid, param, value, flag: value === null ? "MISSING" : "OK", observedAt, ingestedAt: w.updateTime, origin: "MODELED" }) as Reading;
+  return [
+    ...w.periods.flatMap((p) => {
+      const wind = Math.max(...(p.windSpeed.match(/\d+/g) ?? ["0"]).map(Number));
+      return [at(p.start, "AIR_C", r2(((p.temperatureF - 32) * 5) / 9)), at(p.start, "WIND_MS", r2(wind * 0.44704)), at(p.start, "POP_PCT", p.precipProbability)];
+    }),
+    ...w.qpf.map((q) => at(q.start, "RAIN_MM", q.value)),
+    ...w.gusts.flatMap((g) => Array.from({ length: Math.max(1, Math.round(g.hours)) }, (_, h) => at(iso(ms(g.start) + h * HOUR), "WIND_GUST_MS", g.value === null ? null : r2(g.value / 3.6)))),
+  ];
+});
 
 function readings(v: Vars) {
   const bbox = v.bbox as BBox;
@@ -109,6 +116,16 @@ function snapshotOut(s: Snap) {
   };
 }
 
+/**
+ * The NWS gridpoint weather run as the API stores it beside the river issuances (`product: gridpoint`, points at
+ * the period starts, no stage): `forecasts.weatherRun`, never the as-of river forecast or its history.
+ */
+function gridpointRun(lid: string, asOf: number): Snap | null {
+  const w = (fixture.weather as Record<string, { updateTime: string; periods: { start: string }[] }>)[lid];
+  if (!w || ms(w.updateTime) > asOf) return null;
+  return { site: lid, product: "gridpoint", issuedAt: w.updateTime, ingestedAt: w.updateTime, source: "NWS_GRIDPOINT", revision: 0, points: w.periods.map((p) => ({ validAt: p.start, stageFt: null, flowKcfs: null })) } as unknown as Snap;
+}
+
 function forecasts(v: Vars) {
   const site = siteOf(String(v.site));
   const asOf = v.asOf ? ms(String(v.asOf)) : ms(fixture.now);
@@ -116,11 +133,13 @@ function forecasts(v: Vars) {
   const known = snapshotsKnown(site.lid, asOf);
   const all = fixture.forecasts.filter((s) => s.site === site.lid);
   const knowable = all.map((s) => (s.source === "IEM_ARCHIVE" ? ms(s.issuedAt) : ms(s.ingestedAt)));
+  const run = gridpointRun(site.lid, asOf);
   return {
     site: site.lid,
     asOf: iso(asOf),
     snapshot: known[0] ? snapshotOut(known[0]) : null,
     history: known.slice(0, history).map(snapshotOut),
+    weatherRun: run ? snapshotOut(run) : null,
     replayCoverageStart: knowable.length ? iso(Math.min(...knowable)) : null,
     liveCoverageStart: fixture.liveCoverageStart,
     snapshotCount: known.length,
@@ -324,7 +343,8 @@ export function carpResolvers(options: { reviewFields?: boolean } = {}): Record<
       ...Object.fromEntries(siteVars(v).map(([i, site]) => [`s${i}`, siteStatusAt({ site, asOf: v.to })])),
       feeds: feeds(),
     }),
-    AgentWeatherForecast: (v) => ({ readings: readings(v), feeds: feeds() }),
+    // `runs` is the site's forecast history (the gridpoint run carries the office's update time); absent for a point.
+    AgentWeatherForecast: (v) => ({ readings: readings(v), feeds: feeds(), runs: v.withSite ? forecasts({ site: v.site, asOf: v.to, history: 12 }) : null }),
     AgentSiteStatus: (v) => ({
       ...Object.fromEntries(siteVars(v).flatMap(([i, site]) => [[`s${i}`, siteStatusAt({ site, asOf: v.asOf, conflictFt: v.conflictFt })], ...(v.asOf24 ? [[`p${i}`, siteStatusAt({ site, asOf: v.asOf24, conflictFt: v.conflictFt })]] : [])])),
       feeds: feeds(),

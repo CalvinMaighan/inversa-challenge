@@ -1003,8 +1003,9 @@ async fn forecast_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
             let feed = feed_of_store_source(s.source);
             let (needle, api_url) = match (s.source, &grid) {
                 (crate::forecast::Source::NwsGridpoint, Some(g)) => {
-                    let path = format!("{}/{},{}", g.office, g.x, g.y);
-                    (path.clone(), format!("{}/{path}/forecast", crate::ingest::poll::nws_forecast::API))
+                    // The periods document, not the raw grid fetched beside it.
+                    let url = format!("{}/{}/{},{}/forecast", crate::ingest::poll::nws_forecast::API, g.office, g.x, g.y);
+                    (url.clone(), url)
                 }
                 (crate::forecast::Source::NwpsLive, _) => (format!("/{}/stageflow", s.site), crate::ingest::poll::nwps::stageflow_url(&s.site)),
                 _ => (s.site.clone(), crate::review::forecast_link(&s)),

@@ -100,7 +100,7 @@ export type SiteAt = { status: SiteStatus; alerts: Alert[]; readings: GqlReading
 /** What was known at `asOfMs` (status, alerts in effect) and the readings of the view span. */
 export async function loadSiteAt(site: Site, asOfMs: number, span: { fromMs: number; toMs: number }, signal?: AbortSignal): Promise<SiteAt> {
   const raw = await gqlRequest<{ status: SiteStatus; alerts: Alert[]; readings: GqlReading[] }>(
-    `query CarpSiteAt($site: ID!, $t: Time!, $bbox: BBox!, $from: Time!, $to: Time!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } alerts(bbox: $bbox, at: $t) { id event severity headline onset expires } readings(bbox: $bbox, from: $from, to: $to, params: [STAGE_M, DISCHARGE_CFS, AIR_C, WIND_MS]) { ${READING} } }`,
+    `query CarpSiteAt($site: ID!, $t: Time!, $bbox: BBox!, $from: Time!, $to: Time!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } alerts(bbox: $bbox, at: $t) { id event severity headline onset expires } readings(bbox: $bbox, from: $from, to: $to, params: [STAGE_M, DISCHARGE_CFS, AIR_C, WIND_MS, POP_PCT]) { ${READING} } }`,
     { site: site.lid, t: iso(asOfMs), bbox: siteBox(site), from: iso(span.fromMs), to: iso(span.toMs) },
     signal,
   );
