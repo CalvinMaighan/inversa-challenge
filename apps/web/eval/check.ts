@@ -33,7 +33,8 @@ const NUMBER = /-?\d[\d,]*(?:\.\d+)?/g;
 
 /** Numbers in free text, after stripping ids, dates and times. Each with its decimal places. */
 export function extractNumbers(text: string): { value: number; decimals: number; raw: string }[] {
-  let clean = text;
+  // A typographic minus (U+2212) is a minus.
+  let clean = text.replace(/−/g, "-");
   for (const re of NOT_A_VALUE) clean = clean.replace(re, " ");
   const out: { value: number; decimals: number; raw: string }[] = [];
   for (const m of clean.matchAll(NUMBER)) {

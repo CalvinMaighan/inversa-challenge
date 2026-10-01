@@ -105,7 +105,7 @@ const TOPICS: Partial<Record<AppConfig["id"], Topic[]>> = {
     },
     {
       pattern: /(did|do|have|are) pythons? (cause|caused|causing|drive|driven|drove|responsible for)|pythons? (caused|are causing|drove) (the )?(mammal|prey|wildlife)|mammal decline/i,
-      answer: (app) => `${app.agent.refusal} The data cannot say whether pythons caused the mammal decline or any other decline: it holds python reports, readings, alerts and a hotspot heuristic, not mammal counts or cause. No causal claim can be made from these feeds.`,
+      answer: (app) => `${app.agent.refusal} The data cannot say whether the mammal decline (or any other decline) was caused by pythons: it holds python reports, readings, alerts and a hotspot heuristic, not mammal counts or cause. No causal claim can be made from these feeds.`,
     },
     {
       pattern: /\bcarp\b|river conditions|river stage|atchafalaya|baton rouge|morgan city/i,

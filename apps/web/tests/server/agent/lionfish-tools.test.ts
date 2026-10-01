@@ -200,7 +200,7 @@ describe("lionfish tool: marine_forecast", () => {
     expect(stub.requests[0]!.variables.params).toEqual(["WAVE_M", "WAVE_PERIOD_S", "CURRENT_MS", "CURRENT_DIR_DEG"]);
     expect(out.data).toMatchObject({ source: "Open-Meteo Marine (openmeteo-marine)", horizonHours: 72, horizonEnd: "2026-10-04T12:00:00.000Z", fetchedAt: "2026-10-01T11:00:00Z", calmThresholdM: 1.2 });
     expect(String(out.data.note)).toMatch(/modelled, not measured/);
-    expect(String(out.data.note)).toMatch(/kept apart from the survey priority/);
+    expect(String(out.data.note)).toMatch(/separate from the survey priority score/);
     expect(String(out.data.note)).toMatch(/Never say a dive is safe/);
     const points = out.data.points as any[];
     expect(points.map((p) => p.station).sort()).toEqual(["om-chinchorro", "om-cozumel", "om-glovers", "om-keylargo", "om-looe", "om-sanandres"]);
@@ -334,7 +334,8 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     const rows = out.data.rows as any[];
     const row = rows.find((r) => r.evidenceId === "sighting:7003")!;
     expect(row).toMatchObject({ observedAt: "2026-09-05T16:40:00Z", submittedAt: "2026-09-26T11:30:00Z", lagDays: 20.8, area: "fl-keys", quality: "needs_id", arrivedLate: "21 days after it was observed" });
-    expect(rows.find((r) => r.evidenceId === "sighting:7010")).toMatchObject({ source: "gbif", duplicateOf: "sighting:7001" });
+    expect(rows.find((r) => r.evidenceId === "sighting:7010")).toMatchObject({ source: "gbif", duplicateOf: "sighting:7001 (a copy: not counted)" });
+    expect(String(out.data.duplicateNote)).toMatch(/never counted as a second animal/);
     expect(rows.find((r) => r.evidenceId === "sighting:9502")).toMatchObject({ imprecise: "no accuracy given (possibly obscured)", area: "co-caribbean" });
     // Two imprecise rows: the mid-sea Colombian report and a NAS record with no accuracy.
     expect(out.data.imprecise).toBe(2);

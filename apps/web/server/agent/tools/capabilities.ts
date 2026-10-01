@@ -24,7 +24,7 @@ import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfi
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
-import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
+import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenList, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
 import { localTime } from "@/server/agent/tools/shared";
 import {
@@ -208,7 +208,10 @@ const sightings = {
   inputSchema: sightingsInput,
   async execute(input: z.infer<typeof sightingsInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const bbox = resolveBbox(input.bbox, ctx);
-    const wanted = input.species ? await resolveSpecies(input.species, ctx) : null;
+    // An empty list is a placeholder the model sent for "no filter", never a filter that matches nothing.
+    const speciesAsked = givenList(input.species);
+    const qualityAsked = givenList(input.quality);
+    const wanted = speciesAsked ? await resolveSpecies(speciesAsked, ctx) : null;
     if (wanted && wanted.taxonIds.length === 0) {
       const missing = wanted.unresolved.map((u) => (u.inat ? `${u.asked} (iNaturalist knows it as ${u.inat}, but no sighting of it is stored)` : `${u.asked} (no such species in the data or at iNaturalist)`));
       return output({ bbox, total: 0, distinctAnimals: 0, duplicates: 0, conflicts: 0, rows: [], unresolvedSpecies: missing, note: `No records: ${missing.join("; ")}. Say so plainly.` }, [], [], 0);
@@ -223,8 +226,11 @@ const sightings = {
     // Counting by submission date needs every observation that could have been submitted in the window, however
     // old (old photos arrive years later), so the observed window opens wide.
     const endsNow = Math.abs(Date.parse(asked.to) - ctx.now.getTime()) <= HOUR_MS;
+    // The widening reach is the sightings feed's backfill (`feeds[].params.backfillDays`, 90 for lionfish), else 30 days.
+    const backfillDays = ctx.app.feeds.map((f) => (f.params as { backfillDays?: unknown } | undefined)?.backfillDays).find((d): d is number => typeof d === "number" && d > 0);
+    const widenHours = Math.min(backfillDays ? backfillDays * 24 : WIDEN_HOURS, MAX_LOOKBACK_HOURS);
     const fetched = {
-      from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - (bySubmitted ? SUBMITTED_LOOKBACK_HOURS : WIDEN_HOURS) * HOUR_MS)).toISOString(),
+      from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - (bySubmitted ? SUBMITTED_LOOKBACK_HOURS : widenHours) * HOUR_MS)).toISOString(),
       to: asked.to,
     };
     const data = await gqlWithFeeds<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
@@ -234,16 +240,18 @@ const sightings = {
         bbox,
         ...fetched,
         taxa: wanted?.taxonIds ?? null,
-        quality: input.quality?.map((quality) => quality.toUpperCase()) ?? null,
+        quality: qualityAsked?.map((quality) => quality.toUpperCase()) ?? null,
       },
       ctx,
     );
     const known = knownAt ? data.sightings.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : data.sightings;
     const dateOf = (row: GqlSighting) => (bySubmitted ? Date.parse(row.ingestedAt ?? row.observedAt) : Date.parse(row.observedAt));
     const recent = known.filter((row) => dateOf(row) >= Date.parse(asked.from) && dateOf(row) <= Date.parse(asked.to));
-    const widened = !bySubmitted && (!explicit || endsNow) && recent.length === 0 && known.length > 0;
-    const window = widened ? fetched : asked;
-    const rows = [...(widened ? known : recent)].sort(
+    // Submitted-date windows widen the same way (to records that reached the feed within the backfill).
+    const widenSubmitted = bySubmitted && recent.length === 0 ? known.filter((row) => dateOf(row) >= Date.parse(asked.to) - widenHours * HOUR_MS && dateOf(row) <= Date.parse(asked.to)) : [];
+    const widened = (!explicit || endsNow) && recent.length === 0 && (bySubmitted ? widenSubmitted.length > 0 : known.length > 0);
+    const window = widened ? { from: new Date(Date.parse(asked.to) - widenHours * HOUR_MS).toISOString(), to: asked.to } : asked;
+    const rows = [...(widened ? (bySubmitted ? widenSubmitted : known) : recent)].sort(
       (a, b) =>
         (QUALITY_RANK[lower(a.quality)] ?? 9) - (QUALITY_RANK[lower(b.quality)] ?? 9) ||
         Date.parse(b.observedAt) - Date.parse(a.observedAt),
@@ -296,10 +304,13 @@ const sightings = {
         ...(knownAt ? { knownAt, knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are left out` } : {}),
         ...(ctx.app.copy.sightingsNote ? { sightingsNote: ctx.app.copy.sightingsNote } : {}),
         ...(widened
-          ? { widened: `Nothing in the ${askedDays} days asked for; the window was widened to the last 30 days. Say so.` }
+          ? { widened: `Nothing in the ${askedDays} days asked for; the window was widened to the last ${widenHours / 24} days. Say so.` }
           : {}),
         ...(older > 0
-          ? { olderInLast30Days: older, hint: `Nothing in this window, but ${older} older in the 30 days before it: call again with hours: 720 to show them.` }
+          ? { [`olderInLast${widenHours / 24}Days`]: older, hint: `Nothing in this window, but ${older} older in the ${widenHours / 24} days before it: call again with hours: ${widenHours} to show them.` }
+          : {}),
+        ...(duplicates.length
+          ? { duplicateNote: `${duplicates.length} row${duplicates.length === 1 ? " is" : "s are"} a copy of another record (duplicateOf: GBIF or NAS re-publishing an iNaturalist report): never counted as a second animal or as corroboration; say "not counted" and cite both markers.` }
           : {}),
         ...(wanted && wanted.unresolved.length > 0
           ? { unresolvedSpecies: wanted.unresolved.map((u) => (u.inat ? `${u.asked}: iNaturalist knows it as ${u.inat}, but no sighting of it is stored` : `${u.asked}: no such species in the data or at iNaturalist`)) }
@@ -340,7 +351,7 @@ const sightings = {
           accuracyM: row.accuracyM,
           ...(imprecise(row) ? { imprecise: row.accuracyM === null ? "no accuracy given (possibly obscured)" : `accuracy ${row.accuracyM} m` } : {}),
           ...(ctx.app.regions.length > 1 ? { area: regionAt(ctx.app, row.lat, row.lon)?.id ?? null } : {}),
-          duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
+          duplicateOf: row.canonicalId ? `sighting:${row.canonicalId} (a copy: not counted)` : null,
           idConflict: row.conflict,
           ...(lateBy(row) ? { arrivedLate: `${lateBy(row)} after it was observed` } : {}),
         })),
@@ -507,14 +518,15 @@ const conditions = {
     const nearby = inside.length === 0 && data.readings.length > 0;
     const readings = nearby ? data.readings : inside;
     const bbox = nearby ? around : area;
-    const latest = new Map<string, { row: GqlReading; count: number }>();
+    const latest = new Map<string, { row: GqlReading; count: number; first: GqlReading }>();
     for (const row of readings) {
       const key = `${row.station.id}|${lower(row.param)}|${lower(row.origin)}`;
       const seen = latest.get(key);
-      if (!seen) latest.set(key, { row, count: 1 });
+      if (!seen) latest.set(key, { row, count: 1, first: row });
       else {
         seen.count += 1;
         if (Date.parse(row.observedAt) > Date.parse(seen.row.observedAt)) seen.row = row;
+        if (Date.parse(row.observedAt) < Date.parse(seen.first.observedAt)) seen.first = row;
       }
     }
     const series = [...latest.values()].sort(
@@ -534,6 +546,12 @@ const conditions = {
       ),
     );
     const usable = (row: GqlReading) => row.value !== null && lower(row.flag) === "ok";
+    // The window's earliest usable reading per series is citable too, so a change over the window has both ends.
+    const firstUsable = (entry: { first: GqlReading; row: GqlReading }) => (entry.first !== entry.row && usable(entry.first) ? entry.first : null);
+    for (const entry of shown) {
+      const first = firstUsable(entry);
+      if (first) evidenceRows.push(evidence("reading", readingKey(first.station.id, first.param, first.observedAt, first.origin), `${first.station.name} ${lower(first.param)} ${first.value} (${lower(first.origin)}) · ${first.observedAt} (window start)`, first.station.source));
+    }
     const missing = shown
       .filter(({ row }) => !usable(row))
       .map(({ row }) => ({ evidenceId: idOf(row), station: row.station.name, param: lower(row.param), flag: lower(row.flag) }));
@@ -581,12 +599,14 @@ const conditions = {
     const fallback = [...new Set((input.params ?? PARAMS).flatMap((param) => PARAM_SOURCES[param]))];
     // A multi-area app says where in-situ stations exist at all, so a satellite value cannot be checked elsewhere.
     const measuredIn = new Set(readings.filter((row) => lower(row.origin) === "measured").map((row) => regionAt(ctx.app, row.station.lat, row.station.lon)?.id));
+    const withMeasured = ctx.app.regions.filter((r) => measuredIn.has(r.id)).map((r) => r.name);
+    const withoutMeasured = ctx.app.regions.filter((r) => !measuredIn.has(r.id)).map((r) => r.name);
     const coverage =
       ctx.app.regions.length > 1
         ? {
-            withMeasuredStations: ctx.app.regions.filter((r) => measuredIn.has(r.id)).map((r) => r.name),
-            withoutMeasuredStations: ctx.app.regions.filter((r) => !measuredIn.has(r.id)).map((r) => r.name),
-            note: "In-situ (measured) buoys and tide stations report only where listed; elsewhere satellite values stand alone and cannot be checked against a buoy.",
+            withMeasuredStations: withMeasured,
+            withoutMeasuredStations: withoutMeasured,
+            note: `Measured (in-situ) buoys or tide stations exist only in: ${withMeasured.join(", ") || "none of the areas"}. No buoys in: ${withoutMeasured.join(", ") || "none"}, so satellite values stand alone there and cannot be checked against a measurement. Say this in those words.`,
           }
         : null;
     const feeds = feedsFor(data.feeds, seenSources, fallback);
@@ -618,24 +638,32 @@ const conditions = {
         ...(nearby
           ? { scope: `No station inside the area; these are the nearest within ${NEARBY_DEG}° of it.`, area }
           : {}),
+        ...(coverage ? { coverageNote: coverage.note } : {}),
         readings: readings.length,
         series: series.length,
         truncated: series.length > shown.length,
         ...(coverage ? { coverage } : {}),
         conflicts,
         missing,
-        rows: shown.map(({ row, count }, index) => ({
-          evidenceId: evidenceRows[index]!.id,
-          station: row.station.name,
-          stationKind: row.station.kind,
-          source: row.station.source,
-          param: lower(row.param),
-          value: row.value,
-          flag: lower(row.flag),
-          origin: lower(row.origin),
-          observedAt: row.observedAt,
-          samples: count,
-        })),
+        rows: shown.map((entry, index) => {
+          const { row, count } = entry;
+          const first = firstUsable(entry);
+          return {
+            evidenceId: evidenceRows[index]!.id,
+            station: row.station.name,
+            stationKind: row.station.kind,
+            source: row.station.source,
+            param: lower(row.param),
+            value: row.value,
+            flag: lower(row.flag),
+            origin: lower(row.origin),
+            observedAt: row.observedAt,
+            samples: count,
+            ...(first && usable(row)
+              ? { windowStart: { value: first.value, observedAt: first.observedAt, cite: `[e:${idOf(first)}]` }, changeInWindow: Number((row.value! - first.value!).toFixed(3)) }
+              : {}),
+          };
+        }),
       },
       evidenceRows,
       feeds,
@@ -877,7 +905,7 @@ const feedState = {
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
-    const out = output({ asOf: ctx.now.toISOString() }, [], data.feeds, data.feeds.length);
+    const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation, last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it." }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
 };
@@ -888,12 +916,12 @@ const setViewInput = z
   .object({
     bbox: bboxSchema.optional(),
     preset: z.string().min(2).max(60).optional().describe("A named camera preset of this app (conditions apps: 'all-sites' or 'atchafalaya'). Replaces bbox."),
-    site: z.string().min(2).max(80).optional().describe("Select and frame one configured location (NWPS id, name or town). Replaces bbox."),
+    site: z.string().min(2).max(80).optional().describe("Select and frame one configured location (NWPS id, name or town), or a place name in a species app. Replaces bbox."),
     time: timeSchema.optional().describe("Timeline time. Defaults to the current reference time."),
     asOf: timeSchema.optional().describe("Knowledge time for replay: show what was known at this time (forecast versions, observations, alerts as of then). Sets the timeline to it."),
     replay: z.boolean().optional().describe("Switch the timeline to knowledge-time replay. Implied by asOf; pass false to leave replay while keeping the time."),
   })
-  .refine((v) => v.bbox !== undefined || v.preset !== undefined || v.site !== undefined, "give bbox, preset or site");
+  .describe("With no bbox, preset or site the current view is kept and only the timeline moves.");
 
 const setView = {
   name: "set_view",
@@ -908,8 +936,10 @@ const setView = {
     if (presetName && !preset && !siteName) throw new Error(`no camera preset "${presetName}" (presets: ${(ctx.app.cameraPresets ?? []).map((p) => p.id).join(", ") || "none"})`);
     // A site that is also the preset's name ("Atchafalaya") means the preset.
     const site = siteName && !(preset && preset.name.toLowerCase().includes(siteName.toLowerCase())) ? findSite(ctx.app, siteName) : null;
-    if (siteName && !site && !preset) throw new Error(`"${siteName}" is not a configured location. ${ctx.app.agent.refusal}`);
-    const bbox = resolveBbox(site ? siteBox(site) : preset ? presetBox(preset) : input.bbox, ctx);
+    // A species app has no configured locations: a `site` is a place name, framed from the gazetteer.
+    const place = siteName && !site && !preset && ctx.app.locations.length === 0 ? (findArea(ctx.app, siteName)?.bbox ?? (() => { const p = lookupGazetteer(siteName); return p && inRegion(ctx.app, p.lat, p.lon) ? p.bbox : null; })()) : null;
+    if (siteName && !site && !preset && !place) throw new Error(ctx.app.locations.length === 0 ? `No place named "${siteName}" inside this app's regions. ${ctx.app.agent.refusal}` : `"${siteName}" is not a configured location. ${ctx.app.agent.refusal}`);
+    const bbox = resolveBbox(site ? siteBox(site) : preset ? presetBox(preset) : (place ?? input.bbox), ctx);
     const asOfText = givenTime(input.asOf);
     const asOf = asOfText ? Date.parse(asOfText) : undefined;
     const time = asOf !== undefined ? new Date(asOf).toISOString() : atTime(input.time, ctx);
@@ -922,7 +952,7 @@ const setView = {
       ...(asOf !== undefined ? { asOf } : {}),
       ...(replay ? { replay: true } : {}),
     });
-    return output({ bbox, time, ...(preset ? { preset: preset.id } : {}), ...(site ? { site: site.lid, siteName: site.name } : {}), ...(asOf !== undefined ? { asOf: time } : {}), replay, applied: true }, [], [], 1);
+    return output({ bbox, time, ...(preset ? { preset: preset.id } : {}), ...(site ? { site: site.lid, siteName: site.name } : {}), ...(place ? { place: siteName } : {}), ...(asOf !== undefined ? { asOf: time } : {}), replay, applied: true }, [], [], 1);
   },
 };
 

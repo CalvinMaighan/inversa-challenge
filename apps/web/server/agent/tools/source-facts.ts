@@ -187,7 +187,7 @@ export const SOURCE_FACTS: Record<string, SourceFacts> = {
     latency: "days to weeks (datasets publish in batches)",
     rateLimit: "fair use",
     coverage: "aggregated occurrence records from many datasets (iNaturalist research grade, REEF surveys, museums, NAS mirrors)",
-    limits: ["copies of iNaturalist research-grade records are matched by catalogue number and never counted as corroboration", "late: datasets publish in weekly batches, days to weeks after the observation", "history rather than news"],
+    limits: ["duplicates: its copies of iNaturalist research-grade records are matched by catalogue number and never counted as corroboration (deduplicated against iNaturalist)", "late: datasets publish in weekly batches, days to weeks after the observation", "history rather than news"],
     tells: "the long record of where lionfish were found, and a second source only where a record is not an iNaturalist copy",
   },
   ndbc: {

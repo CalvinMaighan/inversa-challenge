@@ -146,6 +146,11 @@ export function feedSummary(feeds: FeedState[]) {
         note: feed.note,
         cite: feed.lastFetchRunId ? `[e:fetch:${feed.lastFetchRunId}]` : null,
       })),
+    // One ready sentence per degraded feed, to paste into the answer's freshness line.
+    line: feeds
+      .filter((feed) => feed.state !== "nominal" && !isDisabled(feed))
+      .map((feed) => `${feed.source} is ${feed.state}${feed.lagSeconds === null ? "" : ` (newest ${ageWords(feed.lagSeconds)} old)`}${feed.lastFetchRunId ? ` [e:fetch:${feed.lastFetchRunId}]` : ""}`)
+      .join("; "),
   };
 }
 

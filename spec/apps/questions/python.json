@@ -1508,7 +1508,7 @@
         "mode": "answer",
         "phrases": [
           "cold",
-          "(February|2026-02)",
+          "(January|2026-01)",
           "heuristic"
         ],
         "forbid": [],
@@ -1972,6 +1972,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "python-explain-cold-snap-drop, python-replay-cold-snap-map, python-replay-scores-during-cold: the cold snap is January 2026 (the fixture reference time is 2026-01-15T03:00Z with a Cold Weather Advisory from 2026-01-14T22:00Z; February 2026 is after the reference time, so no data could exist for it). Question text and view hints changed from February to January; pass criteria unchanged."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "python-replay-cold-snap-map: pass phrase (February|2026-02) follows the January rename: (January|2026-01)."
     }
   ]
 }

@@ -33,7 +33,16 @@ export const sourceInfo = {
   async execute(input: z.infer<typeof sourceInfoInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const configured = ctx.app.feeds.map((f) => f.source);
     const asked = given(input.feed)?.toLowerCase();
-    const direct = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
+    const exact = !asked ? configured : configured.filter((s) => s === asked || s.startsWith(`${asked}-`) || asked.startsWith(`${s}-`));
+    // A feed named in words ("USGS NAS", "Coral Reef Watch", "Open-Meteo"): the feeds whose id, publisher or name share the most words with it.
+    const words = (asked ?? "").split(/[^a-z0-9]+/).filter((w) => w.length >= 2);
+    const scored = configured.map((s) => {
+      const facts = SOURCE_FACTS[s];
+      const hay = `${s} ${facts?.sayAs ?? ""} ${facts?.publisher ?? ""} ${ctx.app.feeds.find((f) => f.source === s)?.name ?? ""}`.toLowerCase();
+      return { s, score: words.filter((w) => hay.includes(w)).length };
+    });
+    const best = Math.max(0, ...scored.map((x) => x.score));
+    const direct = exact.length > 0 || !asked ? exact : best > 0 ? scored.filter((x) => x.score === best).map((x) => x.s) : [];
     if (asked && direct.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
     // An archive and the live source it copies belong in one answer: asking for one brings the other.
     const known = new Set<string>(configured);
@@ -101,6 +110,7 @@ export const sourceInfo = {
           boundary,
           note: "Facts are static (adapter documentation); health is the feed's current state. Introduce each feed with its `headline`, copied verbatim (it names the publisher, licence and rate limit as written, with the marker); a related feed is included because the answer needs both; end with the freshnessLine.",
           freshnessLine,
+          markers: `Cite every feed you name: ${rows.map((row) => row.cite).join(" ")}`,
           rows,
         },
         evidenceRows,

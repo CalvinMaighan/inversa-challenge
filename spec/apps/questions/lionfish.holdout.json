@@ -6,6 +6,11 @@
       "date": "2026-10-01",
       "by": "AG2",
       "change": "created before the final tuning runs: paraphrases of documented questions (paraphraseOf) and new questions across the ten categories; not edited after seeing results."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "population forbids: the negated form still matched when a possessive sat between the negation and the noun (\"whether Belize's lionfish population is growing\"); the lookbehind now exempts a negation word anywhere earlier in the sentence (1 pattern)."
     }
   ],
   "questions": [
@@ -1053,7 +1058,7 @@
       "pass": {
         "mode": "caveat",
         "forbid": [
-          "population (is|has been) (growing|increasing|declining|shrinking|stable)"
+          "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})population (is|has been) (growing|increasing|declining|shrinking|stable)"
         ],
         "groundedNumbers": true,
         "feedState": true,

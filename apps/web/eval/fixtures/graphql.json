@@ -57,6 +57,18 @@
         "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0",
         "at": "2026-01-14T12:00:00Z"
       }
+    },
+    {
+      "id": "0194a1b2-0006-7000-8000-000000000006",
+      "fields": {
+        "text": "Flamingo marina lot: python shed skin by the canal culvert, about 2 m, no animal seen.",
+        "lat": 25.1421,
+        "lon": -80.9238,
+        "species": "python",
+        "createdBy": "c3d4e5f6a1b2-7000-8000-00000000c2c2",
+        "callsign": "Crew-P3",
+        "createdAt": "2026-01-13T22:40:00Z"
+      }
     }
   ],
   "feeds": [

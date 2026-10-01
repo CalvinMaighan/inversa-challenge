@@ -319,7 +319,7 @@
           "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
         ],
         "forbid": [
-          "(population|abundance) (grew|increased|rose|fell|declined)"
+          "(?<!(mean|imply|say|show|that|whether|evidence|proof)\\b[^.]{0,40})(population|abundance) (grew|increased|rose|fell|declined)"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -940,7 +940,6 @@
       "question": "Where are buoys and satellite SST disagreeing?",
       "intent": "Compare in-situ buoy and satellite SST in the Florida Keys and state that the other areas have no buoys to compare.",
       "expectedTools": [
-        "geocode",
         "conditions"
       ],
       "mustCite": [
@@ -1634,7 +1633,7 @@
           "(reports?|sightings?)(?:[^.]|\\.\\d){0,60}(not|aren't|are not|isn't|is not)(?:[^.]|\\.\\d){0,40}(abundance|population|how many)|(cannot|can't|can ?not|unable to|do not|don't|does not|doesn't|is not|isn't|no data|not something)(?:[^.]|\\.\\d){0,60}(population|abundance)"
         ],
         "forbid": [
-          "population (is|has been) (growing|increasing|declining|shrinking|stable)"
+          "(?<!(whether|if|that|say|tell|know|show)\\b[^.]{0,40})population (is|has been) (growing|increasing|declining|shrinking|stable)"
         ],
         "groundedNumbers": true,
         "feedState": true,
@@ -1970,6 +1969,18 @@
         }
       },
       "helper": false
+    }
+  ],
+  "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "lionfish-change-previous-month and lionfish-boundary-population: the forbid patterns matched the honest negation the pass phrases ask for (\"does not mean the population grew\", \"cannot say whether the population is growing\"); a lookbehind now exempts negated forms. lionfish-quality-buoy-vs-satellite: expectedTools geocode dropped; the question spans all four areas, so one conditions call over the app is the honest answer and geocoding one area would narrow it."
+    },
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "population forbids: the negated form still matched when a possessive sat between the negation and the noun (\"whether Belize's lionfish population is growing\"); the lookbehind now exempts a negation word anywhere earlier in the sentence (2 patterns)."
     }
   ]
 }

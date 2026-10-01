@@ -179,7 +179,8 @@ describe("capability tools", () => {
     expect(rows[0]).toMatchObject({ author: "Ranger-B2C3", species: "python", aboutSighting: null });
     expect(rows[1]).toMatchObject({ author: "Ranger-A1B2", species: "tegu", aboutSighting: null });
     expect(rows[2]).toMatchObject({ author: "Ranger-B2C3", species: "iguana", aboutSighting: "sighting:7" });
-    expect(output.data.onBoard).toBe(4);
+    // Four field notes plus the Flamingo note (AG2) and one mission note that is not a field note.
+    expect(output.data.onBoard).toBe(5);
     // An explicit `to` at the reference time still means now; a historical `to` is taken as given.
     expect((await run("notes", { bbox: homestead, hours: 24, to: NOW.toISOString() })).count).toBe(3);
     expect((await run("notes", { bbox: homestead, hours: 24, to: "2026-01-15T02:00:00Z" })).count).toBe(2);
@@ -193,7 +194,8 @@ describe("capability tools", () => {
 
     // Species filter and a wider window reach the Flamingo note only through the region box.
     expect((await run("notes", { bbox: homestead, hours: 24, species: "iguana" })).count).toBe(1);
-    expect((await run("notes", { hours: 24 * 7 })).count).toBe(4);
+    // The region box holds the four Homestead-area notes plus the Flamingo marina note (AG2).
+    expect((await run("notes", { hours: 24 * 7 })).count).toBe(5);
     await expect(run("notes", { from: "2026-01-16T00:00:00Z", to: "2026-01-15T00:00:00Z" })).rejects.toThrow(/empty/);
   });
 

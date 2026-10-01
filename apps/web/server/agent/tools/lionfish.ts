@@ -295,7 +295,7 @@ export const reefHeat = {
 // ---------------------------------------------------------------- marine_forecast
 
 const MARINE_NOTE =
-  "Open-Meteo Marine forecast (modelled, not measured; MeteoFrance wave and current models; CC BY 4.0, free tier for non-commercial use): wave height (m), wave period (s), current speed (stored in m/s; km/h = m/s × 3.6; the API publishes km/h) and current direction (degrees). Field conditions for planning dives only: kept apart from the survey priority score, which never uses them. The horizon is 72 hours from the model run; nothing can be said beyond it. Never say a dive is safe or unsafe: give the numbers and let the team judge.";
+  "Open-Meteo Marine forecast (modelled, not measured; MeteoFrance wave and current models; CC BY 4.0, free tier for non-commercial use): wave height (m), wave period (s), current speed (stored in m/s; km/h = m/s × 3.6; the API publishes km/h) and current direction (degrees). Field conditions for planning dives only: separate from the survey priority score, which never uses them (end the answer with the sentence: Field conditions are separate from the priority score). The horizon is 72 hours from the model run; nothing can be said beyond it. Never say a dive is safe or unsafe: give the numbers and let the team judge.";
 const CALM_WAVE_M = 1.2;
 const MARINE_HORIZON_H = 72;
 
@@ -463,6 +463,7 @@ export const marineForecast = {
           ...(place ? { place: place.name } : {}),
           ...(point ? { asked: point } : {}),
           ...(points.length === 0 ? { missing: "No Open-Meteo Marine forecast stored for this place in the next 72 hours." } : {}),
+          citeNote: "Every wave or current number you quote carries its row's cite marker (daily rows: cite and citeCurrent); at least one marker per point you name.",
           calmestFirst: ranked,
           points,
         },
@@ -710,6 +711,9 @@ export const lionfishHotspots = (species: z.ZodType<string>) => ({
           heuristic: true,
           note: PRIORITY_NOTE,
           ...(area ? { area: area.id, areaName: area.name } : { scope: "all four areas; recent reports are normalised per area, so cells are comparable within an area, and the rank across areas is a heuristic order only" }),
+          ...(cells[0]
+            ? { topCell: { cell: cells[0].cell, area: cells[0].area, rankScore: cells[0].rankScore, cite: cells[0].cite, evidenceId: cells[0].evidenceId, next: `For the records and rationale behind it (how the score is built, which reports counted), call explain_cell with cell "${cells[0].cell}"; for its stored record, call evidence with id "${cells[0].evidenceId}".` } }
+            : {}),
           byArea,
           cells,
         },
@@ -803,6 +807,10 @@ export const lionfishExplainCell = (species: z.ZodType<string>) => ({
           weights: explained.weights,
           heuristic: true,
           note: PRIORITY_NOTE,
+          ...(() => {
+            const top = (explained.components?.recentReports.evidence ?? []).filter((e) => e.kind === "sighting" && e.weight !== null).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0];
+            return top ? { topReport: { id: top.id, cite: `[e:${top.id}]`, observedAt: top.observedAt, submittedAt: top.submittedAt, next: `To show where this report comes from (its page, dates and licence), call evidence with id "${top.id}".` } } : {};
+          })(),
           caveats: explained.caveats,
           credit: explained.credit,
           centre,
