@@ -71,6 +71,44 @@ const ROWS: Row[] = [
   { name: "Fort Lauderdale", kind: "town", lat: 26.1224, lon: -80.1373 },
   { name: "Naples", kind: "town", lat: 26.142, lon: -81.7948 },
   { name: "Marco Island", kind: "town", lat: 25.9412, lon: -81.7184 },
+  // Florida reef tract (Lionfish Watch area fl-keys).
+  { name: "Carysfort Reef", kind: "reef", lat: 25.2217, lon: -80.2117 },
+  { name: "French Reef", kind: "reef", lat: 25.0345, lon: -80.3493 },
+  { name: "Tennessee Reef", kind: "reef", lat: 24.7533, lon: -80.7817 },
+  { name: "Western Dry Rocks", kind: "reef", lat: 24.4433, lon: -81.9267 },
+  // Mexican Caribbean (area mx-caribbean): Holbox to Banco Chinchorro.
+  { name: "Cozumel", aliases: ["isla cozumel", "palancar", "palancar reef", "san miguel de cozumel"], kind: "reef", lat: 20.42, lon: -86.92, bbox: { west: -87.1, south: 20.2, east: -86.7, north: 20.6 } },
+  { name: "Isla Mujeres", kind: "town", lat: 21.2311, lon: -86.7311 },
+  { name: "Cancún", aliases: ["cancun"], kind: "town", lat: 21.1619, lon: -86.8515 },
+  { name: "Puerto Morelos", kind: "reef", lat: 20.85, lon: -86.87 },
+  { name: "Playa del Carmen", aliases: ["playa"], kind: "town", lat: 20.6296, lon: -87.0739 },
+  { name: "Akumal", kind: "reef", lat: 20.3961, lon: -87.3134 },
+  { name: "Tulum", kind: "town", lat: 20.2114, lon: -87.4654 },
+  { name: "Mahahual", aliases: ["majahual", "costa maya"], kind: "town", lat: 18.7117, lon: -87.7083 },
+  { name: "Banco Chinchorro", aliases: ["chinchorro", "chinchorro bank"], kind: "reef", lat: 18.58, lon: -87.33, bbox: { west: -87.5, south: 18.35, east: -87.2, north: 18.8 } },
+  { name: "Holbox", aliases: ["isla holbox"], kind: "town", lat: 21.5219, lon: -87.3789 },
+  // Belize (area belize): barrier reef and the three atolls.
+  { name: "Belize City", kind: "town", lat: 17.5046, lon: -88.1962 },
+  { name: "Ambergris Caye", aliases: ["san pedro", "san pedro belize"], kind: "reef", lat: 17.92, lon: -87.96, bbox: { west: -88.05, south: 17.85, east: -87.85, north: 18.15 } },
+  { name: "Caye Caulker", kind: "town", lat: 17.7405, lon: -88.0255 },
+  { name: "Hol Chan Marine Reserve", aliases: ["hol chan"], kind: "reef", lat: 17.8667, lon: -87.98 },
+  { name: "Turneffe Atoll", aliases: ["turneffe", "turneffe islands"], kind: "reef", lat: 17.37, lon: -87.85, bbox: { west: -88.0, south: 17.1, east: -87.7, north: 17.6 } },
+  { name: "Lighthouse Reef", aliases: ["lighthouse reef atoll", "half moon caye"], kind: "reef", lat: 17.3, lon: -87.5, bbox: { west: -87.65, south: 17.1, east: -87.4, north: 17.55 } },
+  { name: "Great Blue Hole", aliases: ["blue hole"], kind: "reef", lat: 17.316, lon: -87.5347 },
+  { name: "Glover's Reef", aliases: ["glovers reef", "glover's", "glovers", "glover's reef atoll", "glovers atoll"], kind: "reef", lat: 16.82, lon: -87.78, bbox: { west: -87.9, south: 16.7, east: -87.65, north: 16.95 } },
+  { name: "Placencia", kind: "town", lat: 16.5146, lon: -88.3661 },
+  { name: "Hopkins", aliases: ["hopkins belize"], kind: "town", lat: 16.8811, lon: -88.2797 },
+  { name: "South Water Caye", kind: "reef", lat: 16.8133, lon: -88.0817 },
+  { name: "Gladden Spit", kind: "reef", lat: 16.58, lon: -88.0 },
+  // Colombian Caribbean (area co-caribbean): the islands and the mainland coast.
+  { name: "San Andrés", aliases: ["san andres", "san andres island", "isla de san andres"], kind: "reef", lat: 12.55, lon: -81.7, bbox: { west: -81.8, south: 12.45, east: -81.6, north: 12.65 } },
+  { name: "Providencia", aliases: ["old providence", "providencia island"], kind: "reef", lat: 13.35, lon: -81.37, bbox: { west: -81.45, south: 13.28, east: -81.3, north: 13.42 } },
+  { name: "Cartagena", aliases: ["cartagena de indias"], kind: "town", lat: 10.3997, lon: -75.5144 },
+  { name: "Islas del Rosario", aliases: ["rosario islands"], kind: "reef", lat: 10.17, lon: -75.75 },
+  { name: "Santa Marta", kind: "town", lat: 11.2408, lon: -74.2099 },
+  { name: "Tayrona", aliases: ["tayrona national park", "parque tayrona"], kind: "park", lat: 11.3, lon: -74.05, bbox: { west: -74.2, south: 11.25, east: -73.9, north: 11.4 } },
+  { name: "Taganga", kind: "town", lat: 11.2689, lon: -74.1917 },
+  { name: "Barranquilla", kind: "town", lat: 10.9685, lon: -74.7813 },
 ];
 
 /** Point entries default to a ~9 km half-width box. */
@@ -79,6 +117,8 @@ const DEFAULT_HALF_DEG = 0.08;
 function normalize(text: string): string {
   return text
     .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9\s-]/g, " ")
     .replace(/\b(the|near|around|at|in)\b/g, " ")
     .replace(/\s+/g, " ")

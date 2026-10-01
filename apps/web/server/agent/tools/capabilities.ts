@@ -18,8 +18,9 @@ import {
   readingKey,
   speciesKeys,
 } from "@/server/agent/tools/evidence";
-import { carpTools } from "@/server/agent/tools/carp";
+import { carpTools, weatherForecast } from "@/server/agent/tools/carp";
 import { commonTools } from "@/server/agent/tools/common";
+import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfishSetView, lionfishTools } from "@/server/agent/tools/lionfish";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
@@ -53,13 +54,18 @@ import type { BBox } from "@/shared/agent/events";
 import type { AppConfig } from "@/shared/apps";
 import { QUALITY_CODES } from "@/shared/frames";
 import { sightingPageUrl } from "@/shared/source-pages";
+import { regionAt } from "@/shared/apps";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
-/** Frames cover a 30-day window (PLAN.md C15). */
-const MAX_LOOKBACK_HOURS = 24 * 30;
+/** Longest window a sightings or readings call may ask for: the 90-day backfill (lionfish replays a quarter). */
+const MAX_LOOKBACK_HOURS = 24 * 90;
+/** Frames cover a 30-day window (PLAN.md C15): an empty recent window widens to it. */
+const WIDEN_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
 /** Default sightings lookback; with no window given and nothing in it, the tool widens to MAX_LOOKBACK_HOURS. */
 const DEFAULT_SIGHTING_HOURS = 24 * 7;
+/** Counting by submission date looks this far back for the observations (old photos are uploaded years later). */
+const SUBMITTED_LOOKBACK_HOURS = 24 * 366 * 10;
 /**
  * Conditions query this much around the asked-for box. Rows inside the box win; when no station lies inside it
  * ("water levels near Homestead", with the nearest gauge a few km out), the nearby stations answer instead.
@@ -111,10 +117,18 @@ const geocode = {
     "Resolve a place name inside this app's regions (park units, reefs, towns, river gauges, marinas) to a point, a bbox and its grid cell. Call before any area query.",
   inputSchema: z.object({ place: z.string().min(2).max(120).describe("Place name, e.g. 'Flamingo' or 'Key Largo'") }),
   async execute(input: { place: string }, ctx: CapabilityContext): Promise<CapabilityOutput> {
+    // One of the app's regions by id or name (lionfish: the four areas) resolves to its box without a lookup.
+    const area = findArea(ctx.app, input.place);
+    if (area) {
+      const lat = (area.bbox.south + area.bbox.north) / 2;
+      const lon = (area.bbox.west + area.bbox.east) / 2;
+      return output({ name: area.name, kind: "area", areaId: area.id, lat, lon, bbox: area.bbox, thin: area.thin, source: "config", ...(area.thin ? { note: ctx.app.copy.thinAreaNote ?? "thin area: too few recent records for a ranked score" } : {}) }, [], [], 1);
+    }
     const local = lookupGazetteer(input.place);
     const place = (local && inRegion(ctx.app, local.lat, local.lon) ? local : null) ?? (await openMeteoGeocode(ctx.app, input.place, ctx.signal));
     if (!place) throw new Error(`No place named "${input.place}" inside this app's regions. ${ctx.app.agent.refusal}`);
-    return output({ ...place, cell: cellFor(ctx.app, place.lat, place.lon) }, [], [], 1);
+    const region = regionAt(ctx.app, place.lat, place.lon);
+    return output({ ...place, ...(region && ctx.app.regions.length > 1 ? { areaId: region.id, areaName: region.name, thin: region.thin } : {}), cell: cellFor(ctx.app, place.lat, place.lon) }, [], [], 1);
   },
 };
 
@@ -169,8 +183,23 @@ const sightingsInput = z.object({
   quality: z.array(z.enum(QUALITY)).optional().describe("Limit to these quality grades."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
-  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default 168 = 7 days)."),
+  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default: the app's window, 7 days for python, 30 days for lionfish)."),
+  dateField: z
+    .enum(["observed", "submitted"])
+    .optional()
+    .describe("Which date the window counts by: observed (default; when the animal was seen) or submitted (when the record reached the feed: 'newly submitted', 'arrived', 'uploaded'). With submitted, rows can be years older than the window."),
+  knownAt: timeSchema.optional().describe("Knowledge time: only records that had reached the feed by this time ('what did we know on …')."),
 });
+
+/** Days between the observation and the record reaching the feed, one decimal; null when the API gives no ingest time. */
+function lagDays(row: Pick<GqlSighting, "observedAt" | "ingestedAt">): number | null {
+  if (!row.ingestedAt) return null;
+  return Math.round(((Date.parse(row.ingestedAt) - Date.parse(row.observedAt)) / (24 * HOUR_MS)) * 10) / 10;
+}
+
+/** Positional accuracy worse than a kilometre, or none given (obscured coordinates), makes a report imprecise. */
+const IMPRECISE_M = 1000;
+const imprecise = (row: Pick<GqlSighting, "accuracyM">) => row.accuracyM === null || row.accuracyM > IMPRECISE_M;
 
 const sightings = {
   name: LAYER.sightings,
@@ -185,12 +214,17 @@ const sightings = {
       return output({ bbox, total: 0, distinctAnimals: 0, duplicates: 0, conflicts: 0, rows: [], unresolvedSpecies: missing, note: `No records: ${missing.join("; ")}. Say so plainly.` }, [], [], 0);
     }
     const explicit = Boolean(input.from) || Boolean(input.to) || input.hours !== undefined;
-    const asked = resolveWindow(input, ctx, DEFAULT_SIGHTING_HOURS);
+    const defaultHours = Math.min(ctx.app.windows?.defaultHours ?? DEFAULT_SIGHTING_HOURS, MAX_LOOKBACK_HOURS);
+    const asked = resolveWindow(input, ctx, defaultHours);
+    const bySubmitted = input.dateField === "submitted";
+    const knownAt = givenTime(input.knownAt);
     // The same call fetches the whole 30 days before `to`. A "recent" window (none given, or one ending now) that
     // comes back empty widens to them; an empty historical window tells the model how many older records exist.
+    // Counting by submission date needs every observation that could have been submitted in the window, however
+    // old (old photos arrive years later), so the observed window opens wide.
     const endsNow = Math.abs(Date.parse(asked.to) - ctx.now.getTime()) <= HOUR_MS;
     const fetched = {
-      from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - MAX_LOOKBACK_HOURS * HOUR_MS)).toISOString(),
+      from: new Date(Math.min(Date.parse(asked.from), Date.parse(asked.to) - (bySubmitted ? SUBMITTED_LOOKBACK_HOURS : WIDEN_HOURS) * HOUR_MS)).toISOString(),
       to: asked.to,
     };
     const data = await gqlWithFeeds<{ sightings: GqlSighting[]; feeds: GqlFeedState[] }>(
@@ -204,10 +238,12 @@ const sightings = {
       },
       ctx,
     );
-    const recent = data.sightings.filter((row) => Date.parse(row.observedAt) >= Date.parse(asked.from));
-    const widened = (!explicit || endsNow) && recent.length === 0 && data.sightings.length > 0;
+    const known = knownAt ? data.sightings.filter((row) => !row.ingestedAt || Date.parse(row.ingestedAt) <= Date.parse(knownAt)) : data.sightings;
+    const dateOf = (row: GqlSighting) => (bySubmitted ? Date.parse(row.ingestedAt ?? row.observedAt) : Date.parse(row.observedAt));
+    const recent = known.filter((row) => dateOf(row) >= Date.parse(asked.from) && dateOf(row) <= Date.parse(asked.to));
+    const widened = !bySubmitted && (!explicit || endsNow) && recent.length === 0 && known.length > 0;
     const window = widened ? fetched : asked;
-    const rows = [...(widened ? data.sightings : recent)].sort(
+    const rows = [...(widened ? known : recent)].sort(
       (a, b) =>
         (QUALITY_RANK[lower(a.quality)] ?? 9) - (QUALITY_RANK[lower(b.quality)] ?? 9) ||
         Date.parse(b.observedAt) - Date.parse(a.observedAt),
@@ -226,6 +262,7 @@ const sightings = {
         "sighting",
         row.id,
         `${speciesLabel(row.taxon)} · ${lower(row.quality)} · ${row.source} · ${row.observedAt}`,
+        row.source,
       ),
     );
     const feeds = feedsFor(data.feeds, new Set(rows.map((row) => row.source)), ["inat", "nas", "gbif"]);
@@ -247,12 +284,17 @@ const sightings = {
     const span = endsNow ? `last ${days} ${days === 1 ? "day" : "days"}` : `${window.from.slice(5, 10)} to ${window.to.slice(5, 10)}`;
     const title = `${species} sightings · ${span}`;
     const view = sightingsView(viewRows, bbox, title.charAt(0).toUpperCase() + title.slice(1));
-    const older = !widened && recent.length === 0 ? data.sightings.length : 0;
+    const older = !widened && !bySubmitted && recent.length === 0 ? known.length : 0;
+    const lateRows = rows.filter((row) => lateBy(row) !== null);
+    const impreciseRows = rows.filter(imprecise);
     const askedDays = Math.max(1, Math.round((Date.parse(asked.to) - Date.parse(asked.from)) / (24 * HOUR_MS)));
     const out = output(
       {
         bbox,
         window,
+        dateField: bySubmitted ? "submitted (the window counts by the date each record reached the feed; observed dates can be much older)" : "observed (the window counts by the date the animal was seen; submittedAt says when the record reached the feed)",
+        ...(knownAt ? { knownAt, knownAtNote: `only records that had reached the feed by ${knownAt}; later arrivals are left out` } : {}),
+        ...(ctx.app.copy.sightingsNote ? { sightingsNote: ctx.app.copy.sightingsNote } : {}),
         ...(widened
           ? { widened: `Nothing in the ${askedDays} days asked for; the window was widened to the last 30 days. Say so.` }
           : {}),
@@ -266,15 +308,21 @@ const sightings = {
         distinctAnimals: rows.length - duplicates.length,
         duplicates: duplicates.length,
         conflicts: rows.filter((row) => row.conflict).length,
-        late: rows.filter((row) => lateBy(row) !== null).length,
+        late: lateRows.length,
         // Named up front, like feedSummary.mention: each late record with how late and its citation marker.
-        ...(rows.some((row) => lateBy(row) !== null)
+        ...(lateRows.length
           ? {
-              lateRecords: rows
-                .filter((row) => lateBy(row) !== null)
+              lateRecords: lateRows
                 .slice(0, MAX_MODEL_ROWS)
-                .map((row) => ({ source: row.source, arrived: `${lateBy(row)} after it was observed`, cite: `[e:sighting:${row.id}]` })),
+                .map((row) => ({ source: row.source, observed: row.observedAt.slice(0, 10), submitted: row.ingestedAt?.slice(0, 10) ?? null, arrived: `${lateBy(row)} after it was observed`, ...(regionAt(ctx.app, row.lat, row.lon) && ctx.app.regions.length > 1 ? { area: regionAt(ctx.app, row.lat, row.lon)!.id } : {}), cite: `[e:sighting:${row.id}]` })),
             }
+          : {}),
+        imprecise: impreciseRows.length,
+        ...(impreciseRows.length
+          ? { impreciseRecords: impreciseRows.slice(0, MAX_MODEL_ROWS).map((row) => ({ source: row.source, accuracyM: row.accuracyM, why: row.accuracyM === null ? "no positional accuracy given (coordinates may be obscured)" : `positional accuracy ${row.accuracyM} m`, lat: row.lat, lon: row.lon, cite: `[e:sighting:${row.id}]` })) }
+          : {}),
+        ...(ctx.app.regions.length > 1
+          ? { byArea: Object.fromEntries(ctx.app.regions.map((r) => [r.id, { name: r.name, thin: r.thin, reports: rows.filter((row) => regionAt(ctx.app, row.lat, row.lon)?.id === r.id).length, distinct: rows.filter((row) => !row.canonicalId && regionAt(ctx.app, row.lat, row.lon)?.id === r.id).length }])) }
           : {}),
         byQuality,
         bySpecies,
@@ -285,9 +333,13 @@ const sightings = {
           source: row.source,
           quality: lower(row.quality),
           observedAt: row.observedAt,
+          submittedAt: row.ingestedAt ?? null,
+          lagDays: lagDays(row),
           lat: row.lat,
           lon: row.lon,
           accuracyM: row.accuracyM,
+          ...(imprecise(row) ? { imprecise: row.accuracyM === null ? "no accuracy given (possibly obscured)" : `accuracy ${row.accuracyM} m` } : {}),
+          ...(ctx.app.regions.length > 1 ? { area: regionAt(ctx.app, row.lat, row.lon)?.id ?? null } : {}),
           duplicateOf: row.canonicalId ? `sighting:${row.canonicalId}` : null,
           idConflict: row.conflict,
           ...(lateBy(row) ? { arrivedLate: `${lateBy(row)} after it was observed` } : {}),
@@ -478,6 +530,7 @@ const conditions = {
         "reading",
         readingKey(row.station.id, row.param, row.observedAt, row.origin),
         `${row.station.name} ${lower(row.param)} ${row.value ?? "missing"} (${lower(row.origin)}) · ${row.observedAt}`,
+        row.station.source,
       ),
     );
     const usable = (row: GqlReading) => row.value !== null && lower(row.flag) === "ok";
@@ -485,20 +538,24 @@ const conditions = {
       .filter(({ row }) => !usable(row))
       .map(({ row }) => ({ evidenceId: idOf(row), station: row.station.name, param: lower(row.param), flag: lower(row.flag) }));
 
-    // Group usable latest values by comparable parameter, then by origin.
-    const groups = new Map<Param, Map<string, GqlReading[]>>();
+    // Group usable latest values by comparable parameter (and region, in a multi-area app: a Florida buoy says
+    // nothing about a Belize satellite pixel), then by origin.
+    const groups = new Map<string, Map<string, GqlReading[]>>();
+    const multiRegion = ctx.app.regions.length > 1;
     for (const { row } of shown) {
       if (!usable(row)) continue;
       const param = lower(row.param) as Param;
       const as = COMPARE_AS[param] ?? param;
-      const byOrigin = groups.get(as) ?? new Map<string, GqlReading[]>();
+      const key = multiRegion ? `${as}|${regionAt(ctx.app, row.station.lat, row.station.lon)?.id ?? ""}` : as;
+      const byOrigin = groups.get(key) ?? new Map<string, GqlReading[]>();
       const bucket = byOrigin.get(lower(row.origin)) ?? [];
       bucket.push(row);
       byOrigin.set(lower(row.origin), bucket);
-      groups.set(as, byOrigin);
+      groups.set(key, byOrigin);
     }
     const conflicts: Record<string, unknown>[] = [];
-    for (const [param, byOrigin] of groups) {
+    for (const [key, byOrigin] of groups) {
+      const [param, regionId] = key.split("|") as [Param, string | undefined];
       const threshold = CONFLICT_THRESHOLD[param];
       const reference = byOrigin.get("measured");
       if (threshold === undefined || !reference) continue;
@@ -510,6 +567,7 @@ const conditions = {
         if (Math.abs(delta) > threshold) {
           conflicts.push({
             param,
+            ...(regionId ? { area: regionId } : {}),
             measured: { mean: Number(refMean.toFixed(2)), evidenceIds: reference.map(idOf) },
             [origin]: { mean: Number((refMean + delta).toFixed(2)), evidenceIds: other.map(idOf) },
             delta: Number(delta.toFixed(2)),
@@ -521,6 +579,16 @@ const conditions = {
     }
     const seenSources = new Set(readings.map((row) => row.station.source));
     const fallback = [...new Set((input.params ?? PARAMS).flatMap((param) => PARAM_SOURCES[param]))];
+    // A multi-area app says where in-situ stations exist at all, so a satellite value cannot be checked elsewhere.
+    const measuredIn = new Set(readings.filter((row) => lower(row.origin) === "measured").map((row) => regionAt(ctx.app, row.station.lat, row.station.lon)?.id));
+    const coverage =
+      ctx.app.regions.length > 1
+        ? {
+            withMeasuredStations: ctx.app.regions.filter((r) => measuredIn.has(r.id)).map((r) => r.name),
+            withoutMeasuredStations: ctx.app.regions.filter((r) => !measuredIn.has(r.id)).map((r) => r.name),
+            note: "In-situ (measured) buoys and tide stations report only where listed; elsewhere satellite values stand alone and cannot be checked against a buoy.",
+          }
+        : null;
     const feeds = feedsFor(data.feeds, seenSources, fallback);
     const toRow = (row: GqlReading): ReadingRow => ({
       evidenceId: idOf(row),
@@ -553,6 +621,7 @@ const conditions = {
         readings: readings.length,
         series: series.length,
         truncated: series.length > shown.length,
+        ...(coverage ? { coverage } : {}),
         conflicts,
         missing,
         rows: shown.map(({ row, count }, index) => ({
@@ -862,22 +931,30 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
   const species = speciesSchemaFor(app);
   const kind = (app as Partial<AppConfig>).kind;
   const speciesOnly = kind !== "conditions";
-  const riverTools = kind === "species" ? [] : carpTools;
+  // A component app (lionfish: four priority components) gets the component forms of hotspots, explain_cell and
+  // set_view plus reef_heat and marine_forecast; a species app scored density × activity × access keeps python's.
+  const component = speciesOnly && isComponentApp(app as Partial<AppConfig> as AppConfig);
+  // The NWS gridpoint forecast reads by point too, so a species app may list it (python's weekend planning).
+  const riverTools = kind === "species" ? [weatherForecast] : carpTools;
   return [
     geocode,
     ...(speciesOnly ? [sightings, speciesCounts] : []),
     conditions,
     alerts,
-    ...(speciesOnly ? [hotspots(species), explainCell(species), backtest(species)] : []),
+    ...(speciesOnly ? (component ? [lionfishHotspots(species), lionfishExplainCell(species)] : [hotspots(species), explainCell(species), backtest(species)]) : []),
+    ...(component ? lionfishTools : []),
     ...riverTools,
     feedState,
     ...commonTools,
     notes,
-    setView,
+    component ? lionfishSetView : setView,
   ];
 }
 
-export const CAPABILITY_NAMES: readonly string[] = allCapabilities({ taxa: [] } as unknown as AppConfig).map((cap) => cap.name);
+const COMPONENT_STUB = { taxa: [], kind: "species", score: { components: [{ id: "recentReports" }, { id: "idQuality" }, { id: "heatStress" }, { id: "completeness" }] } } as unknown as AppConfig;
+
+/** Every tool name any app can register (python's, lionfish's and carp's forms), for the per-app allowlist checks. */
+export const CAPABILITY_NAMES: readonly string[] = [...new Set([...allCapabilities({ taxa: [] } as unknown as AppConfig), ...allCapabilities(COMPONENT_STUB)].map((cap) => cap.name))];
 
 /**
  * The tools of one app: its `agent.tools` allowlist, in registry order. A tool off the list is never

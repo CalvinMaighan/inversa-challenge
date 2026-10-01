@@ -4,6 +4,8 @@
  * needs, and the eval harness runs them as its golden set. Pure: no runtime globals.
  */
 import carpQuestions from "app-configs/questions/carp.json";
+import lionfishQuestions from "app-configs/questions/lionfish.json";
+import pythonQuestions from "app-configs/questions/python.json";
 
 import type { AppId } from "./schema";
 
@@ -21,9 +23,9 @@ export type SupportedQuestion = {
 
 export type QuestionFile = { app: string; questions: SupportedQuestion[] };
 
-const FILES: Partial<Record<AppId, QuestionFile>> = { carp: carpQuestions as QuestionFile };
+const FILES: Partial<Record<AppId, QuestionFile>> = { carp: carpQuestions as QuestionFile, lionfish: lionfishQuestions as QuestionFile, python: pythonQuestions as QuestionFile };
 
-/** The app's question file, or an empty set for an app whose set is hand-written elsewhere. */
+/** The app's question file (every app has one; an unknown app gets an empty set). */
 export function supportedQuestions(app: AppId): SupportedQuestion[] {
   return FILES[app]?.questions ?? [];
 }

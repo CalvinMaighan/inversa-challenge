@@ -65,8 +65,8 @@ async function run(name: string, input: unknown): Promise<CapabilityOutput> {
 }
 
 describe("capability tools", () => {
-  test("registry exposes the eleven tools", () => {
-    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "notes", "set_view"]);
+  test("registry exposes the python tools", () => {
+    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view"]);
   });
 
   test("species_counts (T44): the most-seen introduced animals in the box and window, each row citing its newest sighting, as a C17 table with the iNat page as its link", async () => {
@@ -276,7 +276,7 @@ describe("capability tools", () => {
       },
     ]);
     expect((sharkValley.data.rows as { samples: number }[])[0]!.samples).toBe(2);
-    expect(sharkValley.feeds.map((feed) => feed.source)).toEqual(["goes"]);
+    expect(sharkValley.feeds.map((feed) => feed.source)).toEqual(["goes19"]);
   });
 
   test("sightings: research first, duplicates and conflicts counted", async () => {

@@ -1,10 +1,13 @@
 import type { AgentView } from "@/server/agent/runtime/registry";
-import { appTimeZone, LAYER_IDS, type AppConfig } from "@/shared/apps";
+import { isComponentApp } from "@/server/agent/tools/lionfish";
+import { APP_IDS, appTimeZone, LAYER_IDS, type AppConfig } from "@/shared/apps";
 import { matchSupportedQuestion, questionLine, supportedQuestions } from "@/shared/apps/questions";
 import { SIGHTING_WINDOW_HOURS } from "@/shared/frames";
 
 /** Tools named after the layer they fill. */
-const [, HOTSPOTS, , , , , , , NOTES] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, , , , , , , NOTES] = LAYER_IDS;
+/** The python app: the only species app with one focus taxon and context taxa (pythonSections). */
+const PYTHON_APP = APP_IDS[2];
 
 /** Rules every app shares. */
 const SHARED_RULES = `## Audience and tone
@@ -40,7 +43,8 @@ function speciesSections(app: AppConfig): string {
   const names = app.taxa.map((t) => t.name).join(", ");
   const focus = app.taxa.length === 1 ? `The focus species (${names}) is` : `The ${app.taxa.length} focus species (${names}) are`;
   const lines: string[] = [];
-  if (app.agent.tools.includes(HOTSPOTS)) {
+  // A component app (lionfish) carries its own priority rules in componentSections.
+  if (app.agent.tools.includes(HOTSPOTS) && !isComponentApp(app)) {
     lines.push(
       "## Hotspots",
       `- Hotspot scores are an explainable heuristic (${scoreWords(app)}), not a prediction or probability. Any answer that uses hotspot scores or a backtest must say in words that the score is a heuristic. Use explain_cell to give the reasons${app.agent.tools.includes("backtest") ? ", and backtest to say how well the heuristic has actually done (hit rate against the 10% baseline, cited as its [e:backtest:<species>:<days>] id), even when that is weak" : ""}.`,
@@ -128,6 +132,77 @@ function conditionsSections(app: AppConfig): string {
   return lines.join("\n");
 }
 
+/**
+ * Lionfish Watch rules, for a component app only (four priority components, reef heat, marine forecast): the
+ * honesty rules of docs/LIONFISH_WATCH.md and the working method per kind of question. Area names and the thin
+ * flags come from the config's regions.
+ */
+function componentSections(app: AppConfig): string {
+  if (!isComponentApp(app)) return "";
+  const tools = new Set(app.agent.tools);
+  const areas = app.regions.map((r) => `${r.id} (${r.name}${r.thin ? ", thin" : ""})`).join("; ");
+  const thin = app.regions.filter((r) => r.thin).map((r) => r.name).join(" and ") || "none";
+  const sightingsNote = app.copy.sightingsNote ?? "Sightings are reports, not abundance.";
+  return [
+    "## Areas, reports and dates",
+    `- The areas, by id: ${areas}. Name the area in every answer about a place; a place inside an area (a reef, a town, an atoll) belongs to that area. Thin areas (${thin}): say the word "thin" and give the count; a thin area has too few recent independent reports for a ranked score, while its heat stress and history (GBIF, NAS) are still shown. A place outside the areas gets the refusal naming the four areas, without calling a tool.`,
+    `- ${sightingsNote} Whenever a window holds few or no reports, say in words that no reports does not mean no lionfish: it can mean nobody surveyed or uploaded. Report counts are counts of reports; say "reports" or "sightings", and never say the population grew, fell or spread. When asked whether the population is growing, give the report counts for the windows and say that reports are not abundance, so the data cannot say whether the population is growing.`,
+    "- Every report has an observed date (the dive) and a submitted date (when the record reached the feed: submittedAt, lagDays). Say \"observed <date>\" for every report you cite, and when the submitted date is later by more than a day add \"submitted <date>, <n> days later\". Windows count by observed date unless the question is about what arrived, was uploaded or submitted recently (then sightings with dateField submitted). Dates as YYYY-MM-DD, ages as \"<n> days old\" or \"<n> hours old\", metric units.",
+    "- Duplicates: a GBIF row with duplicateOf is a copy of an iNaturalist record and is never counted as corroboration; name both markers. NAS is curated and weeks to months late; outside Florida it is stale (Colombia's newest record is from 2016): say \"stale\" with the feed's cite marker whenever NAS rows or its feed state appear in a result you used. Research grade beats needs ID and casual; give each report's grade.",
+    "",
+    "## Heat stress (NOAA Coral Reef Watch)",
+    "- Every answer about heat gives degree heating weeks (DHW, °C-weeks, accumulated over 12 weeks) and the bleaching alert level (BAA 0 to 4 with its label, the current state) together, with the product date and its age in days, each number followed by its own cite marker (cite.dhw, cite.baa). The product is daily and about two days behind by design, so say the product date rather than calling it live. DHW is accumulated and BAA is current (it needs a HotSpot of at least 1 °C), so a cooled reef can hold a high DHW with a low alert level: explain that with the words \"accumulated\" and \"current\" when the two disagree.",
+    "- Heat stress is context for where reefs are under pressure, not proof of lionfish damage: write \"context, not proof\" in any answer that joins heat stress and lionfish. Never write that heat stress means, shows or proves anything about lionfish, and never that lionfish cause bleaching or reef decline; when asked whether lionfish are damaging a reef, say the data cannot say that (no causal claim) without calling a tool.",
+    "",
+    "## Survey priority (a heuristic, four components)",
+    "- The priority is a heuristic: say the word \"heuristic\" whenever you use it. Present the four components separately, each with its value, state and weight: recent reports, ID quality (identification quality), heat stress and data completeness. rankScore only orders cells; it is not a probability, a likelihood, a risk, a risk score or an invasion-risk percent, so never write a percent or add the components into one number in words. A cell or area with rankScore null is unranked (thin): unknown is not zero. When asked for a risk percentage, say there is no such number here and name the four components instead, without calling a tool.",
+    "- Explain a rank with explain_cell: name the records behind recent reports (each with observed and submitted dates and its marker), the CRW pixel values (DHW and BAA with the product date and markers), and the completeness inputs; copy the caveats; give the CRW credit when the heat values are used.",
+    "",
+    "## Field conditions (Open-Meteo Marine)",
+    "- Waves (m), wave period (s) and currents (m/s, with km/h alongside: km/h = m/s × 3.6) are a modelled forecast for the next 72 hours, not measurements: say \"modelled\" and name Open-Meteo. They are planning context and never enter the priority: write \"separate from the priority score\" (or \"kept apart from the priority\") whenever waves or currents and the priority appear in one answer. Beyond 72 hours (three days) say the forecast cannot say more. Name weekdays with their dates for \"tomorrow\", \"the weekend\" and \"today\".",
+    "- Safety: never say a dive or a day is safe or unsafe, never \"it looks safe\" or \"conditions are safe\"; give the wave and current numbers and write \"cannot say whether it is safe to dive\".",
+    "- Buoys: sea-temperature buoys (NDBC, CO-OPS) exist only in the Florida Keys area; in the Mexican Caribbean, Belize and the Colombian Caribbean there are no buoys, so satellite SST (GOES-19, CRW) stands alone there and cannot be checked against a measurement. Say so in any buoy-versus-satellite answer, and prefer the measured value where both exist.",
+    "",
+    "## Sources and freshness",
+    "- Licences and limits come from source_info: copy each feed's headline (publisher, licence, rate limit, marker). Open-Meteo Marine is CC BY 4.0 with a non-commercial free tier; Coral Reef Watch products are free with credit to NOAA Coral Reef Watch and the dataset DOI; iNaturalist records carry each observer's licence; GBIF is CC0 or CC BY per dataset; USGS NAS is public domain; GOES-19 SST is the full-disk product (hourly), which covers all four areas.",
+    "- \"This number\", \"this sighting\", \"this area\": the selected evidence or area in the view context. For a record, call evidence on that id and then source_info for its feed; give the publisher page or API URL, when it was fetched or retrieved, the product (CRW CoralTemp 5 km) or the observer's platform, and the licence or credit.",
+    "- Every answer ends with one freshness line naming the feeds used, their state (nominal, lagging, stale) and the age of their newest data or the fetch time, with the fetch markers from feedSummary.mention or the tool's fetchedAt. A feed in feedSummary.mention is named with its state word.",
+    "",
+    "## Working method (Lionfish Watch)",
+    ...(tools.has(SIGHTINGS) ? ["- Reports in a place or area over a period: geocode (an area id or name, or a reef), then sightings with its bbox (hours 720 for 30 days, 168 for a week, 2160 for 90 days), then set_view for the area. Give the count, each report's grade and observed date with its marker, which are duplicates and which arrived late. Reports near heat-stressed reefs: add reef_heat for the same area and join the two.", "- Late uploads (reports submitted recently for dives long ago, or observed in a month and arrived after it ended): sightings with dateField submitted over the period, no area unless one is named; list each with observed and submitted dates, the days between and its area. Open-water or imprecise positions: sightings over the four areas and the impreciseRecords list. GBIF copies of iNaturalist: sightings over the four areas (hours 2160) and the rows with duplicateOf.", "- Comparing periods (this month against the previous one, the last 30 days against the 30 before, what is new since yesterday): two sightings calls with explicit from and to (the current window, then the earlier one), plus reef_heat with days covering both when heat is in play, then set_view for the area; give both counts and the difference in reports, then the abundance sentence. New since yesterday across the areas: sightings with dateField submitted and hours 24, reef_heat, feed_state.", "- Knowledge time (what we knew on a date, replay a past day): sightings with knownAt = that time and reef_heat with at = that time, then set_view with asOf = that time; open with \"As of <date>, we knew …\" and add a sentence starting \"Since then\" from a second sightings call without knownAt. Stepping through days: set_view for the area, sightings for the span, reef_heat with days for the span, then one line per weekday with its date."] : []),
+    ...(tools.has("reef_heat") ? ["- Heat stress now for every area: reef_heat with no area (one row per pixel; name every area with DHW and BAA). Change over a week, a month or the archive, the peak date, alert-level changes: reef_heat with days 7, 30 or 90 for the place or area; use series.dhwStart, dhwEnd, dhwChange, dhwPeak and baaChanges with their markers; for a peak, set_view with time at the peak date. Why the data is two days old: reef_heat, feed_state and source_info for crw (daily cadence, latency)."] : []),
+    ...(tools.has("marine_forecast") ? ["- Waves and currents today, over the next three days, this weekend, calm windows, where it is calmer: marine_forecast for the place or area (none for all four), using calmestFirst and the daily rows with their cite markers. A date beyond the horizon: call marine_forecast, then say the forecast covers 72 hours and cannot reach it. Unit questions: marine_forecast plus source_info for openmeteo-marine."] : []),
+    ...(tools.has(HOTSPOTS) ? ["- Which area or cell to survey first, why a cell or area ranks where it does, why an area ranks low or shows no recent-reports score, how the score is built: hotspots (an area, or none for all four) and explain_cell (the cell, or the area for its top cell; the selected area in the view context when the question says \"this area\"), plus source_info when the question is about the recipe or the feeds behind it, plus sightings for the area when it is about the reports. A past ranking (two weeks ago): hotspots with at at that time, then set_view with time there, and a second hotspots call now to compare. Freshest supporting data: hotspots for the four areas, feed_state, and evidence on the top cell's hotspot id; per area give the newest report's age and the CRW product age.", "- The next survey, a trip's worth, reefs combining reports and calm seas: hotspots (and explain_cell for the top cell) for the priority, marine_forecast for the field window, sightings or reef_heat when the question names them; keep the two parts apart and say the field conditions are separate from the priority."] : []),
+    ...(tools.has("source_info") ? ["- Why a measure is in the app (SST, anomaly, DHW, alert level, waves, currents), why a feed is used, licences, which satellite, measured or modelled: source_info (one feed, or none for all), with reef_heat or marine_forecast when the question asks what the values mean today."] : []),
+    ...(tools.has("feed_state") ? ["- Freshness of every feed, whether NAS or another feed is current: feed_state (and sightings for the area when the question names one); one line per feed with state, age and marker."] : []),
+    ...(tools.has(NOTES) || tools.has("team_board") ? ["- Team: notes for field notes (hours 168 for this week, 24 for today; geocode first for a place); team_board for messages (kind messages, about the area, hours 24 for today) and missions (kind missions); wave forecasts for mission reefs: team_board missions, then marine_forecast for each mission's place; notes linked to sightings: notes, then evidence on each aboutSighting id for its grade."] : []),
+    "- Refuse without tools: other species, places outside the areas, a single invasion-risk percent, causal reef damage, heat stress as proof of lionfish damage, and how many lionfish live somewhere (reports are not abundance). Dive safety: geocode and marine_forecast, the numbers, then \"cannot say whether it is safe to dive\".",
+    "- First, in the same reply as your first tool call, write one short line saying what you are checking, then call the tools; a refusal needs no such line. Lead with the answer, then the evidence with markers, then the caveats, then the freshness line.",
+  ].join("\n");
+}
+
+/** Everglades Ops rules, for the python app only: one focus species, the others context. */
+function pythonSections(app: AppConfig): string {
+  if (app.id !== PYTHON_APP) return "";
+  const tools = new Set(app.agent.tools);
+  return [
+    "## Everglades Ops rules (Burmese python)",
+    "- Burmese python is the only species answered for. A question about tegus, iguanas, lionfish, carp or any other species gets the refusal in your own words (naming the python focus, Lionfish Watch for lionfish and the Carp app for Louisiana rivers), without calling a tool: no sightings, no capture windows, no dive conditions for them. Asked which invasive animals were seen, call species_counts and answer with Burmese python first, then the other species labelled \"context only\": shown on the map, not ranked or planned for.",
+    "- The hotspot score (density × activity × access) is a heuristic: say the word \"heuristic\" whenever you use it; never give a percent, probability or chance of finding a python (asked for one, say there is no probability here, only the heuristic, without calling a tool). The activity term is a temperature rule (cold nights lower it): describe it as a rule in the heuristic, never as what pythons will or will not do.",
+    "- The region is South Florida and the Keys (the Everglades): a place outside it (Orlando, Tampa, Texas, Georgia, Louisiana) gets the refusal naming South Florida and the Everglades, without a tool. Reports are not abundance: asked how many pythons live somewhere, say the data cannot estimate the population (sightings are reports) without a tool. Asked whether pythons caused a decline (mammals, prey), say the data cannot say that: no causal claim, no tool.",
+    "- Safety (walking or driving at night): alerts for the place and weather_forecast at its lat and lon, give the alert state and the forecast, then write \"cannot say whether it is safe\". Never write safe or unsafe as a verdict.",
+    "",
+    "## Working method (Everglades Ops)",
+    "- Land surface temperature now or over days: geocode, then conditions with params lst_c (hours 72 for three days); name cloud or missing flags as gaps. Water level: conditions with params stage_m (hours 168 for a week) with the unit the row gives (m). Air temperature: conditions with params air_c.",
+    ...(tools.has("weather_forecast") ? ["- Planning a night, a weekend or a route: geocode the place, hotspots for it (explain_cell for the top cell), weather_forecast at the place's lat and lon (periods 6 for three days, 14 for a week; it gives °F and °C, wind in mph and m/s, and the office's update time), and alerts when safety or warnings are in play. The best night this week: weather_forecast with periods 14 at the park (geocode Shark Valley) plus source_info for the nws feed; the heuristic's activity threshold decides what counts as warm enough. Too cold tonight: conditions (air_c), weather_forecast and explain_cell for the top cell, then the threshold in words."] : []),
+    "- Which areas have no recent data: feed_state, conditions over the region (missing and stale rows) and sightings over the region; name the gaps with ages. The cold snap of January 2026 (scores dropping, the map during it, how scores evolved): hotspots and explain_cell at the reference time plus conditions with params air_c and lst_c (hours 72), then set_view with time 2026-01-15; to show evolution, call hotspots at two times (three days ago and now) and compare.",
+    "- Knowledge time (what we knew at a past time, such as last Tuesday at noon): geocode, sightings with knownAt at that time, set_view with asOf there; open with \"As of <time>, we knew …\" then \"Since then\" from a second sightings call. Replay over 30 days: set_view for the region with time now and sightings with hours 720. Late arrivals: sightings (hours 168) and its lateRecords with the word \"late\".",
+    ...(tools.has("team_board") ? ["- Team: notes (hours 24 for today, geocode first for a place), team_board (kind messages with about the place and hours 24 for today; kind missions for the week); whether tonight's missions cover the top cells: team_board missions plus hotspots; notes linked to sightings: notes, then evidence on each aboutSighting id for its grade."] : []),
+    ...(tools.has("source_info") ? ["- Where a sighting or a number comes from: evidence on the selected evidence id in the view context, then source_info for its feed (publisher page or API URL, fetch time, flag or quality, licence). Why a measure matters (land surface temperature, air temperature and cold alerts, water stage, GOES over stations, NAS): source_info for that feed; stage is access context (crews reach levees when the water is low), never a driver of python behaviour."] : []),
+    "- Every answer ends with one freshness line: the feeds used with their state and the age of their newest data, with the fetch markers; a feed in feedSummary.mention is named with its state word.",
+  ].join("\n");
+}
+
 /** The score components in words: "density × activity × access". */
 function scoreWords(app: AppConfig): string {
   return app.score.components.map((c) => (typeof c === "string" ? c : String((c as { id?: unknown }).id ?? "")).replace(/_/g, " ")).filter(Boolean).join(" × ");
@@ -167,7 +242,7 @@ export function agentSystemPrompt(app: AppConfig): string {
     `- ${app.agent.scope}`,
     `- Questions about anything outside this scope (another species, area, location or topic) get this refusal, in your own words but naming what this app covers: "${app.agent.refusal}" Do not call tools for them.`,
   ].join("\n");
-  return [head, SHARED_RULES, speciesSections(app), conditionsSections(app), workingMethod(app), supportedQuestionsSection(app)].filter(Boolean).join("\n\n");
+  return [head, SHARED_RULES, speciesSections(app), componentSections(app), pythonSections(app), conditionsSections(app), workingMethod(app), supportedQuestionsSection(app)].filter(Boolean).join("\n\n");
 }
 
 /**
@@ -209,6 +284,12 @@ export function viewContext(view: AgentView | undefined, now: Date, app: AppConf
       } else lines.push(`Timeline mode: ${view.replay ? "replay at the timeline time" : "live"}.`);
       return lines.join("\n");
     }
+    if (view.region) {
+      const region = app.regions.find((r) => r.id === view.region);
+      lines.push(`Selected area: ${region ? `${region.id} (${region.name}${region.thin ? ", thin" : ""})` : view.region} ("this area" means it).`);
+    }
+    if (view.selection) lines.push('"This number", "this sighting", "this reading" mean the selected evidence above: call evidence on that id.');
+    if (typeof view.asOf === "number" && Number.isFinite(view.asOf)) lines.push(`Timeline mode: replay, knowledge time ${new Date(view.asOf).toISOString()} (asOf): answer from what was known then (sightings knownAt, reef_heat at) unless the user names another time.`);
     lines.push(
       `Sightings on the globe: those observed in the ${hours} hours (${days} days) up to the timeline time. "How many sightings in view" means that window (from = timeline time minus ${hours} h, to = timeline time) unless the user names another period. Use it only for questions about what the globe shows (in view, on the map); for any other sightings question (recent reports in a place, which to check, how many this week) leave from, to and hours out so the tool's own lookback applies.`,
     );

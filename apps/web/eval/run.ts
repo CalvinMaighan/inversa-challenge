@@ -21,8 +21,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { checkQuestion, type ToolCapture } from "./check";
-import { CATEGORIES, GOLDEN_SETS, type Golden } from "./golden";
-import { fixtureNow, startStub } from "./stub-server";
+import { CATEGORIES, GOLDEN_SETS, holdoutSet, type Golden } from "./golden";
+import { fixtureNow, fixtureSelection, startStub } from "./stub-server";
 import { checkViews } from "./views";
 
 import { resetHarness } from "@/server/agent/cordis/boot";
@@ -31,7 +31,7 @@ import { AGENT_MODEL_ID, MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/
 import type { CapabilityContext, CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import type { AgentStreamEvent, AgentStreamRequest } from "@/shared/agent/events";
-import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppId } from "@/shared/apps";
+import { APP_IDS, appBBox, appLayerIds, getApp, isAppId, type AppConfig, type AppId } from "@/shared/apps";
 
 /** OpenRouter list price for GPT-6 Luna, USD per million tokens. */
 const PRICE_IN = 0.1;
@@ -61,13 +61,23 @@ function capturing(registry: CapabilityRegistry, into: ToolCapture[]): Capabilit
   return registry;
 }
 
-/** The question's `context` as view state: the selected site, a knowledge time, a replay flag. */
-function viewFor(base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
+/**
+ * The question's `context` as view state: the selected site, a knowledge time, a replay flag (carp); a selected
+ * area, the globe's window and a selected evidence record (lionfish, python; the record is looked up in the fixture).
+ */
+function viewFor(app: AppConfig, base: NonNullable<AgentStreamRequest["view"]>, golden: Golden): NonNullable<AgentStreamRequest["view"]> {
   const context = golden.context ?? {};
   const asOf = context.asOf ? Date.parse(context.asOf) : NaN;
+  const areaId = context.selectedArea ?? context.area;
+  const area = areaId ? app.regions.find((r) => r.id === areaId) : undefined;
+  const windowHours = context.window ? (/90/.test(context.window) ? 2160 : /30/.test(context.window) ? 720 : /7|week/.test(context.window) ? 168 : undefined) : undefined;
+  const selection = context.selectedEvidence ? fixtureSelection(app.id, context.selectedEvidence) : null;
   return {
     ...base,
     ...(context.selectedSite ? { site: context.selectedSite } : {}),
+    ...(area ? { bbox: area.bbox, region: area.id, area: area.id, preset: area.id } : {}),
+    ...(windowHours ? { windowHours } : {}),
+    ...(selection ? { selection } : {}),
     ...(Number.isFinite(asOf) ? { asOf, replay: true, time: new Date(asOf).toISOString() } : {}),
     ...(context.replay === "true" ? { replay: true } : {}),
   };
@@ -79,7 +89,10 @@ async function main(): Promise<number> {
   // and its answer is not checked against the golden pass criteria before it streams. `--assisted` measures the
   // supported-question hints instead (product feature, not the benchmark).
   if (!process.argv.includes("--assisted")) process.env.AGENT_BLIND = "1";
-  const golden = GOLDEN_SETS[app.eval.goldenSet] ?? [];
+  // `--holdout` runs the held-out set (paraphrases and new questions the prompts never saw) instead of the main set.
+  const holdout = process.argv.includes("--holdout");
+  const golden = holdout ? holdoutSet(app.id) : (GOLDEN_SETS[app.eval.goldenSet] ?? []);
+  if (holdout && golden.length === 0) throw new Error(`no held-out set for ${app.id} (spec/apps/questions/${app.id}.holdout.json)`);
   // EVAL_ONLY=id,id runs a subset while iterating; EVAL_CATEGORY=c one category; the gate runs all of them.
   const only = process.env.EVAL_ONLY?.split(",").map((id) => id.trim()).filter(Boolean);
   const category = process.env.EVAL_CATEGORY?.trim();
@@ -88,7 +101,7 @@ async function main(): Promise<number> {
   const categories = [...new Set(questions.map((g) => g.category).filter((c): c is string => !!c))].sort((a, b) => CATEGORIES.indexOf(a as (typeof CATEGORIES)[number]) - CATEGORIES.indexOf(b as (typeof CATEGORIES)[number]));
   const qualityTotal = questions.filter((g) => g.quality).length;
   const fixture = fixtureNow(app.id);
-  console.log(`EVAL app=${app.id} set=${app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${fixture}`);
+  console.log(`EVAL app=${app.id} set=${holdout ? `${app.id}.holdout` : app.eval.goldenSet} model=${AGENT_MODEL_ID} questions=${total} fixture=${fixture}`);
   if (!openRouterApiKey()) {
     console.log(`EVAL ${MISSING_KEY_MESSAGE} (run it through \`bun run eval\`, which wraps doppler)`);
     for (const c of categories) console.log(`EVAL category ${c} passed 0/${questions.filter((g) => g.category === c).length}`);
@@ -104,7 +117,7 @@ async function main(): Promise<number> {
   process.env.INVERSA_DATA_DIR = dataDir;
   const now = new Date(fixture);
   const layers = appLayerIds(app).filter((l) => l === "sightings" || l === "hotspots" || l === "stations" || l === "alerts");
-  const baseView = { bbox: appBBox(app), time: fixture, layers, selection: null };
+  const baseView = { bbox: appBBox(app), time: fixture, layers, selection: null, ...(app.windows ? { windowHours: app.windows.defaultHours } : {}) };
 
   const outcomes: Outcome[] = [];
   const startedAll = Date.now();
@@ -116,7 +129,7 @@ async function main(): Promise<number> {
         const captures: ToolCapture[] = [];
         const started = Date.now();
         const result = await runTurn(
-          { app: app.id, sessionId: `eval-${g.id}-${started}`, question: g.question, view: viewFor(baseView, g), now, cache: false, registry: capturing(buildAgentRegistry(app), captures) },
+          { app: app.id, sessionId: `eval-${g.id}-${started}`, question: g.question, view: viewFor(app, baseView, g), now, cache: false, registry: capturing(buildAgentRegistry(app), captures) },
           (event) => events.push(event),
         );
         outcomes.push({ golden: g, events, result, captures, ms: Date.now() - started });

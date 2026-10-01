@@ -151,7 +151,7 @@
       "lastFetchRunId": "90398"
     },
     {
-      "source": "goes",
+      "source": "goes19",
       "mode": "PUSH",
       "state": "LAGGING",
       "newestObservedAt": "2026-01-15T01:30:00Z",
@@ -614,7 +614,7 @@
     },
     "21": {
       "id": "21",
-      "source": "goes",
+      "source": "goes19",
       "name": "GOES-19 cell Biscayne reef",
       "lat": 25.555,
       "lon": -80.195,
@@ -622,7 +622,7 @@
     },
     "22": {
       "id": "22",
-      "source": "goes",
+      "source": "goes19",
       "name": "GOES-19 cell Shark Valley",
       "lat": 25.755,
       "lon": -80.765,
@@ -630,7 +630,7 @@
     },
     "23": {
       "id": "23",
-      "source": "goes",
+      "source": "goes19",
       "name": "GOES-19 cell Flamingo",
       "lat": 25.145,
       "lon": -80.915,
@@ -638,7 +638,7 @@
     },
     "24": {
       "id": "24",
-      "source": "goes",
+      "source": "goes19",
       "name": "GOES-19 cell Key Largo reef",
       "lat": 25.045,
       "lon": -80.395,
@@ -682,6 +682,38 @@
       "name": "Open-Meteo Shark Valley",
       "lat": 25.76,
       "lon": -80.77,
+      "kind": "grid"
+    },
+    "36": {
+      "id": "36",
+      "source": "nws",
+      "name": "NWS gridpoint MFL 78,59 Shark Valley",
+      "lat": 25.757,
+      "lon": -80.766,
+      "kind": "grid"
+    },
+    "37": {
+      "id": "37",
+      "source": "nws",
+      "name": "NWS gridpoint MFL 105,47 Homestead",
+      "lat": 25.469,
+      "lon": -80.478,
+      "kind": "grid"
+    },
+    "38": {
+      "id": "38",
+      "source": "nws",
+      "name": "NWS gridpoint MFL 61,66 Big Cypress Oasis",
+      "lat": 25.857,
+      "lon": -81.033,
+      "kind": "grid"
+    },
+    "39": {
+      "id": "39",
+      "source": "nws",
+      "name": "NWS gridpoint KEY 92,57 Flamingo",
+      "lat": 25.142,
+      "lon": -80.925,
       "kind": "grid"
     },
     "41": {
@@ -729,7 +761,7 @@
     {
       "station": "11",
       "param": "AIR_C",
-      "value": 12.0,
+      "value": 12,
       "flag": "OK",
       "observedAt": "2026-01-14T19:00:00Z",
       "origin": "MEASURED"
@@ -801,7 +833,7 @@
     {
       "station": "34",
       "param": "WIND_MS",
-      "value": 6.0,
+      "value": 6,
       "flag": "OK",
       "observedAt": "2026-01-15T02:00:00Z",
       "origin": "MODELED"
@@ -1333,6 +1365,518 @@
       "flag": "OK",
       "observedAt": "2026-01-15T01:00:00Z",
       "origin": "MEASURED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 7.2,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 6.7,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 13.5,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 5.4,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 8,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 4.5,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 15.2,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 4,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 10.4,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 3.1,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 17,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 3.6,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 12.5,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 2.7,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "AIR_C",
+      "value": 18.3,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "36",
+      "param": "WIND_MS",
+      "value": 3.1,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 7.6,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 6.8,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 13.9,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 5.5,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 8.4,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 4.6,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 15.6,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 4.1,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 10.8,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 3.2,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 17.4,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 3.7,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 12.9,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 2.8,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "AIR_C",
+      "value": 18.7,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "37",
+      "param": "WIND_MS",
+      "value": 3.2,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 6.6,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 6.5,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 12.9,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 5.2,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 7.4,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 4.3,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 14.6,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 3.8,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 9.8,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 2.9,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 16.4,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 3.4,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 11.9,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 2.5,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "AIR_C",
+      "value": 17.7,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "38",
+      "param": "WIND_MS",
+      "value": 2.9,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 8.1,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 7,
+      "flag": "OK",
+      "observedAt": "2026-01-14T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 14.4,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 5.7,
+      "flag": "OK",
+      "observedAt": "2026-01-15T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 8.9,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 4.8,
+      "flag": "OK",
+      "observedAt": "2026-01-15T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 16.1,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 4.3,
+      "flag": "OK",
+      "observedAt": "2026-01-16T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 11.3,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 3.4,
+      "flag": "OK",
+      "observedAt": "2026-01-16T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 17.9,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 3.9,
+      "flag": "OK",
+      "observedAt": "2026-01-17T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 13.4,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 3,
+      "flag": "OK",
+      "observedAt": "2026-01-17T15:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "AIR_C",
+      "value": 19.2,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
+    },
+    {
+      "station": "39",
+      "param": "WIND_MS",
+      "value": 3.4,
+      "flag": "OK",
+      "observedAt": "2026-01-18T03:00:00Z",
+      "origin": "MODELED"
     }
   ],
   "alerts": [
@@ -1390,6 +1934,18 @@
         "lat": 25.815,
         "lon": -81.345,
         "score": 0.47
+      },
+      {
+        "cell": "258:110",
+        "lat": 25.405,
+        "lon": -80.615,
+        "score": 0.44
+      },
+      {
+        "cell": "236:102",
+        "lat": 25.325,
+        "lon": -80.835,
+        "score": 0.29
       }
     ],
     "tegu": [
@@ -1478,7 +2034,7 @@
         },
         {
           "name": "activity",
-          "value": 1.0,
+          "value": 1,
           "rationale": "Air temperature 7.8 °C is below the 10 °C cold-stun threshold: easy-capture window"
         },
         {
@@ -1498,13 +2054,113 @@
         },
         {
           "name": "activity",
-          "value": 1.0,
+          "value": 1,
           "rationale": "Lionfish are active year-round"
         },
         {
           "name": "access",
           "value": 0.9,
           "rationale": "Wave 0.5 m and wind 5.1 m/s are inside the 1.2 m / 8 m/s dive limits (buoy reading is 8 h old)"
+        }
+      ]
+    },
+    "python|258:110": {
+      "score": 0.44,
+      "terms": [
+        {
+          "name": "density",
+          "value": 0.52,
+          "rationale": "One research-grade python sighting within 1 km in the last 10 days plus NAS history along the Taylor Slough levee (21-day half-life)"
+        },
+        {
+          "name": "activity",
+          "value": 0.95,
+          "rationale": "Pythons move on warm nights; LST 10.4 °C at 23:30Z is marginal, so activity comes from the 3-night average"
+        },
+        {
+          "name": "access",
+          "value": 0.9,
+          "rationale": "Main Park Road and the Taylor Slough levee within 500 m; stage 0.98 m keeps the levee dry"
+        }
+      ]
+    },
+    "python|236:102": {
+      "score": 0.29,
+      "terms": [
+        {
+          "name": "density",
+          "value": 0.61,
+          "rationale": "Two research-grade python sightings within 2 km in the last 14 days (21-day half-life)"
+        },
+        {
+          "name": "activity",
+          "value": 0.95,
+          "rationale": "Pythons move on warm nights; LST 10.4 °C at 23:30Z is marginal, so activity comes from the 3-night average"
+        },
+        {
+          "name": "access",
+          "value": 0.5,
+          "rationale": "No road within 3 km: the Mahogany Hammock trail is a boardwalk and the surrounding prairie is flooded (stage 1.12 m), so crews cannot reach the cell by vehicle"
+        }
+      ]
+    },
+    "python|244:147": {
+      "score": 0.74,
+      "terms": [
+        {
+          "name": "density",
+          "value": 0.8,
+          "rationale": "Research-grade python sightings along the Shark Valley tram road in the last week (21-day half-life)"
+        },
+        {
+          "name": "activity",
+          "value": 0.95,
+          "rationale": "Pythons move on warm nights; LST 10.4 °C at 23:30Z is marginal, so activity comes from the 3-night average"
+        },
+        {
+          "name": "access",
+          "value": 0.97,
+          "rationale": "Tram road within 200 m; stage 1.12 m keeps the road dry"
+        }
+      ]
+    },
+    "python|228:84": {
+      "score": 0.51,
+      "terms": [
+        {
+          "name": "density",
+          "value": 0.55,
+          "rationale": "One needs-ID python sighting near Flamingo marina in the last 5 days plus NAS history (21-day half-life)"
+        },
+        {
+          "name": "activity",
+          "value": 0.93,
+          "rationale": "Pythons move on warm nights; air 9.1 °C at Flamingo is below the warm-night threshold, so activity comes from the 3-night average"
+        },
+        {
+          "name": "access",
+          "value": 1,
+          "rationale": "Main Park Road and the marina lot within 300 m"
+        }
+      ]
+    },
+    "python|185:151": {
+      "score": 0.47,
+      "terms": [
+        {
+          "name": "density",
+          "value": 0.5,
+          "rationale": "NAS history along Loop Road in Big Cypress, no report in the last 14 days (21-day half-life)"
+        },
+        {
+          "name": "activity",
+          "value": 0.95,
+          "rationale": "Pythons move on warm nights; LST missing under cloud, so activity comes from the 3-night average"
+        },
+        {
+          "name": "access",
+          "value": 0.99,
+          "rationale": "Loop Road within 100 m"
         }
       ]
     }
@@ -1638,5 +2294,121 @@
         }
       ]
     }
+  },
+  "board": {
+    "id": "python:main",
+    "lastSeq": 17,
+    "missions": [
+      {
+        "id": "0194a1c0-0001-7000-8000-00000000b001",
+        "fields": {
+          "title": "Shark Valley night road survey (Tram Road)",
+          "place": "Shark Valley",
+          "bbox": [
+            -80.8,
+            25.72,
+            -80.74,
+            25.78
+          ],
+          "start": "2026-01-15T02:00:00Z",
+          "end": "2026-01-15T08:00:00Z",
+          "assignees": [
+            "Ranger-A1B2",
+            "Crew-P3"
+          ],
+          "status": "active"
+        }
+      },
+      {
+        "id": "0194a1c0-0002-7000-8000-00000000b002",
+        "fields": {
+          "title": "Tamiami Trail levee patrol, L-29",
+          "place": "Tamiami Trail",
+          "bbox": [
+            -80.9,
+            25.74,
+            -80.6,
+            25.78
+          ],
+          "start": "2026-01-15T03:30:00Z",
+          "end": "2026-01-15T09:00:00Z",
+          "assignees": [
+            "Crew-P4"
+          ],
+          "status": "planned"
+        }
+      },
+      {
+        "id": "0194a1c0-0003-7000-8000-00000000b003",
+        "fields": {
+          "title": "Flamingo canal sweep",
+          "place": "Flamingo",
+          "bbox": [
+            -80.95,
+            25.12,
+            -80.9,
+            25.16
+          ],
+          "start": "2026-01-17T13:00:00Z",
+          "end": "2026-01-17T18:00:00Z",
+          "assignees": [
+            "Crew-P3"
+          ],
+          "status": "planned"
+        }
+      },
+      {
+        "id": "0194a1c0-0004-7000-8000-00000000b004",
+        "fields": {
+          "title": "Homestead canal python check",
+          "place": "Homestead",
+          "bbox": [
+            -80.5,
+            25.44,
+            -80.44,
+            25.49
+          ],
+          "start": "2026-01-13T02:00:00Z",
+          "end": "2026-01-13T07:00:00Z",
+          "assignees": [
+            "Ranger-B2C3"
+          ],
+          "status": "done"
+        }
+      }
+    ],
+    "messages": [
+      {
+        "id": "0194a1d0-0001-7000-8000-00000000c001",
+        "body": "Shark Valley: tram road is cold and quiet, one python track at marker 3, nothing moving yet.",
+        "hlc": "2026-01-15T02:20:00Z-0001",
+        "nodeId": "ranger-a1b2",
+        "to": null,
+        "thread": "shark-valley",
+        "at": "2026-01-15T02:20:00Z",
+        "from": "Ranger-A1B2"
+      },
+      {
+        "id": "0194a1d0-0002-7000-8000-00000000c002",
+        "body": "Copy. Stay on the levee until 04:00, the LST cell over Shark Valley is cloud-masked so we have no satellite temperature there.",
+        "hlc": "2026-01-15T02:34:00Z-0002",
+        "nodeId": "ops-lead",
+        "to": "Ranger-A1B2",
+        "thread": "shark-valley",
+        "at": "2026-01-15T02:34:00Z",
+        "from": "Ops-Lead"
+      },
+      {
+        "id": "0194a1d0-0003-7000-8000-00000000c003",
+        "body": "Flamingo sweep moved to Saturday; the cold advisory runs until 09:00 Thursday.",
+        "hlc": "2026-01-15T01:05:00Z-0003",
+        "nodeId": "ops-lead",
+        "to": "Crew-P3",
+        "thread": "flamingo",
+        "at": "2026-01-15T01:05:00Z",
+        "from": "Ops-Lead"
+      }
+    ],
+    "removals": {}
   }
 }

@@ -886,7 +886,7 @@
       "id": "python-explain-cold-snap-drop",
       "app": "python",
       "category": "explain",
-      "question": "Why did scores drop during the February 2026 cold snap?",
+      "question": "Why did scores drop during the January 2026 cold snap?",
       "intent": "Explain the activity term's response to low temperatures in the cold-snap scene with readings.",
       "expectedTools": [
         "hotspots",
@@ -898,7 +898,7 @@
         "kind:reading"
       ],
       "view": {
-        "timeline": "2026-02-01 cold-snap scene"
+        "timeline": "2026-01-15 cold-snap scene"
       },
       "pass": {
         "mode": "answer",
@@ -1490,7 +1490,7 @@
       "id": "python-replay-cold-snap-map",
       "app": "python",
       "category": "replay",
-      "question": "Show the hotspot map during the February 2026 cold snap.",
+      "question": "Show the hotspot map during the January 2026 cold snap.",
       "intent": "Move the timeline to the 2026-02-01 scene and show the hotspots and temperatures as known then.",
       "expectedTools": [
         "set_view",
@@ -1502,7 +1502,7 @@
         "kind:reading"
       ],
       "view": {
-        "timeline": "2026-02-01 cold-snap scene"
+        "timeline": "2026-01-15 cold-snap scene"
       },
       "pass": {
         "mode": "answer",
@@ -1590,7 +1590,7 @@
         "kind:hotspot"
       ],
       "view": {
-        "timeline": "step through 2026-01-30 to 2026-02-03"
+        "timeline": "step through 2026-01-13 to 2026-01-16"
       },
       "pass": {
         "mode": "answer",
@@ -1965,6 +1965,13 @@
         }
       },
       "helper": false
+    }
+  ],
+  "changelog": [
+    {
+      "date": "2026-10-01",
+      "by": "AG2",
+      "change": "python-explain-cold-snap-drop, python-replay-cold-snap-map, python-replay-scores-during-cold: the cold snap is January 2026 (the fixture reference time is 2026-01-15T03:00Z with a Cold Weather Advisory from 2026-01-14T22:00Z; February 2026 is after the reference time, so no data could exist for it). Question text and view hints changed from February to January; pass criteria unchanged."
     }
   ]
 }
