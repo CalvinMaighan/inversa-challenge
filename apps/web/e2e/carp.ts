@@ -13,7 +13,8 @@
  * Lines:
  *   CARP sites=8 board=ok briefing=ok presets=2 keyboard=ok
  *   CARP-TIMELINE series=ok thresholds=ok coverage_marker=ok conflict_chip=ok scrub_median_ms=<n>
- *   CARP-ASOF forecast_swap=ok later_obs=ok board_asof=ok label=ok exit=ok
+ *   CARP-ASOF forecast_swap=ok later_obs=ok board_asof=ok label=ok exit=ok threshold_state=<known|unknown_labelled>
+ *     (`unknown_labelled`: no thresholds were stored by the as-of time, and every row says they were stored later)
  *   CARP-EVIDENCE drawer=ok new_tab=ok stale=ok missing=ok cannot_assess=ok boundary=ok
  *   CARP-A11Y serious=<n> critical=<n> mobile_hscroll=<n> keyboard=ok
  * Screenshots: docs/evidence/carp-{board,timeline,asof,drawer,mobile,light}.png
@@ -308,6 +309,17 @@ async function main(): Promise<void> {
     const asofNote = await page.locator('[data-testid="carp-board-asof"]').innerText();
     const pastRows = await page.$$eval("[data-carp-row]", (els) => els.map((el) => `${el.getAttribute("data-carp-row")}:${el.getAttribute("data-status")}:${(el as HTMLElement).innerText.length}`).join(","));
     const boardAsofOk = check(boardAsof === String(asofMs) && /Statuses as known at Sep 28/.test(asofNote) && pastRows !== liveRows, `board asof=${boardAsof} note="${asofNote}"`);
+    // Thresholds as known then (gates/leaf-GRB.md G3): a row may say "no thresholds" only when the API held none for
+    // that site at that time, and then must say they were stored later (they are stored now).
+    const noThRows = await page.$$eval("[data-carp-row]", (els) => els.map((el) => ({ lid: el.getAttribute("data-carp-row")!, text: (el.querySelector('li[data-rule="no_thresholds"]') as HTMLElement | null)?.innerText ?? null })));
+    const heldThen = await Promise.all(
+      noThRows.map(async (r) => {
+        const q = await stack.graphql<{ then: { thresholds: unknown } | null; now: { thresholds: unknown } | null }>(`query($s: ID!, $t: Time!, $n: Time!) { then: siteStatusAt(site: $s, asOf: $t) { thresholds { actionFt } } now: siteStatusAt(site: $s, asOf: $n) { thresholds { actionFt } } }`, { s: r.lid, t: new Date(asofMs).toISOString(), n: new Date().toISOString() });
+        return { ...r, then: !!q.then?.thresholds, now: !!q.now?.thresholds };
+      }),
+    );
+    const said = heldThen.filter((r) => r.text !== null);
+    const thresholdState = said.length === 0 && heldThen.every((r) => r.then) ? "known" : said.every((r) => !r.then && r.now && /first stored after this time/.test(r.text!)) && heldThen.every((r) => r.text !== null || r.then) ? "unknown_labelled" : (log(`thresholds as of ${PAST_ASOF}: ${JSON.stringify(heldThen)}`), "fail");
     const label = await page.locator('[data-testid="carp-asof-label"]').innerText();
     const labelOk = check(/What we knew at Sep 28, 1:00 PM CDT/.test(label) && /forecast issued Sep 2[78]/.test(label) && /IEM archive/.test(label), `label "${label}"`);
     await shot(page, "carp-asof.png");
@@ -322,7 +334,7 @@ async function main(): Promise<void> {
     const exitIssued = await page.locator('[data-testid="carp-issued"]').innerText();
     const hash = new URL(page.url()).hash;
     const exit = check(exitIssued === liveIssued && !hash.includes("asof") && (await page.locator('[data-testid="carp-later-legend"]').count()) === 0, `exit issued=${exitIssued} hash=${hash}`);
-    console.log(`CARP-ASOF forecast_swap=${forecastSwap} later_obs=${laterObs} board_asof=${boardAsofOk} label=${labelOk} exit=${exit}`);
+    console.log(`CARP-ASOF forecast_swap=${forecastSwap} later_obs=${laterObs} board_asof=${boardAsofOk} label=${labelOk} exit=${exit} threshold_state=${thresholdState}`);
 
     // ---- G4: evidence and honesty -----------------------------------------------------------------
     // textContent: labels are upper-cased by CSS, which innerText would report.

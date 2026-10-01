@@ -7,15 +7,19 @@ import styled from "client/styled";
 import { Icon, IconButton, MOBILE, Surface } from "./primitives";
 
 type Side = "left" | "right";
+/** Height kept free under a left panel for the attribution line (10 px text, lifted 4 px above the timeline). */
+const CREDITS_ROOM_PX = 16;
 
 /**
  * Edge panel: a column along the left or right edge between the top bar and the timeline on desktop, a bottom
  * sheet on phones (PRD §12). The HUD root sets `--hud-top` and `--hud-bottom` so panels never cover the bars.
  */
-const Frame = styled(Surface)<{ $side: Side; $width: number }>`
+const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
   top: var(--hud-top);
-  bottom: var(--hud-bottom);
+  /* A left panel stops a line short of the timeline: the globe's data attribution sits there, under the HUD. */
+  bottom: calc(var(--hud-bottom) + ${(p) => (p.$side === "left" ? CREDITS_ROOM_PX : 0)}px);
+  ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom)));` : "")}
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
   width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
   display: flex;
@@ -34,6 +38,7 @@ const Frame = styled(Surface)<{ $side: Side; $width: number }>`
     right: 0;
     bottom: 0;
     width: auto;
+    height: auto;
     max-height: 62dvh;
     border-radius: var(--radius-l) var(--radius-l) 0 0;
     padding-bottom: env(safe-area-inset-bottom);
@@ -138,6 +143,8 @@ export type PanelProps = {
   onOpen?: () => void;
   tabLabel?: string;
   width?: number;
+  /** Desktop: stop at this height (px) instead of reaching the timeline, leaving the map below it in view. */
+  maxHeight?: number;
   actions?: ReactNode;
   children: ReactNode;
   "data-testid"?: string;
@@ -182,7 +189,7 @@ function usePanelFocus(open: boolean) {
   return { frameRef, tabRef, fromTabRef };
 }
 
-export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, actions, children, ...rest }: PanelProps) {
+export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, maxHeight, actions, children, ...rest }: PanelProps) {
   const { frameRef, tabRef, fromTabRef } = usePanelFocus(open);
   if (!open) {
     return onOpen ? (
@@ -211,6 +218,7 @@ export default function Panel({ side, title, open, onClose, onOpen, tabLabel, wi
       data-hud-obstacle=""
       $side={side}
       $width={width}
+      $maxHeight={maxHeight}
       aria-label={typeof title === "string" ? title : tabLabel}
       data-testid={rest["data-testid"]}
       // Esc closes the panel the keyboard is in, and only that one (the agent card has its own Esc).

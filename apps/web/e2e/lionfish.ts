@@ -17,6 +17,7 @@
  *   LIONFISH-QUALITY basis_toggle=ok late_filter=ok stale=ok missing=ok conflict=ok chips=ok
  *   LIONFISH-REPLAY play=ok step=ok asof=ok scrub_median_ms=<n> requests=0
  *   LIONFISH-HELP topics=6 sources=ok banner=ok
+ *   LIONFISH-LAYOUT map_visible_pct=<n> mobile_banner_pct=<n> mobile_markers_clear=<n>/<n>
  *   LIONFISH-A11Y serious=<n> critical=<n> mobile_hscroll=<n> keyboard=ok
  * Screenshots: docs/evidence/lionfish-{areas,priority-card,heat,quality,replay,help,mobile,light}.png
  */
@@ -122,6 +123,30 @@ async function axe(page: Page): Promise<{ serious: string[]; critical: string[] 
   }, REGIONS);
 }
 
+/**
+ * How much of the map the HUD leaves visible (gates/leaf-GRB.md G2): the share of the globe pane, sampled every
+ * 6 px, under no HUD obstacle (panel, banner, timeline) and no top-bar control; the banner's share of the
+ * viewport; and how many report and priority markers sit wholly in the pane and clear of every obstacle.
+ */
+async function mapLayout(page: Page): Promise<{ visiblePct: number; bannerPct: number; clear: number; markers: number }> {
+  return page.evaluate(() => {
+    const pane = document.querySelector('[data-slot="globe-pane"]')!.getBoundingClientRect();
+    const covers = [...document.querySelectorAll<HTMLElement>('[data-hud-obstacle], [data-testid="hud-topbar"] button')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    const covered = (x: number, y: number) => covers.some((r) => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom);
+    let free = 0;
+    let total = 0;
+    for (let x = pane.left + 3; x < pane.right; x += 6)
+      for (let y = pane.top + 3; y < pane.bottom; y += 6) {
+        total += 1;
+        if (!covered(x, y)) free += 1;
+      }
+    const marks = [...document.querySelectorAll<HTMLElement>('[data-kind="report"], [data-kind="cell"]')].map((m) => m.getBoundingClientRect());
+    const clear = marks.filter((r) => r.left >= pane.left && r.right <= pane.right && r.top >= pane.top && r.bottom <= pane.bottom && ![[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]].some(([x, y]) => covered(x!, y!))).length;
+    const b = document.querySelector('[data-testid="lionfish-banner"]')?.getBoundingClientRect();
+    return { visiblePct: Math.round((100 * free) / total), bannerPct: b ? Math.round((100 * b.width * b.height) / (window.innerWidth * window.innerHeight)) : 0, clear, markers: marks.length };
+  });
+}
+
 type Row = { id: string; source: string; observedAt: string; canonicalId: string | null; taxon: { focus: boolean } };
 /** Independent focus reports observed in the 30 days before LIVE_MS, straight from the API (all four areas). */
 async function apiIndependent(stack: Stack): Promise<{ independent: number; copies: number }> {
@@ -158,6 +183,9 @@ async function main(): Promise<void> {
     const bannerText = await page.locator('[data-testid="lionfish-banner"]').innerText();
     const bannerFirst = bannerText.includes(APP.copy.sightingsNote!) && bannerText.includes(APP.copy.heatNote!) && bannerText.includes(APP.copy.priorityNote!);
     await shot(page, "lionfish-areas.png");
+    // The first view settles (the camera flies to the four areas) before the map's free share is measured.
+    await page.waitForTimeout(3_000);
+    const deskLayout = await mapLayout(page);
 
     // ---- G1: areas, layers, thin, duplicates, keyboard -------------------------------------------
     let areas = 0;
@@ -511,6 +539,8 @@ async function main(): Promise<void> {
     await ready(phone.page);
     const hscroll = async () => phone.page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth, document.body.scrollWidth - document.body.clientWidth));
     const h1 = await hscroll();
+    await phone.page.waitForTimeout(3_000);
+    const phoneLayout = await mapLayout(phone.page);
     await phone.page.click('[data-testid="lionfish-panel-tab"]');
     await phone.page.locator('[data-testid="lionfish-panel"]').waitFor();
     const h2 = await hscroll();
@@ -527,6 +557,8 @@ async function main(): Promise<void> {
     const serious = [...new Set(all.flatMap((a) => a.serious))];
     const critical = [...new Set(all.flatMap((a) => a.critical))];
     if (serious.length || critical.length) log("axe", JSON.stringify({ serious, critical }));
+    log(`layout desktop ${JSON.stringify(deskLayout)} phone ${JSON.stringify(phoneLayout)}`);
+    console.log(`LIONFISH-LAYOUT map_visible_pct=${deskLayout.visiblePct} mobile_banner_pct=${phoneLayout.bannerPct} mobile_markers_clear=${phoneLayout.clear}/${phoneLayout.markers}`);
     console.log(`LIONFISH-A11Y serious=${serious.length} critical=${critical.length} mobile_hscroll=${h1 + h2 + h3} keyboard=${keyboardA11y}`);
     if (errors.length) log("page errors", errors.slice(0, 5));
   } catch (err) {

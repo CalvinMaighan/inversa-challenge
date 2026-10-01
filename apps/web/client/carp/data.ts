@@ -6,7 +6,7 @@ import { GqlError, gqlRequest } from "client/threads/api";
 
 import { appBBox, type AppConfig } from "shared/apps";
 
-import { forecastAsOf, HOUR, isRiverForecast, usgsSeries, type Alert, type GqlReading, type Site, type SiteStatus, type Snapshot, type VerifyPoint } from "./model";
+import { forecastAsOf, HOUR, isRiverForecast, thresholdList, usgsSeries, type Alert, type GqlReading, type Site, type SiteStatus, type Snapshot, type VerifyPoint } from "./model";
 import { fromC5, type SiteReview } from "./review";
 
 const SNAPSHOT = `id site product issuedAt ingestedAt source revision validFrom validTo horizonEnd peakStageFt peakAt peakCategory points { validAt stageFt flowKcfs category }`;
@@ -14,6 +14,8 @@ const STATUS = `site asOf observation { observedAt ingestedAt source stageFt flo
 const READING = `param value observedAt origin flag station { id source name lat lon }`;
 
 const iso = (ms: number) => new Date(ms).toISOString();
+/** An as-of after anything stored: `siteStatusAt` there gives the newest thresholds held. */
+const LATEST = "2100-01-01T00:00:00.000Z";
 
 /** A box around one site, for its readings and alerts. */
 export function siteBox(site: Pick<Site, "lat" | "lon">, padDeg = 0.1) {
@@ -22,26 +24,39 @@ export function siteBox(site: Pick<Site, "lat" | "lon">, padDeg = 0.1) {
 
 // ---- board ------------------------------------------------------------------------------------
 
-export type BoardSiteData = { status: SiteStatus | null; history: Snapshot[]; replayCoverageStart: string | null };
+export type BoardSiteData = {
+  status: SiteStatus | null;
+  history: Snapshot[];
+  replayCoverageStart: string | null;
+  /** No NWPS thresholds were stored by the board's time, but some are stored now: they arrived after it. */
+  thresholdsLater: boolean;
+};
 export type BoardData = { asOfMs: number; sites: Record<string, BoardSiteData>; readings: GqlReading[] };
 
 /** One site's board inputs at `$t`: status and the recent issuances. (One query per site keeps each under the API's complexity limit.) */
-export const BOARD_SITE_QUERY = `query CarpBoardSite($site: ID!, $t: Time!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } forecasts(site: $site, asOf: $t, history: 8) { replayCoverageStart history { ${SNAPSHOT} } } }`;
+export const BOARD_SITE_QUERY = `query CarpBoardSite($site: ID!, $t: Time!, $now: Time!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } forecasts(site: $site, asOf: $t, history: 8) { replayCoverageStart history { ${SNAPSHOT} } } now: siteStatusAt(site: $site, asOf: $now) { thresholds { actionFt minorFt moderateFt majorFt } } }`;
 /** USGS readings of every site for the 24 h change (50 h back for the tidal 24 h means). */
 export const BOARD_READINGS_QUERY = `query CarpBoardReadings($bbox: BBox!, $from: Time!, $t: Time!) { readings(bbox: $bbox, from: $from, to: $t, params: [STAGE_M, DISCHARGE_CFS]) { ${READING} } }`;
 
 /** The board's inputs at `asOfMs`: each site's status and recent issuances, USGS readings for 24 h change. */
 export async function loadBoard(app: AppConfig, sites: readonly Site[], asOfMs: number, signal?: AbortSignal): Promise<BoardData> {
   const t = iso(asOfMs);
-  type SiteRaw = { status: SiteStatus | null; forecasts: { replayCoverageStart: string | null; history: Snapshot[] } | null };
+  type SiteRaw = { status: SiteStatus | null; forecasts: { replayCoverageStart: string | null; history: Snapshot[] } | null; now: { thresholds: SiteStatus["thresholds"] } | null };
+  // The newest thresholds stored, whatever the page clock says (a pinned or replayed clock can sit before them).
+  const now = LATEST;
   const [perSite, readings] = await Promise.all([
-    Promise.all(sites.map((s) => gqlRequest<SiteRaw>(BOARD_SITE_QUERY, { site: s.lid, t }, signal))),
+    Promise.all(sites.map((s) => gqlRequest<SiteRaw>(BOARD_SITE_QUERY, { site: s.lid, t, now }, signal))),
     gqlRequest<{ readings: GqlReading[] }>(BOARD_READINGS_QUERY, { bbox: appBBox(app), from: iso(asOfMs - 50 * HOUR), t }, signal),
   ]);
   const out: BoardData = { asOfMs, sites: {}, readings: readings.readings ?? [] };
   sites.forEach((s, i) => {
     const raw = perSite[i]!;
-    out.sites[s.lid] = { status: raw.status ?? null, history: raw.forecasts?.history ?? [], replayCoverageStart: raw.forecasts?.replayCoverageStart ?? null };
+    out.sites[s.lid] = {
+      status: raw.status ?? null,
+      history: raw.forecasts?.history ?? [],
+      replayCoverageStart: raw.forecasts?.replayCoverageStart ?? null,
+      thresholdsLater: thresholdList(raw.status?.thresholds).length === 0 && thresholdList(raw.now?.thresholds).length > 0,
+    };
   });
   return out;
 }
@@ -88,8 +103,8 @@ export type SiteHistory = { history: Snapshot[]; replayCoverageStart: string | n
 /** Every issuance known now (up to 60), plus today's thresholds. Fetched once per site and view span. */
 export async function loadSiteHistory(site: Site, nowMs: number, signal?: AbortSignal): Promise<SiteHistory> {
   const raw = await gqlRequest<{ forecasts: Omit<SiteHistory, "thresholdsNow">; now: { thresholds: SiteStatus["thresholds"] } }>(
-    `query CarpSiteHistory($site: ID!, $now: Time!) { forecasts(site: $site, asOf: $now, history: 60) { replayCoverageStart liveCoverageStart snapshotCount history { ${SNAPSHOT} } } now: siteStatusAt(site: $site, asOf: $now) { thresholds { actionFt minorFt moderateFt majorFt } } }`,
-    { site: site.lid, now: iso(nowMs) },
+    `query CarpSiteHistory($site: ID!, $now: Time!, $latest: Time!) { forecasts(site: $site, asOf: $now, history: 60) { replayCoverageStart liveCoverageStart snapshotCount history { ${SNAPSHOT} } } now: siteStatusAt(site: $site, asOf: $latest) { thresholds { actionFt minorFt moderateFt majorFt } } }`,
+    { site: site.lid, now: iso(nowMs), latest: LATEST },
     signal,
   );
   return { ...raw.forecasts, history: raw.forecasts.history ?? [], thresholdsNow: raw.now?.thresholds ?? null };
@@ -123,5 +138,5 @@ export function boardInputs(data: BoardData, site: Site) {
   const history = (d?.history ?? []).filter(isRiverForecast);
   const forecast = forecastAsOf(history, data.asOfMs);
   const previous = forecast ? (history.filter((s) => Date.parse(s.issuedAt) < Date.parse(forecast.issuedAt)).sort((a, b) => Date.parse(b.issuedAt) - Date.parse(a.issuedAt))[0] ?? null) : null;
-  return { status: d?.status ?? null, forecast, previous, usgs: usgsSeries(data.readings, site) };
+  return { status: d?.status ?? null, forecast, previous, usgs: usgsSeries(data.readings, site), thresholdsLater: d?.thresholdsLater ?? false };
 }

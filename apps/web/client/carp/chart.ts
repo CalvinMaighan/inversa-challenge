@@ -283,9 +283,10 @@ export function drawChart(ctx: CanvasRenderingContext2D, width: number, height: 
       ctx.fillText(label, lx, top ? s.y0 - 5 : s.y1 - 14);
     }
   };
+  // With a message in the middle (no location yet) the coverage line keeps its place but not its words.
   if (d.coverageMs !== null) {
-    if (d.coverageMs >= d.fromMs) vline(d.coverageMs, c.text, [2, 2], "◂ replay coverage begins", true);
-    else {
+    if (d.coverageMs >= d.fromMs) vline(d.coverageMs, c.text, [2, 2], d.message ? null : "◂ replay coverage begins", true);
+    else if (!d.message) {
       ctx.fillStyle = c.muted;
       ctx.fillText(`◂ replay coverage began ${localDay(d.coverageMs, d.zone)}`, s.x0 + 2, s.y0 - 5);
     }
@@ -299,18 +300,21 @@ export function drawChart(ctx: CanvasRenderingContext2D, width: number, height: 
 
   if (d.message) {
     ctx.font = "12px system-ui, sans-serif";
-    const w = ctx.measureText(d.message).width + 16;
-    const cx = (s.x0 + s.x1) / 2;
+    // Wrapped to the canvas, never clipped: a phone is narrower than one line of the message.
+    const lines = wrapText(ctx, d.message, Math.max(80, width - 28));
+    const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
+    const h = lines.length * 15 + 9;
+    const cx = Math.min(Math.max((s.x0 + s.x1) / 2, w / 2 + 2), width - w / 2 - 2);
     const cy = (s.y0 + s.y1) / 2;
     ctx.fillStyle = c.bg;
     ctx.globalAlpha = 0.9;
-    ctx.fillRect(cx - w / 2, cy - 12, w, 24);
+    ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
     ctx.globalAlpha = 1;
     ctx.strokeStyle = c.line;
-    ctx.strokeRect(cx - w / 2 + 0.5, cy - 11.5, w - 1, 23);
+    ctx.strokeRect(cx - w / 2 + 0.5, cy - h / 2 + 0.5, w - 1, h - 1);
     ctx.fillStyle = c.text;
     ctx.textAlign = "center";
-    ctx.fillText(d.message, cx, cy + 4);
+    lines.forEach((l, i) => ctx.fillText(l, cx, cy - h / 2 + 16 + i * 15));
     ctx.textAlign = "start";
     ctx.font = font;
   }
@@ -320,6 +324,21 @@ export function drawChart(ctx: CanvasRenderingContext2D, width: number, height: 
 
 /** What one draw put on the canvas, for tests and the e2e (`data-*` on the canvas). */
 export type Drawn = { thresholds: number; later: number; coverage: "marker" | "note" | "none" };
+
+/** Greedy word wrap of `text` into lines no wider than `max` px in the context's current font. */
+export function wrapText(ctx: Pick<CanvasRenderingContext2D, "measureText">, text: string, max: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(next).width > max) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
 
 function niceStep(raw: number): number {
   const p = 10 ** Math.floor(Math.log10(Math.max(raw, 1e-6)));

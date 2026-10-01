@@ -11,6 +11,8 @@ import type { HelpTopic } from "./store";
 import { Chip, ChipRow, ComponentBar, Section, Tag } from "./ui";
 
 const [SIGHTINGS, HOTSPOTS] = LAYER_IDS;
+/** Desktop: the panel scrolls within this height, so the map below it stays in view. */
+const SURVEY_MAX_HEIGHT = 560;
 
 const AreaGrid = styled.div`
   display: grid;
@@ -233,7 +235,7 @@ export default function SurveyPanel(p: SurveyPanelProps) {
   const selected = p.areas.find((a) => a.id === p.area) ?? null;
   const basisWord = p.basis === "observed" ? "observed" : "submitted";
   return (
-    <Panel side="left" title="Lionfish survey" tabLabel="Survey" open={p.open} onOpen={p.onOpen} onClose={p.onClose} width={340} data-testid="lionfish-panel">
+    <Panel side="left" title="Lionfish survey" tabLabel="Survey" open={p.open} onOpen={p.onOpen} onClose={p.onClose} width={340} maxHeight={SURVEY_MAX_HEIGHT} data-testid="lionfish-panel">
       <Section aria-label="Areas">
         <h3>Areas</h3>
         <AreaGrid role="group" aria-label="Fly to an area">

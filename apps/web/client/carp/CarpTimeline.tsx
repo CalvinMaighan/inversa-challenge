@@ -91,12 +91,15 @@ const Label = styled.span`
   }
 `;
 
-const Track = styled.div`
+/** A phone with no location chosen: the chart holds only the hint, so it gives the height back to the map. */
+export const CHART_HEIGHT_MOBILE_EMPTY = 64;
+
+const Track = styled.div<{ $empty: boolean }>`
   position: relative;
   height: ${CHART_HEIGHT}px;
   touch-action: none;
   ${MOBILE} {
-    height: ${CHART_HEIGHT_MOBILE}px;
+    height: ${(p) => (p.$empty ? CHART_HEIGHT_MOBILE_EMPTY : CHART_HEIGHT_MOBILE)}px;
   }
 `;
 
@@ -262,22 +265,29 @@ export default function CarpTimeline({ chart, siteName, forecast, conflicts, rep
   const rootRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 
-  // Panels and tabs stop above the timeline, however tall it wrapped (`--hud-bottom` on the HUD root).
+  // Panels and tabs stop above the timeline, however tall it wrapped (`--hud-bottom` on the HUD root), and the
+  // globe's data attribution, which sits under the HUD, is lifted above it so the timeline never takes its clicks
+  // (`--globe-credits-bottom` on the pane, as the shared timeline does).
   useLayoutEffect(() => {
     const root = rootRef.current;
     const hud = root?.closest<HTMLElement>("[data-hud]");
+    const pane = root?.closest<HTMLElement>('[data-slot="globe-pane"]');
     if (!root || !hud || typeof ResizeObserver !== "function") return;
     const apply = () => {
-      const gap = hud.getBoundingClientRect().bottom - root.getBoundingClientRect().top;
+      const top = root.getBoundingClientRect().top;
+      const gap = hud.getBoundingClientRect().bottom - top;
       if (gap > 0) hud.style.setProperty("--hud-bottom", `${Math.ceil(gap + 8)}px`);
+      if (pane) pane.style.setProperty("--globe-credits-bottom", `${Math.ceil(pane.getBoundingClientRect().bottom - top + 4)}px`);
     };
     const ro = new ResizeObserver(apply);
     ro.observe(root);
     ro.observe(hud);
+    if (pane) ro.observe(pane);
     apply();
     return () => {
       ro.disconnect();
       hud.style.removeProperty("--hud-bottom");
+      pane?.style.removeProperty("--globe-credits-bottom");
     };
   }, []);
   const [height, setHeight] = useState(CHART_HEIGHT);
@@ -378,7 +388,7 @@ export default function CarpTimeline({ chart, siteName, forecast, conflicts, rep
           ) : null}
         </Label>
       </Controls>
-      <Track>
+      <Track $empty={!siteName}>
         <Canvas
           ref={canvasRef}
           data-testid="carp-chart"
@@ -398,61 +408,64 @@ export default function CarpTimeline({ chart, siteName, forecast, conflicts, rep
           data-carp-scrubber=""
         />
       </Track>
-      <Legend data-testid="carp-legend">
-        <span>
-          <i style={{ color: "var(--carp-usgs)" }} />
-          USGS gauge height (USGS datum)
-        </span>
-        <span>
-          <i className="dot" style={{ color: "var(--carp-nwps)" }} />
-          NWPS observed stage (flood datum{chart.live ? "" : ", by observation time"})
-        </span>
-        <span>
-          <i style={{ color: "var(--carp-forecast)" }} />
-          NWPS forecast
-        </span>
-        <span>
-          <i className="band" style={{ color: "var(--carp-forecast)" }} />
-          spread of last 3 issuances (not a confidence band)
-        </span>
-        {!chart.live ? (
-          <span style={{ color: "var(--text)" }} data-testid="carp-later-legend">
-            <i className="dash" />
-            <i className="hollow" />
-            observed after the as-of time (what happened next)
-          </span>
-        ) : null}
-        {chart.alerts.length ? (
+      {/* Nothing is drawn until a location is chosen, so there is nothing to key yet (a phone keeps the rows for the map). */}
+      {siteName ? (
+        <Legend data-testid="carp-legend">
           <span>
-            <i className="band" style={{ color: "var(--warn)" }} />
-            NWS alert in effect ({chart.alerts.map((a) => a.label).join(", ")})
+            <i style={{ color: "var(--carp-usgs)" }} />
+            USGS gauge height (USGS datum)
           </span>
-        ) : null}
-        <span>
-          <i className="dash" style={{ color: "var(--warn)" }} />
-          flood thresholds (NWPS{chart.live ? "" : ", as published now"})
-        </span>
-        {offChart
-          .filter((o) => o.aboveFt > 0)
-          .slice(0, 1)
-          .map((o) => (
-            <span key={o.label} data-testid="carp-offchart">
-              {o.label} {o.ft} ft is {o.aboveFt.toFixed(1)} ft above the chart
+          <span>
+            <i className="dot" style={{ color: "var(--carp-nwps)" }} />
+            NWPS observed stage (flood datum{chart.live ? "" : ", by observation time"})
+          </span>
+          <span>
+            <i style={{ color: "var(--carp-forecast)" }} />
+            NWPS forecast
+          </span>
+          <span>
+            <i className="band" style={{ color: "var(--carp-forecast)" }} />
+            spread of last 3 issuances (not a confidence band)
+          </span>
+          {!chart.live ? (
+            <span style={{ color: "var(--text)" }} data-testid="carp-later-legend">
+              <i className="dash" />
+              <i className="hollow" />
+              observed after the as-of time (what happened next)
             </span>
-          ))}
-        {conflicts.map((c) => {
-          const t = conflictText(c, zone);
-          return (
-            <ConflictChip key={c.kind} data-testid="carp-conflict-chip" data-kind={c.kind}>
-              <summary>
-                <Dot $tone="danger" />
-                Sources disagree: {c.kind}
-              </summary>
-              <p>{t.detail}</p>
-            </ConflictChip>
-          );
-        })}
-      </Legend>
+          ) : null}
+          {chart.alerts.length ? (
+            <span>
+              <i className="band" style={{ color: "var(--warn)" }} />
+              NWS alert in effect ({chart.alerts.map((a) => a.label).join(", ")})
+            </span>
+          ) : null}
+          <span>
+            <i className="dash" style={{ color: "var(--warn)" }} />
+            flood thresholds (NWPS{chart.live ? "" : ", as published now"})
+          </span>
+          {offChart
+            .filter((o) => o.aboveFt > 0)
+            .slice(0, 1)
+            .map((o) => (
+              <span key={o.label} data-testid="carp-offchart">
+                {o.label} {o.ft} ft is {o.aboveFt.toFixed(1)} ft above the chart
+              </span>
+            ))}
+          {conflicts.map((c) => {
+            const t = conflictText(c, zone);
+            return (
+              <ConflictChip key={c.kind} data-testid="carp-conflict-chip" data-kind={c.kind}>
+                <summary>
+                  <Dot $tone="danger" />
+                  Sources disagree: {c.kind}
+                </summary>
+                <p>{t.detail}</p>
+              </ConflictChip>
+            );
+          })}
+        </Legend>
+      ) : null}
     </Root>
   );
 }

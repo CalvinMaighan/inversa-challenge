@@ -5,6 +5,7 @@ import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { getGlobe } from "client/globe/api";
+import { boxOf, fitInPane } from "client/globe/fit";
 import { MOBILE_QUERY, useIsMobile } from "client/hud/primitives";
 import { applyCarpView, goLive, selectSite, setAsOf } from "client/state/carp";
 import { THEME } from "client/state/theme";
@@ -26,8 +27,10 @@ import {
   issuanceSpread,
   sitesOf,
   stageConflict,
+  thresholdList,
   usgsSeries,
   weatherAt,
+  type Site,
   type SourceConflict,
 } from "./model";
 import { deriveReview } from "./review";
@@ -43,7 +46,16 @@ const REPLAY_TICK_MS = 120;
 /** Play from live starts this far back. */
 const REPLAY_FROM_LIVE_MS = 48 * HOUR;
 const SITE_ALTITUDE_M = 45_000;
+/** Room around the outer sites on a phone: half a marker plus its id label. */
+const MARKER_INSET_PX = 34;
 
+/**
+ * Sites framed clear of the HUD. A phone fits them to the free rect it measures (portrait, bars of their own
+ * height); the desktop keeps `frameSites`' margins for the board on the left and the timeline below.
+ */
+function frameFor(sites: readonly Site[], mobile: boolean) {
+  return (mobile ? fitInPane(boxOf(sites), MARKER_INSET_PX) : null) ?? frameSites(sites, !mobile);
+}
 
 /**
  * The carp HUD (leaf UC): site markers on the globe, the review board, the briefing and evidence drawer, and the
@@ -83,7 +95,7 @@ export default function CarpHud({ app }: { app: AppConfig }) {
       if (!p) return;
       const ids = p.locations?.length ? p.locations : app.locations.map((l) => l.id);
       const chosen = sites.filter((s) => ids.includes(s.id));
-      getGlobe()?.flyTo(frameSites(chosen.length ? chosen : sites, !mobile));
+      getGlobe()?.flyTo(frameFor(chosen.length ? chosen : sites, mobile));
       setPresetFor({ id, site: carp.site });
     },
     [app, sites, carp.site, mobile],
@@ -92,7 +104,12 @@ export default function CarpHud({ app }: { app: AppConfig }) {
   // First view: every site in sight, clear of the board and the timeline, unless a link brought its own camera.
   useEffect(() => {
     if (/(^|[#&])c=/.test(window.location.hash)) return;
-    set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frameSites(sites, !window.matchMedia(MOBILE_QUERY).matches), place: null, seq: prev.seq + 1 }));
+    // After layout, so a phone's free rect is measured with the timeline and the tab in place.
+    const id = requestAnimationFrame(() => {
+      const frame = frameFor(sites, window.matchMedia(MOBILE_QUERY).matches);
+      set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
+    });
+    return () => cancelAnimationFrame(id);
     // Once per mount (an app switch remounts).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -148,9 +165,10 @@ export default function CarpHud({ app }: { app: AppConfig }) {
   const siteReview = useMemo(() => {
     if (!site || !detail.at) return review;
     const previous = earlier[0] ?? null;
-    const derived = deriveReview({ site, asOfMs, live, zone, status, forecast, previous, usgs: { ...usgs, stageFt: usgs.stageFt.filter((p) => p.t <= asOfMs), dischargeCfs: usgs.dischargeCfs.filter((p) => p.t <= asOfMs) } });
+    const thresholdsLater = thresholdList(status?.thresholds).length === 0 && thresholdList(detail.history?.thresholdsNow).length > 0;
+    const derived = deriveReview({ site, asOfMs, live, zone, status, forecast, previous, thresholdsLater, usgs: { ...usgs, stageFt: usgs.stageFt.filter((p) => p.t <= asOfMs), dischargeCfs: usgs.dischargeCfs.filter((p) => p.t <= asOfMs) } });
     return review?.origin === "c5" ? review : derived;
-  }, [site, detail.at, review, asOfMs, live, zone, status, forecast, earlier, usgs]);
+  }, [site, detail.at, detail.history, review, asOfMs, live, zone, status, forecast, earlier, usgs]);
 
   const evidence: SiteEvidence | null = useMemo(() => {
     if (!site) return null;

@@ -5,6 +5,7 @@ import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { getGlobe } from "client/globe/api";
+import { fitInPane } from "client/globe/fit";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
 import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
@@ -46,6 +47,39 @@ const Banner = styled(Surface)`
     right: var(--gap-s);
     font-size: 12px;
   }
+  &[data-expanded="false"] {
+    align-items: center;
+    padding-block: 4px;
+  }
+`;
+
+/** The collapsed banner: every caveat on one line, cut at the edge; pressing it shows them in full. */
+const OneLine = styled.button`
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  b {
+    font-weight: 600;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+`;
+
+/** The banner's chevron: down to expand, up to collapse. */
+const Turn = styled.span<{ $up: boolean }>`
+  display: inline-flex;
+  transform: rotate(${(p) => (p.$up ? -90 : 90)}deg);
 `;
 
 const AsOf = styled(Surface)`
@@ -74,6 +108,8 @@ const AsOf = styled(Surface)`
 `;
 
 const PANEL_WIDTH = 340;
+/** Room inside the free rect for a report dot or a ranked square at an area's edge. */
+const AREA_INSET_PX = 22;
 const [SIGHTINGS, HOTSPOTS] = LAYER_IDS;
 
 /**
@@ -100,13 +136,29 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   }, [app]);
 
   // First view: all four areas, clear of the panel and the timeline, unless a link brought its own camera.
+  // Fitted to the free rect measured after layout (panel, banner and timeline in place), so no area's markers sit
+  // under them or off the edge of a phone; the fixed-margin framing is the fallback.
   useEffect(() => {
     if (/(^|[#&])c=/.test(window.location.hash)) return;
-    const frame = frameAreas(areasOf(app), !window.matchMedia(MOBILE_QUERY).matches);
-    set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
+    const id = requestAnimationFrame(() => {
+      const areas = areasOf(app);
+      const box = { west: Math.min(...areas.map((a) => a.bbox.west)), south: Math.min(...areas.map((a) => a.bbox.south)), east: Math.max(...areas.map((a) => a.bbox.east)), north: Math.max(...areas.map((a) => a.bbox.north)) };
+      const frame = fitInPane(box, AREA_INSET_PX) ?? frameAreas(areas, !window.matchMedia(MOBILE_QUERY).matches);
+      set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
+    });
+    return () => cancelAnimationFrame(id);
   }, [app]);
 
   const [banner, setBanner] = useState(() => !bannerDismissed(typeof window === "undefined" ? null : window.sessionStorage));
+  // In full on a desktop, one line on a phone (three wrapped caveats would take a fifth of the screen); either
+  // way the reader can switch.
+  const [bannerOpen, setBannerOpen] = useState<boolean | null>(null);
+  const bannerFull = bannerOpen ?? !mobile;
+  const notes = [
+    copyText(app, "sightingsNote", "Sightings are not abundance."),
+    copyText(app, "heatNote", "Heat stress is context, not proof of damage."),
+    copyText(app, "priorityNote", "Survey priority is not a risk or a probability."),
+  ];
   const reports = useMemo(() => data.reports?.reports ?? [], [data.reports]);
   const q = useMemo(() => ({ basis: view.basis, atMs, days: view.days, lateOnly: view.lateOnly }), [view.basis, atMs, view.days, view.lateOnly]);
   const drawn = useMemo(() => windowReports(reports, { ...q, areaId: view.area }), [reports, q, view.area]);
@@ -195,13 +247,28 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
           role="note"
           aria-label="How to read Lionfish Watch"
           data-testid="lionfish-banner"
+          data-hud-obstacle=""
+          data-expanded={bannerFull ? "true" : "false"}
           style={{ ["--lf-panel" as string]: panelOpen && !mobile ? `${PANEL_WIDTH + 12}px` : "0px" }}
         >
-          <ul>
-            <li>{copyText(app, "sightingsNote", "Sightings are not abundance.")}</li>
-            <li>{copyText(app, "heatNote", "Heat stress is context, not proof of damage.")}</li>
-            <li>{copyText(app, "priorityNote", "Survey priority is not a risk or a probability.")}</li>
-          </ul>
+          {bannerFull ? (
+            <ul id="lionfish-banner-notes">
+              {notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          ) : (
+            <OneLine type="button" aria-expanded={false} onClick={() => setBannerOpen(true)} data-testid="lionfish-banner-expand">
+              <b>How to read this map:</b> {notes.join(" ")}
+            </OneLine>
+          )}
+          {bannerFull ? (
+            <IconButton type="button" aria-label="Collapse to one line" title="Collapse to one line" aria-expanded={true} aria-controls="lionfish-banner-notes" data-testid="lionfish-banner-collapse" onClick={() => setBannerOpen(false)}>
+              <Turn $up>
+                <Icon name="chevron" />
+              </Turn>
+            </IconButton>
+          ) : null}
           <IconButton
             type="button"
             aria-label="Dismiss for this session"

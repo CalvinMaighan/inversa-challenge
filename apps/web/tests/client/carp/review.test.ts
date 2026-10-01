@@ -59,6 +59,16 @@ describe("derived review (until C5 serves siteReview)", () => {
     expect(r.freshness).toBe("MISSING");
   });
 
+  test("thresholds stored only after the as-of time: the row says so instead of 'none known'", () => {
+    const none = status({ thresholds: null });
+    const never = deriveReview(base({ live: false, status: none })).reasons.find((x) => x.rule === "no_thresholds")!;
+    const later = deriveReview(base({ live: false, status: none, thresholdsLater: true })).reasons.find((x) => x.rule === "no_thresholds")!;
+    expect(never.text).toMatch(/No NWPS flood thresholds were known/);
+    expect(never.value).toBe("none");
+    expect(later.text).toMatch(/first stored after this time/);
+    expect(later.value).toBe("stored_later");
+  });
+
   test("past freshness ignores USGS readings (they carry no receipt time)", () => {
     const usgs = usgsSeries(usgsReadings(krz, [{ at: new Date(NOW - H).toISOString(), stageFt: 1.5 }]), krz);
     expect(deriveReview(base({ usgs, status: status({ observation: null, observationFreshness: "MISSING" }) })).freshness).toBe("FRESH");

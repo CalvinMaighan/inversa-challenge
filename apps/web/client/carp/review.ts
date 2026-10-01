@@ -79,7 +79,16 @@ export type ReviewInput = {
   forecast: Snapshot | null;
   previous: Snapshot | null;
   usgs: UsgsSeries;
+  /** No thresholds were stored by asOf but some are now (fetched after it): said so, instead of "none known". */
+  thresholdsLater?: boolean;
 };
+
+/** Why a status has no flood category, in words: thresholds stored only after this time, or none at all. */
+export function noThresholdsText(later: boolean): string {
+  return later
+    ? "NWPS flood thresholds were first stored after this time, so no flood category is computed for it."
+    : "No NWPS flood thresholds were known, so flood categories cannot be computed.";
+}
 
 const reason = (r: Omit<ReviewReason, "value" | "threshold" | "observedAt" | "issuedAt" | "link"> & Partial<ReviewReason>): ReviewReason => ({
   value: null,
@@ -167,7 +176,7 @@ export function deriveReview(input: ReviewInput): SiteReview {
   }
 
   if (status && thresholds.length === 0) {
-    reasons.push(reason({ rule: "no_thresholds", kind: "gap", source: "nwps", link: links.nwps, text: "No NWPS flood thresholds were known, so flood categories cannot be computed." }));
+    reasons.push(reason({ rule: "no_thresholds", kind: "gap", source: "nwps", link: links.nwps, value: input.thresholdsLater ? "stored_later" : "none", text: noThresholdsText(input.thresholdsLater === true) }));
   }
 
   const change = change24h(usgs.stageFt, asOfMs, site.tidal);

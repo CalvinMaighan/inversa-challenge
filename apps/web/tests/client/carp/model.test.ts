@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { yRange } from "client/carp/chart";
+import { wrapText, yRange } from "client/carp/chart";
 import { cfs, ft, kcfs, localTime, signedFt, yesterdayAfternoon, zonedInstant } from "client/carp/format";
 import {
   categoryOf,
@@ -165,5 +165,22 @@ describe("carp formatting", () => {
     expect(yesterdayAfternoon(Date.parse("2026-10-01T01:00:00Z"), ZONE)).toBe(Date.parse("2026-09-29T20:00:00Z"));
     // Standard time in winter.
     expect(zonedInstant(2026, 1, 15, 15, ZONE)).toBe(Date.parse("2026-01-15T21:00:00Z"));
+  });
+});
+
+describe("chart message wrap", () => {
+  // 6 px per character, as a monospace stand-in for measureText.
+  const ctx = { measureText: (s: string) => ({ width: s.length * 6 }) as TextMetrics };
+
+  test("a message wider than the chart wraps at words, no line over the width", () => {
+    const msg = "Select a location on the map or the board to draw its stage and forecast.";
+    const lines = wrapText(ctx, msg, 200);
+    expect(lines.length).toBeGreaterThan(1);
+    expect(lines.join(" ")).toBe(msg);
+    for (const l of lines) expect(l.length * 6).toBeLessThanOrEqual(200);
+  });
+
+  test("a short message stays on one line", () => {
+    expect(wrapText(ctx, "Loading Krotz Springs…", 400)).toEqual(["Loading Krotz Springs…"]);
   });
 });
