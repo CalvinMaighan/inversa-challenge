@@ -51,6 +51,8 @@ export const FEED_SOURCES = {
   web: "push",
   crw: "poll",
   nwps: "poll",
+  "openmeteo-marine": "poll",
+  "goes19-sst": "push",
 } as const;
 export type FeedSource = keyof typeof FEED_SOURCES;
 const SOURCE_IDS = Object.keys(FEED_SOURCES) as [FeedSource, ...FeedSource[]];
@@ -101,7 +103,7 @@ const bbox = z.tuple([finite, finite, finite, finite]).transform((b): BBox => ({
 
 const camera = z.strictObject({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180), heightM: positive });
 
-const region = z.strictObject({ id, name: text, bbox, cellDeg: positive, camera, thin: z.boolean().default(false) });
+const region = z.strictObject({ id, name: text, code: z.string().regex(/^[a-z][a-z0-9]*$/).optional(), bbox, cellDeg: positive, camera, thin: z.boolean().default(false) });
 
 const taxon = z.strictObject({
   id,
