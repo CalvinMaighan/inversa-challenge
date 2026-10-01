@@ -255,23 +255,23 @@ mod tests {
     #[tokio::test]
     async fn quality_bio_links_real_fixtures_inat_first() {
         let state = test_state();
-        ingest(&state, &Inat::new(), "inat/focus-p1.json").await;
-        ingest(&state, &Gbif::new(), "gbif/modified-p1.json").await;
-        ingest(&state, &Nas::new(), "nas/pterois-2026-p1.json").await;
-        ingest(&state, &Nas::new(), "nas/python-2026-p1.json").await;
+        ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
+        ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/python-2026-p1.json").await;
         assert_real_links(&links(&state).await);
     }
 
     #[tokio::test]
     async fn quality_bio_links_real_fixtures_in_reverse_arrival_order() {
         let state = test_state();
-        ingest(&state, &Nas::new(), "nas/pterois-2026-p1.json").await;
-        ingest(&state, &Nas::new(), "nas/python-2026-p1.json").await;
-        ingest(&state, &Gbif::new(), "gbif/modified-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/python-2026-p1.json").await;
+        ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
         let before = links(&state).await;
         // NAS 1936573 first matches the GBIF mirror (same instant, same point) ...
         assert_eq!(get(&before, "nas", NAS_LIONFISH).1, Some(get(&before, "gbif", GBIF_MIRROR).0));
-        ingest(&state, &Inat::new(), "inat/focus-p1.json").await;
+        ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
         let l = links(&state).await;
         // ... and moves to the iNat sighting when it arrives: the GBIF mirror now resolves to
         // iNat, and NAS follows the earliest candidate to its canonical root.
@@ -365,15 +365,15 @@ mod tests {
     #[tokio::test]
     async fn quality_bio_reingest_changes_nothing() {
         let state = test_state();
-        ingest(&state, &Inat::new(), "inat/focus-p1.json").await;
-        ingest(&state, &Gbif::new(), "gbif/modified-p1.json").await;
-        ingest(&state, &Nas::new(), "nas/pterois-2026-p1.json").await;
+        ingest(&state, &Inat::new(state.app.clone()), "inat/focus-p1.json").await;
+        ingest(&state, &Gbif::new(state.app.clone()), "gbif/modified-p1.json").await;
+        ingest(&state, &Nas::new(state.app.clone()), "nas/pterois-2026-p1.json").await;
         let before = links(&state).await;
         for (src, name) in [("gbif", "gbif/modified-p1.json"), ("nas", "nas/pterois-2026-p1.json"), ("inat", "inat/focus-p1.json")] {
             let s: Box<dyn Source> = match src {
-                "gbif" => Box::new(Gbif::new()),
-                "nas" => Box::new(Nas::new()),
-                _ => Box::new(Inat::new()),
+                "gbif" => Box::new(Gbif::new(state.app.clone())),
+                "nas" => Box::new(Nas::new(state.app.clone())),
+                _ => Box::new(Inat::new(state.app.clone())),
             };
             let out = ingest_payload(&state, s.as_ref(), payload(&format!("fixture:{name}"), fixture(name)), None).await.unwrap();
             assert_eq!(out.rows_written, 0, "{name}");

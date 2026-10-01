@@ -100,6 +100,7 @@ pub fn publisher(url: &str) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ingest::poll::bio::testing::python;
     use crate::ingest::poll::{coops, gbif, inat, nas, ndbc, nws, openmeteo, usgs};
     use crate::model::Row;
 
@@ -143,14 +144,14 @@ mod tests {
     /// One fixture record per source, the URL it maps to, and every row of that fixture mapping to a page.
     /// Shared with the live link check below.
     pub(super) fn fixture_links() -> Vec<(&'static str, String, String)> {
-        let inat = sighting_ids(inat::normalize(&fixture("inat/focus-p1.json")).unwrap());
-        let gbif = sighting_ids(gbif::normalize(&fixture("gbif/modified-p1.json")).unwrap());
-        let nas = sighting_ids(nas::normalize(&fixture("nas/python-2026-p1.json")).unwrap());
+        let inat = sighting_ids(inat::normalize(&fixture("inat/focus-p1.json"), &python()).unwrap());
+        let gbif = sighting_ids(gbif::normalize(&fixture("gbif/modified-p1.json"), &python()).unwrap());
+        let nas = sighting_ids(nas::normalize(&fixture("nas/python-2026-p1.json"), &python()).unwrap());
         let usgs = station_ids(usgs::normalize_iv(&fixture("usgs/iv.json"), 0).unwrap());
         let ndbc_st = ndbc::station("KYWF1").unwrap();
         let ndbc = station_ids(ndbc::normalize_txt(ndbc_st, &fixture("ndbc/KYWF1.txt"), 1_790_800_000_000).unwrap());
         let coops = station_ids(coops::normalize_product("8723214", "water_level", &fixture("coops/8723214.water_level.json")).unwrap());
-        let alerts = alert_ids(nws::normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json")).unwrap());
+        let alerts = alert_ids(nws::normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json"), &nws::Scope::for_app(&python())).unwrap());
         let vtec = alerts.iter().find(|a| a.starts_with("vtec:KKEY.SC.Y.0019")).unwrap().clone();
         let cap = alerts.iter().find(|a| a.starts_with("urn:oid:")).unwrap().clone();
         let method = usgs.iter().find(|s| s.contains(':')).unwrap().clone();
@@ -175,7 +176,7 @@ mod tests {
 
     #[test]
     fn source_page_url_inat_observation() {
-        let ids = sighting_ids(inat::normalize(&fixture("inat/focus-p1.json")).unwrap());
+        let ids = sighting_ids(inat::normalize(&fixture("inat/focus-p1.json"), &python()).unwrap());
         assert_eq!(ids[0], "335508189");
         assert_eq!(source_page_url("inat", &ids[0]).as_deref(), Some("https://www.inaturalist.org/observations/335508189"));
         assert!(ids.iter().all(|id| source_page_url("inat", id).is_some()));
@@ -183,7 +184,7 @@ mod tests {
 
     #[test]
     fn source_page_url_gbif_occurrence_from_composite_ext_id() {
-        let ids = sighting_ids(gbif::normalize(&fixture("gbif/modified-p1.json")).unwrap());
+        let ids = sighting_ids(gbif::normalize(&fixture("gbif/modified-p1.json"), &python()).unwrap());
         let mirror = ids.iter().find(|id| id.ends_with(":6130701656")).unwrap();
         assert_eq!(mirror, "50c9509d-22c7-4a22-a47d-8c48425ef4a7:335508189:6130701656");
         assert_eq!(source_page_url("gbif", mirror).as_deref(), Some("https://www.gbif.org/occurrence/6130701656"));
@@ -194,7 +195,7 @@ mod tests {
 
     #[test]
     fn source_page_url_nas_specimen_viewer() {
-        let ids = sighting_ids(nas::normalize(&fixture("nas/python-2026-p1.json")).unwrap());
+        let ids = sighting_ids(nas::normalize(&fixture("nas/python-2026-p1.json"), &python()).unwrap());
         assert_eq!(ids[0], "1936189");
         assert_eq!(
             source_page_url("nas", &ids[0]).as_deref(),
@@ -243,7 +244,7 @@ mod tests {
 
     #[test]
     fn source_page_url_nws_vtec_event_and_cap_id() {
-        let ids = alert_ids(nws::normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json")).unwrap());
+        let ids = alert_ids(nws::normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json"), &nws::Scope::for_app(&python())).unwrap());
         let sca = ids.iter().find(|a| a.starts_with("vtec:KKEY.SC.Y.0019")).unwrap();
         assert_eq!(
             source_page_url("nws", sca).as_deref(),

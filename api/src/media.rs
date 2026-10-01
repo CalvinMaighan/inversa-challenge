@@ -1,4 +1,4 @@
-//! Same-origin media proxy `GET /v1/media/:id` (PRD §12). The web app runs under
+//! Same-origin media proxy `GET /v1/{app}/media/:id` (PRD §12; app prefix PLAN.md C-A2). The web app runs under
 //! `Cross-Origin-Embedder-Policy: require-corp`, so iNat photos are served from here with
 //! `Cross-Origin-Resource-Policy: same-origin`. `:id` is a sighting id; the upstream URL is its
 //! `photo_url`, never a client-supplied URL.
@@ -20,7 +20,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::Path;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -28,6 +28,7 @@ use axum::{Extension, Router};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use reqwest::Url;
 
+use crate::app::AppRegistry;
 use crate::state::AppState;
 
 pub const ALLOWED_HOSTS: [&str; 2] = ["inaturalist-open-data.s3.amazonaws.com", "static.inaturalist.org"];
@@ -309,11 +310,11 @@ impl Subject {
     }
 }
 
-async fn media(State(state): State<AppState>, Extension(proxy): Extension<Arc<MediaProxy>>, Path(id): Path<String>) -> Result<Response, Refusal> {
+async fn media(state: AppState, Extension(proxy): Extension<Arc<MediaProxy>>, Path((_app, id)): Path<(String, String)>) -> Result<Response, Refusal> {
     serve(state, proxy, Subject::Sighting, id).await
 }
 
-async fn taxon_media(State(state): State<AppState>, Extension(proxy): Extension<Arc<MediaProxy>>, Path(id): Path<String>) -> Result<Response, Refusal> {
+async fn taxon_media(state: AppState, Extension(proxy): Extension<Arc<MediaProxy>>, Path((_app, id)): Path<(String, String)>) -> Result<Response, Refusal> {
     serve(state, proxy, Subject::Taxon, id).await
 }
 
@@ -361,14 +362,14 @@ async fn serve(state: AppState, proxy: Arc<MediaProxy>, subject: Subject, id: St
         .into_response())
 }
 
-pub fn routes() -> Router<AppState> {
+pub fn routes() -> Router<AppRegistry> {
     routes_with(Policy::inaturalist())
 }
 
-pub fn routes_with(policy: Policy) -> Router<AppState> {
+pub fn routes_with(policy: Policy) -> Router<AppRegistry> {
     Router::new()
-        .route("/v1/media/{id}", get(media))
-        .route("/v1/media/taxon/{id}", get(taxon_media))
+        .route("/media/{id}", get(media))
+        .route("/media/taxon/{id}", get(taxon_media))
         .layer(Extension(Arc::new(MediaProxy::new(policy))))
 }
 
@@ -440,8 +441,9 @@ mod tests {
     }
 
     async fn get_media(state: &AppState, policy: Policy, id: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
-        let app = routes_with(policy).with_state(state.clone());
-        let res = app.oneshot(Request::get(format!("/v1/media/{id}")).body(Body::empty()).unwrap()).await.unwrap();
+        let registry = AppRegistry::from_states(vec![state.clone()]);
+        let app = Router::new().nest("/v1/{app}", routes_with(policy)).with_state(registry);
+        let res = app.oneshot(Request::get(format!("/v1/python/media/{id}")).body(Body::empty()).unwrap()).await.unwrap();
         let (parts, body) = res.into_parts();
         (parts.status, parts.headers, body.collect().await.unwrap().to_bytes().to_vec())
     }

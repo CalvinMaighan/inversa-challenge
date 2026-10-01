@@ -1,10 +1,9 @@
-//! Per-species rule table (T11, PRD section 8).
+//! Named rule sets (T11, PRD section 8). A taxon's config picks one by name (`rules` in
+//! `spec/apps/*.json`); the set holds its activity and access rules.
 //!
 //! Each rule maps the conditions at a cell to a multiplier and cites its rationale. A rule
 //! returns `None` when the conditions it needs are missing; the score then uses a neutral 1.0
 //! and the explain output says "no data" for that term.
-
-use super::Species;
 
 /// Conditions at one cell and time, from the nearest valid readings. `None` means no reading
 /// within reach or within the staleness window.
@@ -25,6 +24,13 @@ pub struct Rule {
     /// Multiplier for these conditions, or `None` when the inputs are missing (neutral 1.0).
     pub applies: fn(&Conditions) -> Option<f32>,
     pub rationale: &'static str,
+}
+
+/// The activity and access rules one taxon runs.
+pub struct RuleSet {
+    pub name: &'static str,
+    pub activity: &'static [Rule],
+    pub access: &'static [Rule],
 }
 
 /// Multipliers, kept as named constants so the tests can hand-compute expectations.
@@ -128,21 +134,19 @@ static LAND_ACCESS: [Rule; 1] = [Rule {
     rationale: "Land species: crews can reach any cell by road or airboat; no access penalty.",
 }];
 
-pub fn activity_rules(species: Species) -> &'static [Rule] {
-    match species {
-        Species::Python => &PYTHON_ACTIVITY,
-        Species::Tegu => &TEGU_ACTIVITY,
-        Species::Iguana => &IGUANA_ACTIVITY,
-        Species::Lionfish => &LIONFISH_ACTIVITY,
-    }
+pub static RULE_SETS: [RuleSet; 4] = [
+    RuleSet { name: "python", activity: &PYTHON_ACTIVITY, access: &PYTHON_ACCESS },
+    RuleSet { name: "tegu", activity: &TEGU_ACTIVITY, access: &LAND_ACCESS },
+    RuleSet { name: "iguana", activity: &IGUANA_ACTIVITY, access: &LAND_ACCESS },
+    RuleSet { name: "lionfish", activity: &LIONFISH_ACTIVITY, access: &LIONFISH_ACCESS },
+];
+
+pub fn ruleset(name: &str) -> Option<&'static RuleSet> {
+    RULE_SETS.iter().find(|r| r.name == name)
 }
 
-pub fn access_rules(species: Species) -> &'static [Rule] {
-    match species {
-        Species::Python => &PYTHON_ACCESS,
-        Species::Lionfish => &LIONFISH_ACCESS,
-        Species::Tegu | Species::Iguana => &LAND_ACCESS,
-    }
+pub fn names() -> Vec<&'static str> {
+    RULE_SETS.iter().map(|r| r.name).collect()
 }
 
 /// Product of the rules' multipliers; a rule without data contributes 1.0.
@@ -154,26 +158,26 @@ pub fn multiplier(rules: &[Rule], c: &Conditions) -> f32 {
 mod tests {
     use super::*;
 
-    /// Every rule in the table, for the audit below.
-    fn all_rules() -> Vec<(Species, &'static Rule)> {
-        super::super::SPECIES
-            .iter()
-            .flat_map(|&s| activity_rules(s).iter().chain(access_rules(s)).map(move |r| (s, r)))
-            .collect()
+    /// Every rule in every set, for the audit below.
+    fn all_rules() -> Vec<(&'static str, &'static Rule)> {
+        RULE_SETS.iter().flat_map(|s| s.activity.iter().chain(s.access).map(move |r| (s.name, r))).collect()
     }
 
     #[test]
     fn rules_have_rationale() {
         let rules = all_rules();
         assert_eq!(rules.len(), 8);
-        for (species, rule) in rules {
-            assert!(!rule.name.trim().is_empty(), "{species:?} rule without a name");
-            assert!(rule.rationale.trim().len() >= 40, "{species:?} {} has no real rationale", rule.name);
+        for (set, rule) in rules {
+            assert!(!rule.name.trim().is_empty(), "{set} rule without a name");
+            assert!(rule.rationale.trim().len() >= 40, "{set} {} has no real rationale", rule.name);
         }
-        for s in super::super::SPECIES {
-            assert!(!activity_rules(s).is_empty());
-            assert!(!access_rules(s).is_empty());
+        for s in &RULE_SETS {
+            assert!(!s.activity.is_empty());
+            assert!(!s.access.is_empty());
+            assert!(std::ptr::eq(ruleset(s.name).unwrap(), s));
         }
+        assert!(ruleset("dragon").is_none());
+        assert_eq!(names(), ["python", "tegu", "iguana", "lionfish"]);
     }
 
     #[test]

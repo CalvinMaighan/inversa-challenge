@@ -1,4 +1,5 @@
-//! Supervised per-source tasks and the ingest pipeline (T5, PRD §6).
+//! Supervised per-source tasks and the ingest pipeline (T5, PRD §6), one scheduler per app
+//! (PLAN.md C-A1): only the sources an app's `feeds[]` lists are registered and started for it.
 //!
 //! Every payload, polled or pushed, goes through [`ingest_payload`]:
 //! gzip + archive, `raw_objects`, `normalize`, one write transaction (row upserts, `fetch_runs`,
@@ -17,6 +18,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::task::JoinHandle;
 
+use crate::app::config::App;
 use crate::ingest::archive::raw_key;
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::source::{FetchCtx, RawPayload, Source, SourceInfo};
@@ -52,40 +54,96 @@ impl Default for Supervision {
     }
 }
 
-/// Upsert every known source into `sources` (with the reason for each one that will not run),
-/// then (when `config.sources_enabled`) start one supervised task per push/poll source.
+/// Upsert every source the app lists into `sources` (with the reason for each one that will not
+/// run), then (when `config.sources_enabled`) start one supervised task per push/poll source.
 /// Returns immediately; the work runs on the runtime.
 pub fn spawn(state: AppState) {
     tokio::spawn(async move {
+        let app = state.app.id().to_string();
         match start(state, Supervision::default()).await {
-            Ok(handles) => tracing::info!("scheduler: {} source tasks running", handles.len()),
-            Err(e) => tracing::error!("scheduler: start failed: {e:#}"),
+            Ok(handles) => tracing::info!(app, "scheduler: {} source tasks running", handles.len()),
+            Err(e) => tracing::error!(app, "scheduler: start failed: {e:#}"),
         }
     });
 }
 
-/// The body of [`spawn`], returning the task handles so tests can observe and stop them.
-pub async fn start(state: AppState, supervision: Supervision) -> anyhow::Result<Vec<JoinHandle<()>>> {
-    let mut runnable = crate::ingest::push::all(&state.config);
-    runnable.extend(crate::ingest::poll::all(&state.config));
+/// What the scheduler would register and run for an app, before anything is spawned.
+pub struct Plan {
+    /// Sources with a fetch loop (push and poll), in start order.
+    pub runnable: Vec<Arc<dyn Source>>,
+    /// Every source the app lists, with the reason it is not running (`None` = it runs).
+    pub known: Vec<(SourceInfo, Option<String>)>,
+}
+
+#[cfg(test)]
+impl Plan {
+    pub fn runnable_ids(&self) -> Vec<&'static str> {
+        self.runnable.iter().map(|s| s.info().id).collect()
+    }
+
+    pub fn known_ids(&self) -> Vec<&'static str> {
+        self.known.iter().map(|(i, _)| i.id).collect()
+    }
+}
+
+/// Intern a config string as `&'static str` (`SourceInfo` fields are static): each distinct
+/// value is leaked once per process, however often the scheduler plans.
+fn intern(s: &str) -> &'static str {
+    static POOL: std::sync::OnceLock<std::sync::Mutex<HashMap<String, &'static str>>> = std::sync::OnceLock::new();
+    let mut pool = POOL.get_or_init(Default::default).lock().unwrap_or_else(|p| p.into_inner());
+    pool.entry(s.to_string()).or_insert_with(|| Box::leak(s.to_string().into_boxed_str()))
+}
+
+/// Static description of a feed the config lists but no adapter serves yet (`crw`, `nwps`).
+fn pending_info(feed: &crate::app::config::FeedCfg) -> SourceInfo {
+    let leak = |s: Option<&str>, fallback: &'static str| -> &'static str { s.map(intern).unwrap_or(fallback) };
+    SourceInfo {
+        id: leak(Some(&feed.source), ""),
+        name: leak(feed.name.as_deref(), "pending adapter"),
+        homepage: leak(feed.homepage.as_deref(), ""),
+        mode: match feed.mode {
+            crate::app::config::Mode::Push => crate::ingest::source::Mode::Push,
+            crate::app::config::Mode::Poll => crate::ingest::source::Mode::Poll,
+        },
+        cadence: Duration::from_secs(24 * 3600),
+        max_latency: Duration::from_secs(48 * 3600),
+    }
+}
+
+/// The sources of `state.app`: runnable ones from the push and poll registries, disabled push
+/// sources (missing secrets), hook sources (gated by the secret) and feeds whose adapter is
+/// still pending, each with its reason.
+pub fn plan(state: &AppState) -> Plan {
+    let app = &state.app;
+    let mut runnable = crate::ingest::push::all(&state.config, app);
+    runnable.extend(crate::ingest::poll::all(&state.config, app));
 
     // (info, why it is not running). Hook sources are fed over HTTP, so only the secret gates them.
     let hook_reason = state.config.ingest_hook_secret.is_none().then(|| "INGEST_HOOK_SECRET not set".to_string());
     let fetch_reason = (!state.config.sources_enabled).then(|| "INVERSA_SOURCES=off".to_string());
     let mut known: Vec<(SourceInfo, Option<String>)> =
         runnable.iter().map(|s| (s.info(), fetch_reason.clone())).collect();
-    known.extend(crate::ingest::push::disabled(&state.config).into_iter().map(|(info, reason)| (info, Some(reason))));
-    known.extend(crate::ingest::push::hook::sources().iter().map(|s| (s.info(), hook_reason.clone())));
+    known.extend(crate::ingest::push::disabled(&state.config, app).into_iter().map(|(info, reason)| (info, Some(reason))));
+    known.extend(crate::ingest::push::hook::sources(app).iter().map(|s| (s.info(), hook_reason.clone())));
+    for feed in app.cfg.feeds.iter().filter(|f| crate::app::config::PENDING_SOURCES.contains(&f.source.as_str())) {
+        known.push((pending_info(feed), Some(format!("adapter for {} not implemented yet", feed.source))));
+    }
+    Plan { runnable, known }
+}
+
+/// The body of [`spawn`], returning the task handles so tests can observe and stop them.
+pub async fn start(state: AppState, supervision: Supervision) -> anyhow::Result<Vec<JoinHandle<()>>> {
+    let Plan { runnable, known } = plan(&state);
     for (info, reason) in &known {
         if let Some(reason) = reason {
-            tracing::info!(source = info.id, "scheduler: source disabled: {reason}");
+            tracing::info!(app = state.app.id(), source = info.id, "scheduler: source disabled: {reason}");
         }
     }
     upsert_sources(&state, known.iter().map(|(info, _)| info.clone()).collect()).await?;
     set_disabled(&state, known.into_iter().map(|(info, reason)| (info.id, reason)).collect()).await?;
 
     if !state.config.sources_enabled {
-        tracing::info!("scheduler: sources disabled (INVERSA_SOURCES=off)");
+        tracing::info!(app = state.app.id(), "scheduler: sources disabled (INVERSA_SOURCES=off)");
         return Ok(Vec::new());
     }
     Ok(spawn_sources(&state, runnable, supervision))
@@ -395,10 +453,11 @@ pub async fn ingest_payload(
 
     // 4-7. One transaction: rows, fetch run, quality hooks, commit.
     let (fetched_at, http_status) = (raw.fetched_at, raw.http_status);
+    let app = state.app.clone();
     let written = state
         .obs
         .write(move |tx| {
-            let mut w = RowWriter::new(tx, source_id, raw_object_id);
+            let mut w = RowWriter::new(tx, &app, source_id, raw_object_id);
             for row in &rows {
                 w.write(row)?;
             }
@@ -422,7 +481,7 @@ pub async fn ingest_payload(
                 note.as_deref(),
             )?;
             if let Some((from, to)) = window {
-                crate::ingest::quality_phys::post_write(tx, source_id, from, to)?;
+                crate::ingest::quality_phys::post_write(tx, &app, source_id, from, to)?;
                 crate::ingest::quality_bio::post_write(tx, source_id, from, to)?;
             }
             Ok((run_id, status, rows_written, rows_skipped, window))
@@ -488,9 +547,12 @@ fn valid_coord(lat: f64, lon: f64) -> bool {
 
 /// Upserts rows inside one transaction, resolving taxon and station refs with per-transaction
 /// caches. Every upsert only touches the row when a value differs, so `written` counts real
-/// changes and an identical payload writes nothing.
+/// changes and an identical payload writes nothing. Sightings and stations outside every region
+/// of the app are skipped (counted in `skipped`), so an adapter that still queries another area
+/// never leaks rows into this app's database (PLAN.md P4 scope guard).
 struct RowWriter<'t, 'c> {
     tx: &'t Transaction<'c>,
+    app: &'t App,
     source_id: &'static str,
     raw_object_id: i64,
     now: i64,
@@ -503,9 +565,10 @@ struct RowWriter<'t, 'c> {
 }
 
 impl<'t, 'c> RowWriter<'t, 'c> {
-    fn new(tx: &'t Transaction<'c>, source_id: &'static str, raw_object_id: i64) -> Self {
+    fn new(tx: &'t Transaction<'c>, app: &'t App, source_id: &'static str, raw_object_id: i64) -> Self {
         RowWriter {
             tx,
+            app,
             source_id,
             raw_object_id,
             now: now_ms(),
@@ -570,9 +633,9 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         Ok(Some(id))
     }
 
-    /// Returns `(station id, changed)`, or `None` when the ref is invalid.
+    /// Returns `(station id, changed)`, or `None` when the ref is invalid or outside the app.
     fn station(&mut self, s: &StationRef) -> rusqlite::Result<Option<(i64, bool)>> {
-        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) {
+        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) || self.app.region_of(s.lat, s.lon).is_none() {
             return Ok(None);
         }
         if let Some((id, _)) = self.stations.get(&s.ext_id).filter(|(_, seen)| seen == s) {
@@ -597,7 +660,7 @@ impl<'t, 'c> RowWriter<'t, 'c> {
     }
 
     fn sighting(&mut self, s: &SightingRow) -> rusqlite::Result<Option<bool>> {
-        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) {
+        if s.ext_id.is_empty() || !valid_coord(s.lat, s.lon) || self.app.region_of(s.lat, s.lon).is_none() {
             return Ok(None);
         }
         let Some(taxon_id) = self.taxon(&s.taxon)? else { return Ok(None) };
@@ -1028,16 +1091,29 @@ mod tests {
             new: None,
             changed_at: 0,
         }));
+        // Outside every region of the app (P4): a Kansas gauge and a Louisiana python.
+        rows.push(Row::Station(StationRef { ext_id: "KS1".into(), name: "Kansas".into(), lat: 39.0, lon: -98.0, kind: StationKind::Gage }));
+        rows.push(Row::Sighting(SightingRow {
+            ext_id: "obs-la".into(),
+            taxon: TaxonRef::named("Python bivittatus", "Burmese python"),
+            lat: 30.4,
+            lon: -91.2,
+            accuracy_m: None,
+            observed_at: 1_790_000_000_000,
+            quality: Quality::Research,
+            photo_url: None,
+        }));
         let out = ingest_payload(&state, &src, payload(&rows, None), None).await.unwrap();
         assert_eq!(out.status, RunStatus::Partial);
-        assert_eq!(out.rows_skipped, 2);
+        assert_eq!(out.rows_skipped, 4);
         assert_eq!(count(&state, "sightings").await, 1);
+        assert_eq!(count(&state, "stations").await, 1);
         let error: String = state
             .obs
             .read(|c| c.query_row("select error from fetch_runs where status = 'partial'", [], |r| r.get(0)))
             .await
             .unwrap();
-        assert_eq!(error, "2 of 8 rows skipped");
+        assert_eq!(error, "4 of 10 rows skipped");
     }
 
     #[tokio::test]
@@ -1207,6 +1283,50 @@ mod tests {
         }
     }
 
+    /// C-A1/G6: only the feeds an app's config lists are planned for it. The python app plans
+    /// every adapter; Lionfish Watch leaves NWS, USGS and NWWS out and registers its pending CRW
+    /// adapter as disabled; a fake config without the iNat feed does not plan iNat.
+    #[tokio::test]
+    async fn app_scheduler_plans_only_configured_feeds() {
+        let python = test_state();
+        let p = plan(&python);
+        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif"]);
+        assert_eq!(p.known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws", "web"]);
+
+        let lionfish = crate::app::test_support::test_state_for("lionfish");
+        let p = plan(&lionfish);
+        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo", "inat", "nas", "gbif"]);
+        assert!(!p.known_ids().contains(&"nws") && !p.known_ids().contains(&"nwws") && !p.known_ids().contains(&"usgs"));
+        let crw = p.known.iter().find(|(i, _)| i.id == "crw").expect("pending crw registered");
+        assert_eq!(crw.0.name, "NOAA Coral Reef Watch");
+        assert_eq!(crw.1.as_deref(), Some("adapter for crw not implemented yet"));
+        assert!(p.known.iter().any(|(i, r)| i.id == "goes19" && r.as_deref().is_some_and(|r| r.contains("GOES_SQS_URL"))));
+
+        let carp = crate::app::test_support::test_state_for("carp");
+        let p = plan(&carp);
+        assert_eq!(p.runnable_ids(), ["nws", "usgs"]);
+        assert_eq!(p.known_ids(), ["nws", "usgs", "web", "nwps"]);
+
+        // A config with the iNat feed removed: the fake app never spawns iNat, and `start`
+        // registers exactly its feeds.
+        let mut v: serde_json::Value = serde_json::from_str(crate::app::config::builtin_json("python").unwrap()).unwrap();
+        v["feeds"].as_array_mut().unwrap().retain(|f| f["source"] != "inat" && f["source"] != "goes19");
+        let cfg = crate::app::config::AppConfig::parse("fake.json", &v.to_string()).unwrap();
+        let fake = AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
+        let p = plan(&fake);
+        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "nas", "gbif"]);
+        assert!(!p.known_ids().contains(&"goes19"), "a push feed left out is not even registered as disabled");
+        start(fake.clone(), Supervision::default()).await.unwrap();
+        let registered: Vec<String> = fake
+            .obs
+            .read(|c| c.prepare("select id from sources order by id")?.query_map([], |r| r.get(0))?.collect())
+            .await
+            .unwrap();
+        assert_eq!(registered, ["coops", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs", "web"]);
+        let feeds = crate::feed_state::compute(&fake.obs, now_ms()).await.unwrap();
+        assert!(feeds.iter().all(|f| f.source != "inat"));
+    }
+
     #[tokio::test]
     async fn supervisor_start_upserts_sources_without_running_them() {
         let state = test_state();
@@ -1222,7 +1342,7 @@ mod tests {
         assert!(cadence > 0);
         // Idempotent at the next boot.
         start(state.clone(), Supervision::default()).await.unwrap();
-        let disabled = crate::ingest::push::disabled(&state.config);
+        let disabled = crate::ingest::push::disabled(&state.config, &state.app);
         assert_eq!(
             disabled.iter().map(|(i, _)| i.id).collect::<Vec<_>>(),
             ["goes19", "nwws"],
@@ -1230,8 +1350,8 @@ mod tests {
         );
         assert_eq!(
             count(&state, "sources").await,
-            1 + crate::ingest::push::all(&state.config).len() as i64
-                + crate::ingest::poll::all(&state.config).len() as i64
+            1 + crate::ingest::push::all(&state.config, &state.app).len() as i64
+                + crate::ingest::poll::all(&state.config, &state.app).len() as i64
                 + disabled.len() as i64
         );
         let reasons: Vec<(String, Option<String>)> = state
@@ -1261,7 +1381,7 @@ mod tests {
 
         // A boot where a source can run clears its reason (not via `start` here: that would
         // spawn the network pollers).
-        let runnable: Vec<(&'static str, Option<String>)> = crate::ingest::poll::all(&state.config)
+        let runnable: Vec<(&'static str, Option<String>)> = crate::ingest::poll::all(&state.config, &state.app)
             .iter()
             .map(|s| (s.info().id, None))
             .collect();

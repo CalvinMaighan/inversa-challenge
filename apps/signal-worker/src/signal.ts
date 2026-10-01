@@ -34,7 +34,8 @@ export interface IceServer {
   credential?: string;
 }
 
-export const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** Room and peer ids. `:` is allowed so a room can be `<app>:main` (PLAN.md C-A6). */
+export const ID_RE = /^[A-Za-z0-9_:-]{1,64}$/;
 export const MAX_BODY_BYTES = 64 * 1024;
 export const PEER_TTL_MS = 60_000;
 export const MAX_NAME_LENGTH = 64;

@@ -17,16 +17,24 @@ use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-use crate::app::test_support::test_state;
+use crate::app::test_support::{router_for, test_state};
 use crate::backfill::{fixture_sources, measure};
 use crate::frames::{self, Layout, ENV_FLAGGED, ENV_MISSING, HEADER_BYTES};
 use crate::state::AppState;
 
 const HOUR: i64 = 3_600_000;
 const DAY: i64 = 24 * HOUR;
+/// The python app's four taxa.
+const TAXA: usize = 4;
 
-fn region() -> Value {
-    json!({"west": -83.2, "south": 24.3, "east": -79.8, "north": 27.5})
+/// The python app's region (its one region), as a GraphQL `BBox` variable.
+fn region(state: &AppState) -> Value {
+    let b = state.app.hull();
+    json!({"west": b.west, "south": b.south, "east": b.east, "north": b.north})
+}
+
+fn layout(state: &AppState) -> Layout {
+    state.app.regions[0].layout
 }
 
 fn iso(ms: i64) -> String {
@@ -37,9 +45,9 @@ fn iso(ms: i64) -> String {
 
 /// POST a GraphQL request through the router; returns `data`, failing on any error.
 async fn gql(state: &AppState, query: &str, variables: Value) -> Value {
-    let res = crate::app::app(state.clone())
+    let res = router_for(state)
         .oneshot(
-            Request::post("/v1/graphql")
+            Request::post("/v1/python/graphql")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     json!({"query": query, "variables": variables}).to_string(),
@@ -64,24 +72,23 @@ async fn int(state: &AppState, sql: &'static str) -> i64 {
 }
 
 /// Number of env cells in `body` (one EVF2 frame body) with an LST value.
-fn lst_cells(body: &[u8]) -> usize {
-    let layout = Layout::REGION;
-    let lst = &body[layout.lst_offset()..layout.sst_offset()];
+fn lst_cells(layout: &Layout, body: &[u8]) -> usize {
+    let lst = &body[layout.lst_offset(TAXA)..layout.sst_offset(TAXA)];
     lst.chunks_exact(2)
         .filter(|b| !matches!(i16::from_le_bytes([b[0], b[1]]), ENV_MISSING | ENV_FLAGGED))
         .count()
 }
 
 /// Split an EVF2 chunk into its frame bodies, checking every length on the way.
-fn bodies(chunk: &[u8]) -> Vec<&[u8]> {
+fn bodies<'a>(layout: &Layout, chunk: &'a [u8]) -> Vec<&'a [u8]> {
     let h = frames::read_header(chunk).unwrap();
-    let layout = Layout::REGION;
+    assert_eq!(h.region_count, 1);
     let mut out = Vec::new();
     let mut at = HEADER_BYTES;
     for _ in 0..h.frame_count {
-        let n_off = at + layout.sightings_offset();
+        let n_off = at + layout.sightings_offset(TAXA);
         let n = u32::from_le_bytes(chunk[n_off..n_off + 4].try_into().unwrap()) as usize;
-        let len = layout.body_len(n);
+        let len = layout.body_len(TAXA, n);
         out.push(&chunk[at..at + len]);
         at += len;
     }
@@ -98,7 +105,7 @@ async fn e2e_fixture_pipeline() {
         .await
         .unwrap();
 
-    let sources: Vec<&'static str> = fixture_sources(&state.config)
+    let sources: Vec<&'static str> = fixture_sources(&state)
         .iter()
         .map(|s| s.info().id)
         .collect();
@@ -180,7 +187,7 @@ async fn e2e_fixture_pipeline() {
     let data = gql(
         &state,
         "query($b: BBox!, $f: Time!, $t: Time!) { sightings(bbox: $b, from: $f, to: $t) { id source lat lon taxon { id } observedAt } }",
-        json!({"b": region(), "f": iso(newest - 31 * DAY + 1), "t": iso(newest)}),
+        json!({"b": region(&state), "f": iso(newest - 31 * DAY + 1), "t": iso(newest)}),
     )
     .await;
     let sightings = data["sightings"].as_array().unwrap();
@@ -188,12 +195,10 @@ async fn e2e_fixture_pipeline() {
         !sightings.is_empty(),
         "sightings in the last 31 days of fixture data"
     );
+    let hull = state.app.hull();
     for s in sightings {
         let (lat, lon) = (s["lat"].as_f64().unwrap(), s["lon"].as_f64().unwrap());
-        assert!(
-            (24.3..=27.5).contains(&lat) && (-83.2..=-79.8).contains(&lon),
-            "{s}"
-        );
+        assert!(hull.contains(lat, lon), "{s}");
     }
 
     // 4. evidence on a sighting: record, archived raw payload, and the same feed envelope.
@@ -238,7 +243,7 @@ async fn e2e_fixture_pipeline() {
     let data = gql(
         &state,
         "query($b: BBox!, $f: Time!, $t: Time!) { readings(bbox: $b, from: $f, to: $t, params: [LST_C]) { station { source } value flag origin } }",
-        json!({"b": region(), "f": iso(at - HOUR), "t": iso(at + HOUR)}),
+        json!({"b": region(&state), "f": iso(at - HOUR), "t": iso(at + HOUR)}),
     )
     .await;
     let readings = data["readings"].as_array().unwrap();
@@ -272,7 +277,7 @@ async fn e2e_fixture_pipeline() {
     let data = gql(
         &state,
         "query($b: BBox!, $at: Time!) { alerts(bbox: $b, at: $at) { id event severity } }",
-        json!({"b": region(), "at": iso(onset)}),
+        json!({"b": region(&state), "at": iso(onset)}),
     )
     .await;
     assert!(
@@ -297,17 +302,17 @@ async fn e2e_fixture_pipeline() {
         .unwrap();
     let h = frames::read_header(&chunk).unwrap();
     assert_eq!((h.frame_count, h.frame0, h.step_min), (24, from, 60));
-    let gql_bodies = bodies(&chunk);
+    let gql_bodies = bodies(&layout(&state), &chunk);
     assert!(
-        lst_cells(gql_bodies[23]) > 100,
+        lst_cells(&layout(&state), gql_bodies[23]) > 100,
         "GOES LST reaches the frame at {}",
         iso(to)
     );
 
     // 8. REST bulk frames: same window, gzip EVF2, identical bytes to the GraphQL chunk.
-    let res = crate::app::app(state.clone())
+    let res = router_for(&state)
         .oneshot(
-            Request::get(format!("/v1/frames?from={from}&to={to}&step=60"))
+            Request::get(format!("/v1/python/frames?from={from}&to={to}&step=60"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -332,7 +337,7 @@ async fn e2e_fixture_pipeline() {
     let data = gql(
         &state,
         "query($at: Time!, $b: BBox!) { hotspots(species: \"iguana\", at: $at, bbox: $b, top: 20) { species cells { cell score } } }",
-        json!({"at": iso(iguana_at), "b": region()}),
+        json!({"at": iso(iguana_at), "b": region(&state)}),
     )
     .await;
     let cells = data["hotspots"]["cells"].as_array().unwrap();
@@ -353,9 +358,9 @@ async fn hook(state: &AppState, rows: &Value) -> (StatusCode, Value) {
     let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(format!("{ts}.").as_bytes());
     mac.update(&body);
-    let res = crate::app::app(state.clone())
+    let res = router_for(state)
         .oneshot(
-            Request::post("/v1/ingest/hook/web")
+            Request::post("/v1/python/ingest/hook/web")
                 .header(header::CONTENT_TYPE, "application/json")
                 .header("x-timestamp", ts.to_string())
                 .header("x-signature", hex::encode(mac.finalize().into_bytes()))
@@ -459,7 +464,7 @@ async fn e2e_quality_cases() {
     let data = gql(
         &state,
         "query($b: BBox!, $f: Time!, $t: Time!) { readings(bbox: $b, from: $f, to: $t, params: [LST_C]) { station { name source } value flag } }",
-        json!({"b": region(), "f": iso(scan_at), "t": iso(scan_at)}),
+        json!({"b": region(&state), "f": iso(scan_at), "t": iso(scan_at)}),
     )
     .await;
     let lst = data["readings"].as_array().unwrap();
@@ -482,11 +487,11 @@ async fn e2e_quality_cases() {
     let chunk = base64::engine::general_purpose::STANDARD
         .decode(data["frames"]["data"].as_str().unwrap())
         .unwrap();
-    let body = bodies(&chunk)[0];
-    let layout = Layout::REGION;
+    let layout = layout(&state);
+    let body = bodies(&layout, &chunk)[0];
     let lst_at = |name: &str| {
         let (c, r) = name.trim_start_matches("GOES cell g5:").split_once(':').unwrap();
-        let at = layout.lst_offset() + layout.env.index(c.parse().unwrap(), r.parse().unwrap()) * 2;
+        let at = layout.lst_offset(TAXA) + layout.env.index(c.parse().unwrap(), r.parse().unwrap()) * 2;
         i16::from_le_bytes([body[at], body[at + 1]])
     };
     for r in lst {
@@ -497,7 +502,7 @@ async fn e2e_quality_cases() {
             None => assert_eq!(v, ENV_FLAGGED, "{} pixel in the frame: {r}", r["flag"]),
         }
     }
-    let values = &body[layout.lst_offset()..layout.sst_offset()];
+    let values = &body[layout.lst_offset(TAXA)..layout.sst_offset(TAXA)];
     let (mut valid, mut flagged) = (0, 0);
     for b in values.chunks_exact(2) {
         match i16::from_le_bytes([b[0], b[1]]) {
@@ -518,7 +523,7 @@ async fn e2e_quality_cases() {
         .proxy(reqwest::Proxy::all(format!("http://127.0.0.1:{dead_port}")).unwrap())
         .build()
         .unwrap();
-    let ndbc: Vec<_> = crate::ingest::poll::physical::sources(&state.config)
+    let ndbc: Vec<_> = crate::ingest::poll::physical::sources(&state.config, &state.app)
         .into_iter()
         .filter(|s| s.info().id == "ndbc")
         .collect();

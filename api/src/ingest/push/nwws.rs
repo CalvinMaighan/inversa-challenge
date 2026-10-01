@@ -403,7 +403,7 @@ fn find_polygon(lines: &[&str]) -> Option<serde_json::Value> {
 mod tests {
     use super::*;
     use crate::ingest::poll::nws::normalize_alerts;
-    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, FakeFetch};
+    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, python_app, FakeFetch};
 
     fn stanza(name: &str) -> RawPayload {
         RawPayload { fetched_at: 1_790_800_900_000, ..stanza_payload(fixture(&format!("nwws/{name}"))) }
@@ -426,9 +426,10 @@ mod tests {
 
     #[test]
     fn nwws_source_absent_without_user() {
+        let app = python_app();
         let mut config = Config::for_tests();
         assert!(sources(&config).is_empty());
-        assert!(crate::ingest::push::all(&config).iter().all(|s| s.info().id != "nwws"));
+        assert!(crate::ingest::push::all(&config, &app).iter().all(|s| s.info().id != "nwws"));
         config.nwws_user = Some("someone".into());
         config.nwws_pass = Some("not-a-real-password".into());
         let listed = sources(&config);
@@ -436,7 +437,7 @@ mod tests {
         let info = listed[0].info();
         assert_eq!((info.id, info.mode), ("nwws", Mode::Push));
         assert_eq!(listed[0].min_interval(), Duration::ZERO);
-        assert!(crate::ingest::push::all(&config).iter().any(|s| s.info().id == "nwws"));
+        assert!(crate::ingest::push::all(&config, &app).iter().any(|s| s.info().id == "nwws"));
     }
 
     #[tokio::test]
@@ -470,7 +471,7 @@ mod tests {
         assert_eq!(a.expires, Some(ms("2026-10-01T09:00:00Z")));
 
         // The NWS API poll saw the same product as CAP: same key, event, times and headline.
-        let api: Vec<AlertRow> = normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json"))
+        let api: Vec<AlertRow> = normalize_alerts(&fixture("nws/alerts_active_fl_am_gm.json"), &crate::ingest::poll::nws::Scope::for_app(&python_app()))
             .unwrap()
             .into_iter()
             .filter_map(|r| match r {

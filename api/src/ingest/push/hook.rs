@@ -1,4 +1,4 @@
-//! Signed webhook receiver `POST /v1/ingest/hook/:source` (PLAN.md C10, T5).
+//! Signed webhook receiver `POST /v1/{app}/ingest/hook/:source` (PLAN.md C10, T5; app prefix C-A2).
 //!
 //! Headers: `X-Timestamp` (unix seconds) and `X-Signature` =
 //! `hex(HMAC_SHA256(INGEST_HOOK_SECRET, "<ts>.<body>"))`. Responses:
@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, Path};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
@@ -22,6 +22,8 @@ use axum::{Json, Router};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
+use crate::app::config::App;
+use crate::app::AppRegistry;
 use crate::ingest::scheduler::{ingest_payload, RunStatus};
 use crate::ingest::source::{FetchCtx, Mode, RawPayload, Source, SourceInfo};
 use crate::model::Row;
@@ -30,14 +32,18 @@ use crate::state::AppState;
 pub const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_SKEW_SECS: i64 = 300;
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/v1/ingest/hook/{source}", post(receive)).layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+pub fn routes() -> Router<AppRegistry> {
+    Router::new().route("/ingest/hook/{source}", post(receive)).layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
 }
 
-/// Sources that accept signed hook payloads. Upserted into `sources` at boot by the scheduler;
-/// they have no fetch loop.
-pub fn sources() -> Vec<Arc<dyn Source>> {
-    vec![Arc::new(HookSource::web())]
+/// Sources that accept signed hook payloads for `app` (its `feeds[]` must list `web`). Upserted
+/// into `sources` at boot by the scheduler; they have no fetch loop.
+pub fn sources(app: &App) -> Vec<Arc<dyn Source>> {
+    if app.cfg.has_feed("web") {
+        vec![Arc::new(HookSource::web())]
+    } else {
+        Vec::new()
+    }
 }
 
 /// Generic push source fed only through the hook. The body is a JSON array of `model::Row` in
@@ -52,7 +58,7 @@ impl HookSource {
             info: SourceInfo {
                 id: "web",
                 name: "Signed web hook",
-                homepage: "/v1/ingest/hook/web",
+                homepage: "/v1/<app>/ingest/hook/web",
                 mode: Mode::Push,
                 cadence: Duration::from_secs(60 * 60),
                 max_latency: Duration::from_secs(24 * 60 * 60),
@@ -104,7 +110,7 @@ pub fn verify(secret: &str, headers: &HeaderMap, body: &[u8], now: i64) -> Resul
     mac.verify_slice(&sig).map_err(|_| "bad signature")
 }
 
-async fn receive(State(state): State<AppState>, Path(source_id): Path<String>, headers: HeaderMap, body: Bytes) -> Response {
+async fn receive(state: AppState, Path((_app, source_id)): Path<(String, String)>, headers: HeaderMap, body: Bytes) -> Response {
     let Some(secret) = state.config.ingest_hook_secret.as_deref() else {
         return error(StatusCode::SERVICE_UNAVAILABLE, "ingest hook disabled: INGEST_HOOK_SECRET is not set");
     };
@@ -113,8 +119,8 @@ async fn receive(State(state): State<AppState>, Path(source_id): Path<String>, h
         return error(StatusCode::UNAUTHORIZED, reason);
     }
     // Only after authentication, so unauthenticated callers cannot probe source ids.
-    let Some(source) = sources().into_iter().find(|s| s.info().id == source_id) else {
-        return error(StatusCode::NOT_FOUND, format!("unknown hook source {source_id}"));
+    let Some(source) = sources(&state.app).into_iter().find(|s| s.info().id == source_id) else {
+        return error(StatusCode::NOT_FOUND, format!("unknown hook source {source_id} for app {}", state.app.id()));
     };
     let content_type = headers
         .get(axum::http::header::CONTENT_TYPE)
@@ -122,7 +128,7 @@ async fn receive(State(state): State<AppState>, Path(source_id): Path<String>, h
         .unwrap_or("application/json")
         .to_string();
     let raw = RawPayload {
-        source_url: format!("hook:/v1/ingest/hook/{source_id}"),
+        source_url: format!("hook:/v1/{}/ingest/hook/{source_id}", state.app.id()),
         content_type,
         bytes: body.to_vec(),
         http_status: None,
@@ -148,7 +154,7 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
-    use crate::app::test_support::{test_app, test_state};
+    use crate::app::test_support::{router_for, test_app, test_state};
     use crate::model::{Quality, SightingRow, TaxonRef};
 
     const SECRET: &str = "test-hook-secret";
@@ -175,7 +181,7 @@ mod tests {
     }
 
     fn request(source: &str, ts: Option<i64>, sig: Option<String>, body: Vec<u8>) -> Request<Body> {
-        let mut req = Request::post(format!("/v1/ingest/hook/{source}")).header("content-type", "application/json");
+        let mut req = Request::post(format!("/v1/python/ingest/hook/{source}")).header("content-type", "application/json");
         if let Some(ts) = ts {
             req = req.header("x-timestamp", ts.to_string());
         }
@@ -270,7 +276,7 @@ mod tests {
         let mut config = (*state.config).clone();
         config.ingest_hook_secret = None;
         state.config = Arc::new(config);
-        let app = crate::app::app(state);
+        let app = router_for(&state);
         let b = body();
         let ts = now();
         let res = app.oneshot(request("web", Some(ts), Some(sign(SECRET, ts, &b)), b)).await.unwrap();
@@ -284,8 +290,16 @@ mod tests {
         let ts = now();
         let res = app.clone().oneshot(request("inat", Some(ts), Some(sign(SECRET, ts, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
-        let res = app.oneshot(request("inat", Some(ts), Some(sign("wrong", ts, &b)), b)).await.unwrap();
+        let res = app.clone().oneshot(request("inat", Some(ts), Some(sign("wrong", ts, &b)), b.clone())).await.unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+        // An app whose config lists no `web` feed has no hook source at all.
+        let mut v: serde_json::Value = serde_json::from_str(crate::app::config::builtin_json("python").unwrap()).unwrap();
+        v["feeds"].as_array_mut().unwrap().retain(|f| f["source"] != "web");
+        let cfg = crate::app::config::AppConfig::parse("nohook.json", &v.to_string()).unwrap();
+        let state = crate::state::AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
+        assert!(sources(&state.app).is_empty());
+        let res = router_for(&state).oneshot(request("web", Some(ts), Some(sign(SECRET, ts, &b)), b)).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

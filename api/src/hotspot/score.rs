@@ -1,10 +1,12 @@
 //! density × activity × access (T11, PRD section 8).
 //!
-//! A `Snapshot` holds everything the scorer needs for a time window, loaded once from the
-//! observations db: in-grid sightings, stations and the condition readings. Scoring a frame
-//! time then touches no database, so frame builds and backtests parallelise with rayon.
+//! A `Snapshot` holds everything the scorer needs for one region and time window, loaded
+//! once from the observations db: in-grid sightings, stations and the condition readings.
+//! Scoring a frame time then touches no database, so frame builds and backtests parallelise
+//! with rayon. Taxa come from the app config (`App::taxa`); the snapshot keeps one density
+//! index per taxon in config order.
 //!
-//! Density: each non-duplicate sighting of the species is splatted with a Gaussian kernel
+//! Density: each non-duplicate sighting of the taxon is splatted with a Gaussian kernel
 //! (σ = 2 cells, truncated at 3σ) and weighted by `0.5^(age / half_life)`. Sightings from the
 //! `nas` and `gbif` history sources are a static prior: weight 0.2 and no time decay. The
 //! grid is normalised to 0..1 by its maximum, per frame.
@@ -20,7 +22,8 @@ use chrono::Datelike;
 use rayon::prelude::*;
 
 use super::rules::{self, Conditions};
-use super::{Grid, Species, SPECIES};
+use super::Grid;
+use crate::app::config::{App, Taxon};
 use crate::db::Db;
 
 /// Kernel width in cells; truncated at 3σ.
@@ -207,22 +210,24 @@ impl CondFrame {
             month: self.month,
         }
     }
-
 }
 
 type NearestCache = Mutex<HashMap<(CondParam, Vec<u32>), Arc<Vec<u32>>>>;
 
-/// Everything needed to score any time in `[from, to)` without touching the database.
+/// Everything needed to score any time in `[from, to)` on one region's grid without touching
+/// the database.
 pub struct Snapshot {
     pub grid: Grid,
+    /// The app's focus taxa in frame order; `taxon_id` resolved against the database.
+    pub taxa: Vec<Taxon>,
     /// Every in-grid sighting with `observed_at < to`, duplicates included, sorted by time.
     pub sightings: Vec<SightingPt>,
-    /// Non-duplicate decaying sightings per species, sorted by time.
-    recent: [Vec<SightingPt>; 4],
-    /// Non-duplicate prior sightings observed at or after `from`, per species, sorted by time.
-    prior_recent: [Vec<SightingPt>; 4],
-    /// Prior sightings observed before `from`, already splatted.
-    prior_grid: [Vec<f32>; 4],
+    /// Non-duplicate decaying sightings per taxon, sorted by time.
+    recent: Vec<Vec<SightingPt>>,
+    /// Non-duplicate prior sightings observed at or after `from`, per taxon, sorted by time.
+    prior_recent: Vec<Vec<SightingPt>>,
+    /// Prior sightings observed before `from`, already splatted, per taxon.
+    prior_grid: Vec<Vec<f32>>,
     /// (lat, lon) per station index.
     pub stations: Vec<(f64, f64)>,
     readings: [Vec<ReadingPt>; 6],
@@ -234,6 +239,7 @@ impl Snapshot {
     /// Build from rows already in memory (tests, golden file, benchmarks).
     pub fn new(
         grid: Grid,
+        taxa: Vec<Taxon>,
         from: i64,
         to: i64,
         mut sightings: Vec<SightingPt>,
@@ -243,15 +249,15 @@ impl Snapshot {
         let kernel = Kernel::new();
         sightings.retain(|s| s.observed_at < to && s.col < grid.cols && s.row < grid.rows);
         sightings.sort_by_key(|s| (s.observed_at, s.id));
-        let mut recent: [Vec<SightingPt>; 4] = Default::default();
-        let mut prior_recent: [Vec<SightingPt>; 4] = Default::default();
-        let mut prior_grid: [Vec<f32>; 4] = std::array::from_fn(|_| vec![0f32; grid.cells()]);
+        let n = taxa.len();
+        let mut recent: Vec<Vec<SightingPt>> = vec![Vec::new(); n];
+        let mut prior_recent: Vec<Vec<SightingPt>> = vec![Vec::new(); n];
+        let mut prior_grid: Vec<Vec<f32>> = (0..n).map(|_| vec![0f32; grid.cells()]).collect();
         for s in &sightings {
             if s.duplicate() {
                 continue;
             }
-            let Some(sp) = Species::from_taxon_id(s.taxon_id) else { continue };
-            let i = sp.index();
+            let Some(i) = taxa.iter().position(|t| t.taxon_id == s.taxon_id) else { continue };
             if !s.prior {
                 recent[i].push(s.clone());
             } else if s.observed_at >= from {
@@ -266,6 +272,7 @@ impl Snapshot {
         }
         Snapshot {
             grid,
+            taxa,
             sightings,
             recent,
             prior_recent,
@@ -280,21 +287,28 @@ impl Snapshot {
     /// Load the window `[from, to)` from the observations db. Sightings before `to` are
     /// loaded when they can still contribute (history sources always, others within the
     /// longest decay window); readings from `from - STALE_MS` up to `to`.
-    pub async fn load(db: &Db, grid: Grid, from: i64, to: i64) -> anyhow::Result<Snapshot> {
-        Snapshot::load_with(db, grid, from, to, "").await
+    pub async fn load(db: &Db, taxa: &[Taxon], grid: Grid, from: i64, to: i64) -> anyhow::Result<Snapshot> {
+        Snapshot::load_with(db, taxa, grid, from, to, "").await
     }
 
     /// Like `load`, but only the readings that can be current at a UTC day boundary (the
     /// last `STALE_MS` of each day). Backtests score at midnight, so a year-long window
     /// stays small even with dense satellite readings.
-    pub async fn load_day_boundaries(db: &Db, grid: Grid, from: i64, to: i64) -> anyhow::Result<Snapshot> {
+    pub async fn load_day_boundaries(db: &Db, taxa: &[Taxon], grid: Grid, from: i64, to: i64) -> anyhow::Result<Snapshot> {
         const FILTER: &str = "and (observed_at % 86400000 >= 64800000 or observed_at % 86400000 = 0)";
         const _: () = assert!(STALE_MS == 86_400_000 - 64_800_000 && DAY_MS == 86_400_000);
-        Snapshot::load_with(db, grid, from, to, FILTER).await
+        Snapshot::load_with(db, taxa, grid, from, to, FILTER).await
     }
 
-    async fn load_with(db: &Db, grid: Grid, from: i64, to: i64, reading_filter: &'static str) -> anyhow::Result<Snapshot> {
-        let max_hl = SPECIES.iter().map(|s| s.half_life_days()).fold(0.0, f64::max);
+    async fn load_with(
+        db: &Db,
+        taxa: &[Taxon],
+        grid: Grid,
+        from: i64,
+        to: i64,
+        reading_filter: &'static str,
+    ) -> anyhow::Result<Snapshot> {
+        let max_hl = taxa.iter().map(|t| t.half_life_days()).fold(0.0, f64::max);
         let decay_floor = from - (DECAY_WINDOW_HALF_LIVES * max_hl * DAY_MS as f64) as i64;
         let (west, south, east, north) = (grid.west, grid.south, grid.east(), grid.north());
         let rows = db
@@ -399,18 +413,18 @@ impl Snapshot {
             };
             readings[p as usize].push(ReadingPt { station, observed_at, value });
         }
-        Ok(Snapshot::new(grid, from, to, sightings, station_pts, readings))
+        Ok(Snapshot::new(grid, taxa.to_vec(), from, to, sightings, station_pts, readings))
     }
 
-    /// Kernel density of `species` at `at`, normalised to 0..1.
-    pub fn density(&self, species: Species, at: i64) -> Vec<f32> {
-        let i = species.index();
+    /// Kernel density of `taxon` at `at`, normalised to 0..1.
+    pub fn density(&self, taxon: &Taxon, at: i64) -> Vec<f32> {
+        let i = taxon.idx as usize;
         let mut acc = self.prior_grid[i].clone();
         let prior_end = self.prior_recent[i].partition_point(|s| s.observed_at < at);
         for s in &self.prior_recent[i][..prior_end] {
             self.kernel.splat(&self.grid, &mut acc, s.col, s.row, PRIOR_WEIGHT);
         }
-        let hl_ms = species.half_life_days() * DAY_MS as f64;
+        let hl_ms = taxon.half_life_days() * DAY_MS as f64;
         let window = (DECAY_WINDOW_HALF_LIVES * hl_ms) as i64;
         let recent = &self.recent[i];
         let lo = recent.partition_point(|s| s.observed_at < at - window);
@@ -498,29 +512,28 @@ impl Snapshot {
     }
 
     /// density × activity × access for every cell, given a density grid and the conditions.
-    pub fn apply_rules(&self, species: Species, mut density: Vec<f32>, cond: &CondFrame) -> Vec<f32> {
-        let activity = rules::activity_rules(species);
-        let access = rules::access_rules(species);
+    pub fn apply_rules(&self, taxon: &Taxon, mut density: Vec<f32>, cond: &CondFrame) -> Vec<f32> {
+        let set = taxon.rules();
         let cols = self.grid.cols as usize;
         density.par_chunks_mut(cols).enumerate().for_each(|(row, chunk)| {
             for (col, v) in chunk.iter_mut().enumerate() {
                 if *v > 0.0 {
                     let c = cond.at(row * cols + col);
-                    *v *= rules::multiplier(activity, &c) * rules::multiplier(access, &c);
+                    *v *= rules::multiplier(set.activity, &c) * rules::multiplier(set.access, &c);
                 }
             }
         });
         density
     }
 
-    pub fn score_grid(&self, species: Species, at: i64) -> Vec<f32> {
+    pub fn score_grid(&self, taxon: &Taxon, at: i64) -> Vec<f32> {
         let cond = self.conditions(at);
-        self.apply_rules(species, self.density(species, at), &cond)
+        self.apply_rules(taxon, self.density(taxon, at), &cond)
     }
 
     /// Each term's contribution at one cell.
-    pub fn explain_cell(&self, species: Species, at: i64, idx: usize) -> Explain {
-        let density = self.density(species, at)[idx];
+    pub fn explain_cell(&self, taxon: &Taxon, at: i64, idx: usize) -> Explain {
+        let density = self.density(taxon, at)[idx];
         let cond = self.conditions(at).at(idx);
         let mut terms = vec![Term {
             name: "density".into(),
@@ -528,14 +541,15 @@ impl Snapshot {
             rationale: format!(
                 "kernel-weighted {} sightings (Gaussian σ {} cells, half-life {} d, nas/gbif history at {} weight), \
                  normalised to the frame maximum",
-                species.name(),
+                taxon.id(),
                 SIGMA_CELLS,
-                species.half_life_days(),
+                taxon.half_life_days(),
                 PRIOR_WEIGHT
             ),
         }];
         let mut score = density;
-        for (kind, rules) in [("activity", rules::activity_rules(species)), ("access", rules::access_rules(species))] {
+        let set = taxon.rules();
+        for (kind, rules) in [("activity", set.activity), ("access", set.access)] {
             for rule in rules {
                 let (value, rationale) = match (rule.applies)(&cond) {
                     Some(v) => (v, rule.rationale.to_string()),
@@ -545,15 +559,12 @@ impl Snapshot {
                 terms.push(Term { name: format!("{kind}.{}", rule.name), value, rationale });
             }
         }
-        terms.push(Term {
-            name: "conditions".into(),
-            value: 1.0,
-            rationale: describe_conditions(&cond),
-        });
+        terms.push(Term { name: "conditions".into(), value: 1.0, rationale: describe_conditions(&cond) });
         Explain { score, terms }
     }
 
-    /// Cells of a score grid inside `bbox` (by centre), best first.
+    /// Cells of a score grid inside `bbox` (by centre), best first. `cell` is the grid-local
+    /// `<col>:<row>`; callers prefix the region (`App::cell_id`).
     pub fn top_cells(&self, scores: &[f32], bbox: Option<&BBox>, top: usize) -> Vec<Cell> {
         let mut cells: Vec<(usize, f32)> = scores
             .iter()
@@ -680,7 +691,7 @@ pub struct Explain {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
-    /// `<col>:<row>` (PLAN.md C14).
+    /// Cell id (PLAN.md C14): `<col>:<row>`, prefixed with the region in multi-region apps.
     pub cell: String,
     pub lat: f64,
     pub lon: f64,
@@ -695,30 +706,50 @@ pub struct BBox {
     pub north: f64,
 }
 
-pub const DEFAULT_TOP: usize = 100;
-
-/// Ranked cells of `species` at `at` inside `bbox` (GraphQL `hotspots`).
-pub async fn hotspots(db: &Db, species: Species, at: i64, bbox: BBox, top: Option<usize>) -> anyhow::Result<Vec<Cell>> {
-    let snap = Snapshot::load(db, Grid::REGION, at, at + 1).await?;
-    let top = top.unwrap_or(DEFAULT_TOP);
-    Ok(tokio::task::spawn_blocking(move || {
-        let scores = snap.score_grid(species, at);
-        snap.top_cells(&scores, Some(&bbox), top)
-    })
-    .await?)
+impl From<crate::app::config::BBox> for BBox {
+    fn from(b: crate::app::config::BBox) -> Self {
+        BBox { west: b.west, south: b.south, east: b.east, north: b.north }
+    }
 }
 
-/// Each term of the score at one cell (GraphQL `explainCell`).
-pub async fn explain(db: &Db, cell: &str, species: Species, at: i64) -> anyhow::Result<Explain> {
-    let grid = Grid::REGION;
-    let idx = grid.parse_cell(cell).ok_or_else(|| anyhow::anyhow!("bad cell id {cell:?}"))?;
-    let snap = Snapshot::load(db, grid, at, at + 1).await?;
-    Ok(tokio::task::spawn_blocking(move || snap.explain_cell(species, at, idx)).await?)
+pub const DEFAULT_TOP: usize = 100;
+
+/// Ranked cells of `taxon` at `at` inside `bbox` across every region the box touches
+/// (GraphQL `hotspots`). Cell ids carry the region in multi-region apps.
+pub async fn hotspots(db: &Db, app: &App, taxon: &Taxon, at: i64, bbox: BBox, top: Option<usize>) -> anyhow::Result<Vec<Cell>> {
+    let top = top.unwrap_or(DEFAULT_TOP);
+    let mut out: Vec<Cell> = Vec::new();
+    let query = crate::app::config::BBox { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north };
+    for region in app.regions.iter().filter(|r| r.bbox().intersects(&query)) {
+        let snap = Snapshot::load(db, &app.taxa, region.grid, at, at + 1).await?;
+        let taxon = taxon.clone();
+        let cells = tokio::task::spawn_blocking(move || {
+            let scores = snap.score_grid(&taxon, at);
+            snap.top_cells(&scores, Some(&bbox), top)
+        })
+        .await?;
+        out.extend(cells.into_iter().map(|c| {
+            let idx = region.grid.parse_cell(&c.cell).expect("own cell id");
+            Cell { cell: app.cell_id(region, idx), ..c }
+        }));
+    }
+    out.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal).then(a.cell.cmp(&b.cell)));
+    out.truncate(top);
+    Ok(out)
+}
+
+/// Each term of the score at one cell (GraphQL `explainCell`). `cell` is an `App::cell_id`.
+pub async fn explain(db: &Db, app: &App, cell: &str, taxon: &Taxon, at: i64) -> anyhow::Result<Explain> {
+    let (region, idx) = app.parse_cell(cell).ok_or_else(|| anyhow::anyhow!("bad cell id {cell:?}; expected {}", app.cell_shape()))?;
+    let snap = Snapshot::load(db, &app.taxa, region.grid, at, at + 1).await?;
+    let taxon = taxon.clone();
+    Ok(tokio::task::spawn_blocking(move || snap.explain_cell(&taxon, at, idx)).await?)
 }
 
 /// Seeding helpers shared by the hotspot, frames and backtest tests.
 #[cfg(test)]
 pub mod testkit {
+    use crate::app::config::App;
     use crate::db::Db;
 
     pub const HOUR: i64 = 3_600_000;
@@ -732,6 +763,16 @@ pub mod testkit {
             .unwrap()
             .and_utc()
             .timestamp_millis()
+    }
+
+    /// The python app with its taxa resolved to the migration's seeded ids (1-4, config order),
+    /// for tests that open a bare `Db::memory("observations")` instead of an `AppState`.
+    pub fn python_app() -> App {
+        let mut app = App::builtin("python").unwrap();
+        for t in &mut app.taxa {
+            t.taxon_id = t.idx as i64 + 1;
+        }
+        app
     }
 
     pub async fn seed_sources(db: &Db) {
@@ -839,17 +880,22 @@ mod tests {
         (-((dx * dx + dy * dy) as f64) / 8.0).exp() as f32
     }
 
+    async fn load(db: &Db, grid: Grid, from: i64, to: i64) -> Snapshot {
+        Snapshot::load(db, &python_app().taxa, grid, from, to).await.unwrap()
+    }
+
     #[tokio::test]
     async fn hotspot_density_kernel_and_decay() {
         let db = db().await;
+        let app = python_app();
         let t = ms(2025, 7, 10, 12);
         let (lat, lon) = at_cell(10, 10);
         // Tegu at (10,10) now, another at (30,10) one half-life (14 d) earlier: weights 1 and 0.5.
         insert_sighting(&db, "inat", 2, lat, lon, t - HOUR, "research", None).await;
         let (lat2, lon2) = at_cell(30, 10);
         insert_sighting(&db, "inat", 2, lat2, lon2, t - HOUR - 14 * DAY, "research", None).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
-        let d = snap.density(Species::Tegu, t);
+        let snap = load(&db, G, t, t + 1).await;
+        let d = snap.density(app.taxon("tegu").unwrap(), t);
         assert_eq!(d[G.index(10, 10)], 1.0);
         assert!((d[G.index(11, 10)] - kernel_at(1, 0)).abs() < 1e-5, "one cell east: exp(-1/8)");
         assert!((d[G.index(12, 12)] - kernel_at(2, 2)).abs() < 1e-5);
@@ -858,12 +904,13 @@ mod tests {
         let w2 = 0.5f64.powf((HOUR + 14 * DAY) as f64 / (14.0 * DAY as f64));
         assert!((d[G.index(30, 10)] - (w2 / w1) as f32).abs() < 1e-5, "one half-life old: half weight");
         // Python sees nothing.
-        assert!(snap.density(Species::Python, t).iter().all(|&v| v == 0.0));
+        assert!(snap.density(app.taxon("python").unwrap(), t).iter().all(|&v| v == 0.0));
     }
 
     #[tokio::test]
     async fn hotspot_prior_and_duplicates() {
         let db = db().await;
+        let app = python_app();
         let t = ms(2025, 7, 10, 12);
         let (lat, lon) = at_cell(5, 5);
         insert_sighting(&db, "inat", 1, lat, lon, t - HOUR, "research", None).await;
@@ -872,8 +919,8 @@ mod tests {
         insert_sighting(&db, "nas", 1, lat2, lon2, t - 1100 * DAY, "curated", None).await;
         // A duplicate of the first sighting is skipped.
         insert_sighting(&db, "gbif", 1, lat, lon, t - HOUR, "research", Some(1)).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
-        let d = snap.density(Species::Python, t);
+        let snap = load(&db, G, t, t + 1).await;
+        let d = snap.density(app.taxon("python").unwrap(), t);
         let w_recent = 0.5f64.powf(HOUR as f64 / (21.0 * DAY as f64)) as f32;
         assert_eq!(d[G.index(5, 5)], 1.0);
         assert!((d[G.index(30, 20)] - PRIOR_WEIGHT / w_recent).abs() < 1e-5);
@@ -884,16 +931,18 @@ mod tests {
     #[tokio::test]
     async fn hotspot_iguana_cold_stun() {
         let db = db().await;
+        let app = python_app();
+        let iguana = app.taxon("iguana").unwrap();
         let t = ms(2025, 1, 22, 11);
         let (lat, lon) = at_cell(20, 15);
         insert_sighting(&db, "inat", 3, lat, lon, t - 2 * HOUR, "research", None).await;
         let st = insert_station(&db, "nws", "KMIA", lat + 0.02, lon, "grid").await;
         insert_readings(&db, vec![(st, "air_c", Some(7.5), t - HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
+        let snap = load(&db, G, t, t + 1).await;
         let idx = G.index(20, 15);
-        let scores = snap.score_grid(Species::Iguana, t);
+        let scores = snap.score_grid(iguana, t);
         assert_eq!(scores[idx], 1.0 * IGUANA_COLD_STUN_BOOST * 1.0);
-        let ex = snap.explain_cell(Species::Iguana, t, idx);
+        let ex = snap.explain_cell(iguana, t, idx);
         assert_eq!(ex.score, IGUANA_COLD_STUN_BOOST);
         let stun = ex.terms.iter().find(|x| x.name == "activity.iguana_cold_stun_easy_capture_window").unwrap();
         assert_eq!(stun.value, IGUANA_COLD_STUN_BOOST);
@@ -903,8 +952,8 @@ mod tests {
         assert!((product - ex.score).abs() < 1e-6);
         // A warm reading later removes the boost.
         insert_readings(&db, vec![(st, "air_c", Some(24.0), t + HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t + 2 * HOUR, t + 2 * HOUR + 1).await.unwrap();
-        let ex = snap.explain_cell(Species::Iguana, t + 2 * HOUR, idx);
+        let snap = load(&db, G, t + 2 * HOUR, t + 2 * HOUR + 1).await;
+        let ex = snap.explain_cell(iguana, t + 2 * HOUR, idx);
         let stun = ex.terms.iter().find(|x| x.name.ends_with("cold_stun_easy_capture_window")).unwrap();
         assert_eq!(stun.value, 1.0);
     }
@@ -912,64 +961,70 @@ mod tests {
     #[tokio::test]
     async fn hotspot_lionfish_no_access_waves() {
         let db = db().await;
+        let app = python_app();
+        let lionfish = app.taxon("lionfish").unwrap();
         let t = ms(2025, 8, 3, 15);
         let (lat, lon) = at_cell(8, 8);
         insert_sighting(&db, "inat", 4, lat, lon, t - 3 * HOUR, "research", None).await;
         let buoy = insert_station(&db, "ndbc", "41114", lat - 0.03, lon + 0.05, "buoy").await;
         insert_readings(&db, vec![(buoy, "wave_m", Some(2.1), t - HOUR), (buoy, "wind_ms", Some(4.0), t - HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
+        let snap = load(&db, G, t, t + 1).await;
         let idx = G.index(8, 8);
-        let scores = snap.score_grid(Species::Lionfish, t);
+        let scores = snap.score_grid(lionfish, t);
         assert!((scores[idx] - LIONFISH_NO_ACCESS).abs() < 1e-6, "rough seas: 1.0 × 1.0 × 0.1");
-        let ex = snap.explain_cell(Species::Lionfish, t, idx);
+        let ex = snap.explain_cell(lionfish, t, idx);
         let sea = ex.terms.iter().find(|x| x.name == "access.lionfish_sea_state").unwrap();
         assert_eq!(sea.value, LIONFISH_NO_ACCESS);
         let base = ex.terms.iter().find(|x| x.name == "activity.lionfish_year_round").unwrap();
         assert_eq!(base.value, 1.0);
         // Calm seas an hour later: full access.
         insert_readings(&db, vec![(buoy, "wave_m", Some(0.6), t + HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t + HOUR, t + HOUR + 1).await.unwrap();
-        let scores = snap.score_grid(Species::Lionfish, t + HOUR);
+        let snap = load(&db, G, t + HOUR, t + HOUR + 1).await;
+        let scores = snap.score_grid(lionfish, t + HOUR);
         assert!((scores[idx] - 1.0).abs() < 1e-6);
     }
 
     #[tokio::test]
     async fn hotspot_python_cold_and_stage() {
         let db = db().await;
+        let app = python_app();
+        let python = app.taxon("python").unwrap();
         let t = ms(2025, 12, 5, 6);
         let (lat, lon) = at_cell(25, 12);
         insert_sighting(&db, "inat", 1, lat, lon, t - HOUR, "research", None).await;
         let nws = insert_station(&db, "nws", "KTMB", lat, lon - 0.01, "grid").await;
         let gage = insert_station(&db, "usgs", "S12A", lat + 0.01, lon, "gage").await;
         insert_readings(&db, vec![(nws, "air_c", Some(12.0), t - HOUR), (gage, "stage_m", Some(2.0), t - HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
+        let snap = load(&db, G, t, t + 1).await;
         let idx = G.index(25, 12);
-        let s = snap.score_grid(Species::Python, t);
+        let s = snap.score_grid(python, t);
         assert!((s[idx] - PYTHON_COLD_SUPPRESS * 0.9).abs() < 1e-6, "12 °C suppresses, 2 m stage gives 0.9");
         // Warm and no stage data: 1.5 × neutral 1.0, and the explain says so.
         insert_readings(&db, vec![(nws, "air_c", Some(26.0), t + 3 * HOUR)]).await;
         let t2 = t + 8 * HOUR; // the stage reading is now stale (> 6 h), the air reading is 5 h old
-        let snap = Snapshot::load(&db, G, t2, t2 + 1).await.unwrap();
-        let ex = snap.explain_cell(Species::Python, t2, idx);
+        let snap = load(&db, G, t2, t2 + 1).await;
+        let ex = snap.explain_cell(python, t2, idx);
         let stage = ex.terms.iter().find(|x| x.name == "access.python_levee_stage").unwrap();
         assert_eq!(stage.value, 1.0);
         assert!(stage.rationale.starts_with("no data"));
         let warm = ex.terms.iter().find(|x| x.name == "activity.python_warm_temperature").unwrap();
         assert_eq!(warm.value, PYTHON_WARM_BOOST);
-        let expect = snap.density(Species::Python, t2)[idx] * PYTHON_WARM_BOOST;
+        let expect = snap.density(python, t2)[idx] * PYTHON_WARM_BOOST;
         assert!((ex.score - expect).abs() < 1e-6);
     }
 
     #[tokio::test]
     async fn hotspot_tegu_brumation_and_ranking() {
         let db = db().await;
+        let app = python_app();
+        let tegu = app.taxon("tegu").unwrap();
         let t = ms(2025, 11, 20, 9);
         let (lat_a, lon_a) = at_cell(5, 5);
         let (lat_b, lon_b) = at_cell(35, 25);
         insert_sighting(&db, "inat", 2, lat_a, lon_a, t - HOUR, "research", None).await;
         insert_sighting(&db, "inat", 2, lat_b, lon_b, t - HOUR - 14 * DAY, "research", None).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
-        let s = snap.score_grid(Species::Tegu, t);
+        let snap = load(&db, G, t, t + 1).await;
+        let s = snap.score_grid(tegu, t);
         let (ia, ib) = (G.index(5, 5), G.index(35, 25));
         assert!((s[ia] - TEGU_BRUMATION_SUPPRESS).abs() < 1e-6);
         let ratio = 0.5f64.powf((HOUR + 14 * DAY) as f64 / (14.0 * DAY as f64))
@@ -984,28 +1039,59 @@ mod tests {
         assert!(top.iter().all(|c| c.lon >= -80.8));
         // May: no brumation.
         let t_may = ms(2025, 5, 20, 9);
-        let snap = Snapshot::load(&db, G, t_may, t_may + 1).await.unwrap();
-        assert!(snap.score_grid(Species::Tegu, t_may).iter().all(|&v| v == 0.0), "nothing observed before May");
+        let snap = load(&db, G, t_may, t_may + 1).await;
+        assert!(snap.score_grid(tegu, t_may).iter().all(|&v| v == 0.0), "nothing observed before May");
     }
 
     #[tokio::test]
     async fn hotspot_public_entry_points() {
         let db = db().await;
+        let app = python_app();
+        let lionfish = app.taxon("lionfish").unwrap();
         let t = ms(2025, 6, 1, 12);
-        let g = Grid::REGION;
+        let g = app.regions[0].grid;
         let idx = g.index(120, 100);
         let (lon, lat) = g.center(idx);
         insert_sighting(&db, "inat", 4, lat, lon, t - HOUR, "research", None).await;
-        let cells = hotspots(&db, Species::Lionfish, t, BBox { west: -83.2, south: 24.3, east: -79.8, north: 27.5 }, Some(5))
-            .await
-            .unwrap();
+        let cells = hotspots(&db, &app, lionfish, t, app.hull().into(), Some(5)).await.unwrap();
         assert_eq!(cells.len(), 5);
         assert_eq!(cells[0].cell, "120:100");
         assert_eq!(cells[0].score, 1.0);
-        let ex = explain(&db, "120:100", Species::Lionfish, t).await.unwrap();
+        let ex = explain(&db, &app, "120:100", lionfish, t).await.unwrap();
         assert_eq!(ex.score, 1.0);
         assert!(ex.terms.iter().any(|x| x.name == "access.lionfish_sea_state" && x.rationale.starts_with("no data")));
-        assert!(explain(&db, "999:1", Species::Lionfish, t).await.is_err());
+        assert!(explain(&db, &app, "999:1", lionfish, t).await.is_err());
+        // A box touching no region ranks nothing.
+        let far = BBox { west: 0.0, south: 0.0, east: 1.0, north: 1.0 };
+        assert!(hotspots(&db, &app, lionfish, t, far, Some(5)).await.unwrap().is_empty());
+    }
+
+    /// Two regions: each gets its own snapshot, cells carry the region id, and the merged
+    /// ranking is score-ordered across regions.
+    #[tokio::test]
+    async fn hotspot_multi_region_cells_carry_region_ids() {
+        let db = db().await;
+        let mut app = App::builtin("lionfish").unwrap();
+        app.taxa[0].taxon_id = 4;
+        let lionfish = &app.taxa[0];
+        let t = ms(2025, 6, 1, 12);
+        let (fl, mx) = (app.region("fl-keys").unwrap(), app.region("mx-caribbean").unwrap());
+        let (lon_a, lat_a) = fl.grid.center(fl.grid.index(10, 10));
+        let (lon_b, lat_b) = mx.grid.center(mx.grid.index(20, 30));
+        insert_sighting(&db, "inat", 4, lat_a, lon_a, t - HOUR, "research", None).await;
+        insert_sighting(&db, "inat", 4, lat_b, lon_b, t - 10 * DAY, "research", None).await;
+        let cells = hotspots(&db, &app, lionfish, t, app.hull().into(), Some(4)).await.unwrap();
+        assert_eq!(cells.len(), 4);
+        assert_eq!(cells[0].cell, "fl-keys:10:10");
+        assert_eq!(cells[0].score, 1.0);
+        assert!(cells.iter().any(|c| c.cell == "mx-caribbean:20:30"), "{cells:?}");
+        assert!(cells.iter().all(|c| c.score > 0.0));
+        // Each region normalises its own density: the older Mexican sighting still peaks at 1.0 there.
+        let only_mx = hotspots(&db, &app, lionfish, t, mx.bbox().into(), Some(1)).await.unwrap();
+        assert_eq!((only_mx[0].cell.as_str(), only_mx[0].score), ("mx-caribbean:20:30", 1.0));
+        let ex = explain(&db, &app, "mx-caribbean:20:30", lionfish, t).await.unwrap();
+        assert_eq!(ex.score, 1.0);
+        assert!(explain(&db, &app, "20:30", lionfish, t).await.is_err(), "region required");
     }
 
     #[test]
@@ -1046,7 +1132,7 @@ mod tests {
         let (lat, lon) = at_cell(3, 3);
         let st = insert_station(&db, "goes19", "cell-3-3", lat, lon, "goes_cell").await;
         insert_readings(&db, vec![(st, "lst_c", None, t - HOUR), (st, "sst_c", Some(25.5), t - HOUR)]).await;
-        let snap = Snapshot::load(&db, G, t, t + 1).await.unwrap();
+        let snap = load(&db, G, t, t + 1).await;
         let cond = snap.conditions(t);
         assert_eq!(cond.value(CondParam::LstC, G.index(3, 3)), None, "flagged reading");
         assert_eq!(cond.value(CondParam::SstC, G.index(3, 3)), Some(25.5));

@@ -2,8 +2,9 @@
 //! `explainCell` and `backtest` delegate to T11 (`frames`, `hotspot`); `board` and `opsSince`
 //! to T12 (`crdt`); `evidence` to `crate::evidence`.
 //!
-//! Validation shared by the list queries: the bbox must lie inside the region (C15), `from` must
-//! not be after `to`, and a window spans at most [`MAX_WINDOW_MS`]. Result lists are capped; a
+//! Validation shared by the list queries: the bbox must lie inside the app's regions (C15,
+//! C-A4), `from` must not be after `to`, and a window spans at most [`MAX_WINDOW_MS`]. Species
+//! arguments name the app's taxa (config id, scientific name or `taxa.id`). Result lists are capped; a
 //! capped list comes with a `TRUNCATED` error next to the data, so partial results never pass
 //! for complete ones.
 
@@ -17,8 +18,9 @@ use super::types::{
     SpeciesCount, Station, Taxon, Time,
 };
 use super::{app_state, now_ms};
+use crate::app::config::{App, Taxon as AppTaxon};
 use crate::db::Db;
-use crate::hotspot::{self, Species};
+use crate::hotspot;
 use crate::{crdt, feed_state, frames};
 
 pub struct QueryRoot;
@@ -54,20 +56,30 @@ fn check_window(from: Time, to: Time) -> Result<()> {
     Ok(())
 }
 
-fn species(id: &ID) -> Result<Species> {
-    Species::parse(id).ok_or_else(|| {
-        format!("unknown species {:?}; expected python, tegu, iguana, lionfish or taxon id 1-4", id.as_str()).into()
+/// A focus taxon of the app by config id, scientific name or `taxa.id`.
+fn species<'a>(app: &'a App, id: &ID) -> Result<&'a AppTaxon> {
+    app.taxon(id).ok_or_else(|| {
+        format!("unknown species {:?} for app {}; expected one of {}", id.as_str(), app.id(), app.taxon_choices()).into()
     })
 }
 
-/// `taxa.id`s from ids or focus species names (`python`, `tegu`, `iguana`, `lionfish`).
-fn taxon_ids(ids: &[ID]) -> Result<Vec<i64>> {
+/// A species app's hotspot surface; a conditions app has none.
+fn hotspot_app<'a>(ctx: &Context<'a>) -> Result<&'a App> {
+    let app = &app_state(ctx).app;
+    if !app.is_species() {
+        return Err(format!("app {} has no hotspot grid (kind conditions): no frames, hotspots, explainCell or backtest", app.id()).into());
+    }
+    Ok(app)
+}
+
+/// `taxa.id`s from ids or focus species names (the app's taxa ids).
+fn taxon_ids(app: &App, ids: &[ID]) -> Result<Vec<i64>> {
     ids.iter()
         .map(|id| {
             id.parse::<i64>()
                 .ok()
                 .filter(|n| *n > 0)
-                .or_else(|| Species::parse(id).map(Species::taxon_id))
+                .or_else(|| app.taxon(id).map(|t| t.taxon_id))
                 .ok_or_else(|| async_graphql::Error::new(format!("unknown taxon {:?}", id.as_str())))
         })
         .collect()
@@ -118,9 +130,10 @@ impl QueryRoot {
         taxa: Option<Vec<ID>>,
         quality: Option<Vec<Quality>>,
     ) -> Result<Vec<Sighting>> {
-        bbox.validate()?;
+        let app = &app_state(ctx).app;
+        bbox.validate(app)?;
         check_window(from, to)?;
-        let taxa = json_list(taxa.map(|ids| taxon_ids(&ids)).transpose()?);
+        let taxa = json_list(taxa.map(|ids| taxon_ids(app, &ids)).transpose()?);
         let quality = json_list(quality.map(|q| q.into_iter().map(Quality::db).collect()));
         let mut rows = app_state(ctx)
             .obs
@@ -175,7 +188,7 @@ impl QueryRoot {
         if ids.is_none() && q.is_none() {
             return Err("`taxa` needs `ids` or `q`".into());
         }
-        let ids = json_list(ids.map(|ids| taxon_ids(&ids)).transpose()?);
+        let ids = json_list(ids.map(|ids| taxon_ids(&app_state(ctx).app, &ids)).transpose()?);
         // `%` and `_` in the caller's text are literal (escaped), never wildcards.
         let like = q.map(|s| format!("%{}%", s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")));
         let rows = app_state(ctx)
@@ -208,7 +221,7 @@ impl QueryRoot {
         groups: Option<Vec<String>>,
         top: Option<i32>,
     ) -> Result<Vec<SpeciesCount>> {
-        bbox.validate()?;
+        bbox.validate(&app_state(ctx).app)?;
         check_window(from, to)?;
         let top = top.unwrap_or(DEFAULT_SPECIES_TOP);
         if !(1..=MAX_TAXA as i32).contains(&top) {
@@ -269,7 +282,7 @@ impl QueryRoot {
         to: Time,
         params: Option<Vec<Param>>,
     ) -> Result<Vec<Reading>> {
-        bbox.validate()?;
+        bbox.validate(&app_state(ctx).app)?;
         check_window(from, to)?;
         let wanted = json_list(params.map(|p| p.into_iter().map(Param::db).collect()));
         let mut rows = app_state(ctx)
@@ -318,7 +331,7 @@ impl QueryRoot {
     /// Alerts in effect at `at` (onset ≤ at ≤ expires, open ends count as in effect) whose area
     /// intersects `bbox`. Alerts without a polygon (zone-based) are region-wide and always match.
     async fn alerts(&self, ctx: &Context<'_>, bbox: BBox, at: Time) -> Result<Vec<Alert>> {
-        bbox.validate()?;
+        bbox.validate(&app_state(ctx).app)?;
         let rows = app_state(ctx)
             .obs
             .read(move |c| {
@@ -370,6 +383,7 @@ impl QueryRoot {
     /// At most 24 frames as base64 EVF2 (C4). Larger requests go to `GET /v1/frames`.
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn frames(&self, ctx: &Context<'_>, from: Time, to: Time, step_minutes: i32) -> Result<FrameChunk> {
+        let app = hotspot_app(ctx)?;
         if from > to {
             return Err("`from` must not be after `to`".into());
         }
@@ -385,7 +399,7 @@ impl QueryRoot {
             ))
             .extend_with(|_, e| e.set("code", "TOO_MANY_FRAMES")));
         }
-        let bytes = frames::chunk(&app_state(ctx).obs, from.0, to.0, step_minutes as u32).await?;
+        let bytes = frames::chunk(&app_state(ctx).obs, app, from.0, to.0, step_minutes as u32).await?;
         Ok(FrameChunk {
             from,
             to,
@@ -398,17 +412,18 @@ impl QueryRoot {
     /// Top cells of `species` at `at` inside `bbox` (default 100, at most 5000).
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn hotspots(&self, ctx: &Context<'_>, species: ID, at: Time, bbox: BBox, top: Option<i32>) -> Result<HotspotGrid> {
-        bbox.validate()?;
-        let sp = self::species(&species)?;
+        let app = hotspot_app(ctx)?;
+        bbox.validate(app)?;
+        let sp = self::species(app, &species)?;
         if let Some(t) = top {
             if !(1..=MAX_HOTSPOT_TOP).contains(&t) {
                 return Err(format!("`top` must be 1..={MAX_HOTSPOT_TOP}").into());
             }
         }
         let area = hotspot::score::BBox { west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north };
-        let cells = hotspot::score::hotspots(&app_state(ctx).obs, sp, at.0, area, top.map(|t| t as usize)).await?;
+        let cells = hotspot::score::hotspots(&app_state(ctx).obs, app, sp, at.0, area, top.map(|t| t as usize)).await?;
         Ok(HotspotGrid {
-            species: ID(sp.name().into()),
+            species: ID(sp.id().into()),
             at,
             cells: cells
                 .into_iter()
@@ -417,17 +432,19 @@ impl QueryRoot {
         })
     }
 
-    /// Each term of the score of one 0.01° cell (`<col>:<row>`, C14).
+    /// Each term of the score of one scoring cell (`<col>:<row>`, or `<region>:<col>:<row>` in a
+    /// multi-region app; C14).
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn explain_cell(&self, ctx: &Context<'_>, cell: ID, species: ID, at: Time) -> Result<HotspotExplain> {
-        let sp = self::species(&species)?;
-        if hotspot::Grid::REGION.parse_cell(&cell).is_none() {
-            return Err(format!("bad cell id {:?}; expected <col>:<row> on the 340 x 320 grid", cell.as_str()).into());
+        let app = hotspot_app(ctx)?;
+        let sp = self::species(app, &species)?;
+        if app.parse_cell(&cell).is_none() {
+            return Err(format!("bad cell id {:?}; expected {}", cell.as_str(), app.cell_shape()).into());
         }
-        let ex = hotspot::score::explain(&app_state(ctx).obs, &cell, sp, at.0).await?;
+        let ex = hotspot::score::explain(&app_state(ctx).obs, app, &cell, sp, at.0).await?;
         Ok(HotspotExplain {
             cell,
-            species: ID(sp.name().into()),
+            species: ID(sp.id().into()),
             at,
             score: ex.score as f64,
             terms: ex
@@ -441,11 +458,12 @@ impl QueryRoot {
     /// Top-10% hit rate over the last `days` full UTC days (1..=366).
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn backtest(&self, ctx: &Context<'_>, species: ID, days: i32) -> Result<Backtest> {
-        let sp = self::species(&species)?;
+        let app = hotspot_app(ctx)?;
+        let sp = self::species(app, &species)?;
         if !(1..=MAX_BACKTEST_DAYS).contains(&days) {
             return Err(format!("`days` must be 1..={MAX_BACKTEST_DAYS}").into());
         }
-        let b = hotspot::backtest::backtest(&app_state(ctx).obs, sp, days as u32).await?;
+        let b = hotspot::backtest::backtest(&app_state(ctx).obs, app, sp, days as u32).await?;
         Ok(backtest_out(b))
     }
 
@@ -485,7 +503,7 @@ impl QueryRoot {
 
 pub fn backtest_out(b: hotspot::backtest::Backtest) -> Backtest {
     Backtest {
-        species: ID(b.species.name().into()),
+        species: ID(b.species),
         days: b.days as i32,
         hit_rate: b.hit_rate,
         baseline: b.baseline,
@@ -573,8 +591,13 @@ mod tests {
 
     #[test]
     fn species_ids_accept_names_and_taxon_ids() {
-        assert_eq!(species(&ID("python".into())).unwrap(), Species::Python);
-        assert_eq!(species(&ID("4".into())).unwrap(), Species::Lionfish);
-        assert!(species(&ID("otter".into())).is_err());
+        let app = crate::hotspot::score::testkit::python_app();
+        assert_eq!(species(&app, &ID("python".into())).unwrap().id(), "python");
+        assert_eq!(species(&app, &ID("4".into())).unwrap().id(), "lionfish");
+        assert!(species(&app, &ID("otter".into())).unwrap_err().message.contains("python, tegu, iguana, lionfish"));
+        assert_eq!(taxon_ids(&app, &[ID("tegu".into()), ID("7".into())]).unwrap(), [2, 7]);
+        let lf = crate::ingest::poll::bio::testing::lionfish();
+        assert!(species(&lf, &ID("python".into())).is_err(), "not a taxon of Lionfish Watch");
+        assert_eq!(species(&lf, &ID("4".into())).unwrap().id(), "lionfish");
     }
 }

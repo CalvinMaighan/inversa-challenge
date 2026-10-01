@@ -1,43 +1,43 @@
-//! Physical source registry (T8) plus the helpers the physical adapters share: the region
-//! (PLAN.md C15), reading construction with missing-value flags, and time parsing.
+//! Physical source registry (T8) plus the helpers the physical adapters share: the app's
+//! regions (PLAN.md C-A4), reading construction with missing-value flags, and time parsing.
 
 use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 
+pub use crate::app::config::BBox;
+use crate::app::config::App;
 use crate::ingest::poll::{coops, ndbc, nws, openmeteo, usgs};
 use crate::ingest::source::{RawPayload, Source};
 use crate::model::{Flag, Origin, Param, ReadingRow, Row, StationRef};
 use crate::state::Config;
 
-/// Every physical poller. NWWS-OI is a push source and lives in `push::nwws`.
-pub fn sources(config: &Config) -> Vec<Arc<dyn Source>> {
-    vec![
-        Arc::new(nws::Nws::new(config)),
-        Arc::new(usgs::Usgs::new()),
-        Arc::new(ndbc::Ndbc::new()),
-        Arc::new(coops::Coops::new()),
-        Arc::new(openmeteo::OpenMeteo::new()),
-    ]
-}
-
-/// Lon/lat box, degrees.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BBox {
-    pub west: f64,
-    pub south: f64,
-    pub east: f64,
-    pub north: f64,
-}
-
-impl BBox {
-    pub fn contains(&self, lat: f64, lon: f64) -> bool {
-        (self.south..=self.north).contains(&lat) && (self.west..=self.east).contains(&lon)
+/// The physical pollers the app's `feeds[]` lists, in registry order. NWWS-OI is a push source
+/// and lives in `push::nwws`.
+pub fn sources(config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
+    let mut out: Vec<Arc<dyn Source>> = Vec::new();
+    if app.cfg.has_feed("nws") {
+        out.push(Arc::new(nws::Nws::new(config, app.clone())));
     }
+    if app.cfg.has_feed("usgs") {
+        out.push(Arc::new(usgs::Usgs::new()));
+    }
+    if app.cfg.has_feed("ndbc") {
+        out.push(Arc::new(ndbc::Ndbc::new()));
+    }
+    if app.cfg.has_feed("coops") {
+        out.push(Arc::new(coops::Coops::new()));
+    }
+    if app.cfg.has_feed("openmeteo") {
+        out.push(Arc::new(openmeteo::OpenMeteo::new(app.clone())));
+    }
+    out
 }
 
-/// PLAN.md C15.
-pub const REGION: BBox = BBox { west: -83.2, south: 24.3, east: -79.8, north: 27.5 };
+/// The bbox of every region, in config order.
+pub fn region_boxes(app: &App) -> Vec<BBox> {
+    app.regions.iter().map(|r| r.cfg.bbox).collect()
+}
 
 pub const FEET_TO_M: f64 = 0.3048;
 
@@ -112,6 +112,15 @@ pub(crate) mod testing {
     use crate::ingest::source::{FetchCtx, RawPayload, Source, SourceInfo};
     use crate::model::Row;
     use crate::state::AppState;
+
+    /// The python app's single region (the pre-pivot bbox every physical fixture was recorded for).
+    pub fn python_region() -> super::BBox {
+        crate::app::config::App::builtin("python").unwrap().regions[0].cfg.bbox
+    }
+
+    pub fn python_app() -> Arc<crate::app::config::App> {
+        Arc::new(crate::hotspot::score::testkit::python_app())
+    }
 
     pub fn fixture_path(rel: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures").join(rel)
@@ -206,11 +215,20 @@ mod tests {
 
     #[test]
     fn region_contains_and_registry_lists_five_pollers() {
-        assert!(REGION.contains(25.76, -80.19), "Miami");
-        assert!(REGION.contains(24.55, -81.80), "Key West");
-        assert!(!REGION.contains(28.5, -81.4), "Orlando");
-        let ids: Vec<&str> = sources(&Config::for_tests()).iter().map(|s| s.info().id).collect();
+        let region = testing::python_region();
+        assert!(region.contains(25.76, -80.19), "Miami");
+        assert!(region.contains(24.55, -81.80), "Key West");
+        assert!(!region.contains(28.5, -81.4), "Orlando");
+        let ids: Vec<&str> = sources(&Config::for_tests(), &testing::python_app()).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["nws", "usgs", "ndbc", "coops", "openmeteo"]);
+        // Lionfish Watch lists no NWS or USGS feed; the carp skeleton lists USGS and NWS only.
+        let lf = Arc::new(App::builtin("lionfish").unwrap());
+        let ids: Vec<&str> = sources(&Config::for_tests(), &lf).iter().map(|s| s.info().id).collect();
+        assert_eq!(ids, ["ndbc", "coops", "openmeteo"]);
+        let carp = Arc::new(App::builtin("carp").unwrap());
+        let ids: Vec<&str> = sources(&Config::for_tests(), &carp).iter().map(|s| s.info().id).collect();
+        assert_eq!(ids, ["nws", "usgs"]);
+        assert_eq!(region_boxes(&lf).len(), 4);
     }
 
     /// Live smoke test: every poller fetches from its real API and the payloads ingest cleanly.
@@ -222,11 +240,11 @@ mod tests {
         use crate::ingest::source::FetchCtx;
         let mut config = Config::for_tests();
         config.user_agent = Config::from_env().user_agent;
-        let state = crate::state::AppState::memory(config.clone());
+        let state = crate::state::AppState::memory(config.clone(), App::builtin("python").unwrap());
         // Every source runs even when an earlier one fails (upstreams are flaky); failures are
         // collected and reported together.
         let mut failures = Vec::new();
-        for source in sources(&config) {
+        for source in sources(&config, &state.app) {
             let id = source.info().id;
             let ctx = FetchCtx { state: &state, cursor: None };
             let payloads = match source.fetch(&ctx).await {

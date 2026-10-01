@@ -9,8 +9,7 @@ use futures_util::{SinkExt, StreamExt};
 use rusqlite::params;
 use serde_json::{json, Value};
 
-use super::tests::post;
-use crate::app::test_support::test_state;
+use crate::app::test_support::{router_for, test_state};
 use crate::hotspot::score::testkit::{insert_readings, insert_sighting, insert_station, ms, seed_sources, DAY, HOUR};
 use crate::hotspot::Grid;
 use crate::state::AppState;
@@ -21,10 +20,36 @@ async fn seeded() -> AppState {
     state
 }
 
+/// POST to `state`'s own app endpoint (`/v1/<app>/graphql`).
 async fn gql(state: &AppState, query: &str, variables: Value) -> Value {
-    let (status, body) = post(crate::app::app(state.clone()), json!({"query": query, "variables": variables})).await;
+    use axum::body::Body;
+    use axum::http::{header, Request};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let res = router_for(state)
+        .oneshot(
+            Request::post(format!("/v1/{}/graphql", state.app.id()))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(json!({"query": query, "variables": variables}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = res.status();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("non-JSON body ({e}): {bytes:?}"));
     assert_eq!(status, StatusCode::OK, "{body}");
     body
+}
+
+/// The python app's whole region as a GraphQL `BBox` literal.
+fn region(state: &AppState) -> String {
+    let b = state.app.hull();
+    format!("{{west: {}, south: {}, east: {}, north: {}}}", b.west, b.south, b.east, b.north)
+}
+
+fn python_grid(state: &AppState) -> Grid {
+    state.app.regions[0].grid
 }
 
 fn iso(ms: i64) -> String {
@@ -38,8 +63,6 @@ fn error_code(body: &Value) -> &str {
 fn error_message(body: &Value) -> &str {
     body["errors"][0]["message"].as_str().unwrap_or_default()
 }
-
-const REGION: &str = "{west: -83.2, south: 24.3, east: -79.8, north: 27.5}";
 
 #[tokio::test]
 async fn resolver_feeds() {
@@ -107,7 +130,7 @@ async fn resolver_sightings() {
     // Validation: bbox outside the region, inverted window, window over 31 days.
     let body = gql(
         &state,
-        "{ sightings(bbox: {west: -90, south: 24.3, east: -80, north: 27}, from: \"2026-09-01T00:00:00Z\", to: \"2026-09-02T00:00:00Z\") { id } }",
+        "{ sightings(bbox: {west: -90, south: 25, east: -80, north: 27}, from: \"2026-09-01T00:00:00Z\", to: \"2026-09-02T00:00:00Z\") { id } }",
         json!({}),
     )
     .await;
@@ -139,7 +162,7 @@ async fn resolver_sightings_truncates_with_a_note() {
         .unwrap();
     let body = gql(
         &state,
-        &format!("{{ sightings(bbox: {REGION}, from: \"{}\", to: \"{}\") {{ extId }} }}", iso(t), iso(t + DAY)),
+        &format!("{{ sightings(bbox: {}, from: \"{}\", to: \"{}\") {{ extId }} }}", region(&state), iso(t), iso(t + DAY)),
         json!({}),
     )
     .await;
@@ -252,12 +275,13 @@ async fn resolver_frames() {
 async fn resolver_hotspots() {
     let state = seeded().await;
     let t = ms(2025, 6, 1, 12);
-    let g = Grid::REGION;
+    let g = python_grid(&state);
     let (lon, lat) = g.center(g.index(120, 100));
     insert_sighting(&state.obs, "inat", 4, lat, lon, t - HOUR, "research", None).await;
+    let region = region(&state);
     let body = gql(
         &state,
-        &format!("{{ hotspots(species: \"lionfish\", at: \"{}\", bbox: {REGION}, top: 5) {{ species at cells {{ cell lat lon score }} }} }}", iso(t)),
+        &format!("{{ hotspots(species: \"lionfish\", at: \"{}\", bbox: {region}, top: 5) {{ species at cells {{ cell lat lon score }} }} }}", iso(t)),
         json!({}),
     )
     .await;
@@ -269,17 +293,66 @@ async fn resolver_hotspots() {
     assert_eq!(cells[0]["score"], 1.0);
     assert!((cells[0]["lat"].as_f64().unwrap() - lat).abs() < 1e-9);
 
-    let body = gql(&state, &format!("{{ hotspots(species: \"otter\", at: \"{}\", bbox: {REGION}) {{ species }} }}", iso(t)), json!({})).await;
+    let body = gql(&state, &format!("{{ hotspots(species: \"otter\", at: \"{}\", bbox: {region}) {{ species }} }}", iso(t)), json!({})).await;
     assert!(error_message(&body).contains("unknown species"), "{body}");
-    let body = gql(&state, &format!("{{ hotspots(species: \"4\", at: \"{}\", bbox: {REGION}, top: 0) {{ species }} }}", iso(t)), json!({})).await;
+    let body = gql(&state, &format!("{{ hotspots(species: \"4\", at: \"{}\", bbox: {region}, top: 0) {{ species }} }}", iso(t)), json!({})).await;
     assert!(error_message(&body).contains("top"), "{body}");
+
+    // A conditions app has no hotspot surface at all.
+    let carp = crate::app::test_support::test_state_for("carp");
+    let carp_region = self::region(&carp);
+    for q in [
+        format!("{{ hotspots(species: \"carp\", at: \"{}\", bbox: {carp_region}) {{ species }} }}", iso(t)),
+        format!("{{ frames(from: \"{}\", to: \"{}\", stepMinutes: 60) {{ frameCount }} }}", iso(t), iso(t)),
+        "{ backtest(species: \"carp\", days: 2) { days } }".to_string(),
+    ] {
+        let body = gql(&carp, &q, json!({})).await;
+        assert!(error_message(&body).contains("no hotspot grid"), "{q}: {body}");
+    }
+    // Readings and alerts still answer for it (its region is Louisiana).
+    let body = gql(&carp, &format!("{{ alerts(bbox: {carp_region}, at: \"{}\") {{ id }} }}", iso(t)), json!({})).await;
+    assert_eq!(body["data"]["alerts"], json!([]), "{body}");
+}
+
+/// Lionfish Watch: cells carry the region id, `explainCell` wants it, and a bbox spanning two
+/// regions ranks across both.
+#[tokio::test]
+async fn resolver_hotspots_multi_region() {
+    let state = crate::app::test_support::test_state_for("lionfish");
+    seed_sources(&state.obs).await;
+    let t = ms(2025, 6, 1, 12);
+    let (fl, mx) = (state.app.region("fl-keys").unwrap(), state.app.region("mx-caribbean").unwrap());
+    let (lon_a, lat_a) = fl.grid.center(fl.grid.index(10, 10));
+    let (lon_b, lat_b) = mx.grid.center(mx.grid.index(20, 30));
+    insert_sighting(&state.obs, "inat", 4, lat_a, lon_a, t - HOUR, "research", None).await;
+    insert_sighting(&state.obs, "inat", 4, lat_b, lon_b, t - 5 * DAY, "research", None).await;
+    let region = region(&state);
+    let body = gql(
+        &state,
+        &format!("{{ hotspots(species: \"lionfish\", at: \"{}\", bbox: {region}, top: 3) {{ species cells {{ cell score }} }} }}", iso(t)),
+        json!({}),
+    )
+    .await;
+    let cells = body["data"]["hotspots"]["cells"].as_array().unwrap();
+    assert_eq!(cells[0]["cell"], "fl-keys:10:10", "{body}");
+    assert!(cells.iter().any(|c| c["cell"] == "mx-caribbean:20:30"), "{body}");
+    let body = gql(&state, &format!("{{ explainCell(cell: \"mx-caribbean:20:30\", species: \"lionfish\", at: \"{}\") {{ cell score }} }}", iso(t)), json!({})).await;
+    assert_eq!(body["data"]["explainCell"]["score"], 1.0, "{body}");
+    let body = gql(&state, &format!("{{ explainCell(cell: \"20:30\", species: \"lionfish\", at: \"{}\") {{ score }} }}", iso(t)), json!({})).await;
+    assert!(error_message(&body).contains("<region>:<col>:<row>"), "{body}");
+    let body = gql(&state, &format!("{{ hotspots(species: \"python\", at: \"{}\", bbox: {region}) {{ species }} }}", iso(t)), json!({})).await;
+    assert!(error_message(&body).contains("unknown species") && error_message(&body).contains("lionfish"), "{body}");
+    // Evidence ids carry the region too.
+    let body = gql(&state, "query($id: ID!) { evidence(id: $id) { record } }", json!({"id": format!("hotspot:lionfish:mx-caribbean:20:30:{t}")})).await;
+    assert_eq!(body["data"]["evidence"]["record"]["region"], "mx-caribbean", "{body}");
+    assert_eq!(body["data"]["evidence"]["record"]["cell"], "mx-caribbean:20:30");
 }
 
 #[tokio::test]
 async fn resolver_explain_cell() {
     let state = seeded().await;
     let t = ms(2025, 6, 1, 12);
-    let g = Grid::REGION;
+    let g = python_grid(&state);
     let (lon, lat) = g.center(g.index(120, 100));
     insert_sighting(&state.obs, "inat", 4, lat, lon, t - HOUR, "research", None).await;
     let body = gql(
@@ -300,7 +373,7 @@ async fn resolver_explain_cell() {
 #[tokio::test]
 async fn resolver_backtest() {
     let state = seeded().await;
-    let g = Grid::REGION;
+    let g = python_grid(&state);
     let today = crate::hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
     let (lon, lat) = g.center(g.index(100, 100));
     // History two days back, then a sighting in the same cell yesterday: a hit.
@@ -377,26 +450,27 @@ async fn resolver_taxon_info_taxa_and_species_counts() {
 
     // Counts: distinct sightings per taxon in the window, most first, plants and the ungrouped filtered by group.
     let window = format!("from: \"{}\", to: \"{}\"", iso(t - DAY), iso(t + DAY));
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}) {{ taxon {{ id commonName iconicGroup }} count latestSightingId }} }}"), json!({})).await;
+    let region = region(&state);
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}) {{ taxon {{ id commonName iconicGroup }} count latestSightingId }} }}"), json!({})).await;
     let rows = body["data"]["speciesCounts"].as_array().unwrap();
     assert_eq!(rows.len(), 4, "{body}");
     assert_eq!(rows[0]["taxon"]["id"], anole.to_string());
     assert_eq!(rows[0]["count"], 2, "the GBIF duplicate is not counted and the old one is outside the window");
     assert_eq!(rows[0]["latestSightingId"], a2.to_string());
     assert_eq!(rows[1]["taxon"]["id"], "3");
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Reptilia\", \"Aves\"]) {{ taxon {{ scientificName }} count }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}, groups: [\"Reptilia\", \"Aves\"]) {{ taxon {{ scientificName }} count }} }}"), json!({})).await;
     assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"scientificName": "Anolis sagrei"}, "count": 2}, {"taxon": {"scientificName": "Iguana iguana"}, "count": 1}]), "{body}");
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"other\"]) {{ taxon {{ scientificName iconicGroup }} count }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}, groups: [\"other\"]) {{ taxon {{ scientificName iconicGroup }} count }} }}"), json!({})).await;
     assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"scientificName": "Mysterius nobodyi", "iconicGroup": null}, "count": 1}]), "`other` also matches taxa with no group: {body}");
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Plantae\"], top: 1) {{ taxon {{ commonName }} }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}, groups: [\"Plantae\"], top: 1) {{ taxon {{ commonName }} }} }}"), json!({})).await;
     assert_eq!(body["data"]["speciesCounts"], json!([{"taxon": {"commonName": "oleander"}}]), "{body}");
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, groups: [\"Dragons\"]) {{ count }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}, groups: [\"Dragons\"]) {{ count }} }}"), json!({})).await;
     assert!(error_message(&body).contains("unknown group"), "{body}");
-    let body = gql(&state, &format!("{{ speciesCounts(bbox: {REGION}, {window}, top: 0) {{ count }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ speciesCounts(bbox: {region}, {window}, top: 0) {{ count }} }}"), json!({})).await;
     assert!(error_message(&body).contains("`top`"), "{body}");
 
     // The card fields ride on `sightings` and inside the evidence record.
-    let body = gql(&state, &format!("{{ sightings(bbox: {REGION}, {window}, taxa: [\"{anole}\"]) {{ id taxon {{ commonName iconicGroup summary photoUrl pageUrl }} }} }}"), json!({})).await;
+    let body = gql(&state, &format!("{{ sightings(bbox: {region}, {window}, taxa: [\"{anole}\"]) {{ id taxon {{ commonName iconicGroup summary photoUrl pageUrl }} }} }}"), json!({})).await;
     let s = &body["data"]["sightings"][0]["taxon"];
     assert_eq!(s["iconicGroup"], "Reptilia", "{body}");
     assert_eq!(s["pageUrl"], "https://www.inaturalist.org/taxa/116461");
@@ -537,8 +611,8 @@ async fn resolver_apply_ops_rejects_bad_ops_and_big_bodies() {
     // Over the body cap: 413 before any parsing.
     let huge = "x".repeat(super::MAX_BODY_BYTES);
     let res = tower::ServiceExt::oneshot(
-        crate::app::app(state.clone()),
-        axum::http::Request::post("/v1/graphql")
+        router_for(&state),
+        axum::http::Request::post("/v1/python/graphql")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(json!({"query": APPLY, "variables": {"board": "b1", "ops": [], "pad": huge}}).to_string()))
             .unwrap(),
@@ -553,20 +627,21 @@ async fn resolver_apply_ops_rejects_bad_ops_and_big_bodies() {
 #[tokio::test]
 async fn resolver_limits_query_cost() {
     let state = seeded().await;
+    let region = region(&state);
     let window = "from: \"2026-09-01T00:00:00Z\", to: \"2026-09-02T00:00:00Z\"";
-    let fanned: Vec<String> = (0..20).map(|i| format!("s{i}: sightings(bbox: {REGION}, {window}) {{ id }}")).collect();
+    let fanned: Vec<String> = (0..20).map(|i| format!("s{i}: sightings(bbox: {region}, {window}) {{ id }}")).collect();
     let body = gql(&state, &format!("{{ {} }}", fanned.join(" ")), json!({})).await;
     assert!(body["data"].is_null(), "{body}");
     assert!(error_message(&body).contains("complex"), "{body}");
 
     // A handful of heavy fields is fine.
-    let few: Vec<String> = (0..3).map(|i| format!("s{i}: sightings(bbox: {REGION}, {window}) {{ id lat lon }}")).collect();
+    let few: Vec<String> = (0..3).map(|i| format!("s{i}: sightings(bbox: {region}, {window}) {{ id lat lon }}")).collect();
     let body = gql(&state, &format!("{{ {} feeds {{ source }} }}", few.join(" ")), json!({})).await;
     assert!(body["errors"].is_null(), "{body}");
 
     // The alert-band document the HUD sends for a 30-day window at 3 h spacing.
     let bands: Vec<String> = (0..241)
-        .map(|i| format!("a{i}: alerts(bbox: {REGION}, at: \"{}\") {{ id event severity headline onset expires }}", iso(ms(2026, 9, 1, 0) + i * 3 * HOUR)))
+        .map(|i| format!("a{i}: alerts(bbox: {region}, at: \"{}\") {{ id event severity headline onset expires }}", iso(ms(2026, 9, 1, 0) + i * 3 * HOUR)))
         .collect();
     let body = gql(&state, &format!("{{ {} }}", bands.join(" ")), json!({})).await;
     assert!(body["errors"].is_null(), "{body}");
@@ -590,10 +665,10 @@ async fn subscription_ops_receives_applied_ops_over_websocket() {
     let state = test_state();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = crate::app::app(state.clone());
+    let app = router_for(&state);
     let server = tokio::spawn(async move { axum::serve(listener, app).await });
 
-    let mut req = format!("ws://{addr}/v1/graphql").into_client_request().unwrap();
+    let mut req = format!("ws://{addr}/v1/python/graphql").into_client_request().unwrap();
     req.headers_mut().insert("Sec-WebSocket-Protocol", "graphql-transport-ws".parse().unwrap());
     let (mut ws, res) = tokio_tungstenite::connect_async(req).await.unwrap();
     assert_eq!(res.headers()["sec-websocket-protocol"], "graphql-transport-ws");
@@ -624,7 +699,7 @@ async fn subscription_ops_receives_applied_ops_over_websocket() {
         let http = http.clone();
         async move {
             let res: Value = http
-                .post(format!("http://{addr}/v1/graphql"))
+                .post(format!("http://{addr}/v1/python/graphql"))
                 .json(&json!({"query": APPLY, "variables": {"board": "field-team", "ops": ops}}))
                 .send()
                 .await
@@ -647,7 +722,7 @@ async fn subscription_ops_receives_applied_ops_over_websocket() {
     // Later ops stream in order; a re-sent op is not delivered twice; other boards are filtered.
     apply(json!([op("w1", "5000:0:n1", "mission", "m1", "status", json!("active"))])).await;
     let other: Value = http
-        .post(format!("http://{addr}/v1/graphql"))
+        .post(format!("http://{addr}/v1/python/graphql"))
         .json(&json!({"query": APPLY, "variables": {"board": "elsewhere", "ops": [op("e1", "1:0:n1", "note", "x", "t", json!(1))]}}))
         .send()
         .await

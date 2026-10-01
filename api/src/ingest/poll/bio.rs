@@ -1,99 +1,69 @@
-//! Biological source registry (T9) and the helpers the three bio pollers share: region test,
-//! focus-taxon refs, request pacing, paged HTTP, and Eastern-time conversion.
+//! Biological source registry (T9) and the helpers the three bio pollers share: region and
+//! taxon scope from the app config, request pacing, paged HTTP, and Eastern-time conversion.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Weekday};
 
+use crate::app::config::{App, BBox, Taxon};
 use crate::ingest::governor;
 use crate::ingest::source::{RawPayload, Source};
-use crate::model::TaxonRef;
 use crate::state::{AppState, Config};
 
 use super::{gbif, inat, nas};
 
-pub fn sources(_config: &Config) -> Vec<Arc<dyn Source>> {
-    vec![Arc::new(inat::Inat::new()), Arc::new(nas::Nas::new()), Arc::new(gbif::Gbif::new())]
+/// The bio pollers the app's `feeds[]` lists, in ingest order (iNat before NAS and GBIF, which
+/// link to it as duplicates).
+pub fn sources(_config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
+    let mut out: Vec<Arc<dyn Source>> = Vec::new();
+    if app.cfg.has_feed(inat::ID) {
+        out.push(Arc::new(inat::Inat::new(app.clone())));
+    }
+    if app.cfg.has_feed(nas::ID) {
+        out.push(Arc::new(nas::Nas::new(app.clone())));
+    }
+    if app.cfg.has_feed(gbif::ID) {
+        out.push(Arc::new(gbif::Gbif::new(app.clone())));
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------------------------
-// Region and taxa (PLAN.md C15, migration seed)
+// Scope: regions and taxa (PLAN.md C-A4)
 // ---------------------------------------------------------------------------------------------
 
-pub const WEST: f64 = -83.2;
-pub const SOUTH: f64 = 24.3;
-pub const EAST: f64 = -79.8;
-pub const NORTH: f64 = 27.5;
-
-pub fn in_region(lat: f64, lon: f64) -> bool {
-    (SOUTH..=NORTH).contains(&lat) && (WEST..=EAST).contains(&lon)
+/// Is the point inside one of the app's regions?
+pub fn in_region(app: &App, lat: f64, lon: f64) -> bool {
+    app.region_of(lat, lon).is_some()
 }
 
-/// Focus taxa, `taxa.id` 1-4. The scientific names match the migration seed exactly, which is
-/// how the row writer resolves them to the fixed ids.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Focus {
-    Python,
-    Tegu,
-    Iguana,
-    Lionfish,
+/// `(region id, bbox)` of every region, in config order: the per-region query loop of the
+/// paged pollers.
+pub fn region_boxes(app: &App) -> Vec<(String, BBox)> {
+    app.regions.iter().map(|r| (r.cfg.id.clone(), r.cfg.bbox)).collect()
 }
 
-impl Focus {
-    pub fn scientific_name(self) -> &'static str {
-        match self {
-            Focus::Python => "Python bivittatus",
-            Focus::Tegu => "Salvator merianae",
-            Focus::Iguana => "Iguana iguana",
-            Focus::Lionfish => "Pterois volitans/miles",
-        }
-    }
+/// The focus taxon an iNat lineage (taxon id first, then ancestors) collapses to.
+pub fn taxon_for_inat<'a>(app: &'a App, lineage: &[i64]) -> Option<&'a Taxon> {
+    app.taxa.iter().find(|t| t.matches_inat(lineage.iter().copied()))
+}
 
-    pub fn common_name(self) -> &'static str {
-        match self {
-            Focus::Python => "Burmese python",
-            Focus::Tegu => "Argentine black and white tegu",
-            Focus::Iguana => "Green iguana",
-            Focus::Lionfish => "Lionfish",
-        }
-    }
+pub fn taxon_for_gbif(app: &App, species_key: Option<i64>, genus_key: Option<i64>) -> Option<&Taxon> {
+    app.taxa.iter().find(|t| t.matches_gbif(species_key, genus_key))
+}
 
-    /// iNat taxon id of the focus taxon (the lionfish row stands for the genus Pterois).
-    pub fn inat_taxon_id(self) -> i64 {
-        match self {
-            Focus::Python => 238252,
-            Focus::Tegu => 318758,
-            Focus::Iguana => 35342,
-            Focus::Lionfish => 47284,
-        }
-    }
-
-    pub fn iconic_group(self) -> &'static str {
-        match self {
-            Focus::Lionfish => "Actinopterygii",
-            _ => "Reptilia",
-        }
-    }
-
-    pub fn taxon(self) -> TaxonRef {
-        TaxonRef {
-            scientific_name: self.scientific_name().into(),
-            common_name: self.common_name().into(),
-            inat_taxon_id: Some(self.inat_taxon_id()),
-            iconic_group: Some(self.iconic_group().into()),
-            // The seeded rows carry their ancestry (migration 0005); the adapter need not repeat it.
-            ancestor_ids: None,
-        }
-    }
+pub fn taxon_for_nas<'a>(app: &'a App, genus: &str, species: &str) -> Option<&'a Taxon> {
+    app.taxa.iter().find(|t| t.matches_nas(genus, species))
 }
 
 // ---------------------------------------------------------------------------------------------
 // Request pacing and paged fetches
 // ---------------------------------------------------------------------------------------------
 
-/// Minimum gap between two request starts. One per source, shared across fetch calls, so the
-/// etiquette holds within a paged fetch and across back-to-back fetches.
+/// Minimum gap between two request starts. One per upstream, shared by every app's adapter for
+/// that upstream (`Pacer::shared`) and across fetch calls, so the etiquette holds within a paged
+/// fetch, across back-to-back fetches, and across the three apps polling the same API.
 #[derive(Debug)]
 pub struct Pacer {
     interval: Duration,
@@ -103,6 +73,14 @@ pub struct Pacer {
 impl Pacer {
     pub fn new(interval: Duration) -> Self {
         Pacer { interval, last: tokio::sync::Mutex::new(None) }
+    }
+
+    /// The process-wide pacer of `source_id`, created on first use. Two apps that both poll iNat
+    /// share one, so the process never exceeds the upstream's rate.
+    pub fn shared(source_id: &str, interval: Duration) -> Arc<Pacer> {
+        static PACERS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Arc<Pacer>>>> = std::sync::OnceLock::new();
+        let mut map = PACERS.get_or_init(Default::default).lock().unwrap_or_else(|p| p.into_inner());
+        map.entry(source_id.to_string()).or_insert_with(|| Arc::new(Pacer::new(interval))).clone()
     }
 
     pub fn interval(&self) -> Duration {
@@ -240,7 +218,26 @@ pub fn encode(v: &str) -> String {
 }
 
 #[cfg(test)]
+pub(crate) mod testing {
+    use std::sync::Arc;
+
+    use crate::app::config::App;
+
+    /// The python app as the bio adapters see it (taxa resolved to the seeded ids).
+    pub fn python() -> Arc<App> {
+        Arc::new(crate::hotspot::score::testkit::python_app())
+    }
+
+    pub fn lionfish() -> Arc<App> {
+        let mut app = App::builtin("lionfish").unwrap();
+        app.taxa[0].taxon_id = 4;
+        Arc::new(app)
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::testing::{lionfish, python};
     use super::*;
 
     fn local(s: &str) -> NaiveDateTime {
@@ -270,15 +267,33 @@ mod tests {
 
     #[test]
     fn bio_region_and_encoding() {
-        assert!(in_region(25.5, -80.5));
-        assert!(!in_region(29.67, -84.83));
+        let app = python();
+        assert!(in_region(&app, 25.5, -80.5));
+        assert!(!in_region(&app, 29.67, -84.83));
+        let lf = lionfish();
+        assert!(in_region(&lf, 20.5, -87.0), "Cozumel is in the Mexican Caribbean region");
+        assert!(!in_region(&lf, 29.67, -84.83));
+        assert_eq!(region_boxes(&lf).len(), 4);
         assert_eq!(encode("2026-09-01T00:00:00Z"), "2026-09-01T00%3A00%3A00Z");
         assert_eq!(rfc3339_utc(1_790_000_000_123), "2026-09-21T14:13:20Z");
     }
 
     #[test]
+    fn bio_pacers_are_shared_per_upstream_across_apps() {
+        let a = Pacer::shared("bio-test-shared", Duration::from_millis(5));
+        let b = Pacer::shared("bio-test-shared", Duration::from_millis(50));
+        assert!(Arc::ptr_eq(&a, &b), "second caller gets the same pacer, first interval wins");
+        assert_eq!(b.interval(), Duration::from_millis(5));
+        assert!(!Arc::ptr_eq(&a, &Pacer::shared("bio-test-other", Duration::from_millis(5))));
+    }
+
+    #[test]
     fn bio_registry_has_three_sources() {
-        let ids: Vec<&str> = sources(&Config::for_tests()).iter().map(|s| s.info().id).collect();
+        let ids: Vec<&str> = sources(&Config::for_tests(), &python()).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["inat", "nas", "gbif"]);
+        let ids: Vec<&str> = sources(&Config::for_tests(), &lionfish()).iter().map(|s| s.info().id).collect();
+        assert_eq!(ids, ["inat", "nas", "gbif"]);
+        let carp = Arc::new(App::builtin("carp").unwrap());
+        assert!(sources(&Config::for_tests(), &carp).is_empty(), "carp lists no bio feed");
     }
 }

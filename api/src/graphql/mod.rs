@@ -1,6 +1,7 @@
-//! GraphQL at /v1/graphql (PLAN.md C2). Queries and mutations: `POST /v1/graphql`.
-//! Subscriptions: `GET /v1/graphql` upgraded to a WebSocket speaking graphql-transport-ws
-//! (the legacy graphql-ws subprotocol is accepted too).
+//! GraphQL at /v1/{app}/graphql (PLAN.md C2, app prefix C-A2). Queries and mutations:
+//! `POST /v1/{app}/graphql`. Subscriptions: `GET /v1/{app}/graphql` upgraded to a WebSocket
+//! speaking graphql-transport-ws (the legacy graphql-ws subprotocol is accepted too). The
+//! `AppState` of the addressed app is attached to every operation, so one schema serves all apps.
 //!
 //! The wiring lives here; resolver bodies live in `query.rs`, `mutation.rs` and `subscription.rs`,
 //! and the SDL types in `types.rs`. `api/schema.graphql` is the contract, enforced by
@@ -17,12 +18,13 @@ use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
 use async_graphql::{Context, Data, Schema};
 use async_graphql_axum::rejection::GraphQLRejection;
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
-use axum::extract::{FromRequest, FromRequestParts, Request, State, WebSocketUpgrade};
+use axum::extract::{FromRequest, FromRequestParts, Request, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Extension, Router};
 
+use crate::app::AppRegistry;
 use crate::state::AppState;
 pub use mutation::MutationRoot;
 pub use query::QueryRoot;
@@ -56,7 +58,7 @@ pub(crate) fn now_ms() -> i64 {
 /// cap is applied here before it parses.
 pub const MAX_BODY_BYTES: usize = 1024 * 1024;
 
-async fn post_graphql(State(state): State<AppState>, Extension(schema): Extension<AppSchema>, req: Request) -> Response {
+async fn post_graphql(state: AppState, Extension(schema): Extension<AppSchema>, req: Request) -> Response {
     let (parts, body) = req.into_parts();
     let bytes = match axum::body::to_bytes(body, MAX_BODY_BYTES).await {
         Ok(bytes) => bytes,
@@ -73,7 +75,7 @@ async fn post_graphql(State(state): State<AppState>, Extension(schema): Extensio
 }
 
 /// WebSocket upgrade for subscriptions. A plain GET gets a 400 pointing at POST.
-async fn get_graphql(State(state): State<AppState>, Extension(schema): Extension<AppSchema>, req: Request) -> Response {
+async fn get_graphql(state: AppState, Extension(schema): Extension<AppSchema>, req: Request) -> Response {
     let (mut parts, _) = req.into_parts();
     // axum 0.8 has no Option<WebSocketUpgrade> extractor; try both extractors by hand.
     let upgrade = WebSocketUpgrade::from_request_parts(&mut parts, &()).await;
@@ -86,14 +88,14 @@ async fn get_graphql(State(state): State<AppState>, Extension(schema): Extension
         }),
         _ => (
             StatusCode::BAD_REQUEST,
-            "GET /v1/graphql only accepts a graphql-transport-ws WebSocket upgrade; send queries with POST",
+            "GET /v1/{app}/graphql only accepts a graphql-transport-ws WebSocket upgrade; send queries with POST",
         )
             .into_response(),
     }
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/v1/graphql", get(get_graphql).post(post_graphql)).layer(Extension(schema()))
+pub fn routes() -> Router<AppRegistry> {
+    Router::new().route("/graphql", get(get_graphql).post(post_graphql)).layer(Extension(schema()))
 }
 
 #[cfg(test)]
@@ -111,7 +113,7 @@ mod tests {
     use tower::ServiceExt;
 
     use super::*;
-    use crate::app::test_support::{test_app, test_state};
+    use crate::app::test_support::{router_for, test_app, test_state};
     use crate::feed_state;
     use crate::realtime::Event;
 
@@ -226,10 +228,11 @@ mod tests {
         }
     }
 
+    /// POST to the python app's endpoint.
     pub(super) async fn post(app: axum::Router, body: Value) -> (StatusCode, Value) {
         let res = app
             .oneshot(
-                Request::post("/v1/graphql")
+                Request::post("/v1/python/graphql")
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(body.to_string()))
                     .unwrap(),
@@ -309,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn plain_get_is_rejected_with_a_hint() {
         let (app, _) = test_app();
-        let res = app.oneshot(Request::get("/v1/graphql").body(Body::empty()).unwrap()).await.unwrap();
+        let res = app.oneshot(Request::get("/v1/python/graphql").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -351,7 +354,7 @@ mod tests {
         }
         state.team.write(insert_op(4, "other")).await.unwrap();
 
-        let (_, body) = post(crate::app::app(state.clone()),json!({"query": "{ opsSince(boardId: \"b1\", seq: 1) { seq id value } }"})).await;
+        let (_, body) = post(router_for(&state), json!({"query": "{ opsSince(boardId: \"b1\", seq: 1) { seq id value } }"})).await;
         assert_eq!(
             body["data"]["opsSince"],
             json!([{"seq": 2, "id": "op2", "value": {"v": 2}}, {"seq": 3, "id": "op3", "value": {"v": 3}}])
@@ -409,10 +412,10 @@ mod tests {
         let state = test_state();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let app = crate::app::app(state.clone());
+        let app = router_for(&state);
         let server = tokio::spawn(async move { axum::serve(listener, app).await });
 
-        let mut req = format!("ws://{addr}/v1/graphql").into_client_request().unwrap();
+        let mut req = format!("ws://{addr}/v1/python/graphql").into_client_request().unwrap();
         req.headers_mut().insert("Sec-WebSocket-Protocol", "graphql-transport-ws".parse().unwrap());
         let (mut ws, res) = tokio_tungstenite::connect_async(req).await.unwrap();
         assert_eq!(res.headers()["sec-websocket-protocol"], "graphql-transport-ws");

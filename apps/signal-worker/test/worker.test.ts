@@ -331,6 +331,16 @@ describe("request validation and routing", () => {
     expect((await call("GET", `/rooms/${"r".repeat(64)}/inbox/A-z_09`)).status).toBe(200);
   });
 
+  test("room ids may carry an app prefix: <app>:main (PLAN.md C-A6)", async () => {
+    expect((await announce("lionfish:main", "alice")).status).toBe(204);
+    expect((await announce("python:main", "bob")).status).toBe(204);
+    expect((await peers("lionfish:main")).map((p) => p.peerId)).toEqual(["alice"]);
+    expect((await peers("python:main")).map((p) => p.peerId)).toEqual(["bob"]);
+    expect((await send("carp:main", "bob", "alice", "offer", { sdp: "v=0" })).status).toBe(204);
+    expect((await inbox("carp:main", "bob")).map((m) => m.from)).toEqual(["alice"]);
+    expect(await expectError(await call("GET", "/rooms/carp:main:extra:x.y/peers"), 400)).toMatch(/room must match/);
+  });
+
   test("body over 64 KB is 413, by content-length or by counted bytes", async () => {
     const big = { from: "alice", kind: "offer", payload: "x".repeat(MAX_BODY_BYTES) };
     expect(await expectError(await call("POST", "/rooms/demo/inbox/bob", { body: big }), 413)).toContain("65536");

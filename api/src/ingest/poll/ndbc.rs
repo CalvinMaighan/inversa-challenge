@@ -279,8 +279,7 @@ pub fn normalize_txt(st: &NdbcStation, bytes: &[u8], fetched_at: i64) -> anyhow:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, recorded, FakeFetch};
-    use crate::ingest::poll::physical::REGION;
+    use crate::ingest::poll::physical::testing::{assert_idempotent, fixture, python_region, recorded, FakeFetch};
     use crate::model::{Flag, ReadingRow};
 
     const RECORDED_AT: i64 = 1_790_800_191_000;
@@ -307,7 +306,8 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), 52);
-        assert!(STATIONS.iter().all(|s| REGION.contains(s.lat, s.lon)));
+        let region = python_region();
+        assert!(STATIONS.iter().all(|s| region.contains(s.lat, s.lon)));
         for dead in ["FWYF1", "MLRF1", "RKQF1"] {
             assert!(station(dead).is_none(), "{dead} is offline");
         }
