@@ -59,7 +59,7 @@ describe("runTurn refuses without a model call", () => {
 describe("daily token budget", () => {
   test("default limit and env override", () => {
     expect(dailyTokenLimit()).toBe(DEFAULT_DAILY_TOKENS);
-    expect(DEFAULT_DAILY_TOKENS).toBe(10_000_000);
+    expect(DEFAULT_DAILY_TOKENS).toBe(100_000_000);
     process.env.AGENT_DAILY_TOKENS = "250000";
     expect(dailyTokenLimit()).toBe(250_000);
     process.env.AGENT_DAILY_TOKENS = "-5";
@@ -74,7 +74,7 @@ describe("daily token budget", () => {
     recordTokens(800, day);
     expect(tokenBudget(day)).toMatchObject({ day: "2026-01-15", used: 2_000, remaining: DEFAULT_DAILY_TOKENS - 2_000 });
     const file = JSON.parse(await Bun.file(`${env.dataDir}/agent-budget.json`).text()) as { day: string; used: number };
-    expect(file).toEqual({ day: "2026-01-15", used: 2_000 });
+    expect(file).toMatchObject({ day: "2026-01-15", used: 2_000 });
     resetBudgetCache();
     expect(tokenBudget(day).used).toBe(2_000);
     expect(tokenBudget(new Date("2026-01-16T00:00:01Z")).used).toBe(0);
@@ -88,24 +88,24 @@ describe("answer cache keying", () => {
   test("case, whitespace, curly quotes and trailing punctuation do not change the key", () => {
     expect(normalizeQuestion("  Any ALERTS\n right   now?! ")).toBe("any alerts right now");
     expect(normalizeQuestion("What’s up?")).toBe("what's up");
-    expect(answerCacheKey("Any alerts right now?", "v1", { bbox, now })).toBe(
-      answerCacheKey("any alerts   right now", "v1", { bbox, now }),
+    expect(answerCacheKey("python", "Any alerts right now?", "v1", { bbox, now })).toBe(
+      answerCacheKey("python", "any alerts   right now", "v1", { bbox, now }),
     );
   });
 
   test("data version, bbox at 0.01° and the 15-minute frame scope the key", () => {
-    const base = answerCacheKey("q", "v1", { bbox, now });
-    expect(answerCacheKey("q", "v2", { bbox, now })).not.toBe(base);
-    expect(answerCacheKey("q", "v1", { bbox: { ...bbox, west: -80.8512 }, now })).toBe(base);
-    expect(answerCacheKey("q", "v1", { bbox: { ...bbox, west: -80.86 }, now })).not.toBe(base);
-    expect(answerCacheKey("q", "v1", { bbox, now: new Date("2026-01-15T03:14:59Z") })).toBe(base);
-    expect(answerCacheKey("q", "v1", { bbox, now: new Date("2026-01-15T03:15:00Z") })).not.toBe(base);
-    expect(answerCacheKey("q", "v1")).not.toBe(base);
+    const base = answerCacheKey("python", "q", "v1", { bbox, now });
+    expect(answerCacheKey("python", "q", "v2", { bbox, now })).not.toBe(base);
+    expect(answerCacheKey("python", "q", "v1", { bbox: { ...bbox, west: -80.8512 }, now })).toBe(base);
+    expect(answerCacheKey("python", "q", "v1", { bbox: { ...bbox, west: -80.86 }, now })).not.toBe(base);
+    expect(answerCacheKey("python", "q", "v1", { bbox, now: new Date("2026-01-15T03:14:59Z") })).toBe(base);
+    expect(answerCacheKey("python", "q", "v1", { bbox, now: new Date("2026-01-15T03:15:00Z") })).not.toBe(base);
+    expect(answerCacheKey("python", "q", "v1")).not.toBe(base);
   });
 
   test("entries expire after the TTL", () => {
     clearAnswerCache();
-    const key = answerCacheKey("q", "v1");
+    const key = answerCacheKey("python", "q", "v1");
     writeAnswerCache(key, { events: [], content: "a", citations: [] }, 1_000);
     expect(readAnswerCache(key, 1_000 + ANSWER_CACHE_TTL_MS)?.content).toBe("a");
     expect(readAnswerCache(key, 1_001 + ANSWER_CACHE_TTL_MS)).toBeUndefined();

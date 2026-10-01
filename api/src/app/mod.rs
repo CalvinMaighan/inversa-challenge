@@ -136,13 +136,38 @@ pub fn app(registry: AppRegistry) -> Router {
     Router::new().route("/health", get(health)).nest("/v1/{app}", per_app).with_state(registry)
 }
 
+/// The file behind a database's `main` schema, or `None` for an in-memory database.
+async fn db_file(db: &crate::db::Db) -> anyhow::Result<Option<std::path::PathBuf>> {
+    let file: String = db.read(|c| c.query_row("select file from pragma_database_list where name = 'main'", [], |r| r.get(0))).await?;
+    Ok((!file.is_empty()).then(|| std::path::PathBuf::from(file)))
+}
+
+/// Both of an app's databases answer a query and, when file-backed, still exist on disk. A file
+/// deleted under a running process keeps answering from the unlinked inode while every write
+/// is lost at the next restart and Litestream stops replicating it, so it counts as a failure.
+async fn check_dbs(state: &AppState) -> anyhow::Result<()> {
+    for (name, db) in [("observations.db", &state.obs), ("team.db", &state.team)] {
+        let path = db_file(db).await.map_err(|e| anyhow::anyhow!("{}/{name} does not answer: {e:#}", state.app.id()))?;
+        if let Some(path) = path {
+            anyhow::ensure!(path.exists(), "{}/{name} is missing on disk; restart inversa-api to restore it from the replica", state.app.id());
+        }
+    }
+    Ok(())
+}
+
 /// `GET /health`: every running app with its config summary and per-app feed health (C3
-/// envelopes, as `feeds` returns them).
+/// envelopes, as `feeds` returns them). An app whose databases fail [`check_dbs`] or whose
+/// feed state cannot be computed has `feeds: {error}` and makes the answer 503 `degraded`;
+/// the other apps are reported as usual.
 async fn health(axum::extract::State(registry): axum::extract::State<AppRegistry>) -> Response {
     let mut apps = Vec::with_capacity(registry.len());
     let mut status = "ok";
     for state in registry.iter() {
-        let feeds = match crate::feed_state::compute(&state.obs, state.now_ms()).await {
+        let computed = match check_dbs(state).await {
+            Ok(()) => crate::feed_state::compute(&state.obs, state.now_ms()).await,
+            Err(e) => Err(e),
+        };
+        let feeds = match computed {
             Ok(f) => serde_json::to_value(f).unwrap_or_default(),
             Err(e) => {
                 status = "degraded";
@@ -398,6 +423,34 @@ mod tests {
         assert_eq!(py.app.taxa.iter().map(|t| t.taxon_id).collect::<Vec<_>>(), [1, 2, 3, 4]);
         assert!(registry.get("carp").is_none());
         drop(registry);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// R19: a database file deleted under the running API makes that app's `/health` entry an
+    /// error (503 `degraded`); the other apps keep reporting their feeds.
+    #[tokio::test]
+    async fn health_reports_a_missing_db_file_per_app() {
+        let dir = std::env::temp_dir().join(format!("inversa-health-{}", uuid::Uuid::now_v7()));
+        let mut config = Config::for_tests();
+        config.data_dir = dir.clone();
+        let ids: Vec<String> = APP_IDS.iter().map(|s| s.to_string()).collect();
+        let registry = AppRegistry::open(config, &ids).unwrap();
+        let router = super::app(registry.clone());
+        let (status, body) = get_json(&router, "/health").await;
+        assert_eq!((status, &body["status"]), (StatusCode::OK, &json!("ok")), "{body}");
+
+        std::fs::remove_file(dir.join("lionfish/observations.db")).unwrap();
+        let (status, body) = get_json(&router, "/health").await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
+        assert_eq!(body["status"], "degraded");
+        let err = body["apps"][1]["feeds"]["error"].as_str().unwrap();
+        assert!(err.starts_with("lionfish/observations.db is missing on disk"), "{err}");
+        assert!(body["apps"][0]["feeds"].is_array() && body["apps"][2]["feeds"].is_array(), "{body}");
+
+        std::fs::remove_file(dir.join("python/team.db")).unwrap();
+        let (_, body) = get_json(&router, "/health").await;
+        assert!(body["apps"][2]["feeds"]["error"].as_str().unwrap().starts_with("python/team.db is missing on disk"), "{body}");
+        drop((router, registry));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -3,7 +3,14 @@
 # through a proxy that passes those challenges.
 #
 # Axum (127.0.0.1:4041) owns /v1/* and /health, including graphql-transport-ws
-# upgrades for subscriptions. Next (127.0.0.1:3050) owns everything else.
+# upgrades for subscriptions. /signal/* goes to the board's signal Worker on Cloudflare
+# (prefix stripped), so the page talks to one origin (release.yml builds the client with
+# NEXT_PUBLIC_SIGNAL_URL=/signal). Next (127.0.0.1:3050) owns everything else, /api/health included.
+#
+# SIGNAL_WORKER_URL (the Worker's https://<name>.<account>.workers.dev origin) comes from
+# /etc/inversa/caddy.env, which remote-unpack.sh writes from the Doppler env and the caddy unit
+# reads through the inversa.conf drop-in. Unset, /signal/* answers 502 and the board falls back
+# to syncing through the API; /api/health reports the Worker down.
 # Caddy's reverse_proxy handles Connection: Upgrade on its own; nothing extra is needed
 # for WebSockets beyond keeping them open across config reloads (stream_close_delay).
 
@@ -34,9 +41,14 @@ inversa.calvinmaighan.dev {
 		defer
 	}
 
-	# Access log to stderr, so journald holds and rotates it (journalctl -u caddy).
+	# Access log to stderr, so journald holds and rotates it (journalctl -u caddy). The nudge
+	# token is a path segment (/v1/<app>/ingest/nudge/<source>/<token>), so it is masked before
+	# the line is written; nothing else in a URL is a secret.
 	log {
-		format json
+		format filter {
+			request>uri regexp "^(/v1/[^/]+/ingest/nudge/[^/]+/)[^/?]+" "${1}REDACTED"
+			wrap json
+		}
 	}
 
 	@api path /v1/* /health
@@ -46,6 +58,13 @@ inversa.calvinmaighan.dev {
 			flush_interval -1
 			# A deploy reloads Caddy; give open sockets time to finish instead of cutting them.
 			stream_close_delay 5m
+		}
+	}
+
+	handle_path /signal/* {
+		reverse_proxy {$SIGNAL_WORKER_URL:https://signal-worker-url-not-set.invalid} {
+			# workers.dev routes by Host; the Worker checks Origin, which passes through unchanged.
+			header_up Host {upstream_hostport}
 		}
 	}
 

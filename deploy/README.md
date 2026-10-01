@@ -4,17 +4,18 @@ One Hetzner VM runs everything behind Caddy at `inversa.calvinmaighan.dev`:
 
 | Unit | Listens | Runs |
 |---|---|---|
-| `caddy` | :80, :443 | TLS; `/v1/*` and `/health` go to 4041 (WebSockets included), everything else to 3050; COOP, COEP and CORP on every response |
+| `caddy` | :80, :443 | TLS; `/v1/*` and `/health` go to 4041 (WebSockets included), `/signal/*` to the signal Worker (`SIGNAL_WORKER_URL`, prefix stripped), everything else to 3050; COOP, COEP, CORP and CSP on every response; the nudge token is masked in the access log |
 | `inversa-api` | 127.0.0.1:4041 | `/opt/inversa/api/inversa-api`; restores missing DBs from R2 first (`restore.sh` as `ExecStartPre`) |
-| `inversa-web` | 127.0.0.1:3050 | `bun /opt/inversa/web/apps/web/server.js`, a single process, because voice sessions live in memory |
+| `inversa-web` | 127.0.0.1:3050 | `bun /opt/inversa/web/apps/web/server.js`, a single process, because voice sessions live in memory; writes agent sessions and the daily spend files to `/var/lib/inversa/web-data` |
 | `inversa-litestream` | - | replicates `/var/lib/inversa/<app>/{observations,team}.db` (apps `carp`, `lionfish`, `python`) to R2 bucket `inversa-litestream` |
 
 Paths on the box:
 
 - `/opt/inversa/releases/<version>`: unpacked releases. The three newest are kept.
 - `/opt/inversa/current`: points at the live release. `/opt/inversa/{api,web,deploy}` link through it.
-- `/var/lib/inversa`: the per-app databases (`<app>/`), the local archive (when R2 is not set) and the web cache. It is the only writable path for the units.
+- `/var/lib/inversa`: the per-app databases (`<app>/`), the local archive (when R2 is not set), the web cache and `web-data/` (agent sessions, `agent-budget.json`, `voice-usage.json`; not replicated, so a rebuilt box starts the day's spend at zero). It is the only writable path for the units, and the web unit may write only `web-cache/` and `web-data/`.
 - `/etc/inversa/env`: rendered from Doppler `inversa`/`prd` on every deploy (`root:inversa`, `0640`).
+- `/etc/inversa/caddy.env`: only `SIGNAL_WORKER_URL`, copied from the env on every deploy and read by Caddy through `/etc/systemd/system/caddy.service.d/inversa.conf` (`deploy/caddy-inversa.conf`), so Caddy never sees a secret.
 
 ## Workflows
 
@@ -22,7 +23,22 @@ Paths on the box:
 - `deploy.yml` runs only by manual dispatch. It downloads the artifact from a release run (blank means the latest successful run) and renders the env from Doppler. It then uses scp to copy everything to `root@HETZNER_HOST` and runs `remote-unpack.sh`, which installs the units and Caddyfile, restarts the units, and health-checks 4041 and 3050. To roll back, dispatch it again with an older run id.
 - `workers.yml` runs `wrangler deploy` for `apps/signal-worker`, either on a push to `main` that touches it or by manual dispatch.
 
+## Health
+
+- `GET /health` (Axum): every app with its feed states. 503 `degraded` when an app's databases fail (a file missing on disk or not answering) or its feed state cannot be computed; that app's `feeds` is `{error}`.
+- `GET /api/health` (Next, `apps/web/server/health.ts`): API reachability, each app's databases, every feed that is down with its reason, the signal Worker, the agent (key and caps) and voice. 503 `down` only when the API or a database is broken; a missing optional credential is 200 `degraded` with the reason.
+- `remote-unpack.sh` waits for Axum `/health` `ok`, the page and `/api/health` before it calls a deploy good.
+
+## Local checks
+
+- `bash deploy/test-restore.sh`: restores all three apps' databases from a local Litestream file replica made with the production config's layout; last line `RESTORE-OK apps=3`.
+- `bash deploy/test-migrate-app-dirs.sh`: the pre-pivot layout migration; `MIGRATE-OK idempotent`.
+- `caddy validate --config deploy/Caddyfile --adapter caddyfile`.
+- `cd apps/web && bun run e2e:prod`: the production build and the release API with no credentials; `HEADERS …` and one `PROD app=<id> …` line per app.
+
 ## Human checklist
+
+The ordered list with commands is `docs/HUMAN_STEPS.md`; this section is the deploy-specific subset.
 
 Nothing here holds a secret value. Values go only into Doppler or GitHub secrets.
 
@@ -66,7 +82,9 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
   - `CESIUM_ION_TOKEN`: `release.yml` inlines it into the client bundle as `NEXT_PUBLIC_CESIUM_ION_TOKEN`.
   - `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
   - `NWWS_USER`, `NWWS_PASS` (optional)
-  - `INGEST_HOOK_SECRET`
+  - `INGEST_HOOK_SECRET`, `INGEST_NUDGE_TOKEN`
+  - `SIGNAL_WORKER_URL` (the Worker's `https://…workers.dev` origin; Caddy proxies `/signal/*` there)
+  - `USGS_API_KEY` (optional)
   - `CF_TURN_KEY_ID`, `CF_TURN_KEY_TOKEN`
 - [ ] Do not set `INVERSA_BIND`, `INVERSA_DATA_DIR` or `INVERSA_API_ORIGIN` in Doppler. The units pin them, and an env file entry would override the pin.
 - [ ] Create a Doppler service token for `inversa`/`prd`. Add it as the GitHub repository secret `DOPPLER_TOKEN`. Both `release.yml` and `deploy.yml` use it.

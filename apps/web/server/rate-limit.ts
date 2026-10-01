@@ -80,7 +80,7 @@ export function rateLimited(request: Request, route: LimitedRoute): Response | n
   const decision = routeLimiter(route).hit(clientIp(request));
   if (decision.ok) return null;
   return Response.json(
-    { error: "Too many requests from this address. Try again shortly." },
+    { error: "Too many requests from this address. Try again shortly.", code: "rate_limited" },
     { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" } },
   );
 }

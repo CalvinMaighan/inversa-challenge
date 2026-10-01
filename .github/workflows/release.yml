@@ -69,6 +69,11 @@ jobs:
           test -n "$NEXT_PUBLIC_CESIUM_ION_TOKEN" || { echo "::error::CESIUM_ION_TOKEN is empty in Doppler inversa/prd"; exit 1; }
           echo "::add-mask::$NEXT_PUBLIC_CESIUM_ION_TOKEN"
           export NEXT_PUBLIC_CESIUM_ION_TOKEN
+          # Same origin for the board's signal Worker: Caddy proxies /signal/* to it (deploy/Caddyfile).
+          # Unset, the client would fall back to the dev Worker at 127.0.0.1:8799.
+          export NEXT_PUBLIC_SIGNAL_URL=/signal
+          # The production bundle must not carry the e2e diagnostics hook.
+          unset NEXT_PUBLIC_INVERSA_E2E
           bun run --cwd apps/web build
       - name: Pack web tree
         run: |
@@ -119,7 +124,7 @@ jobs:
           mkdir -p "$DIST/api" "$DIST/web" "$DIST/deploy" out
           install -m 755 "$RUNNER_TEMP/api/inversa-api" "$DIST/api/inversa-api"
           tar --zstd -xf "$RUNNER_TEMP/web/inversa-web.tar.zst" -C "$DIST/web"
-          cp deploy/Caddyfile deploy/litestream.yml deploy/*.service "$DIST/deploy/"
+          cp deploy/Caddyfile deploy/litestream.yml deploy/*.service deploy/caddy-inversa.conf "$DIST/deploy/"
           install -m 755 deploy/restore.sh deploy/remote-unpack.sh deploy/migrate-app-dirs.sh "$DIST/deploy/"
           jq -n --arg version "$VERSION" --arg sha "$GITHUB_SHA" --arg ref "$GITHUB_REF" \
             --arg run "$GITHUB_RUN_ID" '{version: $version, sha: $sha, ref: $ref, run_id: $run}' \

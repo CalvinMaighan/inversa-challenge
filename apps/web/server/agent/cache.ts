@@ -1,6 +1,7 @@
 /**
- * Answer cache keyed by (normalized question, data version). The data version
- * is the newest `lastFetchAt` across feeds, so any new fetch misses the cache.
+ * Answer cache keyed by (app, normalized question, data version). The data version
+ * is the newest `lastFetchAt` across the app's feeds, so any new fetch misses the cache;
+ * the app is its own key part, so one app's answer never serves another app's question.
  * A hit replays the recorded event stream. Entries live 10 minutes.
  */
 
@@ -31,6 +32,7 @@ const FRAME_MS = 15 * 60_000;
  * so both scope the key: bbox to 0.01°, time to its 15-minute frame (C15).
  */
 export function answerCacheKey(
+  app: string,
   question: string,
   dataVersion: string,
   scope?: { bbox?: { west: number; south: number; east: number; north: number }; now?: Date },
@@ -39,7 +41,7 @@ export function answerCacheKey(
     ? [scope.bbox.west, scope.bbox.south, scope.bbox.east, scope.bbox.north].map((value) => value.toFixed(2)).join(",")
     : "region";
   const frame = scope?.now ? Math.floor(scope.now.getTime() / FRAME_MS) : "now";
-  return [dataVersion, bbox, frame, normalizeQuestion(question)].join("\u0000");
+  return [app, dataVersion, bbox, frame, normalizeQuestion(question)].join("\u0000");
 }
 
 export function readAnswerCache(key: string, now = Date.now()): CachedAnswer | undefined {

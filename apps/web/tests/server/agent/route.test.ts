@@ -71,7 +71,7 @@ describe("POST /api/agent/stream", () => {
     const response = await post({ app: "python", sessionId: "no-key", question: "Any alerts over Florida Bay?" });
     expect(response.status).toBe(503);
     expect(response.headers.get("content-type")).toContain("application/json");
-    expect(await response.json()).toEqual({ error: "agent unavailable: OPENROUTER_API_KEY not set" });
+    expect(await response.json()).toEqual({ error: "agent unavailable: OPENROUTER_API_KEY not set", code: "agent_unavailable" });
   });
 
   test("a blank OPENROUTER_API_KEY counts as missing (503)", async () => {

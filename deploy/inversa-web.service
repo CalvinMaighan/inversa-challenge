@@ -12,6 +12,9 @@ Environment=NODE_ENV=production
 Environment=HOSTNAME=127.0.0.1
 Environment=PORT=3050
 Environment=INVERSA_API_ORIGIN=http://127.0.0.1:4041
+# Agent sessions, the agent's daily spend file and the voice minute file. Not the API's data dir:
+# the web process never opens the databases.
+Environment=INVERSA_DATA_DIR=/var/lib/inversa/web-data
 Environment=BUN_RUNTIME_TRANSPILER_CACHE_PATH=/var/lib/inversa/web-cache/bun
 WorkingDirectory=/opt/inversa/web/apps/web
 # Exactly one process: voice sessions live in this process's memory, so no cluster
@@ -38,9 +41,9 @@ RestrictRealtime=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 LockPersonality=true
 UMask=0027
-# Only the web cache is writable; .next/cache in each release links to web-cache/next.
-# The databases stay read-only to this process.
-ReadWritePaths=/var/lib/inversa/web-cache
+# Only the web cache and web-data are writable; .next/cache in each release links to
+# web-cache/next. The databases stay read-only to this process.
+ReadWritePaths=/var/lib/inversa/web-cache /var/lib/inversa/web-data
 
 [Install]
 WantedBy=multi-user.target

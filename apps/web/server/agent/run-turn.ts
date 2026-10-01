@@ -4,7 +4,7 @@ import { createUserMessage, type LlmCallConfig } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 
 import { answerProblems, capturing, revisionRequest, type ToolCapture } from "@/server/agent/answer-check";
-import { recordTokens, tokenBudget } from "@/server/agent/budget";
+import { recordUsage, spendRefusal } from "@/server/agent/budget";
 import { answerCacheKey, readAnswerCache, writeAnswerCache } from "@/server/agent/cache";
 import { bootHarness, harnessModel } from "@/server/agent/cordis/boot";
 import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capability-tools";
@@ -120,12 +120,8 @@ async function runTurnUnguarded(
     return finish({ content: "", citations: [], toolCalls: [], usage: empty, model: "none", cached: false });
   };
 
-  const budget = tokenBudget();
-  if (budget.remaining <= 0) {
-    return refuse(
-      `Daily agent token budget (${budget.limit.toLocaleString("en-US")}) is used up. It resets at 00:00 UTC.`,
-    );
-  }
+  const overSpend = spendRefusal(app.id);
+  if (overSpend) return refuse(overSpend.message);
   if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
 
   // P4: another app's species is refused from the config, without a model call.
@@ -144,7 +140,7 @@ async function runTurnUnguarded(
   if (params.cache !== false && history.length === 0) {
     try {
       const version = dataVersion(await fetchFeeds({ app, signal: params.signal }));
-      if (version) cacheKey = answerCacheKey(question, `${app.id}:${version}`, { bbox: params.view?.bbox, now });
+      if (version) cacheKey = answerCacheKey(app.id, question, version, { bbox: params.view?.bbox, now });
     } catch (error) {
       onEvent({
         type: "debug",
@@ -281,7 +277,7 @@ async function runTurnUnguarded(
 
   const content = bridge.finalText();
   const usage = bridge.usage;
-  recordTokens(usage.promptTokens + usage.cacheRead + usage.completionTokens);
+  recordUsage(app.id, usage);
   if (!content && !bridge.finishError && !failed) {
     emit({
       type: "error",

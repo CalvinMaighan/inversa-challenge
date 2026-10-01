@@ -420,14 +420,14 @@ describe("grid, gazetteer, feeds, cache keys", () => {
 
   test("answer cache normalizes the question and expires after 10 minutes", () => {
     expect(normalizeQuestion("  Where are  the PYTHONS?? ")).toBe("where are the pythons");
-    const key = answerCacheKey("Where are the pythons?", "v1");
-    expect(answerCacheKey("where are the pythons", "v1")).toBe(key);
-    expect(answerCacheKey("where are the pythons", "v2")).not.toBe(key);
+    const key = answerCacheKey("python", "Where are the pythons?", "v1");
+    expect(answerCacheKey("python", "where are the pythons", "v1")).toBe(key);
+    expect(answerCacheKey("python", "where are the pythons", "v2")).not.toBe(key);
     const bbox = { west: -80.35, south: 25.35, east: -80.05, north: 25.9 };
-    const scoped = answerCacheKey("where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:01:00Z") });
-    expect(answerCacheKey("Where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:14:59Z") })).toBe(scoped);
-    expect(answerCacheKey("Where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:15:00Z") })).not.toBe(scoped);
-    expect(answerCacheKey("Where are the pythons", "v1", { bbox: { ...bbox, west: -80.4 }, now: new Date("2026-01-15T03:01:00Z") })).not.toBe(scoped);
+    const scoped = answerCacheKey("python", "where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:01:00Z") });
+    expect(answerCacheKey("python", "Where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:14:59Z") })).toBe(scoped);
+    expect(answerCacheKey("python", "Where are the pythons", "v1", { bbox, now: new Date("2026-01-15T03:15:00Z") })).not.toBe(scoped);
+    expect(answerCacheKey("python", "Where are the pythons", "v1", { bbox: { ...bbox, west: -80.4 }, now: new Date("2026-01-15T03:01:00Z") })).not.toBe(scoped);
     writeAnswerCache(key, { events: [], content: "x", citations: [] }, 1_000);
     expect(readAnswerCache(key, 1_000 + ANSWER_CACHE_TTL_MS)?.content).toBe("x");
     expect(readAnswerCache(key, 1_001 + ANSWER_CACHE_TTL_MS)).toBeUndefined();

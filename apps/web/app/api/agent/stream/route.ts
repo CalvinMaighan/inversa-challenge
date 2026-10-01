@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { spendRefusal } from "@/server/agent/budget";
 import { runTurn } from "@/server/agent/run-turn";
 import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import { isValidSessionId } from "@/server/agent/session";
@@ -48,8 +49,35 @@ const requestSchema: z.ZodType<AgentStreamRequest> = z
     });
   });
 
-function jsonError(status: number, error: string, issues?: unknown): Response {
-  return Response.json({ error, ...(issues ? { issues } : {}) }, { status });
+/**
+ * Every refusal is `{error, code}` JSON, never a stack trace: `error` is the sentence the chat shows as is
+ * (`client/agent/chat/ndjson.ts` `errorText`), `code` is for scripts and monitors.
+ */
+type AgentErrorCode = "invalid_request" | "rate_limited" | "cost_cap" | "busy" | "agent_unavailable";
+
+function jsonError(status: number, code: AgentErrorCode, error: string, extra?: Record<string, unknown>, headers?: HeadersInit): Response {
+  return Response.json({ error, code, ...extra }, { status, headers: { "Cache-Control": "no-store", ...headers } });
+}
+
+/** Turns streaming at once across all clients (`AGENT_MAX_CONCURRENT`, default 4); bounds spend overshoot too. */
+const DEFAULT_MAX_CONCURRENT = 4;
+
+function maxConcurrent(): number {
+  const n = Number(process.env.AGENT_MAX_CONCURRENT);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_MAX_CONCURRENT;
+}
+
+/** The daily caps reset at 00:00 UTC. */
+function secondsToUtcMidnight(now = Date.now()): number {
+  const midnight = new Date(now);
+  midnight.setUTCHours(24, 0, 0, 0);
+  return Math.max(1, Math.ceil((midnight.getTime() - now) / 1000));
+}
+
+/** Live turn count, on globalThis so dev module reloads share it. */
+function inFlight(): { n: number } {
+  const g = globalThis as unknown as { __inversaAgentInFlight?: { n: number } };
+  return (g.__inversaAgentInFlight ??= { n: 0 });
 }
 
 /** POST /api/agent/stream: AgentStreamRequest in, C7 NDJSON out (one event per line, ending in `done`). */
@@ -57,16 +85,36 @@ export async function POST(request: Request): Promise<Response> {
   // Before anything else: a flood of bad requests is still a flood.
   const limited = rateLimited(request, "agent");
   if (limited) return limited;
+  // JSON only. A cross-site page can make a visitor's browser POST text/plain or a form without a preflight, which
+  // would spend this site's agent budget from many addresses; application/json needs a preflight, which fails here
+  // (no CORS headers), so only same-origin pages and non-browser clients get through.
+  if (!/^application\/json\b/i.test(request.headers.get("content-type") ?? "")) {
+    return jsonError(415, "invalid_request", "Send the question as application/json.");
+  }
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, "Invalid JSON body");
+    return jsonError(400, "invalid_request", "Invalid JSON body");
   }
   const parsed = requestSchema.safeParse(body);
-  if (!parsed.success) return jsonError(400, "Invalid agent request", parsed.error.issues);
+  if (!parsed.success) return jsonError(400, "invalid_request", "Invalid agent request", { issues: parsed.error.issues });
+  // A used-up daily cap (tokens, all apps' dollars, or this app's dollars) refuses before any model call.
+  const overSpend = spendRefusal(parsed.data.app);
+  if (overSpend) return jsonError(429, "cost_cap", overSpend.message, { cap: overSpend.cap }, { "Retry-After": String(secondsToUtcMidnight()) });
   // No key, no agent: say so before streaming, never fall back to anything else.
-  if (!openRouterApiKey()) return jsonError(503, MISSING_KEY_MESSAGE);
+  if (!openRouterApiKey()) return jsonError(503, "agent_unavailable", MISSING_KEY_MESSAGE);
+  const live = inFlight();
+  if (live.n >= maxConcurrent()) {
+    return jsonError(503, "busy", "The agent is answering other questions right now. Try again in a few seconds.", undefined, { "Retry-After": "5" });
+  }
+  live.n += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    live.n -= 1;
+  };
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -84,9 +132,12 @@ export async function POST(request: Request): Promise<Response> {
         try {
           await runTurn({ ...parsed.data, signal: request.signal }, send);
         } catch (error) {
+          // The message only, never the stack; the stack goes to the server log.
+          console.error("[agent] turn failed", error);
           send({ type: "error", message: error instanceof Error ? error.message : "Agent turn failed" });
           send({ type: "done", content: "" });
         } finally {
+          release();
           closed = true;
           try {
             controller.close();

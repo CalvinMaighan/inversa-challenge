@@ -1,0 +1,34 @@
+name: audit
+
+# Dependency advisories for both lockfiles (docs/security.md "Dependency audit"). Weekly and on
+# lockfile changes. Report-only: an advisory in a build-time tool must not block a hotfix, so a
+# person reads the result and records the disposition in docs/security.md.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  pull_request:
+    paths: ["bun.lock", "api/Cargo.lock"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - uses: dtolnay/rust-toolchain@stable
+      - name: bun audit
+        run: bun audit
+      - name: cargo audit
+        if: always()
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit --file api/Cargo.lock

@@ -2,7 +2,56 @@
 
 Every PRD §13 target measured on the real stack, with how it was measured, on the T27/T28 tree merged with main (T38, T40–T43); the poll run predates the merge, which touched no Rust. Machine: Apple Silicon Mac, headless Chromium (Playwright's `chromium-headless-shell`) with SwiftShader software WebGL, so every number that includes a globe frame is a software-rendering number; a laptop GPU renders the same frames faster. The stack is `apps/web/e2e/stack.ts`: Axum (release) over a temp data dir filled by `backfill --fixtures`, the production Next build (`next start`), the signal Worker under `wrangler dev --local`, and a Caddy-like front proxy, all on free ports.
 
-## Targets
+## Three apps on the production build (H1, 2026-10-01)
+
+Re-measured for `gates/leaf-H1.md` G6 on the three-app tree (`pivot/three-apps` at `a884526` plus H1), same machine and harness as below: the production Next build (`next build`, standalone, e2e hook on so the page reports its marks), the release Axum over each app's fixtures, SwiftShader WebGL. Every globe number is a software-rendering number.
+
+| Budget | carp | lionfish | python | Source line |
+|---|---|---|---|---|
+| First globe frame (median of 5 cold loads) | 1233 ms | 1555 ms | 413 ms | `PERF cold app=<id>` |
+| Hydrated (HUD takes input) | 96 ms | 98 ms | 141 ms | same |
+| App switch, warm | | 93 ms (carp to lionfish, in place) | | `APPSELECT … switch_ms=93` |
+| Scrub median, no network | 1.38 ms (site timeline) | 3.0 ms, 0 requests (replay) | 8.86 ms, p95 14.50 ms, 0 requests, 96/96 frames | `CARP-TIMELINE`, `LIONFISH-REPLAY`, `SCRUB` |
+| Globe idle | | | 0 renders in 5 s idle, 300 animation frames, `requestRenderMode=true`, governor idle | `IDLE-FRAMES` |
+| First agent token (live, 5 questions) | | | p50 1092 ms; status line p50 12 ms; first answer text p50 6.1 s | `PERF agent` |
+
+Lines as printed:
+
+```
+PERF cold app=python runs=5 ttfb=5 dcl=33 load=118 hydrated=141 cesium_fetched=97 globe_first_frame=413 grid_ready=2130 data_drawn=2193
+PERF cold app=carp runs=5 ttfb=3 dcl=32 load=73 hydrated=96 cesium_fetched=77 globe_first_frame=1233 grid_ready=-1 data_drawn=-1
+PERF cold app=lionfish runs=5 ttfb=3 dcl=32 load=74 hydrated=98 cesium_fetched=77 globe_first_frame=1555 grid_ready=-1 data_drawn=-1
+PERF agent questions=5 status_p50=12 first_token_p50=1092 first_text_p50=6095 done_p50=6096
+APPSELECT apps=3 url=ok persist=ok keyboard=ok focus_return=ok switch_ms=93
+SCRUB median=8.86 requests=0 p95=14.50 work_median=0.43 frames=96 verified=96
+CARP-TIMELINE series=ok thresholds=ok coverage_marker=ok conflict_chip=ok scrub_median_ms=1.38
+LIONFISH-REPLAY play=ok step=ok asof=ok scrub_median_ms=3.0 requests=0
+IDLE-FRAMES 0 raf=300 requestRenderMode=true governor=idle
+```
+
+Notes:
+
+- **Every budget holds**: app switch 93 ms against 500 ms, scrub medians 1.4–8.9 ms against 16 ms with no requests, idle renders 0, first token 1.1 s against 2 s.
+- **First globe frame differs by app**: python's opening view draws its first frame at 413 ms, carp and lionfish at 1.2–1.6 s (carp's first run 2.4 s). The page and Cesium arrive at the same time in all three (hydrated about 100 ms, Cesium fetched 77–97 ms), so the gap is inside the globe's own first frame for each app's opening view. H1 did not trace it (UI scope); no PRD target applies to the first frame.
+- `PERF_APP=<id>` (added in H1) runs the cold loads in that app; the grid and sightings marks are python's and print `-1` elsewhere.
+- `e2e:appselect` passed every check except its lionfish map-preset assertion: the camera settles at 19.58° N, 84.37° W while the script expects the middle of lionfish's four areas at 18.6° N, 81.25° W. Either the preset or the script's expected centre is stale (not a perf or H1 change); the switch timing above comes from the same run with that one assertion logged instead of failed (not committed). Left to the app's owner.
+- `e2e:prod` (no credentials, production build, `INVERSA_SOURCES=off`) prints one `PROD app=<id> health=ok ratelimit=ok costcap=ok errors=ok degraded=ok` line per app; see `docs/security.md`.
+
+Reproduce:
+
+```
+cd apps/web
+bun run e2e:scrub
+E2E_SKIP_BUILD=1 bun run e2e:globe
+E2E_SKIP_BUILD=1 bun run e2e:perf                          # python cold + live agent (Doppler inversa/dev)
+PERF_APP=carp PERF_ONLY=cold E2E_SKIP_BUILD=1 bun run e2e:perf
+PERF_APP=lionfish PERF_ONLY=cold E2E_SKIP_BUILD=1 bun run e2e:perf
+E2E_SKIP_BUILD=1 bun run e2e:appselect
+E2E_SKIP_BUILD=1 bun run e2e:carp
+E2E_SKIP_BUILD=1 bun run e2e:lionfish
+```
+
+## Targets (T27/T28, python only)
 
 | Target | Threshold (PRD §13) | Measured | Method | Result |
 |---|---|---|---|---|

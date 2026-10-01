@@ -31,11 +31,14 @@ chmod 755 "$DEST.new/api/inversa-api" "$DEST.new/deploy/restore.sh" "$DEST.new/d
 # Next writes its cache under .next/cache; the release tree is read-only, so point it
 # at the writable web cache (inversa-web.service allows only that path).
 install -d -m 750 -o inversa -g inversa \
-  /var/lib/inversa /var/lib/inversa/web-cache /var/lib/inversa/web-cache/next /var/lib/inversa/web-cache/bun
+  /var/lib/inversa /var/lib/inversa/web-cache /var/lib/inversa/web-cache/next /var/lib/inversa/web-cache/bun \
+  /var/lib/inversa/web-data
 rm -rf "$DEST.new/web/apps/web/.next/cache"
 ln -s /var/lib/inversa/web-cache/next "$DEST.new/web/apps/web/.next/cache"
 
-caddy validate --config "$DEST.new/deploy/Caddyfile" --adapter caddyfile
+# Caddy reads only SIGNAL_WORKER_URL from the env (deploy/Caddyfile), never the secrets.
+grep '^SIGNAL_WORKER_URL=' "$STAGING/env" > "$STAGING/caddy.env" || : > "$STAGING/caddy.env"
+(set -a; . "$STAGING/caddy.env"; caddy validate --config "$DEST.new/deploy/Caddyfile" --adapter caddyfile)
 
 rm -rf "$DEST"
 mv "$DEST.new" "$DEST"
@@ -45,6 +48,9 @@ install -m 640 -o root -g inversa "$STAGING/env" /etc/inversa/env
 install -m 644 "$DEST/deploy/inversa-api.service" "$DEST/deploy/inversa-web.service" \
   "$DEST/deploy/inversa-litestream.service" /etc/systemd/system/
 install -m 644 "$DEST/deploy/Caddyfile" /etc/caddy/Caddyfile
+install -m 644 "$STAGING/caddy.env" /etc/inversa/caddy.env
+install -d -m 755 /etc/systemd/system/caddy.service.d
+install -m 644 "$DEST/deploy/caddy-inversa.conf" /etc/systemd/system/caddy.service.d/inversa.conf
 
 # Atomic flip, then stable paths the units use: /opt/inversa/{api,web,deploy}.
 ln -sfn "releases/$VERSION" "$ROOT/current.new"
@@ -66,7 +72,10 @@ systemctl reload caddy || systemctl restart caddy
 healthy=""
 for _ in $(seq 1 60); do
   # /health is JSON; 503 (curl -f fails) or "status":"degraded" means an app is unhealthy.
-  if curl -fsS http://127.0.0.1:4041/health 2>/dev/null | grep -q '"status":"ok"' && curl -fsS -o /dev/null http://127.0.0.1:3050/; then
+  # Web /api/health is 503 only when the API or an app database is down; a missing optional
+  # credential (agent, voice, Worker, a feed) is 200 "degraded" and does not fail the deploy.
+  if curl -fsS http://127.0.0.1:4041/health 2>/dev/null | grep -q '"status":"ok"' &&
+    curl -fsS -o /dev/null http://127.0.0.1:3050/ && curl -fsS -o /dev/null http://127.0.0.1:3050/api/health; then
     healthy=yes
     break
   fi

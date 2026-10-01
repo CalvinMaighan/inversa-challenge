@@ -71,10 +71,14 @@ async function coldLoad(stack: Stack, browser: Browser): Promise<Cold> {
       page
         .waitForFunction(`(${predicate.toString()})() ? performance.now() : false`, undefined, { timeout: LOAD_TIMEOUT_MS, polling: "raf" })
         .then(async (h) => (await h.jsonValue()) as number);
-    const [gridReady, dataDrawn] = await Promise.all([
-      at(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0),
-      at(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0),
-    ]);
+    // The grid and sightings marks are python's (the fixture app); other apps (PERF_APP) report page and globe marks only.
+    const [gridReady, dataDrawn] =
+      stack.app === "python"
+        ? await Promise.all([
+            at(() => (window.__inversa?.snapshot().grid?.frameCount ?? 0) > 0),
+            at(() => (window.__inversa?.globe()?.layers.find((l) => l.id === "sightings")?.frame ?? -1) >= 0),
+          ])
+        : [-1, -1];
     await page.waitForFunction(() => {
       const m = window.__inversa?.marks();
       return m && m.globeFirstFrame !== null && m.hydrated !== null;
@@ -241,7 +245,9 @@ async function main() {
   buildApi(log);
   buildWeb(log);
   // Only the Next server gets the model key, through Doppler; Axum and this script never see a secret.
-  const stack = await startStack({ name: "perf", nextPrefix: process.env.OPENROUTER_API_KEY ? [] : DOPPLER });
+  // PERF_APP=<id> runs the cold loads in that app (its fixtures, its page); default python.
+  const coldApp = process.env.PERF_APP && isAppId(process.env.PERF_APP) ? process.env.PERF_APP : undefined;
+  const stack = await startStack({ name: "perf", app: coldApp, nextPrefix: process.env.OPENROUTER_API_KEY ? [] : DOPPLER });
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     const cold: Cold[] = [];
@@ -257,7 +263,7 @@ async function main() {
     }
     const med = (k: keyof Cold) => ms(median(cold.map((c) => c[k])));
     console.log(
-      `PERF cold runs=${COLD_RUNS} ttfb=${med("ttfb")} dcl=${med("dcl")} load=${med("load")} hydrated=${med("hydrated")} cesium_fetched=${med("cesiumFetched")} globe_first_frame=${med("globeFirstFrame")} grid_ready=${med("gridReady")} data_drawn=${med("dataDrawn")}`,
+      `PERF cold app=${stack.app} runs=${COLD_RUNS} ttfb=${med("ttfb")} dcl=${med("dcl")} load=${med("load")} hydrated=${med("hydrated")} cesium_fetched=${med("cesiumFetched")} globe_first_frame=${med("globeFirstFrame")} grid_ready=${med("gridReady")} data_drawn=${med("dataDrawn")}`,
     );
     await browser.close();
     if (process.env.PERF_ONLY === "cold") return;

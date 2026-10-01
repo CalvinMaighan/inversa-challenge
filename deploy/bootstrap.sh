@@ -72,7 +72,8 @@ fi
 id inversa >/dev/null 2>&1 ||
   useradd --system --user-group --home-dir /var/lib/inversa --no-create-home --shell /usr/sbin/nologin inversa
 install -d -m 750 -o inversa -g inversa \
-  /var/lib/inversa /var/lib/inversa/web-cache /var/lib/inversa/web-cache/next /var/lib/inversa/web-cache/bun
+  /var/lib/inversa /var/lib/inversa/web-cache /var/lib/inversa/web-cache/next /var/lib/inversa/web-cache/bun \
+  /var/lib/inversa/web-data
 install -d -m 755 -o root -g root /opt/inversa /opt/inversa/releases
 install -d -m 750 -o root -g inversa /etc/inversa
 
