@@ -13,6 +13,7 @@
       "line": "venomous reef fish that eats young native fish",
       "aliases": ["red lionfish", "common lionfish", "devil firefish", "pterois", "pterois volitans", "pterois miles"],
       "scientificName": "Pterois volitans/miles",
+      "dbId": 4,
       "inatTaxonId": 47284,
       "inatLineageIds": [47280, 123459],
       "gbifKey": 2334432,

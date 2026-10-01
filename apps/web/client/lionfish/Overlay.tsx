@@ -207,7 +207,9 @@ export default function Overlay(p: OverlayProps) {
         let stats: HeatDrawStats = { ok: 0, stale: 0, missing: 0, disagree: 0 };
         if (cur.show.heat && cur.heat) {
           stats = drawHeat(ctx, cur.heat, cur.atMs, project);
-          drawHeatLabels(ctx, heatLabels(cur.areas, cur.heat, cur.atMs), project);
+          // The numbered priority markers are DOM buttons above this canvas: a label is moved off them.
+          const markers = cur.show.priority ? cur.cells.flatMap(({ cell }) => project(cell.lon, cell.lat) ?? []) : [];
+          drawHeatLabels(ctx, heatLabels(cur.areas, cur.heat, cur.atMs), project, markers);
         }
         const field = cur.show.field && cur.marine ? drawField(ctx, cur.marine, project) : 0;
         canvas.dataset.heatOk = String(stats.ok);

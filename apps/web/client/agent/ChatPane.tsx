@@ -34,7 +34,7 @@ import {
 } from "./chat.styled";
 import ActionTimeline from "./chat/ActionTimeline";
 import { formatWorkDuration } from "./chat/tools";
-import type { AgentThread, AgentTurn } from "./chat/thread";
+import { plainReasoning, type AgentThread, type AgentTurn } from "./chat/thread";
 import { ClearIcon, CloseIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
 import DataPanels from "./panels/DataPanels";
@@ -60,7 +60,7 @@ function ReasoningBlock({ turn }: { turn: AgentTurn }) {
   return (
     <Reasoning>
       <summary>{ms === null ? "Thinking…" : `Thought for ${formatWorkDuration(ms, false)}`}</summary>
-      <p>{turn.reasoning}</p>
+      <p>{plainReasoning(turn.reasoning)}</p>
     </Reasoning>
   );
 }

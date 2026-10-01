@@ -21,8 +21,8 @@ export function isEnvValue(centi: number): boolean {
 }
 
 /**
- * Species order in an app's hotspot sections: the app's `taxa[]` order (taxon filter keys). Index + 1 is the
- * taxon's `taxa.id` in that app's observations database (C-A4 TaxonIdx).
+ * Species order in an app's hotspot sections: the app's `taxa[]` order (taxon filter keys, C-A4 TaxonIdx). A
+ * sighting record's `taxon` is the taxon's `taxa.id` (the config's `dbId`), not its position here.
  */
 export function evfSpecies(app: Pick<AppConfig, "taxa">): string[] {
   return speciesIds(app as AppConfig);
@@ -302,7 +302,7 @@ export type SightingRecord = {
   id: number;
   lon: number;
   lat: number;
-  /** `taxa.id`; 1..n are the app's focus species in `evfSpecies(app)` order. */
+  /** `taxa.id`: the config `dbId` of the app's focus species (4 for lionfish, 1 for python). */
   taxon: number;
   /** Index into QUALITY_CODES. */
   quality: number;

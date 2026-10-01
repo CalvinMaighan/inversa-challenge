@@ -7,7 +7,7 @@ import { GqlError, gqlRequest } from "client/threads/api";
 import { appBBox, type AppConfig } from "shared/apps";
 
 import { forecastAsOf, HOUR, isRiverForecast, thresholdList, usgsSeries, type Alert, type GqlReading, type Site, type SiteStatus, type Snapshot, type VerifyPoint } from "./model";
-import { fromC5, type SiteReview } from "./review";
+import { fromC5, historyFromC5, type ReviewHistory, type SiteReview } from "./review";
 
 const SNAPSHOT = `id site product issuedAt ingestedAt source revision validFrom validTo horizonEnd peakStageFt peakAt peakCategory points { validAt stageFt flowKcfs category }`;
 const STATUS = `site asOf observation { observedAt ingestedAt source stageFt flowKcfs } stageFt category thresholds { actionFt minorFt moderateFt majorFt } observationFreshness conflicts { kind detail forecastFt observedFt differenceFt } activeAlerts`;
@@ -63,9 +63,17 @@ export async function loadBoard(app: AppConfig, sites: readonly Site[], asOfMs: 
 
 // ---- C5 review service (optional) -------------------------------------------------------------
 
-const REVIEW_FIELDS = `site status reasons { rule value threshold source observedAt issuedAt link text }`;
+/** C5's `SiteReview` fields the client reads (`reasons` are the fired rules; `explanation` is the sentence). */
+const REASON_FIELDS = `rule outcome value valueText threshold unit source observedAt issuedAt link explanation`;
+const REVIEW_FIELDS = `site status summary observationFreshness reasons { ${REASON_FIELDS} }`;
 /** False once the API has answered that it has no `reviewBoard`: the board then derives statuses itself. */
 let c5Available: boolean | null = null;
+/** `reviewHistory` windows are capped at 31 days by the API. */
+const HISTORY_MAX_MS = 31 * 24 * HOUR;
+/** Sites per `reviewHistory` document, inside the API's complexity limit (a heavy field per site plus its rows). */
+const HISTORY_SITES_PER_REQUEST = 4;
+/** Issuances per `forecastVerify` document, inside the API's complexity limit. */
+const VERIFY_PER_REQUEST = 8;
 
 /** Whether an error says the field does not exist (schema without C5), rather than a failure worth reporting. */
 export function isUnknownField(err: unknown): boolean {
@@ -76,10 +84,10 @@ export function isUnknownField(err: unknown): boolean {
 export async function loadC5Board(asOfMs: number, signal?: AbortSignal): Promise<Record<string, SiteReview> | null> {
   if (c5Available === false) return null;
   try {
-    const raw = await gqlRequest<{ reviewBoard: unknown[] }>(`query CarpReviewBoard($t: Time!) { reviewBoard(asOf: $t) { ${REVIEW_FIELDS} } }`, { t: iso(asOfMs) }, signal);
+    const raw = await gqlRequest<{ reviewBoard: { sites?: unknown[] } | null }>(`query CarpReviewBoard($t: Time!) { reviewBoard(asOf: $t) { sites { ${REVIEW_FIELDS} } } }`, { t: iso(asOfMs) }, signal);
     c5Available = true;
     const out: Record<string, SiteReview> = {};
-    for (const row of raw.reviewBoard ?? []) {
+    for (const row of raw.reviewBoard?.sites ?? []) {
       const r = fromC5(row, asOfMs, "MISSING");
       if (r) out[r.site] = r;
     }
@@ -87,6 +95,39 @@ export async function loadC5Board(asOfMs: number, signal?: AbortSignal): Promise
   } catch (err) {
     if (isUnknownField(err)) c5Available = false;
     else if (!signal?.aborted) console.warn("[carp] reviewBoard failed; statuses derived in the browser", err);
+    return null;
+  }
+}
+
+/**
+ * C5's `reviewHistory` of every site over `fromMs`..`toMs` (at most 31 days), a few sites per request: the
+ * "what we knew" board then answers any as-of inside the window from memory (`reviewAt`), with no request per
+ * scrub step. Null when the API has no review service.
+ */
+export async function loadC5History(sites: readonly Site[], fromMs: number, toMs: number, signal?: AbortSignal): Promise<Record<string, ReviewHistory> | null> {
+  if (c5Available === false) return null;
+  const from = Math.max(fromMs, toMs - HISTORY_MAX_MS);
+  const out: Record<string, ReviewHistory> = {};
+  try {
+    const chunks: Site[][] = [];
+    for (let i = 0; i < sites.length; i += HISTORY_SITES_PER_REQUEST) chunks.push(sites.slice(i, i + HISTORY_SITES_PER_REQUEST));
+    const answers = await Promise.all(
+      chunks.map((chunk) => {
+        const fields = chunk.map((s, i) => `h${i}: reviewHistory(site: "${s.lid}", from: $from, to: $to) { site from to initial { ${REVIEW_FIELDS} } transitions { at to reasons { ${REASON_FIELDS} } } }`).join(" ");
+        return gqlRequest<Record<string, unknown>>(`query CarpReviewHistory($from: Time!, $to: Time!) { ${fields} }`, { from: iso(from), to: iso(toMs) }, signal);
+      }),
+    );
+    c5Available = true;
+    for (const raw of answers) {
+      for (const row of Object.values(raw)) {
+        const h = historyFromC5(row);
+        if (h) out[h.site] = h;
+      }
+    }
+    return Object.keys(out).length ? out : null;
+  } catch (err) {
+    if (isUnknownField(err)) c5Available = false;
+    else if (!signal?.aborted) console.warn("[carp] reviewHistory failed; past statuses are fetched per time", err);
     return null;
   }
 }
@@ -110,16 +151,34 @@ export async function loadSiteHistory(site: Site, nowMs: number, signal?: AbortS
   return { ...raw.forecasts, history: raw.forecasts.history ?? [], thresholdsNow: raw.now?.thresholds ?? null };
 }
 
-export type SiteAt = { status: SiteStatus; alerts: Alert[]; readings: GqlReading[] };
+/** What was known at a time: the site's status then and the alerts in effect. */
+export type SiteStatusAt = { status: SiteStatus; alerts: Alert[] };
+export type SiteAt = SiteStatusAt & { readings: GqlReading[] };
 
-/** What was known at `asOfMs` (status, alerts in effect) and the readings of the view span. */
-export async function loadSiteAt(site: Site, asOfMs: number, span: { fromMs: number; toMs: number }, signal?: AbortSignal): Promise<SiteAt> {
-  const raw = await gqlRequest<{ status: SiteStatus; alerts: Alert[]; readings: GqlReading[] }>(
-    `query CarpSiteAt($site: ID!, $t: Time!, $bbox: BBox!, $from: Time!, $to: Time!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } alerts(bbox: $bbox, at: $t) { id event severity headline onset expires } readings(bbox: $bbox, from: $from, to: $to, params: [STAGE_M, DISCHARGE_CFS, AIR_C, WIND_MS, POP_PCT]) { ${READING} } }`,
-    { site: site.lid, t: iso(asOfMs), bbox: siteBox(site), from: iso(span.fromMs), to: iso(span.toMs) },
+/** What was known at `asOfMs`: the site's status then and the alerts in effect. */
+export async function loadSiteStatusAt(site: Site, asOfMs: number, signal?: AbortSignal): Promise<SiteStatusAt> {
+  const raw = await gqlRequest<{ status: SiteStatus; alerts: Alert[] }>(
+    `query CarpSiteAt($site: ID!, $t: Time!, $bbox: BBox!) { status: siteStatusAt(site: $site, asOf: $t) { ${STATUS} } alerts(bbox: $bbox, at: $t) { id event severity headline onset expires } }`,
+    { site: site.lid, t: iso(asOfMs), bbox: siteBox(site) },
     signal,
   );
-  return { status: raw.status, alerts: raw.alerts ?? [], readings: raw.readings ?? [] };
+  return { status: raw.status, alerts: raw.alerts ?? [] };
+}
+
+/** The readings around the site over the view span (USGS stage and discharge, gridpoint weather). Once per site and span. */
+export async function loadSiteReadings(site: Site, span: { fromMs: number; toMs: number }, signal?: AbortSignal): Promise<GqlReading[]> {
+  const raw = await gqlRequest<{ readings: GqlReading[] }>(
+    `query CarpSiteReadings($bbox: BBox!, $from: Time!, $to: Time!) { readings(bbox: $bbox, from: $from, to: $to, params: [STAGE_M, DISCHARGE_CFS, AIR_C, WIND_MS, POP_PCT]) { ${READING} } }`,
+    { bbox: siteBox(site), from: iso(span.fromMs), to: iso(span.toMs) },
+    signal,
+  );
+  return raw.readings ?? [];
+}
+
+/** Status, alerts and readings at `asOfMs`: the two requests above. */
+export async function loadSiteAt(site: Site, asOfMs: number, span: { fromMs: number; toMs: number }, signal?: AbortSignal): Promise<SiteAt> {
+  const [at, readings] = await Promise.all([loadSiteStatusAt(site, asOfMs, signal), loadSiteReadings(site, span, signal)]);
+  return { ...at, readings };
 }
 
 /** NWPS observations paired with an issuance's valid times (6-hourly), the "what happened next" record. */
@@ -130,6 +189,27 @@ export async function loadVerify(site: Site, issuedAt: string, signal?: AbortSig
     signal,
   );
   return raw.forecastVerify?.points ?? [];
+}
+
+/** The verification pairs of several issuances, a few per request; an issuance the API rejects answers no points. */
+export async function loadVerifyMany(site: Site, issuances: readonly string[], signal?: AbortSignal): Promise<Record<string, VerifyPoint[]>> {
+  const out: Record<string, VerifyPoint[]> = {};
+  const chunks: string[][] = [];
+  for (let i = 0; i < issuances.length; i += VERIFY_PER_REQUEST) chunks.push(issuances.slice(i, i + VERIFY_PER_REQUEST));
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      const fields = chunk.map((at, i) => `v${i}: forecastVerify(site: $site, issuedAt: "${at}") { points { validAt forecastFt observedAt observedFt errorFt missing } }`).join(" ");
+      try {
+        const raw = await gqlRequest<Record<string, { points: VerifyPoint[] } | null>>(`query CarpVerifyMany($site: ID!) { ${fields} }`, { site: site.lid }, signal);
+        chunk.forEach((at, i) => (out[at] = raw[`v${i}`]?.points ?? []));
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        // One by one: a single rejected issuance must not empty the others.
+        for (const at of chunk) out[at] = await loadVerify(site, at, signal).catch(() => []);
+      }
+    }),
+  );
+  return out;
 }
 
 /** Board rows' derivation inputs for one site, from the board data. */

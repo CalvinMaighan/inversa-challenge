@@ -166,7 +166,8 @@ async function runOnce(app: AppConfig, questions: readonly Golden[], categories:
     for (const reason of reasons) console.log(`     - ${reason}`);
     if (process.env.EVAL_VERBOSE) {
       for (const event of outcome.events) {
-        if (event.type === "tool_start") console.log(`     $ ${event.capabilityName} ${JSON.stringify(event.args)}`);
+        // The announcement from the first streamed delta carries no args; the full tool_start (same id) does.
+        if (event.type === "tool_start" && event.args !== undefined) console.log(`     $ ${event.capabilityName} ${JSON.stringify(event.args)}`);
         if (event.type === "tool_end") {
           const data = event.data as { count?: number; feeds?: { source: string; state: string }[] } | undefined;
           const feeds = (data?.feeds ?? []).map((feed) => `${feed.source}:${feed.state}`).join(",");

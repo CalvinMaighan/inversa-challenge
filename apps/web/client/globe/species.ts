@@ -8,14 +8,14 @@
 import { activeApp } from "client/state/app";
 import { speciesIds } from "shared/apps";
 
-/** EVF taxon ids are `taxa.id`, 1-based in config order (PLAN.md C-A4): the focus species is 1. */
-export function isFocusTaxon(taxonId: number): boolean {
-  return Number.isInteger(taxonId) && taxonId >= 1 && taxonId <= activeApp().taxa.length;
+/** Species index of a taxon id (`taxa.id`, the config's `dbId`; PLAN.md C-A4), or -1 for a taxon that is not the app's. */
+export function speciesIndexOfTaxon(taxon: number): number {
+  return activeApp().taxa.findIndex((t) => t.dbId === taxon);
 }
 
-/** Species index of a taxon id, or -1 for a taxon that is not the app's. */
-export function speciesIndexOfTaxon(taxon: number): number {
-  return isFocusTaxon(taxon) ? taxon - 1 : -1;
+/** EVF records carry `taxa.id`: the focus species is the one whose config `dbId` it is (4 for lionfish, 1 for python). */
+export function isFocusTaxon(taxonId: number): boolean {
+  return speciesIndexOfTaxon(taxonId) >= 0;
 }
 
 /** The marker colour of a focus taxon (the config colour); null for any other taxon. */

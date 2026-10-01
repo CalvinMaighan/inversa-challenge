@@ -876,8 +876,9 @@ mod tests {
         assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 13, "python's database is untouched");
     }
 
-    /// The recorded cold snap of 30 Jan - 3 Feb 2026 (see the scene's fetch.sh and
-    /// docs/demo-script.md): real iNat, Open-Meteo archive, USGS and NWS Miami/Key West payloads.
+    /// The recorded cold snap of 30 Jan - 3 Feb 2026 and the rebound to 7 Feb (see the scene's
+    /// fetch.sh and docs/demo-script.md): real iNat, Open-Meteo archive, USGS and NWS Miami/Key West
+    /// payloads.
     #[tokio::test]
     async fn scene_cold_snap() {
         use crate::hotspot::rules::PYTHON_COLD_SUPPRESS;
@@ -888,18 +889,30 @@ mod tests {
         let dir = fixtures_root().join("scenes").join("cold-snap-2026-02-01");
         let scene = ingest_scene(&state, &dir).await.unwrap();
         let (from, to) = scene.window;
-        assert_eq!((from, to), (ms(2026, 1, 30, 0), ms(2026, 2, 4, 0)));
+        assert_eq!((from, to), (ms(2026, 1, 30, 0), ms(2026, 2, 8, 0)));
         let ids: Vec<&str> = scene.tallies.iter().map(|(id, _)| *id).collect();
         assert_eq!(ids, ["inat", "openmeteo", "usgs", "nwws"]);
-        // Measured: no Burmese python report in the bbox those days (iNat, re-recorded
-        // 2026-10-01). Open-Meteo 182 grid points x 3 variables x 120 h plus the marine points;
-        // USGS 15-minute series; 21 NPW products.
+        // Measured (iNat re-recorded 2026-10-01): no Burmese python report in the bbox on the cold
+        // days, two research-grade reports observed on 6 Feb once it warmed. Open-Meteo 182 grid
+        // points x 3 variables x 216 h plus the marine points; USGS 15-minute series; 24 NPW products.
         let rows_in: Vec<(&str, usize, usize, usize)> =
             scene.tallies.iter().map(|(id, t)| (*id, t.payloads, t.rows_in, t.errors)).collect();
-        assert_eq!(rows_in, [("inat", 1, 0, 0), ("openmeteo", 2, 95_520, 0), ("usgs", 2, 71_167, 0), ("nwws", 21, 110, 0)]);
+        assert_eq!(rows_in, [("inat", 1, 2, 0), ("openmeteo", 2, 171_936, 0), ("usgs", 2, 127_956, 0), ("nwws", 24, 113, 0)]);
         let counts = measure_window(&state, from, to).await.unwrap();
-        assert_eq!(counts, WindowCounts { sightings: 0, readings: 165_951, air_below_10c: 5_328, alerts: 42 });
+        assert_eq!(counts, WindowCounts { sightings: 2, readings: 299_157, air_below_10c: 6_722, alerts: 43 });
         assert!(counts.air_below_10c > 0, "no sub-10 °C air readings in the window");
+        let cold_days = measure_window(&state, from, ms(2026, 2, 4, 0)).await.unwrap();
+        assert_eq!(cold_days.sightings, 0, "no python report during the cold days themselves");
+        let observed: Vec<i64> = state
+            .obs
+            .read(|c| {
+                let mut st = c.prepare("select observed_at from sightings order by observed_at")?;
+                let rows = st.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<Vec<i64>>>()?;
+                Ok(rows)
+            })
+            .await
+            .unwrap();
+        assert!(observed.iter().all(|&t| (ms(2026, 2, 6, 0)..ms(2026, 2, 7, 0)).contains(&t)), "both reports observed on 6 Feb: {observed:?}");
 
         // The NWS Miami products of the night of 31 Jan - 1 Feb.
         let events: Vec<String> = state

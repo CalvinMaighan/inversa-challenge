@@ -141,6 +141,7 @@ async function runTurnUnguarded(
     try {
       const version = dataVersion(await fetchFeeds({ app, signal: params.signal }));
       if (version) cacheKey = answerCacheKey(app.id, question, version, { bbox: params.view?.bbox, now });
+      else onEvent({ type: "debug", text: "answer cache skipped: no feed has a fetch time" });
     } catch (error) {
       onEvent({
         type: "debug",
@@ -290,6 +291,10 @@ async function runTurnUnguarded(
   const clean = content && !bridge.finishError && !failed && !limitHit;
   if (cacheKey && clean) {
     writeAnswerCache(cacheKey, { events: recorded, content, citations: bridge.citations() });
+  } else if (cacheKey) {
+    // Said in the stream, so a repeat that misses the cache can be traced to the turn that did not store it.
+    const why = !content ? "empty answer" : bridge.finishError ? `finish error: ${bridge.finishError}` : failed ? "turn failed" : limitHit ? `${limitHit.kind} limit` : "unknown";
+    onEvent({ type: "debug", text: `answer cache not stored: ${why}` });
   }
   return finish({
     content,

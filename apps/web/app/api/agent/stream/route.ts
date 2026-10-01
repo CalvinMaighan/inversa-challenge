@@ -4,6 +4,7 @@ import { spendRefusal } from "@/server/agent/budget";
 import { runTurn } from "@/server/agent/run-turn";
 import { MISSING_KEY_MESSAGE, openRouterApiKey } from "@/server/agent/runtime/model";
 import { isValidSessionId } from "@/server/agent/session";
+import { warmAgent } from "@/server/agent/warm";
 import { rateLimited } from "@/server/rate-limit";
 import { AGENT_STREAM_CONTENT_TYPE, type AgentStreamEvent, type AgentStreamRequest } from "@/shared/agent/events";
 import { APP_IDS, getApp, speciesIds } from "@/shared/apps";
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 const MAX_QUESTION_CHARS = 4_000;
+
+// The harness and the OpenRouter connection are warmed as the route loads, not inside the first question.
+void warmAgent();
 
 const bbox = z
   .object({ west: z.number(), south: z.number(), east: z.number(), north: z.number() })

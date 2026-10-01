@@ -7,7 +7,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import { getGlobe } from "client/globe/api";
 import { boxOf, fitInPane } from "client/globe/fit";
 import { MOBILE_QUERY, useIsMobile } from "client/hud/primitives";
-import { applyCarpView, goLive, selectSite, setAsOf } from "client/state/carp";
+import { applyCarpView, endScrub, goLive, scrubAsOf, selectSite, setAsOf } from "client/state/carp";
 import { THEME } from "client/state/theme";
 import { VIEW, type ViewState } from "client/state/view";
 import type { AppConfig } from "shared/apps";
@@ -78,8 +78,9 @@ export default function CarpHud({ app }: { app: AppConfig }) {
     return { fromMs: now - BACK_MS, toMs: now + AHEAD_MS };
   }, [nowMs]);
 
-  const board = useBoard(app, sites, carp.asOf, nowMs);
-  const detail = useSiteDetail(site, carp.asOf, nowMs, span);
+  const scrubbing = carp.scrubbing === true;
+  const board = useBoard(app, sites, carp.asOf, nowMs, span, scrubbing);
+  const detail = useSiteDetail(site, carp.asOf, nowMs, span, scrubbing);
 
   // Board panel: open on desktop, a tab on phones until asked for.
   const [boardOpen, setBoardOpen] = useState<boolean | null>(null);
@@ -192,7 +193,8 @@ export default function CarpHud({ app }: { app: AppConfig }) {
       alerts,
       conflicts,
       weather,
-      loading: !detail.at,
+      // While a drag moves the cursor, the status shown is the last one fetched: said as loading until it settles.
+      loading: !detail.at || !detail.settled,
       error: detail.error,
     };
   }, [site, usgs, asOfMs, live, zone, siteReview, detail, status, forecast, earlier, conflicts, nowMs]);
@@ -271,7 +273,8 @@ export default function CarpHud({ app }: { app: AppConfig }) {
         conflicts={conflicts}
         replaying={carp.replay === true}
         theme={String(theme ?? "")}
-        onScrub={(ms) => (ms >= nowMs - 60_000 ? goLive() : setAsOf(ms))}
+        onScrub={(ms) => (ms >= nowMs - 60_000 ? goLive() : scrubAsOf(ms))}
+        onScrubEnd={endScrub}
         onLive={goLive}
         onYesterday={() => setAsOf(yesterdayAfternoon(Date.now(), zone))}
         onPlay={onPlay}

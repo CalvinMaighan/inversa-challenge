@@ -104,9 +104,12 @@ async function coldLoad(stack: Stack, browser: Browser): Promise<Cold> {
 
 type AgentTiming = { status: number; firstModel: number; firstText: number | null; done: number; tools: number };
 
-async function ask(stack: Stack, question: string, i: number, app: AppId = "python"): Promise<AgentTiming> {
+type AgentView = { bbox: { west: number; south: number; east: number; north: number }; time: string; layers: string[]; selection: null };
+
+/** The full-stack pass asks python questions from a Homestead view at the wall clock; the app pass passes the fixture view it also repeats. */
+async function ask(stack: Stack, question: string, i: number, app: AppId = "python", view?: AgentView): Promise<AgentTiming> {
   const started = performance.now();
-  const view = app === "python" ? { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "notes"], selection: null } : { bbox: appBBox(getApp(app)), time: fixtureNow(app), layers: [], selection: null };
+  view ??= app === "python" ? { bbox: HOMESTEAD, time: new Date().toISOString(), layers: ["sightings", "notes"], selection: null } : { bbox: appBBox(getApp(app)), time: fixtureNow(app), layers: [], selection: null };
   const res = await fetch(`${stack.origin}/api/agent/stream`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -206,7 +209,8 @@ async function appPass(app: AppId): Promise<void> {
     if (questions.length < 5) throw new Error(`need at least 5 questions, have ${questions.length}`);
     const timings: AgentTiming[] = [];
     for (const [i, q] of questions.entries()) {
-      const t = await ask(stack, q, i, app);
+      // The same view as the repeat below: the answer cache is keyed by bbox and the 15-minute frame.
+      const t = await ask(stack, q, i, app, view);
       timings.push(t);
       log(`agent ${i + 1} "${q}": status=${ms(t.status)} first_model=${ms(t.firstModel)} first_text=${t.firstText === null ? "-" : ms(t.firstText)} done=${ms(t.done)} tools=${t.tools}`);
     }

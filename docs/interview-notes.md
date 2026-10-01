@@ -116,7 +116,7 @@ Rejected: eBird (no python records), NASA FIRMS (GOES fire product covers it), a
 
 ### Limits of the heuristic
 
-`score = density × activity × access`, with hand-set multipliers (for example 0.3× activity below 15 °C). Density is normalised to each frame's maximum, so a score is relative within a frame, not absolute. The backtest is only as good as its sample: on a local database it once reported a 100% hit rate on 2 sightings, which means nothing. The fixture data has 8 sightings in the 7-day window (re-measured, `FIRSTLOAD … window=8 api=8 app=python`).
+`score = density × activity × access`, with hand-set multipliers (for example 0.3× activity below 15 °C). Density is normalised to each frame's maximum, so a score is relative within a frame, not absolute. The backtest is only as good as its sample: on a local database it once reported a 100% hit rate on 2 sightings, which means nothing. The fixture data has 8 sightings in the 7-day window (re-measured, `FIRSTLOAD app=python records=8 errors=0 kind=species … window=8 api=8`).
 
 ## Design choices in one paragraph each
 
@@ -144,6 +144,6 @@ The long form with numbers is `docs/scaling.md`. Short version: more apps are co
 
 **Why is it not deployed?** Deploying needs accounts and a push only a person can do (VM, DNS, R2, Doppler `prd`, the git push). The production build, health checks, rate limits, cost cap and restore drill are tested locally (`gates/leaf-H1.md`); the steps are in `docs/HUMAN_STEPS.md`.
 
-**What is synthetic?** The carp review replay scene is synthetic and labelled. The python cold snap is real (NWS products from the IEM archive, Open-Meteo archive, USGS values for 30 January to 3 February 2026). Agent evals run against fixture GraphQL stubs built from recorded payloads, not the live API.
+**What is synthetic?** The carp review replay scene is synthetic and labelled. The python cold snap is real (NWS products from the IEM archive, Open-Meteo archive, USGS values and the two iNaturalist python reports of 6 February, for 30 January to 7 February 2026). Agent evals run against fixture GraphQL stubs built from recorded payloads, not the live API.
 
 **What did the agentic tooling do, and what did you decide?** The build ran as a tree of tasks, each in its own git worktree with a gates file of runnable checks; contracts were fixed in `PLAN.md` before fan-out; a task counted as done only when its checks passed again on the merged tree. Gates that were ticked by a loose regex but missed their real bar are reported as not met (`gates/leaf-AGB.md` G1, `gates/leaf-AG2.md` G4 to G6).

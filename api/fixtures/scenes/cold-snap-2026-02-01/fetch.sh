@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 # Re-records the cold-snap-2026-02-01 scene: the South Florida cold snap of 30 Jan - 3 Feb 2026
-# (Miami ~2 °C on the mornings of 1 and 2 Feb, NWS Miami Extreme Cold and Freeze Warnings).
+# (Miami ~2 °C on the mornings of 1 and 2 Feb, NWS Miami Extreme Cold and Freeze Warnings) and
+# the rebound that followed, to 7 Feb.
 #
-# Window: 2026-01-30T00:00Z to 2026-02-04T00:00Z (five UTC days). Every payload is the upstream
+# Window: 2026-01-30T00:00Z to 2026-02-08T00:00Z (nine UTC days). Every payload is the upstream
 # response byte for byte; files over ~1 MB are stored gzipped (`gzip -n`) and the loader
 # (`inversa-api backfill --scene`) inflates them. The one conversion is NWS text products into
 # NWWS-OI stanzas, see the NWS section below. Writes manifest.json last.
@@ -13,9 +14,9 @@ cd "$(dirname "$0")"
 
 SCENE=cold-snap-2026-02-01
 FROM_DAY=2026-01-30
-TO_DAY=2026-02-03
+TO_DAY=2026-02-07
 WINDOW_FROM=2026-01-30T00:00:00Z
-WINDOW_TO=2026-02-04T00:00:00Z
+WINDOW_TO=2026-02-08T00:00:00Z
 UA="inversa-api scene recorder"
 RECORDED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -28,8 +29,9 @@ entry() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5" >> .manifest.ts
 get() { curl -fsS --retry 8 --retry-delay 10 -A "$UA" "$@"; }
 
 # --- iNaturalist: the app's one species (Python bivittatus 238252) observed in the region bbox on
-# the window's days. Re-recorded 2026-10-01 when the app narrowed to one species: 0 observations
-# in the window; the empty page is kept so the replay says so from real data.
+# the window's days. iNat holds no Burmese python observation in the bbox on the cold days
+# themselves (30 Jan - 3 Feb, re-checked 2026-10-01); the window runs to 7 Feb so the replay
+# shows reports resuming after the rebound (two research-grade records observed on 6 Feb).
 INAT="https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&d1=$FROM_DAY&d2=$TO_DAY&order_by=id&order=asc&per_page=200"
 get "$INAT" | gzip -n > inat/focus-p1.json.gz
 total=$(gzip -dc inat/focus-p1.json.gz | jq '.total_results')
@@ -114,7 +116,7 @@ jq -Rn --arg scene "$SCENE" --arg recorded "$RECORDED_AT" --arg from "$WINDOW_FR
   [inputs | split("\t") | {source: .[0], file: .[1], url: .[2], content_type: .[3], ingest: (.[4] == "1")}] as $all
   | {
       scene: $scene,
-      title: "South Florida cold snap, 30 Jan - 3 Feb 2026",
+      title: "South Florida cold snap and rebound, 30 Jan - 7 Feb 2026",
       window: {from: $from, to: $to},
       recorded_at: $recorded,
       replay_at: $to,

@@ -51,8 +51,10 @@ const feeds = [
 
 // ---------------------------------------------------------------- taxa and sightings
 
+/** The lionfish `taxa.id` is the config's `dbId` (4: the API's seed), so the stub answers the filter the agent sends. */
+const TAXON_ID = String(lionfish.taxa[0]!.dbId);
 const taxa = {
-  "1": { id: "1", scientificName: "Pterois volitans/miles", commonName: "Lionfish", focus: true, inatTaxonId: "47284", pageUrl: "https://www.inaturalist.org/taxa/47284" },
+  [TAXON_ID]: { id: TAXON_ID, scientificName: "Pterois volitans/miles", commonName: "Lionfish", focus: true, inatTaxonId: "47284", pageUrl: "https://www.inaturalist.org/taxa/47284" },
 };
 
 type SightingSeed = [id: string, source: string, lat: number, lon: number, accuracyM: number | null, observedAt: string, ingestedAt: string, quality: string, canonicalId?: string];
@@ -114,7 +116,7 @@ const sightings = SIGHTINGS.map(([id, source, lat, lon, accuracyM, observedAt, i
   id,
   source,
   extId: source === "inat" ? String(200_000_000 + Number(id)) : source === "gbif" ? `gbif-${id}` : `nas-${id}`,
-  taxon: "1",
+  taxon: TAXON_ID,
   lat,
   lon,
   accuracyM,

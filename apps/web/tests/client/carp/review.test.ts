@@ -1,12 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { init, set } from "@calvinjs/active-state";
+
+import { state } from "client/state";
+import { APP } from "client/state/app";
 
 import { briefing, conflictText, flowAvailability } from "client/carp/briefing";
-import { fromC5, deriveReview, sortBoard, type ReviewInput } from "client/carp/review";
-import { isUnknownField, loadC5Board, resetC5Probe } from "client/carp/data";
+import { fromC5, deriveReview, historyFromC5, reviewAt, sortBoard, withThresholdsLater, type ReviewInput } from "client/carp/review";
+import { isUnknownField, loadC5Board, loadC5History, resetC5Probe } from "client/carp/data";
 import { usgsSeries } from "client/carp/model";
 import { GqlError } from "client/threads/api";
 
 import { H, NOW, site, snap, status, usgsReadings, ZONE } from "./fixtures";
+
+// The loaders post to the active app's GraphQL path.
+init(state);
+set(APP, { id: "carp" });
+afterAll(() => set(APP, APP.defaults));
 
 const krz = site("KRZL1");
 const fresh = snap({ issuedAt: "2026-09-30T15:32:00Z", from: "2026-09-30T18:00:00Z", values: [3.6, 3.7, 3.9, 4.2] });
@@ -102,6 +111,100 @@ describe("C5 adapter", () => {
     expect(r).toMatchObject({ site: "MCGL1", status: "review", origin: "c5", reasons: [{ rule: "forecast_category", kind: "review", text: "Forecast reaches action." }] });
     expect(fromC5({ site: "X", status: "maybe" }, NOW, "FRESH")).toBeNull();
     expect(fromC5(null, NOW, "FRESH")).toBeNull();
+  });
+
+  /** A `reviewBoard.sites` row as Axum serves it (graphql/types.rs `SiteReview`, `ReviewReason`). */
+  const apiRow = (site: string, status: string, reasons: Record<string, unknown>[] = [], over: Record<string, unknown> = {}) => ({
+    site,
+    status,
+    summary: `${site} ${status}`,
+    observationFreshness: "MISSING",
+    reasons: reasons.map((r) => ({ outcome: "FIRED", severity: "MEDIUM", value: null, valueText: null, threshold: null, unit: null, source: "nwps", observedAt: null, issuedAt: null, link: null, ...r })),
+    ...over,
+  });
+  const cannotAssess = (site: string) =>
+    apiRow(site, "CANNOT_ASSESS", [
+      { rule: "missing_input", valueText: "observation", explanation: "No NWPS stage observation known for this site at this time." },
+      { rule: "missing_input", valueText: "forecast", explanation: "No NWPS river forecast known for this site at this time." },
+    ]);
+
+  test("status mapping against API rows: CANNOT_ASSESS is cannot_assess with its gaps, never review; REVIEW keeps its fired rules", () => {
+    const blind = fromC5(cannotAssess("SMML1"), NOW, "FRESH")!;
+    expect(blind).toMatchObject({ site: "SMML1", status: "cannot_assess", origin: "c5", freshness: "MISSING" });
+    // C5's rules 5 and 6 are named per input, as the board rows and the briefing key them.
+    expect(blind.reasons.map((r) => [r.rule, r.kind])).toEqual([
+      ["missing_observation", "gap"],
+      ["missing_forecast", "gap"],
+    ]);
+    expect(blind.reasons[0]!.text).toBe("No NWPS stage observation known for this site at this time.");
+    const noThresholds = fromC5(apiRow("BXAL1", "CANNOT_ASSESS", [{ rule: "missing_input", valueText: "thresholds", explanation: "No NWPS flood thresholds known for this site at this time." }]), NOW, "FRESH")!;
+    expect(noThresholds.reasons[0]).toMatchObject({ rule: "no_thresholds", kind: "gap" });
+    expect(withThresholdsLater(noThresholds, false).reasons[0]!.text).toBe("No NWPS flood thresholds known for this site at this time.");
+    expect(withThresholdsLater(noThresholds, true).reasons[0]).toMatchObject({ value: "stored_later", text: expect.stringMatching(/first stored after this time/) });
+    const fired = fromC5(apiRow("MCGL1", "REVIEW", [{ rule: "forecast_category", value: 4, threshold: 4, unit: "ft", issuedAt: "2026-09-30T15:32:00Z", explanation: "Forecast peak reaches action stage." }, { rule: "stale_input", valueText: "observation", explanation: "Newest NWPS observation is 7.0 h old; observations older than 6 h are stale and dropped from review scoring." }], { observationFreshness: "STALE" }), NOW, "FRESH")!;
+    expect(fired).toMatchObject({ status: "review", freshness: "STALE" });
+    expect(fired.reasons.map((r) => [r.rule, r.kind])).toEqual([
+      ["forecast_category", "review"],
+      ["stale_observation", "gap"],
+    ]);
+    expect(fromC5(apiRow("BTRL1", "OK", [], { observationFreshness: "AGING" }), NOW, "FRESH")).toMatchObject({ status: "ok", reasons: [], freshness: "AGING" });
+    // A row without the freshness field reads it from the gaps.
+    expect(fromC5({ site: "KRZL1", status: "CANNOT_ASSESS", reasons: [{ rule: "stale_input", valueText: "observation", explanation: "Newest NWPS observation is stale." }] }, NOW, "FRESH")!.freshness).toBe("STALE");
+  });
+
+  test("reviewBoard answers an object with `sites`: every row maps, so markers never fall back to a derivation that says review", async () => {
+    const original = globalThis.fetch;
+    const sites = ["SMML1", "KRZL1", "BLRL1", "MCGL1", "BTRL1", "AEXL1", "MLUL1", "BXAL1"];
+    globalThis.fetch = (async () => new Response(JSON.stringify({ data: { reviewBoard: { asOf: new Date(NOW).toISOString(), review: 0, ok: 0, cannotAssess: 8, sites: sites.map(cannotAssess) } } }), { status: 200 })) as unknown as typeof fetch;
+    try {
+      const board = (await loadC5Board(NOW))!;
+      expect(Object.keys(board).sort()).toEqual([...sites].sort());
+      expect(new Set(Object.values(board).map((r) => r.status))).toEqual(new Set(["cannot_assess"]));
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  test("reviewHistory answers the board at any past time from memory: the initial review, then the last transition at or before it", async () => {
+    const t0 = NOW - 48 * H;
+    const row = {
+      site: "KRZL1",
+      from: new Date(t0).toISOString(),
+      to: new Date(NOW).toISOString(),
+      initial: cannotAssess("KRZL1"),
+      transitions: [
+        { at: new Date(t0 + 10 * H).toISOString(), from: "CANNOT_ASSESS", to: "OK", reasons: [], cleared: ["missing_input"] },
+        { at: new Date(t0 + 30 * H).toISOString(), from: "OK", to: "REVIEW", reasons: [{ rule: "stage_rise", outcome: "FIRED", value: 1.3, threshold: 1, unit: "ft", source: "usgs", explanation: "Stage rose 1.30 ft in 24 h." }], cleared: [] },
+      ],
+    };
+    const h = historyFromC5(row)!;
+    expect(h.transitions.map((t) => t.to)).toEqual(["ok", "review"]);
+    expect(reviewAt(h, t0 - 1)).toBeNull();
+    expect(reviewAt(h, t0)).toMatchObject({ status: "cannot_assess", freshness: "MISSING", asOfMs: t0 });
+    expect(reviewAt(h, t0 + 9 * H)).toMatchObject({ status: "cannot_assess" });
+    expect(reviewAt(h, t0 + 10 * H)).toMatchObject({ status: "ok", reasons: [], freshness: "FRESH" });
+    expect(reviewAt(h, t0 + 31 * H)).toMatchObject({ status: "review", reasons: [{ rule: "stage_change", kind: "review", text: "Stage rose 1.30 ft in 24 h." }] });
+    expect(reviewAt(h, NOW + 1)).toBeNull();
+
+    // The loader asks for a few sites per document and keys the histories by site.
+    const original = globalThis.fetch;
+    const bodies: string[] = [];
+    globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
+      bodies.push(String(init?.body));
+      const { query } = JSON.parse(String(init?.body)) as { query: string };
+      const data: Record<string, unknown> = {};
+      for (const m of query.matchAll(/(h\d+): reviewHistory\(site: "(\w+)"/g)) data[m[1]!] = { ...row, site: m[2] };
+      return new Response(JSON.stringify({ data }), { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const sites = ["SMML1", "KRZL1", "BLRL1", "MCGL1", "BTRL1", "AEXL1", "MLUL1", "BXAL1"].map(site);
+      const all = (await loadC5History(sites, t0, NOW))!;
+      expect(bodies.length).toBe(2);
+      expect(Object.keys(all).sort()).toEqual(sites.map((s) => s.lid).sort());
+      expect(reviewAt(all.BXAL1!, t0 + 31 * H)?.status).toBe("review");
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 
   test("an API without reviewBoard is recognised, so the board derives statuses", async () => {

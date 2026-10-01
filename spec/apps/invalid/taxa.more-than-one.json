@@ -15,6 +15,7 @@
         "burmese python"
       ],
       "scientificName": "Python bivittatus",
+      "dbId": 1,
       "inatTaxonId": 238252,
       "inatLineageIds": [],
       "gbifKey": 4820533,
@@ -33,6 +34,7 @@
         "burmese python"
       ],
       "scientificName": "Python bivittatus 2",
+      "dbId": 1,
       "inatTaxonId": 238252,
       "inatLineageIds": [],
       "gbifKey": 4820533,

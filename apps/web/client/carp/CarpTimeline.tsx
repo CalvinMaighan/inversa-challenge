@@ -247,7 +247,10 @@ export type CarpTimelineProps = {
   replaying: boolean;
   /** The theme mode: the canvas reads its colours from CSS, so a theme change redraws. */
   theme?: string;
+  /** A scrubber step (every input event while dragging or stepping). */
   onScrub: (ms: number) => void;
+  /** The scrubber released (change, pointer up, key up, blur): the exact as-of data may now be fetched. */
+  onScrubEnd?: () => void;
   onLive: () => void;
   onYesterday: () => void;
   onPlay: () => void;
@@ -260,9 +263,25 @@ const stepsOf = (c: ChartData) => Math.max(1, Math.round((c.toMs - c.fromMs) / H
  * Observed stage against the forecast in force, one site at a time: scrub (drag, arrow keys: an hour, Page keys: a
  * day) to see what was known at any past hour; play replays forward to now; LIVE returns.
  */
-export default function CarpTimeline({ chart, siteName, forecast, conflicts, replaying, theme, onScrub, onLive, onYesterday, onPlay }: CarpTimelineProps) {
+export default function CarpTimeline({ chart, siteName, forecast, conflicts, replaying, theme, onScrub, onScrubEnd, onLive, onYesterday, onPlay }: CarpTimelineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef<HTMLInputElement>(null);
+  const scrubEnd = useRef(onScrubEnd);
+  useEffect(() => {
+    scrubEnd.current = onScrubEnd;
+  }, [onScrubEnd]);
+  // React's onChange is the input event; the native change event is the release of a drag (or a key step), the
+  // moment the as-of data is worth fetching. Pointer up, key up and blur end a scrub the same way.
+  useEffect(() => {
+    const el = rangeRef.current;
+    if (!el) return;
+    const end = () => scrubEnd.current?.();
+    for (const type of ["change", "pointerup", "keyup", "blur"]) el.addEventListener(type, end);
+    return () => {
+      for (const type of ["change", "pointerup", "keyup", "blur"]) el.removeEventListener(type, end);
+    };
+  }, []);
   const [width, setWidth] = useState(0);
 
   // Panels and tabs stop above the timeline, however tall it wrapped (`--hud-bottom` on the HUD root), and the
@@ -396,6 +415,7 @@ export default function CarpTimeline({ chart, siteName, forecast, conflicts, rep
           aria-label={siteName ? `${siteName}: observed stage and river forecast, ${cursorText}. The numbers are in the location briefing.` : (chart.message ?? "Stage chart")}
         />
         <Range
+          ref={rangeRef}
           type="range"
           min={0}
           max={steps}

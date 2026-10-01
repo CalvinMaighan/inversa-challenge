@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { spans, toReport } from "client/lionfish/data";
+import { HEAT_LABEL_STEP, placeLabel } from "client/lionfish/draw";
 import {
   areaCells,
   areaHeat,
@@ -26,6 +27,19 @@ import {
 import { getApp } from "shared/apps";
 
 import { AREAS, buoy, cell, crw, LIONFISH_APP, marine, NOW, report } from "./fixtures";
+
+describe("lionfish overlay: heat labels and priority markers", () => {
+  test("a heat label that would sit under a numbered marker steps up until clear; a clear one stays", () => {
+    expect(placeLabel(100, 100, 120, [])).toEqual({ x: 100, y: 100 });
+    expect(placeLabel(100, 100, 120, [{ x: 300, y: 100 }])).toEqual({ x: 100, y: 100 });
+    // Marker right on the label: the label moves up one step (half the label, half the 26 px marker, a gap).
+    expect(placeLabel(100, 100, 120, [{ x: 100, y: 100 }])).toEqual({ x: 100, y: 100 - HEAT_LABEL_STEP });
+    // A marker above as well: the label goes below instead.
+    expect(placeLabel(100, 100, 120, [{ x: 100, y: 100 }, { x: 120, y: 78 }])).toEqual({ x: 100, y: 100 + HEAT_LABEL_STEP });
+    // Marker touching the label's edge only: still clear (26 px square plus 2 px gap).
+    expect(placeLabel(100, 100, 120, [{ x: 100 + 60 + 15, y: 100 }])).toEqual({ x: 100, y: 100 });
+  });
+});
 
 describe("lionfish model: app and areas", () => {
   test("Lionfish Watch is a survey app; carp and python are not", () => {

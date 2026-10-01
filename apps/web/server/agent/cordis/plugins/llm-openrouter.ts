@@ -116,7 +116,9 @@ export async function* mapChatStream(
   let text = "";
   let reasoningIndex: number | undefined;
   let reasoning = "";
-  const toolBlocks = new Map<number, { index: number; id: string; name: string; arguments: string }>();
+  // `idKnown`: the upstream sent the call id (a placeholder stands in until then, and a delta carrying a
+  // placeholder id would announce a call the client could never close).
+  const toolBlocks = new Map<number, { index: number; id: string; idKnown: boolean; sent: boolean; name: string; arguments: string }>();
   let usage: TokenUsage | undefined;
   let finishKind: "stop" | "tool-calls" | "max-tokens" = "stop";
   const aborted: StreamChunk = {
@@ -161,11 +163,14 @@ export async function* mapChatStream(
         const key = call.index ?? 0;
         let block = toolBlocks.get(key);
         if (!block) {
-          block = { index: nextIndex++, id: call.id ?? `call_${key}`, name: call.function?.name ?? "", arguments: "" };
+          block = { index: nextIndex++, id: call.id ?? `call_${key}`, idKnown: !!call.id, sent: false, name: call.function?.name ?? "", arguments: "" };
           toolBlocks.set(key, block);
           yield { type: "block-start", index: block.index, blockType: "tool-call" };
         }
-        if (call.id) block.id = call.id;
+        if (call.id) {
+          block.id = call.id;
+          block.idKnown = true;
+        }
         const incoming = call.function?.name;
         // Some upstreams resend the full name per delta, others stream fragments.
         if (incoming) {
@@ -173,8 +178,11 @@ export async function* mapChatStream(
           else if (!block.name.startsWith(incoming)) block.name += incoming;
         }
         const argDelta = call.function?.arguments ?? "";
-        if (argDelta) {
-          block.arguments += argDelta;
+        if (argDelta) block.arguments += argDelta;
+        // A delta flows once the call has its id and name (the first one may carry no arguments yet: it announces
+        // the call); the assembled call follows at `block-end` either way.
+        if (block.idKnown && block.name && (argDelta || !block.sent)) {
+          block.sent = true;
           yield {
             type: "tool-call-delta",
             index: block.index,
