@@ -63,3 +63,20 @@ Google 3D Tiles bill per root-tileset request after a free monthly allowance; ch
 | GE5 | water and weather overlays | `api/src/overlay.rs`, `client/globe/layers/overlays/**`, `shared/overlays.ts` | `gates/leaf-GE5.md` |
 
 Shared files that several leaves must touch (`client/globe/layers/index.ts`, `client/globe/layers/types.ts`, `shared/voice/ui-tools.ts` `LAYER_IDS`, `client/hud/legend/**`, `api/src/app/mod.rs` route merge): each leaf appends its own lines and nothing else, and the driver resolves merge conflicts. After the five merge, the driver wires the agent (`toggle_layer` ids, prompt), docs and the final e2e.
+
+## Developer panel spec (from the user's reference screenshot, 2026-10-01)
+
+A modal opened by the top-right Developer icon button, titled "Power up the globe" under a small "Provider settings" kicker, with a close button and "Esc to close". Intro: the globe works without keys; each key switches on another real feed. One row per provider in `KEY_REGISTRY`:
+
+- status dot (green = set, grey = not set), provider name, a small priority dot (red = unlocks a headline feature such as Google 3D or the agent; yellow = optional), badges `BROWSER-SIDE` (the key runs in the browser and must be provider-restricted) and `CONFIGURED EXTERNALLY` (set through the environment or Doppler; shown, never touched);
+- one plain line on what it unlocks (for example "The photorealistic 3D planet", "Live ships, worldwide", "Talk to the globe");
+- a `MANAGE` link (key is set) or `GET KEY` link (not set) that opens the provider page in a new tab;
+- for an unset key, a paste field (placeholder with the variable name) and one `SAVE KEYS` button for the whole panel.
+
+Where a pasted key goes:
+
+- **Browser-side keys** (Google Maps, Cesium ion): saved to the browser's localStorage, applied on the next globe load, never sent to our server.
+- **Server-side keys** (AISStream, OpenRouter, xAI, AWS GOES, NWWS): only in local development, on loopback, `POST /api/dev/keys` appends them to `data/local-keys.env` (gitignored, mode 0600; created if absent) and `bun run dev` restarts the API and web processes with the new values (`scripts/dev.ts` watches that file and restarts only the processes it started). In any other environment the route answers 403 and the panel shows the `doppler secrets set NAME` command to copy instead, because production keys live in Doppler. A key already set through the shell or Doppler wins over the local file and shows `CONFIGURED EXTERNALLY`.
+- Values are never returned by any route, never logged, never in a screenshot (the paste field is `type=password`).
+
+Registry rows (only keys this app really uses): Google Maps, Cesium ion, AISStream, OpenRouter, xAI voice, AWS for GOES push, NWWS.

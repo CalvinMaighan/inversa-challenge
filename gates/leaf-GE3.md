@@ -7,14 +7,14 @@ Scope: `shared/keys.ts` registry; `GET /api/dev/keys`; Developer panel filling G
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: pending
 
-- [ ] G2: `/api/dev/keys` returns booleans only: a test sets a server key to the sentinel `SENTINEL-DO-NOT-LEAK`, calls the route, and asserts the sentinel is absent from the body and from the server log output
+- [ ] G2: `GET /api/dev/keys` returns booleans only, and `POST /api/dev/keys` (loopback and development only, 403 otherwise) writes `data/local-keys.env` with mode 0600 without echoing values. Test sets a server key to the sentinel `SENTINEL-DO-NOT-LEAK`, calls both routes, and asserts the sentinel is absent from every response body and from captured server log output, that a non-loopback or production request gets 403, and that a key already in the environment is reported `external` and not overwritten
   CHECK: cd apps/web && bun test --tsconfig-override ./tsconfig.json tests -t "dev keys route" 2>&1 | grep -E "pass|fail"
   EXPECT: /[1-9][0-9]* pass[\s\S]*0 fail/
   EVIDENCE: pending
 
-- [ ] G3: Developer panel e2e: the top-right developer button opens the panel, lists every key with Set or Missing, a browser key typed into it (a dummy value) persists across reload via localStorage and shows Set, Clear removes it; server rows have no input. Prints `DEVPANEL rows=<n> browser_inputs=<n> server_inputs=0 persists=1`
+- [ ] G3: Developer panel e2e matches the spec in docs/GODS_EYE.md ("Power up the globe"): the top-right developer button opens the modal, one row per registry key with status dot, badges, purpose line, MANAGE or GET KEY link (new tab), paste fields only for unset keys, Esc closes and returns focus. A dummy browser key typed in persists across reload via localStorage and shows set; a dummy server key saved in dev mode lands in `data/local-keys.env` (the test uses a temp INVERSA_DATA_DIR) and the row turns set after the dev supervisor restarts. Prints `DEVPANEL rows=<n> browser_inputs=<n> server_inputs=<n> persists=1 esc=ok`
   CHECK: cd apps/web && bun run e2e:developer 2>&1 | grep DEVPANEL
-  EXPECT: /DEVPANEL rows=([1-9]\d*) browser_inputs=([1-9]\d*) server_inputs=0 persists=1/
+  EXPECT: /DEVPANEL rows=([1-9]\d*) browser_inputs=([1-9]\d*) server_inputs=([1-9]\d*) persists=1 esc=ok/
   EVIDENCE: pending
 
 - [ ] G4: imagery ladder unit tests named `google direct`: a Google key selects route `google-direct` before ion, a failed direct load falls to ion, then to keyless; the monthly cap drops the direct route to the next rung at 90 percent; Louisiana (carp app) zone added; no request is made without a key
