@@ -338,8 +338,11 @@ export const marineForecast = {
     const place = placeBox(ctx.app, input.place) ?? placeBox(ctx.app, input.area);
     // A name the gazetteer does not know widens to every forecast point and says so, rather than failing the turn.
     const unknownPlace = named && !place ? named : null;
-    const point = input.lat !== undefined && input.lon !== undefined ? { lat: input.lat, lon: input.lon } : place && !place.isArea ? { lat: (place.bbox.south + place.bbox.north) / 2, lon: (place.bbox.west + place.bbox.east) / 2 } : null;
-    if (point && !inRegion(ctx.app, point.lat, point.lon)) throw new Error(`${point.lat}, ${point.lon} is outside the four areas. ${ctx.app.agent.refusal}`);
+    const rawPoint = input.lat !== undefined && input.lon !== undefined ? { lat: input.lat, lon: input.lon } : null;
+    // A point outside the areas is refused only when it is the sole locator; beside a place or area name (or as 0, 0) it is a placeholder.
+    if (rawPoint && !inRegion(ctx.app, rawPoint.lat, rawPoint.lon) && !named && !(rawPoint.lat === 0 && rawPoint.lon === 0)) throw new Error(`${rawPoint.lat}, ${rawPoint.lon} is outside the four areas. ${ctx.app.agent.refusal}`);
+    const pointIgnored = rawPoint && !inRegion(ctx.app, rawPoint.lat, rawPoint.lon) ? rawPoint : null;
+    const point = rawPoint && !pointIgnored ? rawPoint : place && !place.isArea ? { lat: (place.bbox.south + place.bbox.north) / 2, lon: (place.bbox.west + place.bbox.east) / 2 } : null;
     // A point or a reef reads its whole area (the forecast grid is 0.5°, so the nearest point can sit well outside a reef's own box) and keeps the nearest forecast point.
     const bbox = resolveBbox(point ? (regionAt(ctx.app, point.lat, point.lon)?.bbox ?? appBBox(ctx.app)) : (place?.bbox ?? input.bbox ?? appBBox(ctx.app)), ctx);
     const days = input.days ?? 3;
@@ -513,6 +516,7 @@ export const marineForecast = {
           ...(place ? { place: place.name } : {}),
           ...(unknownPlace ? { placeIgnored: `"${unknownPlace}" is not a place the app knows; every forecast point of the four areas is shown instead` } : {}),
           ...(point ? { nearestTo: point, pointNote: "the nearest forecast grid point to the place or point asked for (distanceDeg from it)" } : {}),
+          ...(pointIgnored ? { pointIgnored: `${pointIgnored.lat}, ${pointIgnored.lon} is outside the four areas and was ignored; the place or area named decides` } : {}),
           ...(points.length === 0 ? { missing: "No Open-Meteo Marine forecast stored for this place in the next 72 hours." } : {}),
           citeNote: "Every wave or current number you quote carries its row's cite marker (daily rows: cite and citeCurrent); at least one marker per point you name.",
           calmestFirst: ranked,
@@ -854,11 +858,14 @@ export const lionfishExplainCell = (species: z.ZodType<string>) => ({
     const givenCell = given(input.cell);
     const area = given(input.area) ? findArea(ctx.app, input.area) : null;
     if (given(input.area) && !area) throw new Error(`"${input.area}" is not one of the four areas. ${ctx.app.agent.refusal}`);
-    const pointCell = input.lat !== undefined && input.lon !== undefined ? componentCellFor(ctx.app, input.lat, input.lon) : null;
-    if (input.lat !== undefined && input.lon !== undefined && !pointCell && !area && !givenCell) throw new Error(`${input.lat}, ${input.lon} is outside the four areas. ${ctx.app.agent.refusal}`);
-    let cell = givenCell && givenCell.includes(":") && /^[a-z][a-z0-9-]*:\d+:\d+$/.test(givenCell) ? givenCell : undefined;
+    const pointGiven = input.lat !== undefined && input.lon !== undefined;
+    const pointCell = pointGiven ? componentCellFor(ctx.app, input.lat!, input.lon!) : null;
+    // A point outside the areas beside a cell or area name is a placeholder (0, 0), not a request to refuse.
+    if (pointGiven && !pointCell && !area && !givenCell) throw new Error(`${input.lat}, ${input.lon} is outside the four areas. ${ctx.app.agent.refusal}`);
+    let cell = givenCell && /^[a-z][a-z0-9-]*:\d+:\d+$/.test(givenCell) ? givenCell : undefined;
     if (!cell && !area && pointCell) cell = pointCell;
-    if (!cell && !area && givenCell) cell = givenCell;
+    // A bare `col:row` counts only when it is the sole locator; beside a placeholder point it is a placeholder too.
+    if (!cell && !area && givenCell && !pointGiven) cell = givenCell;
     if (!cell) {
       // An area explains its top cell; nothing at all explains the top cell of the four areas.
       const grid = await gqlWithFeeds<{ hotspots: GqlGrid; feeds: GqlFeedState[] }>("AgentHotspots", HOTSPOTS_QUERY, { species: input.species, at, bbox: area?.bbox ?? appBBox(ctx.app), top: 1, region: area?.id ?? null, weights: input.weights ?? null, basis: input.basis ? input.basis.toUpperCase() : null }, ctx);

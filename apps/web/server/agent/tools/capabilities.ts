@@ -301,6 +301,8 @@ const sightings = {
     const older = !widened && !bySubmitted && recent.length === 0 ? known.length : 0;
     const lateRows = rows.filter((row) => lateBy(row) !== null);
     const impreciseRows = rows.filter(imprecise);
+    // Rows observed in a past window that reached the feed only after it ended ("observed in August, arrived in September").
+    const afterWindow = !bySubmitted && !endsNow ? rows.filter((row) => row.ingestedAt && Date.parse(row.ingestedAt) > Date.parse(asked.to)) : [];
     const askedDays = Math.max(1, Math.round((Date.parse(asked.to) - Date.parse(asked.from)) / (24 * HOUR_MS)));
     // The newest record of each feed within the fetched reach (the backfill), so "is feed X current here" is a cited row
     // with its date, and a feed with nothing in reach is named as such rather than left out.
@@ -367,6 +369,17 @@ const sightings = {
               lateRecords: lateRows
                 .slice(0, MAX_MODEL_ROWS)
                 .map((row) => ({ source: row.source, observed: row.observedAt.slice(0, 10), submitted: row.ingestedAt?.slice(0, 10) ?? null, arrived: `${lateBy(row)} after it was observed`, ...(regionAt(ctx.app, row.lat, row.lon) && ctx.app.regions.length > 1 ? { area: regionAt(ctx.app, row.lat, row.lon)!.id } : {}), cite: `[e:sighting:${row.id}]` })),
+            }
+          : {}),
+        ...(!bySubmitted && !endsNow
+          ? {
+              arrivedAfterWindow: afterWindow.length,
+              arrivedAfterWindowNote: afterWindow.length
+                ? `${afterWindow.length} of these reports reached the feed only after the window ended (${asked.to.slice(0, 10)}): list each with observed and submitted dates, its lag and marker.`
+                : "every report observed in this window had reached the feed before the window ended.",
+              ...(afterWindow.length
+                ? { arrivedAfterWindowRecords: afterWindow.slice(0, MAX_MODEL_ROWS).map((row) => ({ source: row.source, observed: row.observedAt.slice(0, 10), submitted: row.ingestedAt!.slice(0, 10), lagDays: lagDays(row), ...(regionAt(ctx.app, row.lat, row.lon) && ctx.app.regions.length > 1 ? { area: regionAt(ctx.app, row.lat, row.lon)!.id } : {}), cite: `[e:sighting:${row.id}]` })) }
+                : {}),
             }
           : {}),
         imprecise: impreciseRows.length,
