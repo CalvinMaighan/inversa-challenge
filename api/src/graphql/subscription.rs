@@ -6,7 +6,7 @@ use futures_util::stream::{self, Stream, StreamExt};
 
 use super::query::{ops_after, OPS_PAGE};
 use super::types::{FeedState, FrameRange, Op, Time};
-use super::{app_state, now_ms};
+use super::app_state;
 use crate::feed_state;
 use crate::realtime::{Event, OnLag};
 
@@ -22,7 +22,7 @@ impl SubscriptionRoot {
             Event::FeedState(s) => Some(FeedState::from(s)),
             _ => None,
         });
-        let snapshot = feed_state::compute(&state.obs, now_ms()).await?;
+        let snapshot = feed_state::compute(&state.obs, state.now_ms()).await?;
         Ok(stream::iter(snapshot.into_iter().map(FeedState::from)).chain(live))
     }
 

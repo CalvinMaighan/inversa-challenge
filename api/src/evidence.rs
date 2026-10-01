@@ -5,11 +5,21 @@
 //! | kind | key | record |
 //! |---|---|---|
 //! | `sighting` | `sightings.id` | the row, its taxon and its revisions |
-//! | `reading` | `<station_id>:<param>:<observed_at ms>:<origin>` | the row and its station |
-//! | `alert` | `alerts.id` | the row, `areaGeojson` parsed |
+//! | `reading` | `<station>:<param>:<observed_at ms>:<origin>`; `<station>` is `stations.id` or a station's ext id (USGS site number, NWPS lid); also `<source>:<ext id>:<param>:<ms>:<origin>` | the row and its station; for an NWPS lid with no station row, the NWPS observation of the forecast store (stage on the flood-category datum, flow) |
+//! | `alert` | `alerts.id` or the NWS alert id (`urn:oid:…`, `vtec:…`) | the row, `areaGeojson` parsed, and its per-site versions (`firstSeen`, `lastSeen`, `endedAt`) |
 //! | `fetch` | `fetch_runs.id` | the run |
+//! | `forecast` | `<lid>:<issued ms>` (river issuance), or `nws:<office>/<x>,<y>:<updateTime ms>` (gridpoint) | the snapshot with its points, the thresholds known then, provenance and revisions |
+//! | `review` | `<lid or location id>:<asOf ms>` | the site review at that time with every check (conditions apps) |
+//! | `source` | `<feed id>` | the feed's facts: licence, credit/DOI, cadence, latency, rate limit, mode, homepage, last fetch |
+//! | `mission`, `note` | the entity id on the app's team board | its fields (deleted ones included, flagged) |
+//! | `message` | the message id | body, author node, recipient, thread, HLC |
 //! | `hotspot` | `<species>:<cell id>:<frame ms>` (cell id `<col>:<row>`, or `<region>:<col>:<row>` in a multi-region app) | the explain terms |
 //! | `backtest` | `<species>:<days>` | the backtest summary with `perDay` |
+//!
+//! Every id the engines cite resolves here: review reasons (`reading:<lid>:stage_m:…`,
+//! `reading:<usgs site>:discharge_cfs:…`, `forecast:<lid>:<ms>`, `alert:<nws id>`, `fetch:<id>`),
+//! hotspot components (`sighting:<id>`, `reading:<station id>:dhw:…`) and the forecast store.
+//! A well-formed id with no record is `NOT_FOUND`; an unknown kind or malformed key is `BAD_ID`.
 //!
 //! Row-backed kinds also carry the raw payload from the Archive (gunzipped; parsed as JSON when
 //! it is JSON, otherwise `{text}` cut at [`RAW_TEXT_CAP`]; GOES NetCDF as metadata only), the
@@ -147,6 +157,8 @@ struct Found {
     links: Vec<EvidenceLink>,
     /// Publisher web page (`source_pages`), for rows a publisher has a page for.
     page_url: Option<String>,
+    /// API URL of the record when no archived payload names one (`Evidence.sourceUrl`).
+    api_url: Option<String>,
 }
 
 pub async fn evidence(state: &AppState, id: &str) -> Res<Evidence> {
@@ -158,17 +170,25 @@ pub async fn evidence(state: &AppState, id: &str) -> Res<Evidence> {
         "fetch" => fetch(state, id, key).await?,
         "hotspot" => hotspot_found(state, id, key).await?,
         "backtest" => backtest_found(state, id, key).await?,
+        "forecast" => forecast_found(state, id, key).await?,
+        "review" => review_found(state, id, key).await?,
+        "source" => source_found(state, id, key).await?,
+        "mission" | "note" => team_entity(state, id, kind, key).await?,
+        "message" => team_message(state, id, key).await?,
         _ => {
-            return Err(bad_id(id, "kind sighting, reading, alert, fetch, hotspot or backtest"));
+            return Err(bad_id(
+                id,
+                "kind sighting, reading, alert, fetch, forecast, review, source, mission, note, message, hotspot or backtest",
+            ));
         }
     };
     assemble(state, id, kind, found).await
 }
 
 async fn assemble(state: &AppState, id: &str, kind: &str, found: Found) -> Res<Evidence> {
-    let Found { record, source, raw, ingest_lag_ms, links, page_url } = found;
+    let Found { record, source, raw, ingest_lag_ms, links, page_url, api_url } = found;
     let feed = match &source {
-        Some(source) => crate::feed_state::compute(&state.obs, chrono::Utc::now().timestamp_millis())
+        Some(source) => crate::feed_state::compute(&state.obs, state.now_ms())
             .await?
             .into_iter()
             .find(|s| &s.source == source)
@@ -185,7 +205,7 @@ async fn assemble(state: &AppState, id: &str, kind: &str, found: Found) -> Res<E
         record,
         raw: raw_payload,
         raw_key: raw.as_ref().map(|r| r.key.clone()),
-        source_url: raw.as_ref().map(|r| r.source_url.clone()),
+        source_url: raw.as_ref().map(|r| r.source_url.clone()).or(api_url),
         source_page_url: page_url,
         fetched_at: raw.as_ref().map(|r| crate::graphql::types::Time(r.fetched_at)),
         ingest_lag_seconds: ingest_lag_ms.map(|ms| ms.max(0) / 1000),
@@ -376,6 +396,7 @@ async fn sighting(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 source: Some(source),
                 ingest_lag_ms: Some(ingested_at - observed_at),
                 links,
+                api_url: None,
             }))
         })
         .await?;
@@ -494,121 +515,277 @@ fn reading_conflicts(c: &Connection, app: &App, kind: PhysKind, me: &ReadingAt) 
 }
 
 async fn reading(state: &AppState, id: &str, key: &str) -> Res<Found> {
-    const SHAPE: &str = "reading:<station_id>:<param>:<observed_at ms>:<origin>";
+    const SHAPE: &str = "reading:<station id or ext id>:<param>:<observed_at ms>:<origin> or reading:<source>:<ext id>:<param>:<observed_at ms>:<origin>";
     let parts: Vec<&str> = key.split(':').collect();
-    let [station, param, at, origin] = parts.as_slice() else { return Err(bad_id(id, SHAPE)) };
-    let station: i64 = station.parse().map_err(|_| bad_id(id, SHAPE))?;
-    let at: i64 = at.parse().map_err(|_| bad_id(id, SHAPE))?;
-    let (param, origin) = (param.to_string(), origin.to_string());
+    if parts.len() < 4 || parts.iter().any(|p| p.is_empty()) {
+        return Err(bad_id(id, SHAPE));
+    }
+    let n = parts.len();
+    let at: i64 = parts[n - 2].parse().map_err(|_| bad_id(id, SHAPE))?;
+    let (param, origin) = (parts[n - 3].to_string(), parts[n - 1].to_string());
+    let head: Vec<String> = parts[..n - 3].iter().map(|s| s.to_string()).collect();
     let app = state.app.clone();
     let found = state
         .obs
-        .read(move |c| {
-            let row = c
-                .prepare_cached(
-                    "select r.value, r.flag, r.raw_object_id, r.conflict, s.source_id, s.ext_id, s.name, s.lat, s.lon, s.kind
-                     from readings r join stations s on s.id = r.station_id
-                     where r.station_id = ?1 and r.param = ?2 and r.observed_at = ?3 and r.origin = ?4",
-                )?
-                .query_row(params![station, param, at, origin], |r| {
-                    Ok((
-                        r.get::<_, Option<f64>>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, Option<i64>>(2)?,
-                        r.get::<_, bool>(3)?,
-                        r.get::<_, String>(4)?,
-                        r.get::<_, String>(5)?,
-                        r.get::<_, String>(6)?,
-                        r.get::<_, f64>(7)?,
-                        r.get::<_, f64>(8)?,
-                        r.get::<_, String>(9)?,
-                    ))
-                })
-                .optional()?;
-            let Some((value, flag, raw_id, conflict, source, ext_id, name, lat, lon, kind)) = row else {
-                return Ok(None);
-            };
-            let mut record = json!({
-                "station": {"id": station.to_string(), "source": source, "extId": ext_id, "name": name,
-                            "lat": lat, "lon": lon, "kind": kind},
-                "param": param,
-                "value": value,
-                "flag": flag,
-                "observedAt": iso(at),
-                "origin": origin,
-                "conflict": conflict,
-            });
-            // Licences that require attribution (NOAA CRW) travel with the record.
-            if let Some((credit, doi)) = crate::source_pages::credit(&source) {
-                record["credit"] = json!(credit);
-                record["doi"] = json!(doi);
-            }
-            let mut links = Vec::new();
-            if let (Some(k), Some(v), "ok") = (PhysKind::of(&param, &origin), value, flag.as_str()) {
-                links.extend(reading_conflicts(c, &app, k, &ReadingAt { lat, lon, at, value: v })?);
-            }
-            links.extend(fetch_link(c, &source, raw_id)?);
-            let raw = raw_ref(c, raw_id)?;
-            Ok(Some(Found {
-                record,
-                ingest_lag_ms: raw.as_ref().map(|r| r.fetched_at - at),
-                page_url: source_page_url(&source, &ext_id),
-                raw,
-                source: Some(source),
-                links,
-            }))
+        .read(move |c| match resolve_station(c, &head, &param, at, &origin)? {
+            Some(station) => reading_row(c, &app, station, &param, at, &origin),
+            None => nwps_observation(c, &head.join(":"), &param, at, &origin),
         })
         .await?;
     found.ok_or_else(|| not_found(id))
 }
 
+/// The `stations.id` a reading key names: a numeric `stations.id`, `<source>:<ext id>`, or an ext
+/// id alone (exact, or a USGS `<site>:<method>` station of that site), whichever has the reading.
+fn resolve_station(c: &Connection, head: &[String], param: &str, at: i64, origin: &str) -> rusqlite::Result<Option<i64>> {
+    if let [one] = head {
+        if let Ok(sid) = one.parse::<i64>() {
+            let hit = c
+                .prepare_cached("select 1 from readings where station_id = ?1 and param = ?2 and observed_at = ?3 and origin = ?4")?
+                .query_row(params![sid, param, at, origin], |_| Ok(()))
+                .optional()?;
+            if hit.is_some() {
+                return Ok(Some(sid));
+            }
+        }
+    }
+    let by_ext = |source: Option<&str>, ext: &str| -> rusqlite::Result<Option<i64>> {
+        c.prepare_cached(
+            "select s.id from stations s join readings r on r.station_id = s.id
+             where (s.ext_id = ?1 or substr(s.ext_id, 1, length(?1) + 1) = ?1 || ':') and (?2 is null or s.source_id = ?2)
+               and r.param = ?3 and r.observed_at = ?4 and r.origin = ?5
+             order by s.ext_id = ?1 desc, s.id limit 1",
+        )?
+        .query_row(params![ext, source, param, at, origin], |r| r.get(0))
+        .optional()
+    };
+    if head.len() >= 2 {
+        if let Some(sid) = by_ext(Some(&head[0]), &head[1..].join(":"))? {
+            return Ok(Some(sid));
+        }
+    }
+    by_ext(None, &head.join(":"))
+}
+
+fn reading_row(c: &Connection, app: &App, station: i64, param: &str, at: i64, origin: &str) -> rusqlite::Result<Option<Found>> {
+    let row = c
+        .prepare_cached(
+            "select r.value, r.flag, r.raw_object_id, r.conflict, s.source_id, s.ext_id, s.name, s.lat, s.lon, s.kind
+             from readings r join stations s on s.id = r.station_id
+             where r.station_id = ?1 and r.param = ?2 and r.observed_at = ?3 and r.origin = ?4",
+        )?
+        .query_row(params![station, param, at, origin], |r| {
+            Ok((
+                r.get::<_, Option<f64>>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<i64>>(2)?,
+                r.get::<_, bool>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?,
+                r.get::<_, f64>(7)?,
+                r.get::<_, f64>(8)?,
+                r.get::<_, String>(9)?,
+            ))
+        })
+        .optional()?;
+    let Some((value, flag, raw_id, conflict, source, ext_id, name, lat, lon, kind)) = row else {
+        return Ok(None);
+    };
+    let mut record = json!({
+        "station": {"id": station.to_string(), "source": source, "extId": ext_id, "name": name,
+                    "lat": lat, "lon": lon, "kind": kind},
+        "param": param,
+        "value": value,
+        "flag": flag,
+        "observedAt": iso(at),
+        "origin": origin,
+        "conflict": conflict,
+    });
+    // Licences that require attribution (NOAA CRW) travel with the record.
+    if let Some((credit, doi)) = crate::source_pages::credit(&source) {
+        record["credit"] = json!(credit);
+        record["doi"] = json!(doi);
+    }
+    let mut links = Vec::new();
+    if let (Some(k), Some(v), "ok") = (PhysKind::of(param, origin), value, flag.as_str()) {
+        links.extend(reading_conflicts(c, app, k, &ReadingAt { lat, lon, at, value: v })?);
+    }
+    links.extend(fetch_link(c, &source, raw_id)?);
+    let raw = raw_ref(c, raw_id)?;
+    Ok(Some(Found {
+        record,
+        ingest_lag_ms: raw.as_ref().map(|r| r.fetched_at - at),
+        page_url: source_page_url(&source, &ext_id),
+        raw,
+        source: Some(source),
+        links,
+        api_url: None,
+    }))
+}
+
+/// The feed (`sources.id`) that writes a forecast-store `source` value.
+fn feed_of_store_source(source: crate::forecast::Source) -> &'static str {
+    match source {
+        crate::forecast::Source::NwpsLive => crate::ingest::poll::nwps::SOURCE_ID,
+        crate::forecast::Source::IemArchive => crate::ingest::poll::iem::SOURCE_ID,
+        crate::forecast::Source::NwsGridpoint => crate::ingest::poll::nws_forecast::SOURCE_ID,
+    }
+}
+
+/// The newest archived payload of `feed` fetched at or before `at` whose URL contains `needle`.
+fn raw_near(c: &Connection, feed: &str, needle: &str, at: i64) -> rusqlite::Result<Option<i64>> {
+    c.prepare_cached(
+        "select id from raw_objects where source_id = ?1 and fetched_at <= ?3 and instr(source_url, ?2) > 0
+         order by fetched_at desc, id desc limit 1",
+    )?
+    .query_row(params![feed, needle, at], |r| r.get(0))
+    .optional()
+}
+
+/// An NWPS observation of the forecast store (`forecast_observations`), cited by the review
+/// engine as `reading:<lid>:stage_m:<ms>:measured`: stage in NWPS feet (the flood-category
+/// datum), flow in kcfs. Only measured stage/flow params name one.
+fn nwps_observation(c: &Connection, site: &str, param: &str, at: i64, origin: &str) -> rusqlite::Result<Option<Found>> {
+    if origin != "measured" || !matches!(param, "stage_m" | "stage_ft" | "flow_kcfs" | "discharge_cfs") {
+        return Ok(None);
+    }
+    let lid = site.to_ascii_uppercase();
+    let row: Option<(Option<f64>, Option<f64>, String, i64)> = c
+        .prepare_cached("select stage_ft, flow_kcfs, source, ingested_at from forecast_observations where site = ?1 and observed_at = ?2")?
+        .query_row(params![lid, at], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .optional()?;
+    let Some((stage_ft, flow_kcfs, store_source, ingested_at)) = row else { return Ok(None) };
+    let store = crate::forecast::Source::from_db(&store_source).unwrap_or(crate::forecast::Source::NwpsLive);
+    let feed = feed_of_store_source(store);
+    let api_url = crate::ingest::poll::nwps::stageflow_url(&lid);
+    let raw_id = match store {
+        crate::forecast::Source::NwpsLive => raw_near(c, feed, &format!("/{lid}/stageflow"), ingested_at)?,
+        _ => raw_near(c, feed, &lid, ingested_at)?,
+    };
+    let thresholds = crate::forecast::store::thresholds_asof(c, &lid, ingested_at)?;
+    let record = json!({
+        "site": lid,
+        "station": {"extId": lid, "source": feed, "kind": "nwps_gauge"},
+        "param": param,
+        "origin": origin,
+        "observedAt": iso(at),
+        "ingestedAt": iso(ingested_at),
+        "provenance": store.db(),
+        "stageFt": stage_ft,
+        "stageM": stage_ft.map(|ft| ft * crate::ingest::poll::physical::FEET_TO_M),
+        "flowKcfs": flow_kcfs,
+        "flowCfs": flow_kcfs.map(|k| k * 1000.0),
+        "datum": "NWPS stage datum, the one the NWPS flood categories use (USGS stage can differ)",
+        "category": thresholds.and_then(|t| t.category(stage_ft)).map(crate::forecast::Category::db),
+        "lowWater": thresholds.and_then(|t| t.low_water(stage_ft)),
+    });
+    let raw = raw_ref(c, raw_id)?;
+    Ok(Some(Found {
+        record,
+        links: fetch_link(c, feed, raw_id)?.into_iter().collect(),
+        raw,
+        source: Some(feed.to_string()),
+        ingest_lag_ms: Some(ingested_at - at),
+        page_url: source_page_url(crate::ingest::poll::nwps::SOURCE_ID, &lid),
+        api_url: Some(api_url),
+    }))
+}
+
+/// One `alert_snapshots` row: site, event, severity, headline, onset, expires, first seen,
+/// last seen, ended.
+type AlertVersion = (String, String, String, Option<String>, Option<i64>, Option<i64>, i64, i64, Option<i64>);
+
 async fn alert(state: &AppState, id: &str, key: &str) -> Res<Found> {
-    let aid: i64 = key.parse().map_err(|_| bad_id(id, "alert:<integer id>"))?;
+    if key.is_empty() {
+        return Err(bad_id(id, "alert:<alerts.id or NWS alert id>"));
+    }
+    let key = key.to_string();
+    let feed = crate::ingest::poll::nws::feed_id(&state.app);
     let found = state
         .obs
         .read(move |c| {
-            let row = c
+            let aid: Option<i64> = match key.parse::<i64>() {
+                Ok(n) => Some(n),
+                Err(_) => c.prepare_cached("select id from alerts where ext_id = ?1 order by id desc limit 1")?.query_row([&key], |r| r.get(0)).optional()?,
+            };
+            let row = match aid {
+                Some(aid) => c
+                    .prepare_cached(
+                        "select source_id, ext_id, event, severity, headline, area_geojson, onset, expires, raw_object_id
+                         from alerts where id = ?1",
+                    )?
+                    .query_row([aid], |r| {
+                        Ok((
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                            r.get::<_, String>(3)?,
+                            r.get::<_, Option<String>>(4)?,
+                            r.get::<_, Option<String>>(5)?,
+                            r.get::<_, Option<i64>>(6)?,
+                            r.get::<_, Option<i64>>(7)?,
+                            r.get::<_, Option<i64>>(8)?,
+                        ))
+                    })
+                    .optional()?,
+                None => None,
+            };
+            let ext = row.as_ref().map_or(key.clone(), |r| r.1.clone());
+            // Per-site versions from the forecast store (conditions apps): first/last seen, end.
+            let versions: Vec<AlertVersion> = c
                 .prepare_cached(
-                    "select source_id, ext_id, event, severity, headline, area_geojson, onset, expires, raw_object_id
-                     from alerts where id = ?1",
+                    "select site, event, severity, headline, onset, expires, first_seen, last_seen, ended_at
+                     from alert_snapshots where ext_id = ?1 order by first_seen, site, id",
                 )?
-                .query_row([aid], |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, String>(3)?,
-                        r.get::<_, Option<String>>(4)?,
-                        r.get::<_, Option<String>>(5)?,
-                        r.get::<_, Option<i64>>(6)?,
-                        r.get::<_, Option<i64>>(7)?,
-                        r.get::<_, Option<i64>>(8)?,
-                    ))
-                })
-                .optional()?;
-            let Some((source, ext_id, event, severity, headline, area, onset, expires, raw_id)) = row else {
+                .query_map([&ext], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            if row.is_none() && versions.is_empty() {
                 return Ok(None);
+            }
+            let first_seen = versions.iter().map(|v| v.6).min();
+            let last_seen = versions.iter().map(|v| v.7).max();
+            let ended_at = (!versions.is_empty() && versions.iter().all(|v| v.8.is_some())).then(|| versions.iter().filter_map(|v| v.8).max()).flatten();
+            let sites: Vec<Value> = versions
+                .iter()
+                .map(|(site, event, severity, headline, onset, expires, first, last, ended)| {
+                    json!({"site": site, "event": event, "severity": severity, "headline": headline, "onset": iso_opt(*onset),
+                           "expires": iso_opt(*expires), "firstSeen": iso(*first), "lastSeen": iso(*last), "endedAt": iso_opt(*ended)})
+                })
+                .collect();
+            let (source, event, severity, headline, area, onset, expires, raw_id) = match row {
+                Some((source, _, event, severity, headline, area, onset, expires, raw_id)) => (source, event, severity, headline, area, onset, expires, raw_id),
+                None => {
+                    let v = &versions[0];
+                    (feed.to_string(), v.1.clone(), v.2.clone(), v.3.clone(), None, v.4, v.5, None)
+                }
             };
             let record = json!({
-                "id": aid.to_string(),
+                "id": aid.map(|a| a.to_string()),
                 "source": source,
-                "extId": ext_id,
+                "extId": ext,
                 "event": event,
                 "severity": severity,
                 "headline": headline,
                 "areaGeojson": area.and_then(|a| serde_json::from_str::<Value>(&a).ok()),
                 "onset": iso_opt(onset),
                 "expires": iso_opt(expires),
+                "firstSeen": iso_opt(first_seen),
+                "lastSeen": iso_opt(last_seen),
+                "endedAt": iso_opt(ended_at),
+                "sites": sites,
             });
             let links: Vec<EvidenceLink> = fetch_link(c, &source, raw_id)?.into_iter().collect();
             let raw = raw_ref(c, raw_id)?;
+            let api_url = ext.starts_with("urn:oid:").then(|| format!("https://api.weather.gov/alerts/{ext}"));
             Ok(Some(Found {
+                ingest_lag_ms: raw.as_ref().zip(onset).map(|(r, onset)| r.fetched_at - onset).or(first_seen.zip(onset).map(|(f, o)| f - o)),
+                page_url: source_page_url(&source, &ext),
                 record,
-                ingest_lag_ms: raw.as_ref().zip(onset).map(|(r, onset)| r.fetched_at - onset),
-                page_url: source_page_url(&source, &ext_id),
                 raw,
                 source: Some(source),
                 links,
+                api_url,
             }))
         })
         .await?;
@@ -668,6 +845,7 @@ async fn fetch(state: &AppState, id: &str, key: &str) -> Res<Found> {
                 ingest_lag_ms: Some(received_at - fetched_at),
                 links,
                 page_url: None,
+                api_url: None,
             }))
         })
         .await?;
@@ -735,7 +913,7 @@ async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
             "caveats": out.caveats,
             "credit": out.credit,
         });
-        return Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None });
+        return Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None, api_url: None });
     }
     let ex = hotspot::score::explain(&state.obs, app, &cell, sp, at).await?;
     let record = json!({
@@ -748,7 +926,7 @@ async fn hotspot_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
         "score": ex.score,
         "terms": ex.terms.iter().map(|t| json!({"name": t.name, "value": t.value, "rationale": t.rationale})).collect::<Vec<_>>(),
     });
-    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None })
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None, api_url: None })
 }
 
 async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
@@ -760,7 +938,7 @@ async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
     let (species, days) = key.split_once(':').ok_or_else(|| bad_id(id, SHAPE))?;
     let sp = parse_species(app, id, species, SHAPE)?;
     let days: u32 = days.parse().ok().filter(|d| (1..=366).contains(d)).ok_or_else(|| bad_id(id, SHAPE))?;
-    let b = hotspot::backtest::backtest(&state.obs, app, sp, days).await?;
+    let b = hotspot::backtest::backtest_until(&state.obs, app, sp, days, state.now_ms()).await?;
     let record = json!({
         "species": sp.id(),
         "days": b.days,
@@ -768,7 +946,230 @@ async fn backtest_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
         "baseline": b.baseline,
         "perDay": b.per_day.iter().map(|d| json!({"day": iso(d.day), "sightings": d.sightings, "hits": d.hits})).collect::<Vec<_>>(),
     });
-    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None })
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None, api_url: None })
+}
+
+/// The forecast-store site and product a `forecast:` key names: `<lid>` (river issuance; any
+/// product but `gridpoint` first), or `nws:<office>/<x>,<y>` (the gridpoint run of the location on
+/// that grid).
+fn forecast_site(app: &App, site: &str) -> Option<(String, Option<&'static str>)> {
+    match site.strip_prefix("nws:") {
+        Some(grid) => {
+            let (office, xy) = grid.split_once('/')?;
+            let (x, y) = xy.split_once(',')?;
+            let (x, y): (u32, u32) = (x.parse().ok()?, y.parse().ok()?);
+            let loc = app.cfg.locations.iter().find(|l| {
+                l.nws_grid.as_ref().is_some_and(|g| g.office.eq_ignore_ascii_case(office) && g.x == x && g.y == y) && l.nwps.is_some()
+            })?;
+            Some((loc.nwps.clone()?.to_ascii_uppercase(), Some("gridpoint")))
+        }
+        None => Some((site.to_ascii_uppercase(), None)),
+    }
+}
+
+async fn forecast_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
+    const SHAPE: &str = "forecast:<lid>:<issued ms> or forecast:nws:<office>/<x>,<y>:<updateTime ms>";
+    let (site, at) = key.rsplit_once(':').ok_or_else(|| bad_id(id, SHAPE))?;
+    let issued: i64 = at.parse().map_err(|_| bad_id(id, SHAPE))?;
+    if site.is_empty() {
+        return Err(bad_id(id, SHAPE));
+    }
+    let Some((lid, product)) = forecast_site(&state.app, site) else {
+        return Err(not_found(id));
+    };
+    let grid = state.app.cfg.locations.iter().find(|l| l.nwps.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(&lid))).and_then(|l| l.nws_grid.clone());
+    let location = state.app.cfg.locations.iter().find(|l| l.nwps.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(&lid))).map(|l| json!({"id": l.id, "name": l.name}));
+    let found = state
+        .obs
+        .read(move |c| {
+            // The newest revision of the issuance; a river product before a gridpoint run, and the
+            // live capture before an archive copy of the same issuance.
+            let snap_id: Option<i64> = c
+                .prepare_cached(
+                    "select id from forecast_snapshots where site = ?1 and issued_at = ?2 and (?3 is null or product = ?3)
+                     order by product = 'gridpoint', source != 'nwps-live', revision desc, id desc limit 1",
+                )?
+                .query_row(params![lid, issued, product], |r| r.get(0))
+                .optional()?;
+            let Some(snap_id) = snap_id else { return Ok(None) };
+            let Some(s) = crate::forecast::query::by_id(c, snap_id)? else { return Ok(None) };
+            let revisions: i64 = c
+                .prepare_cached("select count(*) from forecast_snapshots where site = ?1 and product = ?2 and issued_at = ?3")?
+                .query_row(params![s.site, s.product, s.issued_at], |r| r.get(0))?;
+            // The thresholds an as-of view at the issuance would use: archive rows were public at
+            // issue, live rows once captured.
+            let known_at = if s.source.backfilled() { s.issued_at } else { s.ingested_at };
+            let thresholds = crate::forecast::store::thresholds_asof(c, &s.site, known_at)?;
+            let newest = crate::forecast::store::newest_thresholds(c, &s.site)?;
+            let neighbour = |sql: &str| -> rusqlite::Result<Option<i64>> {
+                c.prepare_cached(sql)?.query_row(params![s.site, s.product, s.issued_at], |r| r.get::<_, Option<i64>>(0))
+            };
+            let previous = neighbour("select max(issued_at) from forecast_snapshots where site = ?1 and product = ?2 and issued_at < ?3")?;
+            let next = neighbour("select min(issued_at) from forecast_snapshots where site = ?1 and product = ?2 and issued_at > ?3")?;
+            let feed = feed_of_store_source(s.source);
+            let (needle, api_url) = match (s.source, &grid) {
+                (crate::forecast::Source::NwsGridpoint, Some(g)) => {
+                    let path = format!("{}/{},{}", g.office, g.x, g.y);
+                    (path.clone(), format!("{}/{path}/forecast", crate::ingest::poll::nws_forecast::API))
+                }
+                (crate::forecast::Source::NwpsLive, _) => (format!("/{}/stageflow", s.site), crate::ingest::poll::nwps::stageflow_url(&s.site)),
+                _ => (s.site.clone(), crate::review::forecast_link(&s)),
+            };
+            let raw_id = raw_near(c, feed, &needle, s.ingested_at)?;
+            let peak = s.peak().copied();
+            let th_json = |t: crate::forecast::Thresholds| json!({"actionFt": t.action_ft, "minorFt": t.minor_ft, "moderateFt": t.moderate_ft, "majorFt": t.major_ft, "lowFt": t.low_ft});
+            let th = thresholds.map(th_json);
+            let record = json!({
+                "site": s.site,
+                "location": location,
+                "product": s.product,
+                "issuedAt": iso(s.issued_at),
+                "ingestedAt": iso(s.ingested_at),
+                "provenance": s.source.db(),
+                "revision": s.revision,
+                "revisions": revisions,
+                "payloadHash": s.payload_hash,
+                "validFrom": iso_opt(s.valid_from),
+                "validTo": iso_opt(s.valid_to),
+                "horizonEnd": iso_opt(s.horizon_end),
+                "thresholds": th,
+                "thresholdsKnownAt": iso(known_at),
+                // The newest thresholds, for a snapshot captured before any were known.
+                "thresholdsNow": newest.map(th_json),
+                "peak": peak.map(|p| json!({"at": iso(p.valid_at), "stageFt": p.stage_ft,
+                    "category": thresholds.and_then(|t| t.category(p.stage_ft)).map(crate::forecast::Category::db)})),
+                "points": s.points.iter().map(|p| json!({"validAt": iso(p.valid_at), "stageFt": p.stage_ft, "flowKcfs": p.flow_kcfs,
+                    "category": thresholds.and_then(|t| t.category(p.stage_ft)).map(crate::forecast::Category::db)})).collect::<Vec<_>>(),
+            });
+            let mut links: Vec<EvidenceLink> = fetch_link(c, feed, raw_id)?.into_iter().collect();
+            let other = |at: i64| match product {
+                Some(_) => grid.as_ref().map_or(format!("forecast:{}:{at}", s.site), |g| format!("forecast:nws:{}/{},{}:{at}", g.office, g.x, g.y)),
+                None => format!("forecast:{}:{at}", s.site),
+            };
+            links.extend(previous.map(|at| link(other(at), "previous", feed)));
+            links.extend(next.map(|at| link(other(at), "next", feed)));
+            let raw = raw_ref(c, raw_id)?;
+            Ok(Some(Found {
+                record,
+                raw,
+                source: Some(feed.to_string()),
+                ingest_lag_ms: Some(s.ingested_at - s.issued_at),
+                links,
+                page_url: source_page_url(crate::ingest::poll::nwps::SOURCE_ID, &s.site),
+                api_url: Some(api_url),
+            }))
+        })
+        .await?;
+    found.ok_or_else(|| not_found(id))
+}
+
+async fn review_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
+    const SHAPE: &str = "review:<lid or location id>:<asOf ms>";
+    let app = &state.app;
+    if app.is_species() {
+        return Err(bad_id(id, &format!("{SHAPE} (app {} has no review board)", app.id())));
+    }
+    let (site, at) = key.rsplit_once(':').ok_or_else(|| bad_id(id, SHAPE))?;
+    let at: i64 = at.parse().map_err(|_| bad_id(id, SHAPE))?;
+    let sites = crate::review::SiteRef::all(&app.cfg);
+    let site = sites.into_iter().find(|s| s.lid.eq_ignore_ascii_case(site) || s.location == site).ok_or_else(|| not_found(id))?;
+    let cfg = app.cfg.review.clone().unwrap_or_default();
+    let lid = site.lid.clone();
+    let review = state.obs.read(move |c| crate::review::site_review(c, &site, at, &cfg)).await?;
+    let mut links = Vec::new();
+    for r in &review.checks {
+        for e in &r.evidence_ids {
+            if !links.iter().any(|l: &EvidenceLink| l.id.as_str() == e) {
+                links.push(link(e.clone(), "cites", &r.source));
+            }
+        }
+    }
+    Ok(Found {
+        record: crate::review::to_json(&review),
+        source: None,
+        raw: None,
+        ingest_lag_ms: None,
+        links,
+        page_url: source_page_url(crate::ingest::poll::nwps::SOURCE_ID, &lid),
+        api_url: None,
+    })
+}
+
+async fn source_found(state: &AppState, id: &str, key: &str) -> Res<Found> {
+    if key.is_empty() {
+        return Err(bad_id(id, "source:<feed id>"));
+    }
+    let views = crate::source_pages::source_views(state).await?;
+    let v = views.into_iter().find(|v| v.feed == key).ok_or_else(|| not_found(id))?;
+    let links = v.last_fetch_run_id.map(|run| link(format!("fetch:{run}"), "fetch", &v.feed)).into_iter().collect();
+    let page = Some(v.page_url.clone()).filter(|u| u.starts_with("https://"));
+    let api = Some(v.api_url.clone()).filter(|u| u.starts_with("https://"));
+    Ok(Found {
+        record: crate::source_pages::source_view_json(&v),
+        source: Some(v.feed),
+        raw: None,
+        ingest_lag_ms: None,
+        links,
+        page_url: page,
+        api_url: api,
+    })
+}
+
+/// A mission or note on the app's team board (any board of the app's team database): its
+/// last-writer-wins fields, deleted ones included and flagged.
+async fn team_entity(state: &AppState, id: &str, kind: &str, key: &str) -> Res<Found> {
+    if key.is_empty() {
+        return Err(bad_id(id, &format!("{kind}:<id>")));
+    }
+    let (kind, key) = (kind.to_string(), key.to_string());
+    let found = state
+        .team
+        .read(move |c| {
+            let rows: Vec<(String, String, Option<String>, String)> = c
+                .prepare_cached("select board_id, field, value, hlc from fields where entity = ?1 and entity_id = ?2 order by board_id, field")?
+                .query_map(params![kind, key], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            let Some(board) = rows.first().map(|r| r.0.clone()) else { return Ok(None) };
+            let mut fields = serde_json::Map::new();
+            let mut updated = String::new();
+            for (b, field, value, hlc) in rows.into_iter().filter(|r| r.0 == board) {
+                debug_assert_eq!(b, board);
+                fields.insert(field, value.as_deref().and_then(|v| serde_json::from_str(v).ok()).unwrap_or(Value::Null));
+                if crate::crdt::compare_hlc(&hlc, &updated).is_gt() {
+                    updated = hlc;
+                }
+            }
+            let deleted = crate::crdt::is_deleted(&fields);
+            fields.remove("_deleted");
+            let removals: Option<i64> = c
+                .prepare_cached("select sum(total) from removal_counts where board_id = ?1 and entity_id = ?2")?
+                .query_row(params![board, key], |r| r.get(0))?;
+            Ok(Some(json!({"id": key, "kind": kind, "board": board, "fields": fields, "deleted": deleted, "updatedHlc": updated, "removals": removals})))
+        })
+        .await?;
+    let record = found.ok_or_else(|| not_found(id))?;
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None, api_url: None })
+}
+
+/// A committed message on the app's team board.
+async fn team_message(state: &AppState, id: &str, key: &str) -> Res<Found> {
+    if key.is_empty() {
+        return Err(bad_id(id, "message:<id>"));
+    }
+    let key = key.to_string();
+    let found = state
+        .team
+        .read(move |c| {
+            c.prepare_cached("select board_id, body, hlc, node_id, to_node, thread from messages where id = ?1")?
+                .query_row([&key], |r| {
+                    Ok(json!({"id": key, "board": r.get::<_, String>(0)?, "body": r.get::<_, String>(1)?, "hlc": r.get::<_, String>(2)?,
+                              "from": r.get::<_, String>(3)?, "to": r.get::<_, Option<String>>(4)?, "thread": r.get::<_, Option<String>>(5)?}))
+                })
+                .optional()
+        })
+        .await?;
+    let record = found.ok_or_else(|| not_found(id))?;
+    Ok(Found { record, source: None, raw: None, ingest_lag_ms: None, links: Vec::new(), page_url: None, api_url: None })
 }
 
 #[cfg(test)]
@@ -1086,7 +1487,7 @@ mod tests {
         let state = test_state();
         seed_sources(&state.obs).await;
         let g = state.app.regions[0].grid;
-        let today = hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
+        let today = hotspot::backtest::floor_day(crate::state::now_ms());
         let (lon, lat) = g.center(g.index(100, 100));
         insert_sighting(&state.obs, "inat", 1, lat, lon, today - 3 * DAY + 5 * HOUR, "research", None).await;
         insert_sighting(&state.obs, "inat", 1, lat, lon, today - DAY + 9 * HOUR, "research", None).await;
@@ -1142,5 +1543,302 @@ mod tests {
         assert_eq!(decode_raw(&gzip(&body), &raw)["format"], "netcdf4");
         assert_eq!(decode_raw(b"{\"a\":1}", &raw), json!({"a": 1}));
         assert_eq!(decode_raw(b"plain", &raw), json!({"text": "plain", "truncated": false, "bytes": 5}));
+    }
+
+    // ---- E1 G1: every cited id resolves ------------------------------------------------------
+
+    use crate::app::test_support::test_state_for;
+    use crate::backfill::FIXTURE_NOW;
+    use crate::state::Clock;
+
+    /// The carp fixtures (USGS, NWPS, NWS alerts and gridpoint, IEM archive) through the real
+    /// pipeline on a clock pinned at [`FIXTURE_NOW`].
+    async fn carp_fixtures() -> AppState {
+        let state = test_state_for("carp").with_clock(Clock::Fixed(FIXTURE_NOW));
+        let root = crate::backfill::fixtures_root();
+        for source in crate::backfill::fixture_sources(&state) {
+            crate::backfill::ingest_fixtures(&state, source.as_ref(), &root).await.unwrap();
+        }
+        state
+    }
+
+    async fn resolves(state: &AppState, id: &str) -> Evidence {
+        evidence(state, id).await.unwrap_or_else(|e| panic!("{id} does not resolve: {e}"))
+    }
+
+    /// Every evidence id the review engine cites for the eight carp sites (at the fixture time and
+    /// a day later, when inputs are stale and checks cite other records) resolves, and so does the
+    /// `review:` id of each review and every id its links name.
+    #[tokio::test]
+    async fn evidence_kind_review_engine_ids_all_resolve() {
+        let state = carp_fixtures().await;
+        let sites = crate::review::SiteRef::all(&state.app.cfg);
+        let cfg = state.app.cfg.review.clone().unwrap_or_default();
+        let mut kinds = std::collections::BTreeMap::<String, usize>::new();
+        for at in [FIXTURE_NOW, FIXTURE_NOW - 6 * 3_600_000, FIXTURE_NOW + 86_400_000] {
+            let (s, c) = (sites.clone(), cfg.clone());
+            let board = state.obs.read(move |conn| crate::review::board(conn, &s, at, &c)).await.unwrap();
+            for review in &board.sites {
+                for id in review.checks.iter().flat_map(|r| r.evidence_ids.iter()) {
+                    let ev = resolves(&state, id).await;
+                    *kinds.entry(ev.kind.clone()).or_default() += 1;
+                }
+                let rid = format!("review:{}:{at}", review.site.lid);
+                let ev = resolves(&state, &rid).await;
+                assert_eq!(ev.record["status"], review.status.id(), "{rid}");
+                assert_eq!(ev.record["checks"].as_array().unwrap().len(), review.checks.len());
+                for l in &ev.links {
+                    resolves(&state, l.id.as_str()).await;
+                }
+            }
+        }
+        println!("EVIDENCE-REVIEW-IDS {kinds:?}");
+        for kind in ["reading", "forecast", "fetch"] {
+            assert!(kinds.get(kind).is_some_and(|n| *n > 0), "no {kind} id was cited: {kinds:?}");
+        }
+    }
+
+    /// Every id a Lionfish Watch hotspot cites (component inputs and explain evidence) resolves.
+    #[tokio::test]
+    async fn evidence_kind_hotspot_engine_ids_all_resolve() {
+        use crate::hotspot::lionfish::{explain, hotspots, Weights};
+        let state = test_state_for("lionfish").with_clock(Clock::Fixed(FIXTURE_NOW));
+        let root = crate::backfill::fixtures_root();
+        for source in crate::backfill::fixture_sources(&state) {
+            crate::backfill::ingest_fixtures(&state, source.as_ref(), &root).await.unwrap();
+        }
+        let app = &state.app;
+        let basis = crate::ingest::quality_bio::DateBasis::Submitted;
+        let mut n = 0;
+        for r in &app.regions {
+            let cells = hotspots(&state.obs, app, &app.taxa[0], FIXTURE_NOW, app.hull().into(), 3, Some(r.id()), Weights::from_app(app), basis).await.unwrap();
+            for c in cells {
+                let ex = explain(&state.obs, app, &c.cell, &app.taxa[0], FIXTURE_NOW, Weights::from_app(app), basis).await.unwrap();
+                let comps = [&ex.cell.components.recent_reports, &ex.cell.components.id_quality, &ex.cell.components.heat_stress, &ex.cell.components.completeness];
+                for comp in comps {
+                    // Inputs mix ids with plain notes ("reports: 22 independent in 90 d"): ids only.
+                    let is_id = |s: &&String| s.split_once(':').is_some_and(|(k, rest)| matches!(k, "sighting" | "reading") && !rest.starts_with(' '));
+                    for id in comp.inputs.iter().filter(is_id).chain(comp.evidence.iter().map(|e| &e.id)) {
+                        resolves(&state, id).await;
+                        n += 1;
+                    }
+                }
+                resolves(&state, &format!("hotspot:{}:{}:{FIXTURE_NOW}", app.taxa[0].id(), c.cell)).await;
+            }
+        }
+        println!("EVIDENCE-HOTSPOT-IDS {n}");
+        assert!(n > 0);
+    }
+
+    /// `forecast:<lid>:<issued ms>`: the snapshot with its points, the thresholds known at that time,
+    /// provenance, revisions, the API URL, the raw payload and the neighbouring issuances. Gridpoint
+    /// runs resolve as `forecast:nws:<office>/<x>,<y>:<updateTime ms>`.
+    #[tokio::test]
+    async fn evidence_kind_forecast_snapshot() {
+        let state = carp_fixtures().await;
+        let (issued, iem_issued, grid_issued): (i64, i64, i64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select (select issued_at from forecast_snapshots where site = 'SMML1' and source = 'nwps-live'),
+                            (select max(issued_at) from forecast_snapshots where site = 'SMML1' and source = 'iem-archive'
+                               and issued_at not in (select issued_at from forecast_snapshots where site = 'SMML1' and source = 'nwps-live')),
+                            (select issued_at from forecast_snapshots where site = 'SMML1' and source = 'nws-gridpoint')",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+            })
+            .await
+            .unwrap();
+        let ev = resolves(&state, &format!("forecast:SMML1:{issued}")).await;
+        assert_eq!(ev.kind, "forecast");
+        let r = &ev.record;
+        assert_eq!((r["site"].as_str(), r["product"].as_str(), r["provenance"].as_str()), (Some("SMML1"), Some("stageflow"), Some("nwps-live")), "{r}");
+        assert_eq!(r["issuedAt"], iso(issued));
+        assert!(r["points"].as_array().unwrap().len() > 10);
+        // Gauge metadata landed with the replay (12:00Z), after this snapshot's capture time
+        // (07:01Z): none were known then, the newest are given beside.
+        assert_eq!(r["thresholds"], Value::Null, "{r}");
+        assert_eq!(r["thresholdsKnownAt"], r["ingestedAt"]);
+        assert_eq!(r["thresholdsNow"]["actionFt"], 35.0, "{r}");
+        assert_eq!(r["location"]["id"], "atchafalaya-simmesport");
+        assert_eq!(ev.source_url.as_deref(), Some(crate::ingest::poll::nwps::stageflow_url("SMML1").as_str()));
+        assert!(ev.raw.as_ref().is_some_and(|raw| raw.get("forecast").is_some()), "the stageflow body");
+        assert!(ev.links.iter().any(|l| l.relation == "fetch"), "{:?}", ev.links);
+        assert_eq!(ev.feed.as_ref().map(|f| f.source.as_str()), Some("nwps"));
+        // ponytail: water.noaa.gov is not on the PUBLISHERS allowlist (mirrored by the web app), so
+        // no gauge page link leaves `source_page_url` yet; add it on both sides to link NWPS pages.
+        assert_eq!(ev.source_page_url, None);
+        // Lower-case lids resolve too.
+        resolves(&state, &format!("forecast:smml1:{issued}")).await;
+        // The IEM archive issuance: provenance and its neighbours.
+        let ev = resolves(&state, &format!("forecast:SMML1:{iem_issued}")).await;
+        assert_eq!(ev.record["provenance"], "iem-archive");
+        assert!(ev.links.iter().any(|l| l.relation == "previous"), "{:?}", ev.links);
+        for l in ev.links.iter().filter(|l| l.relation != "fetch") {
+            resolves(&state, l.id.as_str()).await;
+        }
+        // Gridpoint run by grid.
+        let ev = resolves(&state, &format!("forecast:nws:LCH/113,129:{grid_issued}")).await;
+        assert_eq!((ev.record["product"].as_str(), ev.record["provenance"].as_str()), (Some("gridpoint"), Some("nws-gridpoint")));
+        assert_eq!(ev.source_url.as_deref(), Some("https://api.weather.gov/gridpoints/LCH/113,129/forecast"));
+        // Unknown issuance and grid: NOT_FOUND; malformed: BAD_ID.
+        for id in [format!("forecast:SMML1:{}", issued + 1), "forecast:XXXX1:1".into(), "forecast:nws:LCH/1,1:1".into()] {
+            assert!(matches!(evidence(&state, &id).await, Err(EvidenceError::NotFound(_))), "{id}");
+        }
+        for id in ["forecast:SMML1:abc", "forecast:123", "forecast::5"] {
+            assert!(matches!(evidence(&state, id).await, Err(EvidenceError::BadId(_))), "{id}");
+        }
+    }
+
+    /// `reading:` by NWPS lid (forecast-store observation) and by USGS site number (ext id), plus
+    /// the `<source>:<ext id>` form.
+    #[tokio::test]
+    async fn evidence_kind_reading_by_ext_id_and_nwps_lid() {
+        let state = carp_fixtures().await;
+        let (obs_at, stage): (i64, f64) = state
+            .obs
+            .read(|c| c.query_row("select max(observed_at), (select stage_ft from forecast_observations where site = 'SMML1' order by observed_at desc limit 1) from forecast_observations where site = 'SMML1'", [], |r| Ok((r.get(0)?, r.get(1)?))))
+            .await
+            .unwrap();
+        let ev = resolves(&state, &crate::review::reading_id("SMML1", obs_at)).await;
+        assert_eq!((ev.record["site"].as_str(), ev.record["stageFt"].as_f64()), (Some("SMML1"), Some(stage)));
+        assert_eq!(ev.record["provenance"], "nwps-live");
+        assert_eq!(ev.feed.as_ref().map(|f| f.source.as_str()), Some("nwps"));
+        assert!(ev.raw.is_some() && ev.source_url.is_some(), "the stageflow payload that delivered it");
+        let (station, ext, param, at): (i64, String, String, i64) = state
+            .obs
+            .read(|c| {
+                c.query_row(
+                    "select s.id, s.ext_id, r.param, r.observed_at from readings r join stations s on s.id = r.station_id where s.source_id = 'usgs' order by r.observed_at desc limit 1",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+            })
+            .await
+            .unwrap();
+        let site = ext.split(':').next().unwrap().to_string();
+        for id in [format!("reading:{station}:{param}:{at}:measured"), format!("reading:{site}:{param}:{at}:measured"), format!("reading:usgs:{ext}:{param}:{at}:measured")] {
+            let ev = resolves(&state, &id).await;
+            assert_eq!(ev.record["station"]["id"], station.to_string(), "{id}");
+            assert!(ev.source_page_url.as_deref().is_some_and(|u| u.contains(&site)), "{id}");
+        }
+        for id in [format!("reading:SMML1:stage_m:{}:measured", obs_at + 1), format!("reading:SMML1:sst_c:{obs_at}:measured"), "reading:usgs:00000000:stage_m:1:measured".into()] {
+            assert!(matches!(evidence(&state, &id).await, Err(EvidenceError::NotFound(_))), "{id}");
+        }
+    }
+
+    /// `alert:<NWS id>`: the row and its per-site versions with first/last seen and the end.
+    #[tokio::test]
+    async fn evidence_kind_alert_by_nws_id_with_versions() {
+        use crate::forecast::store::{record_alerts, AlertSeen};
+        let state = test_state_for("carp");
+        let t = 1_790_000_000_000;
+        let seen = move |id: &str| AlertSeen {
+            ext_id: id.into(),
+            event: "Flood Warning".into(),
+            severity: "Severe".into(),
+            headline: Some("h".into()),
+            onset: Some(t),
+            expires: None,
+            source: crate::forecast::Source::NwsGridpoint,
+            payload_hash: "p1".into(),
+        };
+        let ext = "urn:oid:2.49.0.1.840.0.abc.001.1";
+        state
+            .obs
+            .write(move |tx| {
+                record_alerts(tx, "SMML1", t, &[seen(ext)])?;
+                record_alerts(tx, "KRZL1", t + 60_000, &[seen(ext)])?;
+                record_alerts(tx, "SMML1", t + 3_600_000, &[seen(ext)])?;
+                record_alerts(tx, "SMML1", t + 7_200_000, &[])?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        let ev = resolves(&state, &format!("alert:{ext}")).await;
+        let r = &ev.record;
+        assert_eq!((r["extId"].as_str(), r["event"].as_str()), (Some(ext), Some("Flood Warning")));
+        assert_eq!((r["firstSeen"].clone(), r["lastSeen"].clone(), r["endedAt"].clone()), (json!(iso(t)), json!(iso(t + 3_600_000)), Value::Null), "KRZL1 is still open: {r}");
+        let sites: Vec<&str> = r["sites"].as_array().unwrap().iter().map(|s| s["site"].as_str().unwrap()).collect();
+        assert_eq!(sites, ["SMML1", "KRZL1"]);
+        assert_eq!(r["sites"][0]["endedAt"], iso(t + 7_200_000));
+        assert_eq!(ev.source_url.as_deref(), Some(format!("https://api.weather.gov/alerts/{ext}").as_str()));
+        assert_eq!(ev.source_page_url.as_deref(), Some(format!("https://api.weather.gov/alerts/{ext}").as_str()));
+        assert!(matches!(evidence(&state, "alert:urn:oid:nope").await, Err(EvidenceError::NotFound(_))));
+    }
+
+    /// `source:<feed>`: licence, credit/DOI, cadence, latency, rate limit, mode, homepage.
+    #[tokio::test]
+    async fn evidence_kind_source_facts() {
+        let state = test_state_for("lionfish");
+        let ev = resolves(&state, "source:crw").await;
+        let r = &ev.record;
+        assert_eq!((r["mode"].as_str(), r["nudge"].as_bool()), (Some("webhook"), Some(true)));
+        assert_eq!(r["doi"], crate::source_pages::CRW_DOI);
+        assert!(r["attribution"].as_str().unwrap().contains("NOAA Coral Reef Watch"));
+        assert!(r["licence"].as_str().unwrap().contains("without restriction"));
+        let info = crate::ingest::source::Source::info(&crate::ingest::poll::crw::Crw::new(state.app.clone()));
+        assert_eq!(r["cadenceSeconds"], info.cadence.as_secs());
+        assert!(r["rateLimit"].as_str().is_some() && r["expectedLatency"].as_str().is_some());
+        assert_eq!(ev.source_url.as_deref(), Some("https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json"));
+        assert!(ev.source_page_url.as_deref().is_some_and(|u| u.starts_with("https://")));
+        assert!(matches!(evidence(&state, "source:nwps").await, Err(EvidenceError::NotFound(_))), "lionfish has no nwps");
+        assert!(matches!(evidence(&state, "source:").await, Err(EvidenceError::BadId(_))));
+    }
+
+    /// `mission:`, `note:` and `message:` from the app's team board; a deleted note still
+    /// resolves, flagged.
+    #[tokio::test]
+    async fn evidence_kind_team_board_records() {
+        let state = test_state_for("carp");
+        let op = |id: &str, hlc: &str, entity: &str, entity_id: &str, field: &str, value: Value| crate::crdt::OpIn {
+            id: id.into(),
+            hlc: hlc.into(),
+            board_id: None,
+            entity: entity.into(),
+            entity_id: entity_id.into(),
+            field: field.into(),
+            value,
+            node_id: "n1".into(),
+        };
+        let ops = vec![
+            op("o1", "1000:0:n1", "mission", "m1", "title", json!("Gauge check at Simmesport")),
+            op("o2", "1000:1:n1", "mission", "m1", "site", json!("SMML1")),
+            op("o3", "1000:2:n1", "note", "n1", "text", json!("boat ramp closed")),
+            op("o4", "1000:3:n1", "note", "n1", "_deleted", json!(true)),
+            op("o5", "1000:4:n1", "message", "msg1", "body", json!("heading out")),
+        ];
+        state.team.write(move |tx| crate::crdt::apply_ops(tx, "carp:main", &ops, 1)).await.unwrap();
+        let ev = resolves(&state, "mission:m1").await;
+        assert_eq!(ev.record["fields"], json!({"title": "Gauge check at Simmesport", "site": "SMML1"}));
+        assert_eq!((ev.record["board"].as_str(), ev.record["deleted"].as_bool(), ev.record["updatedHlc"].as_str()), (Some("carp:main"), Some(false), Some("1000:1:n1")));
+        let ev = resolves(&state, "note:n1").await;
+        assert_eq!((ev.record["deleted"].as_bool(), ev.record["fields"]["text"].as_str()), (Some(true), Some("boat ramp closed")));
+        let ev = resolves(&state, "message:msg1").await;
+        assert_eq!((ev.record["body"].as_str(), ev.record["from"].as_str()), (Some("heading out"), Some("n1")));
+        for id in ["mission:nope", "note:m1", "message:nope"] {
+            assert!(matches!(evidence(&state, id).await, Err(EvidenceError::NotFound(_))), "{id}");
+        }
+    }
+
+    /// Unknown records of every new kind are a typed NOT_FOUND (GraphQL `extensions.code`);
+    /// unknown kinds and malformed keys are BAD_ID.
+    #[tokio::test]
+    async fn evidence_kind_unknown_ids_are_typed_not_found() {
+        let carp = test_state_for("carp");
+        for id in ["forecast:SMML1:1", "review:XXXX1:0", "source:nope", "mission:x", "note:x", "message:x", "alert:urn:oid:x", "reading:SMML1:stage_m:1:measured"] {
+            let err = evidence(&carp, id).await.unwrap_err();
+            assert!(matches!(err, EvidenceError::NotFound(_)), "{id}: {err}");
+            assert_eq!(err.extend().extensions.unwrap().get("code"), Some(&async_graphql::Value::from("NOT_FOUND")), "{id}");
+        }
+        for id in ["review:SMML1:x", "forecast:", "nope:1", "reading:SMML1:stage_m"] {
+            assert!(matches!(evidence(&carp, id).await, Err(EvidenceError::BadId(_))), "{id}");
+        }
+        // A review on a species app is a bad id, not a missing one.
+        assert!(matches!(evidence(&test_state_for("python"), "review:SMML1:0").await, Err(EvidenceError::BadId(_))));
+        // `review:<lid>:<ms>` resolves even with nothing stored: the review says cannot_assess.
+        let ev = resolves(&carp, "review:atchafalaya-simmesport:1790856000000").await;
+        assert_eq!((ev.record["site"].as_str(), ev.record["status"].as_str()), (Some("SMML1"), Some("cannot_assess")));
     }
 }

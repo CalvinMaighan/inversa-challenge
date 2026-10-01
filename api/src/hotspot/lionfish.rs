@@ -1093,7 +1093,7 @@ pub async fn backtest_until(db: &Db, app: &App, taxon: &Taxon, days: u32, end_ms
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::app::config::App;
     use crate::hotspot::score::testkit::{insert_sighting, insert_station, ms, seed_sources, DAY, HOUR};
@@ -1397,17 +1397,29 @@ mod tests {
         assert_eq!((fw.state, fw.calm_hours), (State::Stale, Some(24)));
     }
 
-    /// `backfill --fixtures --app lionfish` data, ranked now: Florida and Mexico have a top cell
-    /// with reports; Belize and Colombia are thin. Prints `LIONFISH-TOP`.
+    /// `backfill --fixtures --app lionfish` data ingested and ranked at
+    /// [`crate::backfill::FIXTURE_NOW`] (the app clock is pinned, so the result does not depend
+    /// on the date the suite runs): Florida and Mexico have a top cell with reports; Belize and
+    /// Colombia are thin. Prints `LIONFISH-TOP`.
     #[tokio::test]
     async fn lionfish_top_cells_on_fixtures() {
-        let state = crate::app::test_support::test_state_for("lionfish");
+        let state = crate::app::test_support::test_state_for("lionfish").with_clock(crate::state::Clock::Fixed(crate::backfill::FIXTURE_NOW));
+        ingest_lionfish_fixtures(&state).await;
+        assert_lionfish_top_cells(&state, crate::backfill::FIXTURE_NOW).await;
+    }
+
+    /// Every lionfish fixture through the pipeline, stamped with `state`'s clock.
+    pub(crate) async fn ingest_lionfish_fixtures(state: &crate::state::AppState) {
         let root = crate::backfill::fixtures_root();
-        for source in crate::backfill::fixture_sources(&state) {
-            crate::backfill::ingest_fixtures(&state, source.as_ref(), &root).await.unwrap();
+        for source in crate::backfill::fixture_sources(state) {
+            crate::backfill::ingest_fixtures(state, source.as_ref(), &root).await.unwrap();
         }
+    }
+
+    /// Rank each region at `now`: Florida and Mexico have a non-thin top cell with reports,
+    /// Belize and Colombia are thin. Returns the `LIONFISH-TOP` parts.
+    pub(crate) async fn assert_lionfish_top_cells(state: &crate::state::AppState, now: i64) -> Vec<String> {
         let app = &state.app;
-        let now = chrono::Utc::now().timestamp_millis();
         let mut parts = Vec::new();
         for r in &app.regions {
             let cells = hotspots(&state.obs, app, &app.taxa[0], now, app.hull().into(), 1, Some(r.id()), Weights::from_app(app), DateBasis::Submitted).await.unwrap();
@@ -1423,6 +1435,7 @@ mod tests {
         }
         println!("LIONFISH-TOP {}", parts.join(" "));
         assert!(parts[2].ends_with("=thin") && parts[3].ends_with("=thin"));
+        parts
     }
 
     /// Scoring the largest region (co-caribbean, 780 × 380 cells) with a full CRW pixel grid,

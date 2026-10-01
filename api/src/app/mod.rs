@@ -139,11 +139,10 @@ pub fn app(registry: AppRegistry) -> Router {
 /// `GET /health`: every running app with its config summary and per-app feed health (C3
 /// envelopes, as `feeds` returns them).
 async fn health(axum::extract::State(registry): axum::extract::State<AppRegistry>) -> Response {
-    let now = chrono::Utc::now().timestamp_millis();
     let mut apps = Vec::with_capacity(registry.len());
     let mut status = "ok";
     for state in registry.iter() {
-        let feeds = match crate::feed_state::compute(&state.obs, now).await {
+        let feeds = match crate::feed_state::compute(&state.obs, state.now_ms()).await {
             Ok(f) => serde_json::to_value(f).unwrap_or_default(),
             Err(e) => {
                 status = "degraded";

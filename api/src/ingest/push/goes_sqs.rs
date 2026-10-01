@@ -222,7 +222,7 @@ impl GoesSqs {
         let mut out = Vec::with_capacity(keys.len());
         for (key, product) in keys {
             let url = format!("{BUCKET_URL}{key}");
-            let fetched_at = Utc::now().timestamp_millis();
+            let fetched_at = crate::state::now_ms();
             let res = http.get(&url).send().await.with_context(|| format!("GET {url}"))?;
             let status = res.status().as_u16();
             if !res.status().is_success() {

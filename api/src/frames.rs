@@ -149,7 +149,7 @@ pub fn align(t: i64, step_ms: i64) -> i64 {
 }
 
 pub fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
+    crate::state::now_ms()
 }
 
 /// Header bytes for `region_count` regions: descriptors follow only when there are several.

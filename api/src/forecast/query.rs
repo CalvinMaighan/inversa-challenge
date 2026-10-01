@@ -214,6 +214,81 @@ pub struct Status {
     pub forecast_now: Option<StoredPoint>,
     pub conflicts: Vec<Conflict>,
     pub active_alerts: i64,
+    /// The alert poller's newest runs known at `t`, so `active_alerts = 0` can say when it was
+    /// checked (or that it was not).
+    pub alert_check: Option<AlertCheck>,
+    /// NWPS `low_threshold` state of the observed stage; `None` without a low-water threshold.
+    pub low_water: Option<bool>,
+}
+
+/// Feeds whose fetch runs are the NWS alert poll (carp `nws-alerts`, python `nws`). The poll is
+/// statewide, so one run checks every site.
+pub const ALERT_FEEDS: [&str; 2] = ["nws-alerts", "nws"];
+/// A successful alert poll older than this no longer vouches for "no alert in effect": the
+/// poller runs every 60 s (5 min once NWWS-OI is live), so 15 min without one means it is down.
+pub const ALERT_CHECK_STALE_MS: i64 = 15 * 60_000;
+
+/// The alert poller as known at some `t`, from `fetch_runs` (every poll records one, empty polls
+/// included).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlertCheck {
+    /// Newest poll, whatever its status.
+    pub last_run_id: i64,
+    pub last_at: i64,
+    /// `ok`, `empty`, `partial` or `error`.
+    pub last_status: String,
+    /// Newest poll that did not fail.
+    pub ok_run_id: Option<i64>,
+    pub ok_at: Option<i64>,
+}
+
+impl AlertCheck {
+    /// A successful poll within [`ALERT_CHECK_STALE_MS`] of `t`.
+    pub fn current(&self, t: i64) -> bool {
+        self.ok_at.is_some_and(|at| t - at <= ALERT_CHECK_STALE_MS)
+    }
+}
+
+/// The alert poller's newest runs known at `t` (fetched and recorded by then).
+pub fn alert_check_asof(conn: &Connection, t: i64) -> rusqlite::Result<Option<AlertCheck>> {
+    let newest = |ok_only: bool| -> rusqlite::Result<Option<(i64, i64, String)>> {
+        conn.prepare_cached(
+            "select id, fetched_at, status from fetch_runs
+             where source_id in (?1, ?2) and fetched_at <= ?3 and received_at <= ?3 and (?4 = 0 or status != 'error')
+             order by fetched_at desc, id desc limit 1",
+        )?
+        .query_row(params![ALERT_FEEDS[0], ALERT_FEEDS[1], t, ok_only], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .optional()
+    };
+    let Some((last_run_id, last_at, last_status)) = newest(false)? else { return Ok(None) };
+    let ok = if last_status == "error" { newest(true)? } else { Some((last_run_id, last_at, last_status.clone())) };
+    Ok(Some(AlertCheck { last_run_id, last_at, last_status, ok_run_id: ok.as_ref().map(|o| o.0), ok_at: ok.map(|o| o.1) }))
+}
+
+/// Times in `(from, to]` at which [`AlertCheck::current`] can flip: a successful poll becoming
+/// knowable after a gap, and [`ALERT_CHECK_STALE_MS`] after the last poll before a gap.
+pub fn alert_check_changes(conn: &Connection, from: i64, to: i64) -> rusqlite::Result<Vec<i64>> {
+    let mut st = conn.prepare_cached(
+        "select fetched_at, max(fetched_at, received_at) from fetch_runs
+         where source_id in (?1, ?2) and status != 'error' and received_at > ?3 and fetched_at <= ?4
+         order by 2",
+    )?;
+    let polls: Vec<(i64, i64)> = st
+        .query_map(params![ALERT_FEEDS[0], ALERT_FEEDS[1], from - ALERT_CHECK_STALE_MS - 1, to], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    // (fetched, known): a poll vouches from when it is known until fetched + the stale age.
+    let mut out = Vec::new();
+    let mut prev: Option<i64> = None;
+    for &(fetched, known) in &polls {
+        if prev.is_none_or(|p| known > p + ALERT_CHECK_STALE_MS) {
+            out.extend(prev.map(|p| p + ALERT_CHECK_STALE_MS + 1));
+            out.push(known);
+        }
+        prev = Some(prev.map_or(fetched, |p| p.max(fetched)));
+    }
+    out.extend(prev.map(|p| p + ALERT_CHECK_STALE_MS + 1));
+    out.retain(|t| *t > from && *t <= to);
+    Ok(out)
 }
 
 /// Alert versions in effect at `t`: first seen at or before `t` and not ended by `t`. Uses
@@ -290,7 +365,11 @@ pub fn status_at(conn: &Connection, site: &str, t: i64, conflict_ft: f64) -> rus
         });
     }
     let active_alerts = active_alerts_asof(conn, site, t)?;
+    let alert_check = alert_check_asof(conn, t)?;
+    let low_water = thresholds.and_then(|th| th.low_water(observation.and_then(|o| o.stage_ft)));
     Ok(Status {
+        alert_check,
+        low_water,
         site: site.to_string(),
         as_of: t,
         observation,

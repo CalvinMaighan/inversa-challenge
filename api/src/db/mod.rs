@@ -21,6 +21,7 @@ const OBSERVATIONS: &[(&str, &str)] = &[
     ("0007_forecasts", include_str!("../../migrations/observations/0007_forecasts.sql")),
     ("0008_lionfish_ingest", include_str!("../../migrations/observations/0008_lionfish_ingest.sql")),
     ("0009_discharge", include_str!("../../migrations/observations/0009_discharge.sql")),
+    ("0010_low_water", include_str!("../../migrations/observations/0010_low_water.sql")),
 ];
 const TEAM: &[(&str, &str)] = &[
     ("0001_init", include_str!("../../migrations/team/0001_init.sql")),
@@ -58,7 +59,7 @@ pub fn migrate(conn: &mut Connection, name: &str) -> rusqlite::Result<()> {
         tx.execute_batch(sql)?;
         tx.execute(
             "insert into schema_migration (id, applied_at) values (?1, ?2)",
-            rusqlite::params![id, chrono::Utc::now().timestamp_millis()],
+            rusqlite::params![id, crate::state::now_ms()],
         )?;
         tx.commit()?;
     }

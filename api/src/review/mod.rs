@@ -16,7 +16,9 @@
 //! 2. `forecast_category`: forecast peak within the horizon at action stage or above (NWPS stage
 //!    against NWPS thresholds known at `t`; stored point categories are not trusted because a
 //!    backfilled row was categorised with thresholds fetched later).
-//! 3. `active_alert`: an NWS alert version in effect at `t` for the site.
+//! 3. `active_alert`: an NWS alert version in effect at `t` for the site. "None in effect" is
+//!    only a pass when the alert poller succeeded within `ALERT_CHECK_STALE_MS` of `t` (its
+//!    `fetch_runs`, empty polls included); otherwise the check is unknown, never "no alerts".
 //! 4. `rapid_change_forecast`: forecast rise within any 24 h of the horizon at or above
 //!    `rapidRiseFtPer24h` (tidal: `tidalRapidRiseFtPer24h`).
 //! 5. `stale_input`: observation older than `staleObservationHours` or forecast issued more than
@@ -24,16 +26,20 @@
 //! 6. `missing_input`: no observation, no forecast, no thresholds, or no observation 24 h before
 //!    the newest one (so the 24 h change cannot be computed).
 //! 7. `source_conflict`: NWPS gauge vs NWPS forecast stage differ by more than `conflictFt` at the
-//!    observation time, or NWPS vs USGS flow differ by more than `flowConflictRatio`. Flows are
-//!    compared, never blended.
+//!    observation time, or NWPS flow (kcfs, converted to cfs) vs USGS `discharge_cfs` observed
+//!    within 1 h of it differ by a factor over `flowConflictRatio`. Flows are compared, never
+//!    blended, and both sources are named.
 //!
-//! Status: `review` when any of 1-4, 7 fires; otherwise `cannot_assess` when 5 or 6 fires (an
-//! `ok` would be a guess); otherwise `ok`.
+//! Status: `review` when any of 1-4, 7 fires; otherwise `cannot_assess` when 5 or 6 fires or
+//! rule 1, 2, 3 or 4 could not be checked (an `ok` would be a guess); otherwise `ok`.
+//!
+//! Low water (NWPS `low_threshold` state: observed stage at or below the gauge's
+//! `lowThreshold`) is reported as `low_water` next to the status. It is not a review rule.
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::forecast::query::{self, iso, Freshness, HOUR_MS, OBS_FRESH_MS, PAIR_WINDOW_MS};
+use crate::forecast::query::{self, iso, AlertCheck, Freshness, ALERT_CHECK_STALE_MS, HOUR_MS, OBS_FRESH_MS, PAIR_WINDOW_MS};
 use crate::forecast::store::thresholds_asof;
 use crate::forecast::{Category, Snapshot, Source, StoredObservation, Thresholds};
 
@@ -275,12 +281,15 @@ pub struct AlertIn {
     pub first_seen: i64,
 }
 
-/// Newest USGS reading (display only; see the module doc on datums).
+/// Newest USGS readings known at `t`: stage (display only; see the module doc on datums) and
+/// discharge (parameter 00060, `discharge_cfs`), each with its own observation time.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UsgsNow {
+    /// Stage observation time (or the discharge one when there is no stage).
     pub observed_at: i64,
     pub stage_ft: Option<f64>,
     pub flow_cfs: Option<f64>,
+    pub flow_at: Option<i64>,
 }
 
 /// Everything known about one site at `as_of`.
@@ -297,6 +306,8 @@ pub struct Inputs {
     pub thresholds: Option<Thresholds>,
     /// Alert versions first seen by `as_of` and not ended by then.
     pub alerts: Vec<AlertIn>,
+    /// The alert poller's newest runs known at `as_of`.
+    pub alert_check: Option<AlertCheck>,
     pub usgs: Option<UsgsNow>,
 }
 
@@ -353,7 +364,7 @@ fn gauge_link(lid: &str) -> String {
     format!("https://water.noaa.gov/gauges/{}", lid.to_ascii_lowercase())
 }
 
-fn forecast_link(f: &Snapshot) -> String {
+pub fn forecast_link(f: &Snapshot) -> String {
     match f.source {
         Source::IemArchive => format!(
             "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station={}&kind=forecasts&fmt=csv&sts={}&ets={}",
@@ -529,16 +540,61 @@ pub fn rule_forecast_category(i: &Inputs, cfg: &ReviewCfg) -> Reason {
     r
 }
 
-/// Rule 3. One reason per alert version in effect at `t` (seen, not ended, not expired); one
-/// clear check when there are none.
+/// Rule 3. One reason per alert version in effect at `t` (seen, not ended, not expired). With
+/// none in effect: a clear check citing the alert poll that vouches for it (a successful poll
+/// within [`ALERT_CHECK_STALE_MS`]), or an unknown one when the poller is down or never ran.
 pub fn rule_active_alert(i: &Inputs) -> Vec<Reason> {
     let active: Vec<&AlertIn> = i.alerts.iter().filter(|a| a.first_seen <= i.as_of && a.expires.is_none_or(|e| e > i.as_of)).collect();
     if active.is_empty() {
-        let mut r = Reason::new(
-            Rule::ActiveAlert,
-            Outcome::Clear,
-            "No NWS alert in effect for this site in what the alert poller had recorded by this time.".into(),
-        );
+        let stale_min = ALERT_CHECK_STALE_MS / 60_000;
+        let mut r = match &i.alert_check {
+            Some(c) if c.current(i.as_of) => {
+                let ok_at = c.ok_at.unwrap_or(c.last_at);
+                let failed = if c.last_status == "error" {
+                    format!(" The newest poll at {} failed; the one before it vouches.", iso(c.last_at))
+                } else {
+                    String::new()
+                };
+                let mut r = Reason::new(
+                    Rule::ActiveAlert,
+                    Outcome::Clear,
+                    format!("No NWS alert in effect for this site; the alert feed was checked at {} ({:.0} min before).{failed}", iso(ok_at), i.age_h(ok_at) * 60.0),
+                );
+                r.observed_at = Some(ok_at);
+                r.evidence_ids = c.ok_run_id.map(|id| vec![format!("fetch:{id}")]).unwrap_or_default();
+                r
+            }
+            Some(c) => {
+                let why = match c.ok_at {
+                    Some(ok_at) => format!(
+                        "the alert poller last succeeded at {} ({:.0} min before, over the {stale_min} min limit)",
+                        iso(ok_at),
+                        i.age_h(ok_at) * 60.0
+                    ),
+                    None => "no alert poll has succeeded by this time".into(),
+                };
+                let mut r = Reason::new(
+                    Rule::ActiveAlert,
+                    Outcome::Unknown,
+                    format!(
+                        "Cannot assess NWS alerts: {why}; newest poll at {} ({}). An empty alert store is not evidence of no alerts.",
+                        iso(c.last_at),
+                        c.last_status
+                    ),
+                );
+                r.observed_at = c.ok_at;
+                r.evidence_ids = vec![format!("fetch:{}", c.last_run_id)];
+                r
+            }
+            None => Reason::new(
+                Rule::ActiveAlert,
+                Outcome::Unknown,
+                "Cannot assess NWS alerts: the alert poller has no recorded poll by this time.".into(),
+            ),
+        };
+        r.value_text = Some("alert check".into());
+        r.threshold = Some(stale_min as f64);
+        r.unit = Some("min");
         r.source = "nws".into();
         r.link = Some("https://api.weather.gov/alerts/active?area=LA".into());
         return vec![r];
@@ -762,35 +818,37 @@ pub fn rule_source_conflict(i: &Inputs, cfg: &ReviewCfg) -> Vec<Reason> {
             out.push(r);
         }
     }
-    // b) NWPS vs USGS flow
+    // b) NWPS flow (kcfs) vs USGS discharge (cfs), each at its own observation time.
     let flows = i.latest.filter(|_| !i.observation_stale(cfg)).and_then(|o| {
-        let nwps_cfs = o.flow_kcfs? * 1000.0;
+        let nwps_kcfs = o.flow_kcfs?;
         let u = i.usgs?;
-        let usgs_cfs = u.flow_cfs?;
-        ((u.observed_at - o.observed_at).abs() <= FLOW_PAIR_MS && nwps_cfs > 0.0 && usgs_cfs > 0.0).then_some((o, nwps_cfs, u, usgs_cfs))
+        let (usgs_cfs, usgs_at) = (u.flow_cfs?, u.flow_at?);
+        let nwps_cfs = nwps_kcfs * 1000.0;
+        ((usgs_at - o.observed_at).abs() <= FLOW_PAIR_MS && nwps_cfs > 0.0 && usgs_cfs > 0.0).then_some((o, nwps_kcfs, usgs_at, usgs_cfs))
     });
     match flows {
         None => {
             let mut r = Reason::new(
                 Rule::SourceConflict,
                 Outcome::Unknown,
-                "NWPS and USGS flow are not both available within 1 h of each other, so flows are not compared.".into(),
+                "NWPS flow and USGS discharge are not both available within 1 h of each other, so flows are not compared.".into(),
             );
             r.value_text = Some("flow".into());
             r.threshold = Some(cfg.flow_conflict_ratio);
             r.unit = Some("ratio");
             out.push(r);
         }
-        Some((o, nwps, u, usgs)) => {
+        Some((o, nwps_kcfs, usgs_at, usgs)) => {
+            let nwps = nwps_kcfs * 1000.0;
             let ratio = nwps.max(usgs) / nwps.min(usgs);
-            let fired = ratio > cfg.flow_conflict_ratio;
+            let fired = ratio > cfg.flow_conflict_ratio + EPS;
             let mut r = Reason::new(
                 Rule::SourceConflict,
                 if fired { Outcome::Fired } else { Outcome::Clear },
                 format!(
-                    "Flow: NWPS {nwps:.0} cfs at {} vs USGS {usgs:.0} cfs at {}, a factor of {ratio:.1}; over {:.1} is a conflict. Each is shown with its source, never averaged.",
+                    "Flow: NWPS {nwps_kcfs:.2} kcfs ({nwps:.0} cfs) at {} vs USGS discharge {usgs:.0} cfs at {}, a factor of {ratio:.2}; over {:.2} is a conflict. Each is shown with its source, never averaged.",
                     iso(o.observed_at),
-                    iso(u.observed_at),
+                    iso(usgs_at),
                     cfg.flow_conflict_ratio
                 ),
             );
@@ -801,7 +859,7 @@ pub fn rule_source_conflict(i: &Inputs, cfg: &ReviewCfg) -> Vec<Reason> {
             r.source = format!("{}+usgs", o.source.db());
             r.observed_at = Some(o.observed_at);
             r.link = Some(gauge_link(&i.lid));
-            r.evidence_ids = [Some(reading_id(&i.lid, o.observed_at)), i.usgs_site.as_deref().map(|s| reading_id(s, u.observed_at))]
+            r.evidence_ids = [Some(reading_id(&i.lid, o.observed_at)), i.usgs_site.as_deref().map(|s| discharge_id(s, usgs_at))]
                 .into_iter()
                 .flatten()
                 .collect();
@@ -809,6 +867,11 @@ pub fn rule_source_conflict(i: &Inputs, cfg: &ReviewCfg) -> Vec<Reason> {
         }
     }
     out
+}
+
+/// Evidence id of a USGS discharge reading (`readings.param = discharge_cfs`), by site number.
+pub fn discharge_id(usgs_site: &str, at: i64) -> String {
+    format!("reading:{usgs_site}:discharge_cfs:{at}:measured")
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -841,7 +904,16 @@ pub struct SiteReview {
     pub active_alerts: usize,
     pub usgs_stage_ft: Option<f64>,
     pub usgs_observed_at: Option<i64>,
+    /// Newest USGS discharge (cfs) and its time, shown next to NWPS flow, never blended.
+    pub usgs_flow_cfs: Option<f64>,
+    pub usgs_flow_at: Option<i64>,
     pub tidal: bool,
+    /// NWPS `low_threshold` state: observed stage at or below the gauge's low-water threshold.
+    /// `None` when the gauge has no low-water threshold or there is no stage.
+    pub low_water: Option<bool>,
+    pub low_threshold_ft: Option<f64>,
+    /// The alert poller's newest runs known at `as_of` (`active_alerts = 0` cites it).
+    pub alert_check: Option<AlertCheck>,
 }
 
 /// Distinct items, first-seen order.
@@ -867,7 +939,10 @@ pub fn evaluate(site: &SiteRef, i: &Inputs, cfg: &ReviewCfg) -> SiteReview {
     let mut reasons: Vec<Reason> = checks.iter().filter(|r| r.fired()).cloned().collect();
     reasons.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.rule.cmp(&b.rule)));
     // Rules 1, 2 and 4 must each be checked for an `ok`: an unknown one is a gap, not a pass.
-    let core_unknown = checks.iter().any(|r| matches!(r.rule, Rule::StageRise | Rule::ForecastCategory | Rule::RapidChangeForecast) && r.outcome == Outcome::Unknown);
+    // So must rule 3 when no alert fires: a dead alert poller is a gap, not "no alerts".
+    let core_unknown = checks
+        .iter()
+        .any(|r| matches!(r.rule, Rule::StageRise | Rule::ForecastCategory | Rule::ActiveAlert | Rule::RapidChangeForecast) && r.outcome == Outcome::Unknown);
     let status = if reasons.iter().any(|r| r.rule.flags_review()) {
         Status::Review
     } else if !reasons.is_empty() || core_unknown {
@@ -883,7 +958,15 @@ pub fn evaluate(site: &SiteRef, i: &Inputs, cfg: &ReviewCfg) -> SiteReview {
         Status::CannotAssess => format!(
             "Cannot assess: {}. Reporting ok would be a guess.",
             {
-                let mut gaps = unique(reasons.iter().filter_map(|r| r.value_text.as_deref().map(|w| format!("{} {w}", r.rule.id()))));
+                let unknown_core = checks.iter().filter(|r| {
+                    r.outcome == Outcome::Unknown && matches!(r.rule, Rule::StageRise | Rule::ForecastCategory | Rule::ActiveAlert | Rule::RapidChangeForecast)
+                });
+                let mut gaps = unique(
+                    reasons
+                        .iter()
+                        .filter_map(|r| r.value_text.as_deref().map(|w| format!("{} {w}", r.rule.id())))
+                        .chain(unknown_core.map(|r| format!("{} unknown", r.rule.id()))),
+                );
                 if gaps.is_empty() {
                     gaps.push("a core rule could not be checked".into());
                 }
@@ -914,8 +997,13 @@ pub fn evaluate(site: &SiteRef, i: &Inputs, cfg: &ReviewCfg) -> SiteReview {
         forecast_freshness: fc_fresh,
         active_alerts: checks.iter().filter(|r| r.rule == Rule::ActiveAlert && r.fired()).count(),
         usgs_stage_ft: i.usgs.and_then(|u| u.stage_ft),
-        usgs_observed_at: i.usgs.map(|u| u.observed_at),
+        usgs_observed_at: i.usgs.filter(|u| u.stage_ft.is_some()).map(|u| u.observed_at),
+        usgs_flow_cfs: i.usgs.and_then(|u| u.flow_cfs),
+        usgs_flow_at: i.usgs.and_then(|u| u.flow_at),
         tidal: cfg.is_tidal(&i.lid),
+        low_water: i.thresholds.and_then(|t| t.low_water(i.latest.and_then(|o| o.stage_ft))),
+        low_threshold_ft: i.thresholds.and_then(|t| t.low_ft),
+        alert_check: i.alert_check.clone(),
         checks,
     }
 }
@@ -940,25 +1028,31 @@ fn alerts_asof(conn: &Connection, lid: &str, t: i64) -> rusqlite::Result<Vec<Ale
     rows.collect()
 }
 
-/// Newest USGS stage known at `t` (`readings`, metres, converted). A row with a raw object is
-/// knowable once fetched; one without is treated as public at its observation time.
+/// Newest USGS stage (`stage_m`, converted to feet) and discharge (`discharge_cfs`) known at `t`
+/// (`readings`). A row with a raw object is knowable once fetched; one without is treated as
+/// public at its observation time.
 fn usgs_asof(conn: &Connection, usgs: &str, t: i64) -> rusqlite::Result<Option<UsgsNow>> {
-    conn.prepare_cached(
-        "select r.observed_at, r.value from readings r
-         join stations s on s.id = r.station_id
-         left join raw_objects o on o.id = r.raw_object_id
-         where s.source_id = 'usgs' and (s.ext_id = ?1 or s.ext_id like ?1 || ':%')
-           and r.param = 'stage_m' and r.origin = 'measured' and r.flag = 'ok' and r.value is not null
-           and r.observed_at <= ?2 and (o.fetched_at is null or o.fetched_at <= ?2)
-         order by r.observed_at desc limit 1",
-    )?
-    .query_row(params![usgs, t], |r| {
-        let m: f64 = r.get(1)?;
-        // ponytail: readings carry no discharge param yet, so USGS flow stays None and the flow
-        // conflict check reports unknown until an adapter stores it.
-        Ok(UsgsNow { observed_at: r.get(0)?, stage_ft: Some(m * FEET_PER_METRE), flow_cfs: None })
-    })
-    .optional()
+    let newest = |param: &str| -> rusqlite::Result<Option<(i64, f64)>> {
+        conn.prepare_cached(
+            "select r.observed_at, r.value from readings r
+             join stations s on s.id = r.station_id
+             left join raw_objects o on o.id = r.raw_object_id
+             where s.source_id = 'usgs' and (s.ext_id = ?1 or s.ext_id like ?1 || ':%')
+               and r.param = ?3 and r.origin = 'measured' and r.flag = 'ok' and r.value is not null
+               and r.observed_at <= ?2 and (o.fetched_at is null or o.fetched_at <= ?2)
+             order by r.observed_at desc limit 1",
+        )?
+        .query_row(params![usgs, t, param], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()
+    };
+    let (stage, flow) = (newest("stage_m")?, newest("discharge_cfs")?);
+    let Some(observed_at) = stage.or(flow).map(|(at, _)| at) else { return Ok(None) };
+    Ok(Some(UsgsNow {
+        observed_at,
+        stage_ft: stage.map(|(_, m)| m * FEET_PER_METRE),
+        flow_cfs: flow.map(|(_, cfs)| cfs),
+        flow_at: flow.map(|(at, _)| at),
+    }))
 }
 
 /// Read a site's inputs as of `t` (C3 as-of queries only).
@@ -977,6 +1071,7 @@ pub fn load_inputs(conn: &Connection, site: &SiteRef, t: i64) -> rusqlite::Resul
         forecast: query::asof(conn, &site.lid, t)?,
         thresholds: thresholds_asof(conn, &site.lid, t)?,
         alerts: alerts_asof(conn, &site.lid, t)?,
+        alert_check: query::alert_check_asof(conn, t)?,
         usgs: match &site.usgs {
             Some(u) => usgs_asof(conn, u, t)?,
             None => None,
@@ -986,6 +1081,65 @@ pub fn load_inputs(conn: &Connection, site: &SiteRef, t: i64) -> rusqlite::Resul
 
 pub fn site_review(conn: &Connection, site: &SiteRef, t: i64, cfg: &ReviewCfg) -> rusqlite::Result<SiteReview> {
     Ok(evaluate(site, &load_inputs(conn, site, t)?, cfg))
+}
+
+fn iso_opt(ms: Option<i64>) -> serde_json::Value {
+    ms.map_or(serde_json::Value::Null, |t| serde_json::Value::String(iso(t)))
+}
+
+/// One reason as JSON (the evidence record of `review:<lid>:<asOfMs>`; field names as in the SDL).
+pub fn reason_json(r: &Reason) -> serde_json::Value {
+    serde_json::json!({
+        "rule": r.rule.id(),
+        "outcome": format!("{:?}", r.outcome).to_lowercase(),
+        "severity": format!("{:?}", r.severity).to_lowercase(),
+        "value": r.value,
+        "valueText": r.value_text,
+        "threshold": r.threshold,
+        "unit": r.unit,
+        "source": r.source,
+        "observedAt": iso_opt(r.observed_at),
+        "issuedAt": iso_opt(r.issued_at),
+        "link": r.link,
+        "evidenceIds": r.evidence_ids,
+        "explanation": r.explanation,
+    })
+}
+
+/// A whole review as JSON, every check included.
+pub fn to_json(r: &SiteReview) -> serde_json::Value {
+    let check = r.alert_check.as_ref();
+    serde_json::json!({
+        "site": r.site.lid,
+        "location": r.site.location,
+        "name": r.site.name,
+        "asOf": iso(r.as_of),
+        "status": r.status.id(),
+        "summary": r.summary,
+        "reasons": r.reasons.iter().map(reason_json).collect::<Vec<_>>(),
+        "checks": r.checks.iter().map(reason_json).collect::<Vec<_>>(),
+        "stageFt": r.stage_ft,
+        "observedAt": iso_opt(r.observed_at),
+        "change24hFt": r.change_24h_ft,
+        "categoryNow": r.category_now.map(Category::db),
+        "peakStageFt": r.peak_stage_ft,
+        "peakAt": iso_opt(r.peak_at),
+        "categoryPeak": r.category_peak.map(Category::db),
+        "forecastIssuedAt": iso_opt(r.forecast_issued_at),
+        "forecastSource": r.forecast_source.map(Source::db),
+        "observationFreshness": format!("{:?}", r.observation_freshness).to_lowercase(),
+        "forecastFreshness": format!("{:?}", r.forecast_freshness).to_lowercase(),
+        "activeAlerts": r.active_alerts,
+        "alertsCheckedAt": iso_opt(check.and_then(|c| c.ok_at)),
+        "alertsCheckCurrent": check.is_some_and(|c| c.current(r.as_of)),
+        "usgsStageFt": r.usgs_stage_ft,
+        "usgsObservedAt": iso_opt(r.usgs_observed_at),
+        "usgsFlowCfs": r.usgs_flow_cfs,
+        "usgsFlowAt": iso_opt(r.usgs_flow_at),
+        "lowWater": r.low_water,
+        "lowThresholdFt": r.low_threshold_ft,
+        "tidal": r.tidal,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1039,7 +1193,8 @@ pub struct History {
 /// Every time in `(from, to]` at which a review input of the site can change: a row becoming
 /// knowable, an alert starting, ending or expiring, a feed crossing its stale age, a forecast
 /// point entering or leaving the horizon.
-fn change_times(conn: &Connection, lid: &str, from: i64, to: i64, cfg: &ReviewCfg) -> rusqlite::Result<Vec<i64>> {
+fn change_times(conn: &Connection, site: &SiteRef, from: i64, to: i64, cfg: &ReviewCfg) -> rusqlite::Result<Vec<i64>> {
+    let lid = site.lid.as_str();
     let stale_obs = cfg.stale_observation_ms() + 1;
     let stale_fc = cfg.stale_forecast_ms() + 1;
     let horizon = cfg.horizon_ms();
@@ -1057,6 +1212,21 @@ fn change_times(conn: &Connection, lid: &str, from: i64, to: i64, cfg: &ReviewCf
          union select p.valid_at + 1 from forecast_points p join forecast_snapshots s on s.id = p.snapshot_id where s.site = ?1",
     )?;
     let mut times: Vec<i64> = st.query_map(params![lid, stale_fc, stale_obs, horizon], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+    times.extend(query::alert_check_changes(conn, from, to)?);
+    // USGS discharge becoming knowable (the flow half of rule 7).
+    if let Some(usgs) = &site.usgs {
+        let mut st = conn.prepare_cached(
+            "select max(r.observed_at, coalesce(o.fetched_at, r.observed_at)) from readings r
+             join stations s on s.id = r.station_id
+             left join raw_objects o on o.id = r.raw_object_id
+             where s.source_id = 'usgs' and (s.ext_id = ?1 or s.ext_id like ?1 || ':%') and r.param = 'discharge_cfs'
+               and r.observed_at between ?2 - ?4 and ?3",
+        )?;
+        let flows = st.query_map(params![usgs, from, to, FLOW_PAIR_MS], |r| r.get(0))?;
+        for t in flows {
+            times.push(t?);
+        }
+    }
     times.retain(|t| *t > from && *t <= to);
     times.sort_unstable();
     times.dedup();
@@ -1066,7 +1236,7 @@ fn change_times(conn: &Connection, lid: &str, from: i64, to: i64, cfg: &ReviewCf
 /// Status flips of a site in `[from, to]`, each with the reasons behind it.
 pub fn history(conn: &Connection, site: &SiteRef, from: i64, to: i64, cfg: &ReviewCfg) -> rusqlite::Result<History> {
     let initial = site_review(conn, site, from, cfg)?;
-    let times = change_times(conn, &site.lid, from, to, cfg)?;
+    let times = change_times(conn, site, from, to, cfg)?;
     let mut prev = initial.clone();
     let mut transitions = Vec::new();
     for &t in &times {

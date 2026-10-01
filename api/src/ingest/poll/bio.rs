@@ -110,7 +110,7 @@ pub trait Pager: Send {
 /// `Retry-After` reach the governor.
 pub async fn get_page(state: &AppState, pacer: &Pacer, url: &str) -> anyhow::Result<RawPayload> {
     pacer.wait().await;
-    let fetched_at = chrono::Utc::now().timestamp_millis();
+    let fetched_at = crate::state::now_ms();
     let res = state.http.get(url).header("accept", "application/json").send().await?;
     let res = governor::check_response(res)?;
     let status = res.status().as_u16();

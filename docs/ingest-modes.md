@@ -9,7 +9,7 @@ Evidence: `bun scripts/probe-push.ts` (run 2026-10-01T05:27:42Z) prints one `PUS
 - **push**: the provider sends us each new item over a long-lived channel: SNS to SQS (GOES-19) or XMPP (NWWS-OI).
 - **webhook**: the provider calls a URL of ours when something changes. All three webhooks found here (ERDDAP, IEMBot, and our own emitters) are untrusted or unsigned except our own, so a third-party call is a **nudge**: it wakes the emitter for that source at once and carries no data we trust (see "Nudges").
 - **poll**: our emitter fetches on a schedule. Every poll row says what push search was done and where.
-- **emitter**: the scheduled job that fetches, archives and delivers a payload through the signed hook. Every feed lands through `POST /v1/{app}/ingest/hook/{source}`, push sources included (section "Emitter design").
+- **emitter**: the scheduled job that fetches, archives and delivers a payload through the signed hook. Designed: every feed lands through `POST /v1/{app}/ingest/hook/{source}`, push sources included (section "Emitter design"). As built: emitters inside the API process call the same pipeline directly, and the hook serves emitters in another process (section "As built").
 
 ## Verdict in one table
 
@@ -27,6 +27,44 @@ Evidence: `bun scripts/probe-push.ts` (run 2026-10-01T05:27:42Z) prints one `PUS
 | NDBC | no | **poll** one bulk file every 10 min, conditional GET |
 | NOAA CO-OPS | no | **poll** 6 min |
 | IEM HML archive (carp backfill) | no | **poll**: one backfill, then daily |
+
+## As built (leaf E1, 2026-10-01)
+
+What the code does today; the sections below are the audit and design it came from. Where they differ, this section wins.
+
+**Mode per feed.** `sources.mode` is the adapter's own mode (`SourceInfo.mode`), and `/health`, `feeds` and `sources` report it as is: `push`, `poll` or `webhook`. GraphQL `FeedMode` is `PUSH | POLL | WEBHOOK` (the web chips accepted only push and poll before E1; `apps/web/client/hud/topbar/feed-chips.ts` `normalizeFeedState` must accept `webhook` too, or the CRW chip is dropped). A feed is `webhook` only when a provider's change call is its main trigger (CRW); a poller a provider can also wake keeps `poll` and reports `nudge: true` in `sources`.
+
+| App | Feed id | Mode | Poll loop | Nudge route | Emitter |
+|---|---|---|---|---|---|
+| carp | `usgs` | poll | 15 min, all sites in one request | no | Rust poller |
+| carp | `nwps` | poll | 15 min loop; fetches every wake-up 12:00-18:00Z, hourly otherwise | yes (IEMBot flood products) | Rust poller |
+| carp | `nws-alerts` | poll | 60 s; every poll, empty or not, is a `fetch_runs` row | yes (IEMBot) | Rust poller |
+| carp | `nws-forecast` | poll | 60 min; stored only when `updateTime` changes | yes | Rust poller |
+| carp | `iem` | poll | daily (backfill at boot) | yes | Rust poller |
+| carp | `nwws` | push | XMPP session (down until `NWWS_USER`/`NWWS_PASS`) | no | Rust XMPP client |
+| carp, python | `web` | push | none: hook only | no | signed hook |
+| lionfish | `crw` | webhook | 3 h backstop; data cadence 60 h | yes (ERDDAP) | Rust poller |
+| lionfish | `inat` | poll | 10 min (`cadenceMinutes`), conditional GET | no | Rust poller |
+| lionfish | `gbif` | poll | daily | no | Rust poller |
+| lionfish | `nas` | poll | weekly (`cadenceDays`) | no | Rust poller |
+| lionfish | `ndbc` | poll | 10 min, one bulk file | no | Rust poller |
+| lionfish | `openmeteo-marine` | poll | `meta.json` every 15 min, data on a new run | no | Rust poller |
+| lionfish | `goes19-sst` | push | SQS long poll (down until the queue secrets are set) | no | Rust SQS consumer |
+| python | `inat` | poll | 2 min (default `CADENCE`) | no | Rust poller |
+| python | `gbif`, `nas` | poll | daily | no | Rust poller |
+| python | `nws` | poll | 60 s | no | Rust poller |
+| python | `usgs`, `ndbc`, `coops`, `openmeteo` | poll | 15 min, 10 min, 6 min, 60 min | no | Rust poller |
+| python | `goes19`, `nwws` | push | SQS, XMPP (down until their secrets are set) | no | Rust consumers |
+
+In-process emitters call the pipeline (`scheduler::ingest_payload`) directly; the hook below is the same pipeline over HTTP for an emitter in another process.
+
+**Hook** `POST /v1/{app}/ingest/hook/{source}` (`api/src/ingest/push/hook.rs`). `{source}` is `web` (a JSON array of rows) or any poll adapter the app runs, and the body is the raw provider payload that adapter's `normalize` reads. Headers: `X-Timestamp` (unix s) and `X-Signature` = `hex(HMAC_SHA256(INGEST_HOOK_SECRET, "<ts>.<raw body>"))`; optional `X-Idempotency-Key` (must equal `sha256(body)`, else 400), `X-Source-Url`, `X-Fetched-At` (unix ms). Replay window: a timestamp more than 300 s off is 401. Idempotency: the key is `sha256(body)`; if this app already holds a raw object with that hash for that source and a fetch run for it, or the same bytes are being delivered at that moment, the answer is 200 `{"status":"duplicate","duplicate":true,"idempotencyKey","fetchRunId"}` and nothing is written. Size cap 2 MB (413). 503 without the secret, 404 for a source the app does not run (only after the signature passes), 422 when the body does not normalize (archived and recorded), 202 with the ingest outcome otherwise.
+
+**Nudges** `GET|POST /v1/{app}/ingest/nudge/{source}/{token}` (`api/src/ingest/push/nudge.rs`), for `crw` (lionfish) and `nws-alerts`, `nws-forecast`, `nwps`, `iem` (carp). The token is `INGEST_NUDGE_TOKEN`, compared in constant time (503 when unset, 401 when wrong). Unknown app or a source that takes no nudges: 404. A nudge wakes that source's scheduler task (202 `accepted`); another nudge for the same app and source within 60 s is 200 `duplicate` and wakes nothing. A nudge never cuts a 429/5xx backoff short, and the adapter's own change gate still decides whether anything is stored. The body is ignored (not archived). Nudges are not counted per fetch, so the feed chip does not show which fetch a nudge caused.
+
+**Feed facts** GraphQL `sources` / `sourceInfo(feed)` and evidence `source:<feed>` (`api/src/source_pages.rs` `source_facts`): publisher, API URL, page, licence, attribution, DOI, cadence, expected latency, rate limit, coverage, limits, why it is polled (poll feeds), plus the adapter's mode, data cadence and poll interval, the median fetch-to-commit time over the last 20 runs, the feed-state lag, and the last fetch run and status.
+
+**Alert checks** The review engine reads the alert poller's `fetch_runs` (`forecast::query::alert_check_asof`): "no alert in effect" is a pass only while a successful poll is at most 15 min old, and cites that run (`fetch:<id>`); otherwise the alert check is unknown and the site is `cannot_assess`. `SiteStatus`/`SiteReview` carry `alertsCheckedAt`, `alertsCheckRunId` and `alertsCheckCurrent`.
 
 ## Ledger: one row per feed per app
 
@@ -148,14 +186,14 @@ Same process today, so the POST goes to loopback. Keeping it HTTP means a future
 
 Third-party webhooks cannot sign with our secret. They call `GET or POST /v1/{app}/ingest/nudge/{source}/{token}`, where `token` is a per-source random secret in the URL we registered with the provider.
 
-- The body is archived as is (for audit) and otherwise ignored.
-- The route schedules one immediate fetch of the target source, at most one per 10 s per source, then answers 202.
+- The body is ignored (as built: not archived).
+- The route wakes the target source's task at once, at most once per 60 s per app and source (a repeat answers 200 `duplicate`), and answers 202.
 - Data still arrives only through the emitter's own fetch from the provider, so a forged nudge can cost one extra request and nothing else.
-- Each nudge is recorded, and the feed chip shows "push" when the newest fetch came from a nudge.
+- Not built: per-fetch nudge attribution. The feed chip shows the adapter's mode (`webhook` for CRW), not whether the newest fetch came from a nudge.
 
 ### Freshness reported to the UI
 
-- `sources` holds mode (`push` | `poll`), cadence and `max_latency` per row of the ledger. `feed_state.rs` classifies each source as nominal, lagging, stale or down from newest `observed_at`, last `fetch_run` and errors, and appends the governor's backoff state.
+- `sources` holds mode (`push` | `poll` | `webhook`), cadence and `max_latency` per row of the ledger. `feed_state.rs` classifies each source as nominal, lagging, stale or down from newest `observed_at`, last `fetch_run` and errors, and appends the governor's backoff state.
 - Push sources have no fetch clock, so a quiet channel is told apart from a dead one. GOES uses its most frequent product as the heartbeat: for python ACMC (one file every 5 min), so no SQS message for 15 min makes `goes19` lagging; for lionfish SSTF (hourly), so 90 min. NWWS uses its XMPP keepalive: a dropped session marks `nwws` down while `nws` polls at 60 s.
 - Sources without credentials (`goes19` without SQS, `nwws` without an account, the two nudges before sign-up) are registered and shown as down with the reason, not hidden (existing `push::disabled`).
 - Provider lag is stated separately from our lag: the evidence drawer shows `observed_at`, the forecast `issuedTime` where one exists, and `received_at` for each value.

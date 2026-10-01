@@ -784,7 +784,8 @@ mod tests {
             .unwrap();
         let data: Value = serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
         let crw = data["data"]["feeds"].as_array().unwrap().iter().find(|f| f["source"] == "crw").cloned();
-        assert_eq!(crw.map(|f| f["mode"].clone()), Some(Value::from("POLL")), "{data}");
+        // GraphQL `FeedMode` has `WEBHOOK` since E1, so the true mode reaches the chips.
+        assert_eq!(crw.map(|f| f["mode"].clone()), Some(Value::from("WEBHOOK")), "{data}");
     }
 
     /// Migration 0006 widened the two CHECK constraints in place and nothing else.

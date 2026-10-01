@@ -116,8 +116,8 @@ pub fn upsert_thresholds(tx: &Connection, site: &str, ingested_at: i64, t: &Thre
         return Ok(false);
     }
     tx.execute(
-        "insert or replace into forecast_thresholds (site, ingested_at, action_ft, minor_ft, moderate_ft, major_ft) values (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![site, ingested_at, t.action_ft, t.minor_ft, t.moderate_ft, t.major_ft],
+        "insert or replace into forecast_thresholds (site, ingested_at, action_ft, minor_ft, moderate_ft, major_ft, low_ft) values (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![site, ingested_at, t.action_ft, t.minor_ft, t.moderate_ft, t.major_ft, t.low_ft],
     )?;
     Ok(true)
 }
@@ -130,9 +130,9 @@ pub fn newest_thresholds(conn: &Connection, site: &str) -> rusqlite::Result<Opti
 /// Thresholds known at `t`.
 pub fn thresholds_asof(conn: &Connection, site: &str, t: i64) -> rusqlite::Result<Option<Thresholds>> {
     conn.query_row(
-        "select action_ft, minor_ft, moderate_ft, major_ft from forecast_thresholds where site = ?1 and ingested_at <= ?2 order by ingested_at desc limit 1",
+        "select action_ft, minor_ft, moderate_ft, major_ft, low_ft from forecast_thresholds where site = ?1 and ingested_at <= ?2 order by ingested_at desc limit 1",
         params![site, t],
-        |r| Ok(Thresholds { action_ft: r.get(0)?, minor_ft: r.get(1)?, moderate_ft: r.get(2)?, major_ft: r.get(3)? }),
+        |r| Ok(Thresholds { action_ft: r.get(0)?, minor_ft: r.get(1)?, moderate_ft: r.get(2)?, major_ft: r.get(3)?, low_ft: r.get(4)? }),
     )
     .optional()
 }

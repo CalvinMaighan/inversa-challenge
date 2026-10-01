@@ -242,7 +242,7 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
 
     let days = args.days.unwrap_or_else(|| inat::backfill_days(&target.app));
     // The end of the area-count window: now, or the fixtures' recording time.
-    let mut window_end = chrono::Utc::now().timestamp_millis();
+    let mut window_end = crate::state::now_ms();
     let tallies: Vec<(&'static str, Tally)> = if args.fixtures {
         let root = fixtures_root();
         let mut out = Vec::new();
@@ -568,6 +568,11 @@ impl Source for Replay {
         (self.normalize)(raw)
     }
 }
+
+/// 2026-10-01T12:00:00Z, after every fixture's `recorded_at`: the pinned "now" of tests that
+/// ingest and score the recorded fixtures (`state::Clock::Fixed`).
+#[cfg(test)]
+pub const FIXTURE_NOW: i64 = 1_790_856_000_000;
 
 pub fn fixtures_root() -> PathBuf {
     std::env::var_os("INVERSA_FIXTURES_DIR")

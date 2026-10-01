@@ -214,7 +214,10 @@ impl Source for Nwps {
 /// Flood category thresholds of a gauge body; absent or `-9999` categories are not defined.
 pub fn thresholds(gauge: &Value) -> Thresholds {
     let cat = |name: &str| gauge["flood"]["categories"][name]["stage"].as_f64().unwrap_or(-9999.0);
-    Thresholds::from_feed(cat("action"), cat("minor"), cat("moderate"), cat("major"))
+    // `lowThreshold` is `null` or `{units, value}`; only a stage in feet is a stage threshold.
+    let low = &gauge["lowThreshold"];
+    let low_ft = low["value"].as_f64().filter(|_| low["units"].as_str().is_none_or(|u| u.eq_ignore_ascii_case("ft")));
+    Thresholds::from_feed(cat("action"), cat("minor"), cat("moderate"), cat("major")).with_low(low_ft)
 }
 
 /// Flow in kcfs from a feed value in `units` (`kcfs` or `cfs`).
@@ -349,10 +352,10 @@ pub(crate) mod tests {
         let rows = nwps.normalize(&gauge("KRZL1")).unwrap();
         let [Row::Thresholds(t)] = rows.as_slice() else { panic!("{rows:?}") };
         assert_eq!(t.site, "KRZL1");
-        assert_eq!(t.thresholds, Thresholds { action_ft: Some(28.0), minor_ft: Some(29.0), moderate_ft: Some(40.0), major_ft: Some(43.0) });
+        assert_eq!(t.thresholds, Thresholds { action_ft: Some(28.0), minor_ft: Some(29.0), moderate_ft: Some(40.0), major_ft: Some(43.0), low_ft: Some(0.0) });
         let rows = nwps.normalize(&gauge("MLUL1")).unwrap();
         let [Row::Thresholds(t)] = rows.as_slice() else { panic!("{rows:?}") };
-        assert_eq!(t.thresholds, Thresholds { action_ft: Some(35.5), minor_ft: Some(40.0), moderate_ft: Some(43.0), major_ft: Some(45.0) });
+        assert_eq!(t.thresholds, Thresholds { action_ft: Some(35.5), minor_ft: Some(40.0), moderate_ft: Some(43.0), major_ft: Some(45.0), low_ft: Some(19.0) });
         let expect = [("SMML1", 35.0), ("BLRL1", 17.0), ("MCGL1", 4.0), ("BTRL1", 30.0), ("AEXL1", 28.0), ("BXAL1", 16.0)];
         for (lid, action) in expect {
             let rows = nwps.normalize(&gauge(lid)).unwrap();
@@ -363,7 +366,7 @@ pub(crate) mod tests {
         doc["flood"]["categories"]["action"]["stage"] = Value::from(-9999.0);
         doc["flood"]["categories"]["major"] = Value::Null;
         let t = thresholds(&doc);
-        assert_eq!(t, Thresholds { action_ft: None, minor_ft: Some(29.0), moderate_ft: Some(40.0), major_ft: None });
+        assert_eq!(t, Thresholds { action_ft: None, minor_ft: Some(29.0), moderate_ft: Some(40.0), major_ft: None, low_ft: Some(0.0) });
         assert_eq!(t.category(Some(28.5)), Some(Category::None), "below minor, action undefined");
         assert!(thresholds(&serde_json::json!({"lid": "X"})).is_empty());
     }

@@ -30,10 +30,6 @@ use crate::state::AppState;
 /// Content type archived objects are stored with (payloads are gzipped before `put`).
 pub const ARCHIVE_CONTENT_TYPE: &str = "application/gzip";
 
-fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
 // ---------------------------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------------------------
@@ -244,8 +240,9 @@ async fn supervise(state: AppState, source: Arc<dyn Source>, sup: Supervision) {
 async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<()> {
     let info = source.info();
     let gov: Arc<Governor> = governor::for_source(info.id, source.min_interval());
-    // A `webhook` source sleeps until its backstop poll or a provider nudge, whichever is first.
-    let nudge = (info.mode == crate::ingest::source::Mode::Webhook).then(|| state.nudges.waker(info.id));
+    // A nudge-capable source (`push::nudge::capable`) sleeps until its next poll or a provider
+    // nudge, whichever is first.
+    let nudge = crate::ingest::push::nudge::capable(info.id, info.mode).then(|| state.nudges.waker(info.id));
     let mut cursor = load_cursor(&state, info.id).await?;
     // The governor is shared by every app polling the same upstream (one backoff per host), and
     // keeps the interval of the first app to register. A poller also keeps its own app's cadence
@@ -271,7 +268,7 @@ async fn run_source(state: AppState, source: Arc<dyn Source>) -> anyhow::Result<
                 _ => tokio::time::sleep(wait).await,
             }
         }
-        let fetched_at = now_ms();
+        let fetched_at = state.now_ms();
         last_start = Some(Instant::now());
         let result = source.fetch(&FetchCtx { state: &state, cursor: cursor.clone() }).await;
         match result {
@@ -324,12 +321,12 @@ async fn record_run(
     http_status: Option<u16>,
     error: Option<String>,
 ) -> anyhow::Result<i64> {
-    let info = info.clone();
+    let (info, received_at) = (info.clone(), state.now_ms());
     state
         .obs
         .write(move |tx| {
             upsert_source(tx, &info)?;
-            insert_fetch_run(tx, info.id, fetched_at, status, http_status, 0, None, error.as_deref())
+            insert_fetch_run(tx, info.id, (fetched_at, received_at), status, http_status, 0, None, error.as_deref())
         })
         .await
 }
@@ -459,12 +456,12 @@ pub async fn ingest_payload(
         Err(e) => {
             let msg = format!("normalize: {e:#}");
             tracing::warn!(source = source_id, key = %outcome.r2_key, "{msg}");
-            let (at, http) = (raw.fetched_at, raw.http_status);
+            let (at, http, received) = (raw.fetched_at, raw.http_status, state.now_ms());
             let err = msg.clone();
             outcome.fetch_run_id = state
                 .obs
                 .write(move |tx| {
-                    insert_fetch_run(tx, source_id, at, RunStatus::Error, http, 0, Some(raw_object_id), Some(&err))
+                    insert_fetch_run(tx, source_id, (at, received), RunStatus::Error, http, 0, Some(raw_object_id), Some(&err))
                 })
                 .await?;
             outcome.status = RunStatus::Error;
@@ -477,10 +474,12 @@ pub async fn ingest_payload(
     // 4-7. One transaction: rows, fetch run, quality hooks, commit.
     let (fetched_at, http_status) = (raw.fetched_at, raw.http_status);
     let app = state.app.clone();
+    // Ingest time on the app's clock (`state::Clock`), so a pinned replay stamps rows with it.
+    let received_at = state.now_ms();
     let written = state
         .obs
         .write(move |tx| {
-            let mut w = RowWriter::new(tx, &app, source_id, raw_object_id);
+            let mut w = RowWriter::new(tx, &app, source_id, raw_object_id, received_at);
             for row in &rows {
                 w.write(row)?;
             }
@@ -496,7 +495,7 @@ pub async fn ingest_payload(
             let run_id = insert_fetch_run(
                 tx,
                 source_id,
-                fetched_at,
+                (fetched_at, received_at),
                 status,
                 http_status,
                 rows.len() as i64,
@@ -517,14 +516,14 @@ pub async fn ingest_payload(
 
     // 9. cursor.
     if let Some(next) = raw.next_cursor.clone() {
-        let c = next.clone();
+        let (c, at) = (next.clone(), state.now_ms());
         state
             .obs
             .write(move |tx| {
                 tx.execute(
                     "insert into cursors (source_id, cursor, updated_at) values (?1, ?2, ?3)
                      on conflict(source_id) do update set cursor = excluded.cursor, updated_at = excluded.updated_at",
-                    params![source_id, c, now_ms()],
+                    params![source_id, c, at],
                 )
             })
             .await?;
@@ -544,7 +543,7 @@ pub async fn ingest_payload(
 fn insert_fetch_run(
     tx: &Transaction,
     source_id: &str,
-    fetched_at: i64,
+    (fetched_at, received_at): (i64, i64),
     status: RunStatus,
     http_status: Option<u16>,
     rows_in: i64,
@@ -555,7 +554,7 @@ fn insert_fetch_run(
         "insert into fetch_runs (source_id, fetched_at, received_at, status, http_status, rows_in, raw_object_id, error)
          values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
     )?
-    .execute(params![source_id, fetched_at, now_ms(), status.as_str(), http_status, rows_in, raw_object_id, error])?;
+    .execute(params![source_id, fetched_at, received_at, status.as_str(), http_status, rows_in, raw_object_id, error])?;
     Ok(tx.last_insert_rowid())
 }
 
@@ -610,13 +609,13 @@ struct RowWriter<'t, 'c> {
 }
 
 impl<'t, 'c> RowWriter<'t, 'c> {
-    fn new(tx: &'t Transaction<'c>, app: &'t App, source_id: &'static str, raw_object_id: i64) -> Self {
+    fn new(tx: &'t Transaction<'c>, app: &'t App, source_id: &'static str, raw_object_id: i64, now: i64) -> Self {
         RowWriter {
             tx,
             app,
             source_id,
             raw_object_id,
-            now: now_ms(),
+            now,
             taxa: HashMap::new(),
             stations: HashMap::new(),
             written: 0,
@@ -1484,7 +1483,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(registered, ["coops", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs", "web"]);
-        let feeds = crate::feed_state::compute(&fake.obs, now_ms()).await.unwrap();
+        let feeds = crate::feed_state::compute(&fake.obs, crate::state::now_ms()).await.unwrap();
         assert!(feeds.iter().all(|f| f.source != "inat"));
     }
 
@@ -1534,7 +1533,7 @@ mod tests {
                 _ => assert_eq!(reason, "INVERSA_SOURCES=off", "{id}"),
             }
         }
-        let feeds = crate::feed_state::compute(&state.obs, now_ms()).await.unwrap();
+        let feeds = crate::feed_state::compute(&state.obs, crate::state::now_ms()).await.unwrap();
         assert_eq!(feeds.len(), reasons.len());
         let goes = feeds.iter().find(|f| f.source == "goes19").unwrap();
         assert_eq!(goes.state, crate::feed_state::Health::Down);

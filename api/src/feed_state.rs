@@ -120,7 +120,7 @@ pub fn spawn_publisher(obs: Db, hub: Hub, period: Duration) -> tokio::task::Join
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tick.tick().await;
-            let states = match compute(&obs, chrono::Utc::now().timestamp_millis()).await {
+            let states = match compute(&obs, crate::state::now_ms()).await {
                 Ok(states) => states,
                 Err(e) => {
                     tracing::warn!("feed state: {e:#}");
@@ -542,7 +542,7 @@ mod tests {
         assert_eq!((first.source.as_str(), first.state), ("inat", Health::Down));
         // Several quiet ticks publish nothing; the next event is the fetch below.
         tokio::time::sleep(Duration::from_millis(50)).await;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = crate::state::now_ms();
         run(&db, "inat", now, "ok").await;
         let second = tokio::time::timeout(wait, events.next()).await.unwrap().unwrap();
         assert_eq!((second.state, second.last_fetch_at), (Health::Nominal, Some(now)));

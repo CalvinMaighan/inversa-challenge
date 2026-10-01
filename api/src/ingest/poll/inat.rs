@@ -148,7 +148,7 @@ impl Source for Inat {
     }
 
     async fn fetch(&self, ctx: &FetchCtx<'_>) -> anyhow::Result<Vec<RawPayload>> {
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = crate::state::now_ms();
         let lookback = i64::from(backfill_days(&self.app)) * 86_400_000;
         let mut pager = self.pager(ctx.cursor.as_deref(), now - lookback);
         let mut out = bio::collect_pages(ctx.state, &self.pacer, &mut pager, Some(MAX_REQUESTS_PER_FETCH)).await?;

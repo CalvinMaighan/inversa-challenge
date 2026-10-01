@@ -374,7 +374,7 @@ fn last_seq(conn: &Connection, board_id: &str) -> rusqlite::Result<i64> {
 pub async fn apply_and_publish(state: &AppState, board_id: &str, ops: Vec<OpIn>) -> anyhow::Result<ApplyResult> {
     validate(board_id, &ops)?;
     let board = board_id.to_string();
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = crate::state::now_ms();
     let result = state.team.write(move |tx| apply_ops(tx, &board, &ops, now_ms)).await?;
     for (seq, op) in &result.persisted {
         state.hub.publish(Event::Op { board_id: board_id.to_string(), seq: *seq, op: op.clone() });

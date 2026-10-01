@@ -13,12 +13,12 @@ use base64::Engine;
 use rusqlite::params;
 
 use super::types::{
-    Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedState, ForecastVerification, ForecastView, FrameChunk,
+    Alert, BBox, Backtest, BacktestDay, Board, Evidence, FeedSource, FeedState, ForecastVerification, ForecastView, FrameChunk,
     HotspotBasis, HotspotCell, HotspotExplain, HotspotGrid, HotspotTerm, HotspotWeightsInput, Message, Mission, Op, Param,
     Quality, Reading, ReadingFlag, ReadingOrigin, ReviewBoard, ReviewHistory, Sighting, SiteReview, SiteStatus,
     SpeciesCount, Station, Taxon, Time,
 };
-use super::{app_state, now_ms};
+use super::app_state;
 use crate::app::config::{App, Taxon as AppTaxon};
 use crate::db::Db;
 use crate::hotspot::{self, lionfish};
@@ -167,8 +167,22 @@ fn bad_column(idx: usize, what: &str, value: &str) -> rusqlite::Error {
 impl QueryRoot {
     /// Freshness of every registered feed, ordered by source id.
     async fn feeds(&self, ctx: &Context<'_>) -> Result<Vec<FeedState>> {
-        let states = feed_state::compute(&app_state(ctx).obs, now_ms()).await?;
+        let states = feed_state::compute(&app_state(ctx).obs, app_state(ctx).now_ms()).await?;
         Ok(states.into_iter().map(FeedState::from).collect())
+    }
+
+    /// Every feed of the app (running, waiting for secrets, or hook-only): publisher, licence
+    /// and credit, cadence, expected and observed latency, rate limit, why it is polled, and its
+    /// last fetch and state. Cite one as `source:<feed>`.
+    async fn sources(&self, ctx: &Context<'_>) -> Result<Vec<FeedSource>> {
+        Ok(crate::source_pages::source_views(app_state(ctx)).await?.into_iter().map(FeedSource::from).collect())
+    }
+
+    /// One feed of the app by source id (`sources` for the list); null for a feed the app does
+    /// not run.
+    async fn source_info(&self, ctx: &Context<'_>, feed: ID) -> Result<Option<FeedSource>> {
+        let views = crate::source_pages::source_views(app_state(ctx)).await?;
+        Ok(views.into_iter().find(|v| v.feed == feed.as_str()).map(FeedSource::from))
     }
 
     /// Sightings inside `bbox` observed in `from..=to`, newest first, at most 5000. `taxa` takes
@@ -586,7 +600,7 @@ impl QueryRoot {
         if !(1..=MAX_BACKTEST_DAYS).contains(&days) {
             return Err(format!("`days` must be 1..={MAX_BACKTEST_DAYS}").into());
         }
-        let b = hotspot::backtest::backtest(&app_state(ctx).obs, app, sp, days as u32).await?;
+        let b = hotspot::backtest::backtest_until(&app_state(ctx).obs, app, sp, days as u32, app_state(ctx).now_ms()).await?;
         Ok(backtest_out(b))
     }
 
@@ -629,7 +643,7 @@ impl QueryRoot {
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn forecasts(&self, ctx: &Context<'_>, site: ID, as_of: Option<Time>, history: Option<i32>) -> Result<ForecastView> {
         let site = forecast_site(ctx, &site)?;
-        let as_of = as_of.unwrap_or_else(|| Time(now_ms()));
+        let as_of = as_of.unwrap_or_else(|| Time(app_state(ctx).now_ms()));
         let history = history.unwrap_or(1);
         if !(0..=MAX_FORECAST_HISTORY).contains(&history) {
             return Err(format!("`history` must be 0..={MAX_FORECAST_HISTORY}").into());
@@ -696,6 +710,10 @@ impl QueryRoot {
             forecast_now: s.forecast_now.map(Into::into),
             conflicts: s.conflicts.into_iter().map(Into::into).collect(),
             active_alerts: s.active_alerts as i32,
+            alerts_checked_at: s.alert_check.as_ref().and_then(|c| c.ok_at).map(Time),
+            alerts_check_run_id: s.alert_check.as_ref().and_then(|c| c.ok_run_id).map(|id| ID(id.to_string())),
+            alerts_check_current: s.alert_check.as_ref().is_some_and(|c| c.current(as_of.0)),
+            low_water: s.low_water,
         })
     }
 
@@ -705,7 +723,7 @@ impl QueryRoot {
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn site_review(&self, ctx: &Context<'_>, site: ID, as_of: Option<Time>) -> Result<SiteReview> {
         let (site, cfg) = review_site(ctx, &site)?;
-        let t = as_of.unwrap_or_else(|| Time(now_ms())).0;
+        let t = as_of.unwrap_or_else(|| Time(app_state(ctx).now_ms())).0;
         Ok(app_state(ctx).obs.read(move |c| review::site_review(c, &site, t, &cfg)).await?.into())
     }
 
@@ -714,7 +732,7 @@ impl QueryRoot {
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn review_history(&self, ctx: &Context<'_>, site: ID, from: Option<Time>, to: Option<Time>) -> Result<ReviewHistory> {
         let (site, cfg) = review_site(ctx, &site)?;
-        let to = to.unwrap_or_else(|| Time(now_ms())).0;
+        let to = to.unwrap_or_else(|| Time(app_state(ctx).now_ms())).0;
         let from = from.map_or(to - review::HISTORY_DEFAULT_MS, |f| f.0);
         if from > to {
             return Err("`from` must not be after `to`".into());
@@ -730,7 +748,7 @@ impl QueryRoot {
     #[graphql(complexity = "HEAVY_FIELD + child_complexity")]
     async fn review_board(&self, ctx: &Context<'_>, as_of: Option<Time>) -> Result<ReviewBoard> {
         let (sites, cfg) = review_sites(ctx)?;
-        let t = as_of.unwrap_or_else(|| Time(now_ms())).0;
+        let t = as_of.unwrap_or_else(|| Time(app_state(ctx).now_ms())).0;
         Ok(app_state(ctx).obs.read(move |c| review::board(c, &sites, t, &cfg)).await?.into())
     }
 }

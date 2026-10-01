@@ -70,7 +70,7 @@ pub fn reading(station: &StationRef, param: Param, value: Option<f64>, observed_
 }
 
 pub fn now_ms() -> i64 {
-    Utc::now().timestamp_millis()
+    crate::state::now_ms()
 }
 
 /// A payload as fetched over HTTP.

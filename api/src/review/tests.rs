@@ -62,8 +62,14 @@ fn quiet(lid: &str) -> Inputs {
         forecast: Some(forecast(lid, 30.3, 0.05, 40)),
         thresholds: Some(smml1_thresholds()),
         alerts: vec![],
+        alert_check: Some(polled(T - 60_000)),
         usgs: None,
     }
+}
+
+/// An alert poller whose newest poll (successful) was at `at`.
+fn polled(at: i64) -> AlertCheck {
+    AlertCheck { last_run_id: 7, last_at: at, last_status: "ok".into(), ok_run_id: Some(7), ok_at: Some(at) }
 }
 
 fn with_obs(mut i: Inputs, window: Vec<StoredObservation>) -> Inputs {
@@ -270,7 +276,7 @@ fn review_rule_forecast_category_datum_trap_krzl1() {
     let mut f = forecast("KRZL1", 3.92, 0.1, 40);
     f.points.insert(0, StoredPoint { valid_at: T - H, stage_ft: Some(3.92), flow_kcfs: None, category: None });
     i.forecast = Some(f);
-    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(1.47), flow_cfs: None });
+    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(1.47), flow_cfs: None, flow_at: None });
     let review = evaluate(&site("KRZL1"), &i, &c);
     assert_eq!(review.status, Status::Ok, "{:#?}", review.reasons);
     assert_eq!(review.category_now, Some(Category::None));
@@ -284,7 +290,7 @@ fn review_rule_forecast_category_datum_trap_krzl1() {
     i.window = hourly(3.4, 0.1 / 24.0, 25);
     i.latest = i.window.last().copied();
     i.forecast = Some(forecast("MCGL1", 3.5, 0.0, 40));
-    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(5.95), flow_cfs: None });
+    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(5.95), flow_cfs: None, flow_at: None });
     let r = rule_forecast_category(&i, &c);
     assert_eq!((r.outcome, r.value), (Outcome::Clear, Some(3.5)));
     let review = evaluate(&site("MCGL1"), &i, &c);
@@ -431,17 +437,17 @@ fn review_rule_source_conflict_gauge_and_flow() {
     let mut i = quiet("MLUL1");
     i.usgs_site = Some("07367005".into());
     i.latest.as_mut().unwrap().flow_kcfs = Some(8.18);
-    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(18.21), flow_cfs: Some(1430.0) });
+    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(18.21), flow_cfs: Some(1430.0), flow_at: Some(T - H) });
     let r = flow(&i);
     assert_eq!(r.outcome, Outcome::Fired);
     assert!((r.value.unwrap() - 8180.0 / 1430.0).abs() < 1e-9);
     assert_eq!(r.value_text.as_deref(), Some("flow: NWPS 8180 cfs vs USGS 1430 cfs"));
     assert!(r.explanation.contains("never averaged"));
-    assert_eq!(r.evidence_ids, [reading_id("MLUL1", T - H), reading_id("07367005", T - H)]);
+    assert_eq!(r.evidence_ids, [reading_id("MLUL1", T - H), discharge_id("07367005", T - H)]);
     // Within the ratio: clear. Missing USGS flow, or readings > 1 h apart: unknown.
     i.usgs.as_mut().unwrap().flow_cfs = Some(6000.0);
     assert_eq!(flow(&i).outcome, Outcome::Clear);
-    i.usgs.as_mut().unwrap().observed_at = T - H - H - 1;
+    i.usgs.as_mut().unwrap().flow_at = Some(T - H - H - 1);
     assert_eq!(flow(&i).outcome, Outcome::Unknown);
     i.usgs.as_mut().unwrap().flow_cfs = None;
     assert_eq!(flow(&i).outcome, Outcome::Unknown);
@@ -509,10 +515,35 @@ fn review_rule_config_defaults_and_validation() {
 // G2: as-of over the store
 // ---------------------------------------------------------------------------------------------
 
+/// A migrated store whose alert poller ran every 10 min from 40 days before `T` to 10 days after
+/// (so "no alert" is vouched for); [`bare_conn`] has no polls.
 fn conn() -> Connection {
+    let c = bare_conn();
+    seed_alert_polls(&c, T - 40 * DAY, T + 10 * DAY);
+    c
+}
+
+fn bare_conn() -> Connection {
     let mut c = Connection::open_in_memory().unwrap();
     crate::db::migrate(&mut c, "observations").unwrap();
     c
+}
+
+const POLL_EVERY: i64 = 10 * 60_000;
+
+/// Successful `nws-alerts` polls every [`POLL_EVERY`] in `[from, to)`, recorded 2 s after each.
+fn seed_alert_polls(c: &Connection, from: i64, to: i64) {
+    c.execute(
+        "insert or ignore into sources (id, name, homepage, mode, cadence_s, max_latency_s) values ('nws-alerts', 'NWS alerts', 'https://api.weather.gov', 'poll', 60, 900)",
+        [],
+    )
+    .unwrap();
+    let mut st = c.prepare("insert into fetch_runs (source_id, fetched_at, received_at, status) values ('nws-alerts', ?1, ?1 + 2000, 'ok')").unwrap();
+    let mut at = from;
+    while at < to {
+        st.execute([at]).unwrap();
+        at += POLL_EVERY;
+    }
 }
 
 /// 40 six-hourly points from `from`, stage `start + step * k`.
@@ -791,7 +822,8 @@ fn review_honesty_schema_field_names() {
         [
             "site", "location", "name", "asOf", "status", "summary", "reasons", "checks", "stageFt", "observedAt", "change24hFt", "categoryNow",
             "peakStageFt", "peakAt", "categoryPeak", "forecastIssuedAt", "forecastSource", "observationFreshness", "forecastFreshness",
-            "activeAlerts", "usgsStageFt", "usgsObservedAt", "tidal"
+            "activeAlerts", "usgsStageFt", "usgsObservedAt", "usgsFlowCfs", "usgsFlowAt", "tidal", "lowWater", "lowThresholdFt",
+            "alertsCheckedAt", "alertsCheckRunId", "alertsCheckCurrent"
         ]
     );
     // Texts: every check of a busy review and of an empty one.
@@ -799,7 +831,7 @@ fn review_honesty_schema_field_names() {
     i.forecast = Some(forecast("MLUL1", 38.0, 0.6, 40));
     i.alerts = vec![AlertIn { ext_id: "a".into(), event: "Flood Warning".into(), severity: "Severe".into(), headline: Some("h".into()), onset: None, expires: None, first_seen: T - H }];
     i.latest.as_mut().unwrap().flow_kcfs = Some(8.18);
-    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(18.2), flow_cfs: Some(1430.0) });
+    i.usgs = Some(UsgsNow { observed_at: T - H, stage_ft: Some(18.2), flow_cfs: Some(1430.0), flow_at: Some(T - H) });
     let mut empty = quiet("BXAL1");
     empty.latest = None;
     empty.window.clear();
@@ -897,6 +929,9 @@ fn ts(s: &str) -> i64 {
 
 /// Load a scene into the store through the C3 write side (what the C4 adapters call).
 fn seed_scene(c: &Connection, s: &Scene) {
+    // The alert poller ran through the scene (its empty polls are what "no alert" rests on).
+    let last = s.checkpoints.values().map(|t| ts(t)).max().unwrap_or(0);
+    seed_alert_polls(c, ts(&s.observations.from) - DAY, last + DAY);
     let th = Thresholds::from_feed(s.thresholds.action_ft, s.thresholds.minor_ft, s.thresholds.moderate_ft, s.thresholds.major_ft);
     let lid = s.site.lid.as_str();
     store::upsert_thresholds(c, lid, ts(&s.thresholds.ingested_at), &th).unwrap();
@@ -991,4 +1026,178 @@ fn review_scene() {
         assert_eq!((h.transitions[0].from, h.transitions[0].to), (Status::Ok, Status::Review));
         assert_eq!(h.transitions[0].at, ts(&scene.forecasts[1].ingested_at), "entered review when the second issuance was captured");
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// E1 G3: follow-ups (flow conflict from stored USGS discharge, low water, alert poll checks)
+// ---------------------------------------------------------------------------------------------
+
+/// SMML1 quiet around `T` (hourly NWPS stage near 30 ft with `flow_kcfs`, a flat forecast,
+/// thresholds), as the C4 adapters store it.
+fn seed_quiet_site(c: &Connection, lid: &str, flow_kcfs: Option<f64>) {
+    store::upsert_thresholds(c, lid, T - 10 * DAY, &smml1_thresholds()).unwrap();
+    let mut at = T - 2 * DAY;
+    while at < T {
+        let ob = Observation { observed_at: at, stage_ft: Some(30.0), flow_kcfs };
+        store::insert_observations(c, lid, Source::NwpsLive, at + 55 * 60_000, &[ob]).unwrap();
+        at += H;
+    }
+    store::insert_snapshot(c, &snap(lid, T - 3 * H, T - 2 * H, Source::NwpsLive, "q", (T, 30.0, 0.0)), &smml1_thresholds()).unwrap();
+}
+
+/// A USGS `discharge_cfs` reading at `at` for station `site` (as the OGC adapter writes it).
+fn seed_usgs_discharge(c: &Connection, site: &str, at: i64, cfs: f64) {
+    c.execute(
+        "insert or ignore into sources (id, name, homepage, mode, cadence_s, max_latency_s) values ('usgs', 'USGS', 'https://waterdata.usgs.gov', 'poll', 900, 7200)",
+        [],
+    )
+    .unwrap();
+    c.execute(
+        "insert or ignore into stations (source_id, ext_id, name, lat, lon, kind) values ('usgs', ?1, 'test gage', 30.98, -91.8, 'gage')",
+        [site],
+    )
+    .unwrap();
+    c.execute(
+        "insert into readings (station_id, param, value, flag, observed_at, origin)
+         select id, 'discharge_cfs', ?2, 'ok', ?3, 'measured' from stations where source_id = 'usgs' and ext_id = ?1",
+        rusqlite::params![site, cfs, at],
+    )
+    .unwrap();
+}
+
+/// (a) The flow half of `source_conflict` reads USGS `discharge_cfs` from the store and NWPS
+/// flow (kcfs) from the forecast store, fires above the configured ratio (strictly), names both
+/// sources and both values, and never blends them.
+#[test]
+fn review_followup_flow_conflict_from_stored_discharge() {
+    let s = SiteRef { usgs: Some("07381490".into()), ..site("SMML1") };
+    let flow = |c: &Connection, ratio: f64| {
+        let cfg = ReviewCfg { flow_conflict_ratio: ratio, ..cfg() };
+        let r = site_review(c, &s, T, &cfg).unwrap();
+        let check = r.checks.iter().find(|x| x.rule == Rule::SourceConflict && x.unit == Some("ratio")).cloned().unwrap();
+        (r, check)
+    };
+    // NWPS 200 kcfs at T - 1 h; USGS 100,000 cfs 15 min later: a factor of 2.
+    let c = conn();
+    seed_quiet_site(&c, "SMML1", Some(200.0));
+    seed_usgs_discharge(&c, "07381490", T - 45 * 60_000, 100_000.0);
+    let (r, check) = flow(&c, 1.5);
+    assert_eq!(check.outcome, Outcome::Fired, "{}", check.explanation);
+    assert_eq!(r.status, Status::Review);
+    assert!((check.value.unwrap() - 2.0).abs() < 1e-9);
+    assert_eq!(check.source, "nwps-live+usgs");
+    assert_eq!(check.value_text.as_deref(), Some("flow: NWPS 200000 cfs vs USGS 100000 cfs"));
+    assert!(check.explanation.contains("200.00 kcfs") && check.explanation.contains("USGS discharge 100000 cfs") && check.explanation.contains("never averaged"));
+    assert!(!check.explanation.contains("150000"), "no blended value: {}", check.explanation);
+    assert_eq!(check.evidence_ids, [reading_id("SMML1", T - H), discharge_id("07381490", T - 45 * 60_000)]);
+    assert_eq!((r.usgs_flow_cfs, r.usgs_flow_at), (Some(100_000.0), Some(T - 45 * 60_000)));
+    // Exactly at the configured ratio: not over it, clear; just under: fires.
+    assert_eq!(flow(&c, 2.0).1.outcome, Outcome::Clear);
+    assert_eq!(flow(&c, 1.99).1.outcome, Outcome::Fired);
+    assert_eq!(flow(&c, 2.5).1.outcome, Outcome::Clear);
+    // USGS discharge more than 1 h from the NWPS observation: not compared.
+    let c = conn();
+    seed_quiet_site(&c, "SMML1", Some(200.0));
+    seed_usgs_discharge(&c, "07381490", T - 3 * H, 100_000.0);
+    let (r, check) = flow(&c, 1.5);
+    assert_eq!((check.outcome, r.status), (Outcome::Unknown, Status::Ok), "{}", check.explanation);
+    // History sees the discharge arrive (a flip into review at its observation time).
+    let c = conn();
+    seed_quiet_site(&c, "SMML1", Some(200.0));
+    // At T - 1 h the newest knowable NWPS observation is T - 2 h (captured T - 65 min): the
+    // discharge observed then pairs with it, and nothing else changes at that instant.
+    seed_usgs_discharge(&c, "07381490", T - H, 100_000.0);
+    let h = history(&c, &s, T - 2 * H, T, &cfg()).unwrap();
+    assert_eq!(h.transitions.iter().map(|t| (t.at, t.to)).collect::<Vec<_>>(), [(T - H, Status::Review)], "{:#?}", h.transitions);
+}
+
+/// (b) `lowWater` from the NWPS low-water threshold: parsed from the gauge body, stored with the
+/// categories, and stage at or below it is the `low_threshold` state on SiteReview and SiteStatus.
+#[test]
+fn review_followup_low_water_from_nwps_low_threshold() {
+    let gauge = |lid: &str| -> serde_json::Value { serde_json::from_slice(&crate::ingest::poll::physical::testing::fixture(&format!("nwps/{lid}.json"))).unwrap() };
+    let mlul1 = crate::ingest::poll::nwps::thresholds(&gauge("MLUL1"));
+    assert_eq!(mlul1.low_ft, Some(19.0), "MLUL1 lowThreshold 19 ft (its feed says ObservedFloodCategory low_threshold)");
+    assert_eq!(crate::ingest::poll::nwps::thresholds(&gauge("SMML1")).low_ft, None, "lowThreshold null");
+    assert!(Thresholds::default().with_low(Some(19.0)).is_empty(), "low water is not a flood category");
+    let c = conn();
+    store::upsert_thresholds(&c, "MLUL1", T - 10 * DAY, &mlul1).unwrap();
+    let s = site("MLUL1");
+    let obs_at = |c: &Connection, at: i64, ft: f64| {
+        store::insert_observations(c, "MLUL1", Source::NwpsLive, at + 55 * 60_000, &[Observation { observed_at: at, stage_ft: Some(ft), flow_kcfs: None }]).unwrap();
+    };
+    obs_at(&c, T - 3 * H, 18.6);
+    let r = site_review(&c, &s, T, &cfg()).unwrap();
+    assert_eq!((r.low_water, r.low_threshold_ft), (Some(true), Some(19.0)));
+    assert_eq!(crate::forecast::query::status_at(&c, "MLUL1", T, 1.0).unwrap().low_water, Some(true));
+    assert_eq!(to_json(&r)["lowWater"], true);
+    obs_at(&c, T - 2 * H, 19.0);
+    assert_eq!(site_review(&c, &s, T, &cfg()).unwrap().low_water, Some(true), "at the threshold counts");
+    obs_at(&c, T - H, 19.4);
+    assert_eq!(site_review(&c, &s, T, &cfg()).unwrap().low_water, Some(false));
+    // A changed threshold is a new row; the as-of view uses the one known then.
+    store::upsert_thresholds(&c, "MLUL1", T + H, &mlul1.with_low(Some(20.0))).unwrap();
+    assert_eq!(site_review(&c, &s, T, &cfg()).unwrap().low_water, Some(false));
+    assert_eq!(site_review(&c, &s, T + 2 * H, &cfg()).unwrap().low_water, Some(true));
+    // No low-water threshold: unknown, not false.
+    assert_eq!(site_review(&c, &site("BXAL1"), T, &cfg()).unwrap().low_water, None);
+}
+
+/// (c) Alert checks: every poll (empty ones included) is a `fetch_runs` row; "no alert" cites the
+/// newest successful poll ("checked at T"); a poller silent for over 15 min, or one that never
+/// succeeded, makes the alert check unknown and the site cannot_assess instead of ok.
+#[test]
+fn review_followup_alert_check_dead_poller_is_cannot_assess() {
+    let s = site("SMML1");
+    // Never polled.
+    let c = bare_conn();
+    seed_quiet_site(&c, "SMML1", None);
+    let r = site_review(&c, &s, T, &cfg()).unwrap();
+    let alert = r.checks.iter().find(|x| x.rule == Rule::ActiveAlert).unwrap();
+    assert_eq!((alert.outcome, r.status), (Outcome::Unknown, Status::CannotAssess), "{}", alert.explanation);
+    assert!(alert.explanation.contains("no recorded poll"), "{}", alert.explanation);
+    assert!(r.summary.contains("active_alert unknown"), "{}", r.summary);
+    let st = crate::forecast::query::status_at(&c, "SMML1", T, 1.0).unwrap();
+    assert_eq!((st.active_alerts, st.alert_check.as_ref()), (0, None));
+
+    // Polled until T - 1 h, then dead.
+    seed_alert_polls(&c, T - DAY, T - H);
+    let last = T - H - POLL_EVERY;
+    let r = site_review(&c, &s, T, &cfg()).unwrap();
+    let alert = r.checks.iter().find(|x| x.rule == Rule::ActiveAlert).unwrap();
+    assert_eq!((alert.outcome, r.status), (Outcome::Unknown, Status::CannotAssess), "{}", alert.explanation);
+    assert!(alert.explanation.contains(&iso(last)) && alert.explanation.contains("over the 15 min limit"), "{}", alert.explanation);
+    let run: i64 = c.query_row("select id from fetch_runs where fetched_at = ?1", [last], |r| r.get(0)).unwrap();
+    assert_eq!(alert.evidence_ids, [format!("fetch:{run}")]);
+    assert_eq!(r.alert_check.as_ref().and_then(|c| c.ok_at), Some(last));
+    assert!(!to_json(&r)["alertsCheckCurrent"].as_bool().unwrap());
+    // Within 15 min of the last poll it vouches: ok, "checked at".
+    let r = site_review(&c, &s, last + 15 * 60_000, &cfg()).unwrap();
+    let alert = r.checks.iter().find(|x| x.rule == Rule::ActiveAlert).unwrap();
+    assert_eq!((alert.outcome, r.status), (Outcome::Clear, Status::Ok), "{}", alert.explanation);
+    assert!(alert.explanation.contains(&format!("checked at {}", iso(last))), "{}", alert.explanation);
+    assert_eq!(alert.evidence_ids, [format!("fetch:{run}")]);
+    let st = crate::forecast::query::status_at(&c, "SMML1", last + 60_000, 1.0).unwrap();
+    assert!(st.alert_check.as_ref().is_some_and(|k| k.current(last + 60_000) && k.ok_at == Some(last)));
+    // History: ok, then cannot_assess 15 min after the last poll.
+    let h = history(&c, &s, T - 90 * 60_000, T, &cfg()).unwrap();
+    assert_eq!(h.initial.status, Status::Ok, "{:#?}", h.initial.reasons);
+    assert_eq!(h.transitions.iter().map(|t| (t.at, t.from, t.to)).collect::<Vec<_>>(), [(last + 15 * 60_000 + 1, Status::Ok, Status::CannotAssess)]);
+
+    // A failing poll after a recent success: the success still vouches, the failure is named.
+    c.execute("insert into fetch_runs (source_id, fetched_at, received_at, status, error) values ('nws-alerts', ?1, ?1, 'error', 'HTTP 503')", [last + 60_000]).unwrap();
+    let r = site_review(&c, &s, last + 2 * 60_000, &cfg()).unwrap();
+    let alert = r.checks.iter().find(|x| x.rule == Rule::ActiveAlert).unwrap();
+    assert_eq!(alert.outcome, Outcome::Clear);
+    assert!(alert.explanation.contains("newest poll") && alert.explanation.contains("failed"), "{}", alert.explanation);
+    // Only failures for 15 min: unknown, citing the failed poll.
+    let r = site_review(&c, &s, last + 16 * 60_000, &cfg()).unwrap();
+    let alert = r.checks.iter().find(|x| x.rule == Rule::ActiveAlert).unwrap();
+    assert_eq!(alert.outcome, Outcome::Unknown);
+    assert!(alert.explanation.contains("(error)"), "{}", alert.explanation);
+    // An alert in effect fires whatever the poller's state.
+    store::record_alerts(&c, "SMML1", T - 2 * H, &[warning("w9")]).unwrap();
+    let r = site_review(&c, &s, T, &cfg()).unwrap();
+    assert_eq!(r.status, Status::Review);
+    assert_eq!(r.active_alerts, 1);
 }

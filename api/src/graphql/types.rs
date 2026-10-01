@@ -98,6 +98,19 @@ db_text!(ReadingFlag { Ok => "ok", Cloud => "cloud", BadDqf => "bad_dqf", Missin
 pub enum FeedMode {
     Push,
     Poll,
+    /// Polled as a backstop and woken by an unsigned provider call (ERDDAP for `crw`).
+    Webhook,
+}
+
+impl FeedMode {
+    /// From `sources.mode` (`push`, `poll`, `webhook`); anything else reads as a poll.
+    pub fn from_db(mode: &str) -> FeedMode {
+        match mode {
+            "push" => FeedMode::Push,
+            "webhook" => FeedMode::Webhook,
+            _ => FeedMode::Poll,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
@@ -179,9 +192,8 @@ pub struct FeedState {
 impl From<feed_state::FeedState> for FeedState {
     fn from(s: feed_state::FeedState) -> Self {
         FeedState {
-            // `sources.mode` is push|poll|webhook (migration 0006). A webhook source is a poller
-            // the provider nudges, so it stays POLL here; the SDL and the web chips know two modes.
-            mode: if s.mode == "push" { FeedMode::Push } else { FeedMode::Poll },
+            // `sources.mode` is push|poll|webhook (migration 0006), the adapter's true mode.
+            mode: FeedMode::from_db(&s.mode),
             source: s.source,
             state: s.state.into(),
             newest_observed_at: s.newest_observed_at.map(Time),
@@ -189,6 +201,85 @@ impl From<feed_state::FeedState> for FeedState {
             last_fetch_run_id: s.last_fetch_run_id.map(ID),
             lag_seconds: s.lag_seconds,
             note: s.note,
+        }
+    }
+}
+
+/// One feed of the app (`sources`, `sourceInfo`; evidence id `source:<feed>`): what the publisher
+/// says about it (`source_pages.rs`, the app config) and how it is running now.
+#[derive(Debug, Clone, SimpleObject)]
+#[graphql(name = "SourceInfo")]
+pub struct FeedSource {
+    pub feed: ID,
+    pub name: String,
+    pub publisher: String,
+    /// The adapter's true mode.
+    pub mode: FeedMode,
+    /// A provider call to `/v1/{app}/ingest/nudge/{feed}/{token}` wakes it.
+    pub nudge: bool,
+    /// The feed's data cadence (what feed state measures lag against).
+    pub cadence_seconds: i32,
+    /// Seconds between fetches of the running poll loop; null for push or stopped feeds.
+    pub poll_seconds: Option<i32>,
+    pub cadence: String,
+    pub max_latency_seconds: i32,
+    /// Provider delay plus our worst-case wait, as measured for docs/ingest-modes.md.
+    pub expected_latency: String,
+    /// Median fetch-to-commit time over the last 20 fetch runs, seconds.
+    pub observed_fetch_seconds: Option<f64>,
+    /// Now minus the newest observation the feed delivered, seconds (feed state lag).
+    pub observed_lag_seconds: Option<i64>,
+    pub licence: String,
+    /// Credit line to show with the data.
+    pub attribution: String,
+    pub doi: Option<String>,
+    pub rate_limit: String,
+    pub api_url: String,
+    /// Publisher page for the product, for a new-tab link.
+    pub page_url: String,
+    pub coverage: String,
+    /// What the feed cannot tell us.
+    pub limits: Vec<String>,
+    /// Poll feeds: the push search that came up empty.
+    pub why_poll: Option<String>,
+    pub last_fetch_at: Option<Time>,
+    /// `ok`, `empty`, `partial` or `error`.
+    pub last_fetch_status: Option<String>,
+    /// Cite as `fetch:<id>`.
+    pub last_fetch_run_id: Option<ID>,
+    pub state: Option<FeedHealth>,
+    pub note: Option<String>,
+}
+
+impl From<crate::source_pages::SourceView> for FeedSource {
+    fn from(v: crate::source_pages::SourceView) -> Self {
+        FeedSource {
+            feed: ID(v.feed),
+            name: v.name,
+            publisher: v.publisher,
+            mode: FeedMode::from_db(v.mode),
+            nudge: v.nudge,
+            cadence_seconds: v.cadence_seconds.clamp(0, i32::MAX as i64) as i32,
+            poll_seconds: v.poll_seconds.map(|s| s.clamp(0, i32::MAX as i64) as i32),
+            cadence: v.cadence,
+            max_latency_seconds: v.max_latency_seconds.clamp(0, i32::MAX as i64) as i32,
+            expected_latency: v.expected_latency,
+            observed_fetch_seconds: v.observed_fetch_seconds,
+            observed_lag_seconds: v.observed_lag_seconds,
+            licence: v.licence,
+            attribution: v.attribution,
+            doi: v.doi,
+            rate_limit: v.rate_limit,
+            api_url: v.api_url,
+            page_url: v.page_url,
+            coverage: v.coverage,
+            limits: v.limits,
+            why_poll: v.why_poll,
+            last_fetch_at: v.last_fetch_at.map(Time),
+            last_fetch_status: v.last_fetch_status,
+            last_fetch_run_id: v.last_fetch_run_id.map(|id| ID(id.to_string())),
+            state: v.state.map(Into::into),
+            note: v.note,
         }
     }
 }
@@ -825,11 +916,13 @@ pub struct FloodThresholds {
     pub minor_ft: Option<f64>,
     pub moderate_ft: Option<f64>,
     pub major_ft: Option<f64>,
+    /// NWPS low-water threshold (`lowThreshold`), feet; not a flood category.
+    pub low_ft: Option<f64>,
 }
 
 impl From<forecast::Thresholds> for FloodThresholds {
     fn from(t: forecast::Thresholds) -> Self {
-        FloodThresholds { action_ft: t.action_ft, minor_ft: t.minor_ft, moderate_ft: t.moderate_ft, major_ft: t.major_ft }
+        FloodThresholds { action_ft: t.action_ft, minor_ft: t.minor_ft, moderate_ft: t.moderate_ft, major_ft: t.major_ft, low_ft: t.low_ft }
     }
 }
 
@@ -968,6 +1061,16 @@ pub struct SiteStatus {
     pub conflicts: Vec<SiteConflict>,
     /// NWS alert versions first seen at or before `asOf` and not ended by then.
     pub active_alerts: i32,
+    /// Newest successful alert poll known at `asOf` (empty polls count): what `activeAlerts = 0`
+    /// was checked against. Null when the poller had not succeeded by then.
+    pub alerts_checked_at: Option<Time>,
+    /// `fetch_runs.id` of that poll; cite as `fetch:<id>`.
+    pub alerts_check_run_id: Option<ID>,
+    /// The alert poll is recent enough (15 min) to vouch for `activeAlerts = 0`.
+    pub alerts_check_current: bool,
+    /// NWPS `low_threshold` state: observed stage at or below the low-water threshold. Null
+    /// without a low-water threshold or a stage.
+    pub low_water: Option<bool>,
 }
 
 /// One forecast point against the observation nearest its valid time (within 30 min).
@@ -1162,7 +1265,17 @@ pub struct SiteReview {
     pub active_alerts: i32,
     pub usgs_stage_ft: Option<f64>,
     pub usgs_observed_at: Option<Time>,
+    /// Newest USGS discharge, cfs (shown next to NWPS flow in kcfs, never blended).
+    pub usgs_flow_cfs: Option<f64>,
+    pub usgs_flow_at: Option<Time>,
     pub tidal: bool,
+    /// NWPS `low_threshold` state: observed stage at or below the gauge's low-water threshold.
+    pub low_water: Option<bool>,
+    pub low_threshold_ft: Option<f64>,
+    /// Newest successful alert poll known at `asOf` (see `SiteStatus.alertsCheckedAt`).
+    pub alerts_checked_at: Option<Time>,
+    pub alerts_check_run_id: Option<ID>,
+    pub alerts_check_current: bool,
 }
 
 impl From<review::SiteReview> for SiteReview {
@@ -1190,7 +1303,14 @@ impl From<review::SiteReview> for SiteReview {
             active_alerts: r.active_alerts as i32,
             usgs_stage_ft: r.usgs_stage_ft,
             usgs_observed_at: r.usgs_observed_at.map(Time),
+            usgs_flow_cfs: r.usgs_flow_cfs,
+            usgs_flow_at: r.usgs_flow_at.map(Time),
             tidal: r.tidal,
+            low_water: r.low_water,
+            low_threshold_ft: r.low_threshold_ft,
+            alerts_checked_at: r.alert_check.as_ref().and_then(|c| c.ok_at).map(Time),
+            alerts_check_run_id: r.alert_check.as_ref().and_then(|c| c.ok_run_id).map(|id| ID(id.to_string())),
+            alerts_check_current: r.alert_check.as_ref().is_some_and(|c| c.current(r.as_of)),
         }
     }
 }

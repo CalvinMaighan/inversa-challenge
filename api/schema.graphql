@@ -10,7 +10,8 @@ input BBox {
   north: Float!
 }
 
-enum FeedMode { PUSH POLL }
+"""How a feed reaches us: PUSH (SQS, XMPP), POLL, or WEBHOOK (polled as a backstop, woken by an unsigned provider call)."""
+enum FeedMode { PUSH POLL WEBHOOK }
 enum FeedHealth { NOMINAL LAGGING STALE DOWN }
 enum Quality { RESEARCH NEEDS_ID CASUAL CURATED }
 enum Param { LST_C AIR_C WATER_C SST_C RAIN_MM STAGE_M WAVE_M WIND_MS FIRE_FRP SST SST_ANOMALY DHW BAA WAVE_PERIOD_S CURRENT_MS CURRENT_DIR_DEG DISCHARGE_CFS }
@@ -26,6 +27,42 @@ type FeedState {
   """`fetch_runs.id` of the latest run; cite it as `fetch:<id>`."""
   lastFetchRunId: ID
   lagSeconds: Int
+  note: String
+}
+
+"""One feed of the app (`sources`, `sourceInfo`; cite as `source:<feed>`): publisher facts and how it runs now."""
+type SourceInfo {
+  feed: ID!
+  name: String!
+  publisher: String!
+  mode: FeedMode!
+  """A provider call to `/v1/{app}/ingest/nudge/{feed}/{token}` wakes it."""
+  nudge: Boolean!
+  """The feed's data cadence (what feed state measures lag against)."""
+  cadenceSeconds: Int!
+  """Seconds between fetches of the running poll loop; null for push or stopped feeds."""
+  pollSeconds: Int
+  cadence: String!
+  maxLatencySeconds: Int!
+  expectedLatency: String!
+  """Median fetch-to-commit time over the last 20 fetch runs."""
+  observedFetchSeconds: Float
+  """Now minus the newest observation the feed delivered."""
+  observedLagSeconds: Int
+  licence: String!
+  attribution: String!
+  doi: String
+  rateLimit: String!
+  apiUrl: String!
+  pageUrl: String!
+  coverage: String!
+  limits: [String!]!
+  """Poll feeds: the push search that came up empty."""
+  whyPoll: String
+  lastFetchAt: Time
+  lastFetchStatus: String
+  lastFetchRunId: ID
+  state: FeedHealth
   note: String
 }
 
@@ -380,6 +417,8 @@ type FloodThresholds {
   minorFt: Float
   moderateFt: Float
   majorFt: Float
+  """NWPS low-water threshold (`lowThreshold`), feet; not a flood category."""
+  lowFt: Float
 }
 
 type ForecastPoint {
@@ -462,6 +501,14 @@ type SiteStatus {
   conflicts: [SiteConflict!]!
   """NWS alert versions first seen at or before asOf and not ended by then."""
   activeAlerts: Int!
+  """Newest successful alert poll known at asOf (empty polls count): what activeAlerts = 0 was checked against."""
+  alertsCheckedAt: Time
+  """`fetch_runs.id` of that poll; cite as `fetch:<id>`."""
+  alertsCheckRunId: ID
+  """The alert poll is recent enough (15 min) to vouch for activeAlerts = 0."""
+  alertsCheckCurrent: Boolean!
+  """NWPS low_threshold state: observed stage at or below the low-water threshold; null without one."""
+  lowWater: Boolean
 }
 
 """One forecast point against the observation nearest its valid time (within 30 min)."""
@@ -570,8 +617,18 @@ type SiteReview {
   """Newest USGS stage, display only: its datum can differ from NWPS (KRZL1 -2.45 ft), so it is never compared with flood thresholds."""
   usgsStageFt: Float
   usgsObservedAt: Time
+  """Newest USGS discharge, cfs (shown next to NWPS flow in kcfs, never blended)."""
+  usgsFlowCfs: Float
+  usgsFlowAt: Time
   """Tidal site: larger noise floors for stage rise and forecast rise."""
   tidal: Boolean!
+  """NWPS low_threshold state: observed stage at or below the gauge's low-water threshold."""
+  lowWater: Boolean
+  lowThresholdFt: Float
+  """Newest successful alert poll known at asOf (see SiteStatus.alertsCheckedAt)."""
+  alertsCheckedAt: Time
+  alertsCheckRunId: ID
+  alertsCheckCurrent: Boolean!
 }
 
 type ReviewBoard {
@@ -606,6 +663,10 @@ type ReviewHistory {
 
 type Query {
   feeds: [FeedState!]!
+  """Every feed of the app: licence, credit, cadence, latency, rate limit, why it is polled, last fetch and state."""
+  sources: [SourceInfo!]!
+  """One feed by source id; null for a feed the app does not run."""
+  sourceInfo(feed: ID!): SourceInfo
   sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
   """Taxa by id (or focus species name) and/or by a name fragment; at most 500."""
   taxa(ids: [ID!], q: String): [Taxon!]!

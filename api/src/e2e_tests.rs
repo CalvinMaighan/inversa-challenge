@@ -354,7 +354,7 @@ async fn hook(state: &AppState, rows: &Value) -> (StatusCode, Value) {
     use hmac::{Hmac, Mac};
     let body = rows.to_string().into_bytes();
     let secret = state.config.ingest_hook_secret.clone().expect("tests configure a hook secret");
-    let ts = chrono::Utc::now().timestamp();
+    let ts = crate::state::now_ms() / 1000;
     let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(format!("{ts}.").as_bytes());
     mac.update(&body);
@@ -438,7 +438,7 @@ async fn sightings_near(state: &AppState, lat: f64, lon: f64, at: i64) -> Vec<Va
 async fn e2e_quality_cases() {
     let state = test_state();
     crate::backfill::run(state.clone(), &["--fixtures".to_string()]).await.unwrap();
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = crate::state::now_ms();
 
     // --- stale: `web` (max latency 24 h) receives an observation made 3 days ago ---------------
     let rows = json!([{"Sighting": {

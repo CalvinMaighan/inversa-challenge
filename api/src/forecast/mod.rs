@@ -107,6 +107,11 @@ pub struct Thresholds {
     pub minor_ft: Option<f64>,
     pub moderate_ft: Option<f64>,
     pub major_ft: Option<f64>,
+    /// NWPS `lowThreshold` (low water), NWPS stage feet. Not a flood category: it never counts
+    /// in [`Thresholds::is_empty`] or [`Thresholds::category`]. Stage at or below it is NWPS's
+    /// `low_threshold` state ([`Thresholds::low_water`]).
+    #[serde(default)]
+    pub low_ft: Option<f64>,
 }
 
 /// A feed value as a threshold: `-9999`, `-999`, NaN and infinities are "not defined".
@@ -128,7 +133,21 @@ impl Thresholds {
             minor_ft: clean_threshold(minor),
             moderate_ft: clean_threshold(moderate),
             major_ft: clean_threshold(major),
+            low_ft: None,
         }
+    }
+
+    /// The same thresholds with NWPS's low-water threshold (feed value; `-9999` = missing).
+    pub fn with_low(mut self, low: Option<f64>) -> Thresholds {
+        self.low_ft = low.and_then(clean_threshold);
+        self
+    }
+
+    /// NWPS's `low_threshold` state: stage at or below the low-water threshold. `None` when the
+    /// stage or the threshold is missing.
+    pub fn low_water(&self, stage_ft: Option<f64>) -> Option<bool> {
+        let stage = stage_ft.filter(|s| s.is_finite())?;
+        Some(stage <= self.low_ft?)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -234,7 +253,7 @@ mod category_tests {
         assert!(missing.is_empty());
         assert_eq!(missing.category(Some(1e6)), None, "no threshold: no category, never a number compare");
         let partial = Thresholds::from_feed(-999.0, 29.0, -9999.0, 43.0);
-        assert_eq!(partial, Thresholds { action_ft: None, minor_ft: Some(29.0), moderate_ft: None, major_ft: Some(43.0) });
+        assert_eq!(partial, Thresholds { action_ft: None, minor_ft: Some(29.0), moderate_ft: None, major_ft: Some(43.0), low_ft: None });
         assert_eq!(partial.category(Some(28.5)), Some(Category::None));
         assert_eq!(partial.category(Some(41.0)), Some(Category::Minor));
         assert_eq!(partial.category(Some(43.0)), Some(Category::Major));

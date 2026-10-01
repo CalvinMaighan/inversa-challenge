@@ -260,7 +260,7 @@ pub fn batch_url(ids: &[i64]) -> String {
 /// Fetch and store every pending taxon, [`BATCH`] per request, under the governor. Returns the number
 /// of rows updated. A request failure ends the sweep (the governor holds the backoff for the next one).
 pub async fn enrich(state: &AppState) -> anyhow::Result<usize> {
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = crate::state::now_ms();
     let ids = pending_ids(state, now).await?;
     if ids.is_empty() {
         return Ok(0);
@@ -288,7 +288,7 @@ pub async fn enrich(state: &AppState) -> anyhow::Result<usize> {
             }
         };
         let infos = parse_page(&bytes)?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = crate::state::now_ms();
         updated += state.obs.write(move |tx| apply(tx, &infos, now)).await?;
     }
     tracing::info!("taxon_info: enriched {updated} taxa in {} requests", ids.len().div_ceil(BATCH));
@@ -298,7 +298,7 @@ pub async fn enrich(state: &AppState) -> anyhow::Result<usize> {
 /// Store a recorded `/v1/taxa` page (fixtures, tests).
 pub async fn apply_page(state: &AppState, bytes: &[u8]) -> anyhow::Result<usize> {
     let infos = parse_page(bytes)?;
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = crate::state::now_ms();
     state.obs.write(move |tx| apply(tx, &infos, now)).await
 }
 
@@ -443,7 +443,7 @@ mod tests {
             })
             .await
             .unwrap();
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = crate::state::now_ms();
         // Never-fetched taxa with an iNat id are pending: the four seeded focus rows plus the anole.
         let pending = pending_ids(&state, now).await.unwrap();
         assert_eq!(pending, vec![35342, 47284, 116461, 238252, 318758]);

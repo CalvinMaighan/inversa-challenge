@@ -53,12 +53,8 @@ pub fn top_threshold(scores: &[f32]) -> f32 {
     kth.max(f32::MIN_POSITIVE)
 }
 
-/// The last `days` full UTC days before now.
-pub async fn backtest(db: &Db, app: &App, taxon: &Taxon, days: u32) -> anyhow::Result<Backtest> {
-    backtest_until(db, app, taxon, days, chrono::Utc::now().timestamp_millis()).await
-}
-
-/// The last `days` full UTC days before `end_ms`.
+/// The last `days` full UTC days before `end_ms` (callers pass their app's clock,
+/// `AppState::now_ms`).
 pub async fn backtest_until(db: &Db, app: &App, taxon: &Taxon, days: u32, end_ms: i64) -> anyhow::Result<Backtest> {
     if super::lionfish::enabled(app) {
         return super::lionfish::backtest_until(db, app, taxon, days, end_ms).await;

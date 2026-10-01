@@ -67,7 +67,7 @@ fn error_message(body: &Value) -> &str {
 #[tokio::test]
 async fn resolver_feeds() {
     let state = seeded().await;
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = crate::state::now_ms();
     let run = state
         .obs
         .write(move |tx| {
@@ -378,7 +378,7 @@ async fn resolver_explain_cell() {
 async fn resolver_backtest() {
     let state = seeded().await;
     let g = python_grid(&state);
-    let today = crate::hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
+    let today = crate::hotspot::backtest::floor_day(crate::state::now_ms());
     let (lon, lat) = g.center(g.index(100, 100));
     // History two days back, then a sighting in the same cell yesterday: a hit.
     insert_sighting(&state.obs, "inat", 1, lat, lon, today - 3 * DAY + 5 * HOUR, "research", None).await;
@@ -825,6 +825,16 @@ async fn carp_seeded() -> (AppState, i64, i64, i64) {
                 }],
             )?;
             record_alerts(tx, "BTRL1", d1 + 6 * HOUR, &[])?;
+            // The alert poller ran every 10 min for ten days (its runs are the alert checks).
+            tx.execute(
+                "insert or ignore into sources (id, name, homepage, mode, cadence_s, max_latency_s) values ('nws-alerts', 'NWS alerts', 'https://api.weather.gov', 'poll', 60, 900)",
+                [],
+            )?;
+            let mut at = t0;
+            while at < t0 + 10 * DAY {
+                tx.execute("insert into fetch_runs (source_id, fetched_at, received_at, status) values ('nws-alerts', ?1, ?1 + 2000, 'ok')", [at])?;
+                at += 10 * 60_000;
+            }
             Ok(())
         })
         .await
@@ -1373,7 +1383,7 @@ async fn lionfish_asof_submitted_basis_and_frames() {
 async fn lionfish_backtest_graphql_reports_horizon_and_thin_regions() {
     let state = crate::app::test_support::test_state_for("lionfish");
     seed_sources(&state.obs).await;
-    let today = crate::hotspot::backtest::floor_day(chrono::Utc::now().timestamp_millis());
+    let today = crate::hotspot::backtest::floor_day(crate::state::now_ms());
     let fl = state.app.region("fl-keys").unwrap();
     let (lon, lat) = fl.grid.center(fl.grid.index(100, 100));
     // Four reports at A over the month before the window, then three more at A in the week after

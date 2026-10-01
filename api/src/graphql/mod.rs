@@ -50,10 +50,6 @@ pub(crate) fn app_state<'a>(ctx: &Context<'a>) -> &'a AppState {
     ctx.data_unchecked::<AppState>()
 }
 
-pub(crate) fn now_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
 /// Largest accepted POST body. async-graphql-axum reads the body as an unbounded stream, so the
 /// cap is applied here before it parses.
 pub const MAX_BODY_BYTES: usize = 1024 * 1024;
@@ -270,7 +266,7 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(body, json!({"data": {"feeds": []}}));
 
-        let fetched_at = now_ms() - 30_000;
+        let fetched_at = crate::state::now_ms() - 30_000;
         seed_feed(&state, fetched_at).await;
         let (status, body) = post(
             app.clone(),
@@ -383,7 +379,7 @@ mod tests {
     #[tokio::test]
     async fn feeds_subscription_sends_snapshot_then_updates() {
         let state = test_state();
-        seed_feed(&state, now_ms()).await;
+        seed_feed(&state, crate::state::now_ms()).await;
         let request = async_graphql::Request::new("subscription { feeds { source state } }").data(state.clone());
         let mut stream = schema().execute_stream(request);
         let first = stream.next().await.unwrap().data.into_json().unwrap();
