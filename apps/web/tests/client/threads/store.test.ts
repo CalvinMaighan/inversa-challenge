@@ -24,6 +24,16 @@ const vectors: Vector[] = readdirSync(DIR)
 const op = (id: string, over: Partial<Op> = {}): Op => ({ id, hlc: `1700000000000:0:n`, boardId: "b1", entity: "mission", entityId: "m1", field: "title", value: "x", nodeId: "n", ...over });
 
 describe("schema", () => {
+  test("upgrading from an older schema version drops cached query bodies", () => {
+    const store = openTestStore();
+    store.putCached("h1", '{"data":{"evidence":{"record":{"mediaUrl":"/v1/media/1"}}}}', 1, 60_000);
+    store.migrate();
+    expect(store.getCached("h1")).not.toBeNull();
+    store.db.run("UPDATE meta SET v = '2' WHERE k = 'schema_version'");
+    store.migrate();
+    expect(store.getCached("h1")).toBeNull();
+  });
+
   test("migrates idempotently and creates the eight tables", () => {
     const store = openTestStore();
     store.migrate();

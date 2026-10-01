@@ -54,6 +54,9 @@ export class Store {
         // The column exists: a fresh schema or an earlier upgrade.
       }
     }
+    const previous = Number(this.db.all("SELECT v FROM meta WHERE k = 'schema_version'")[0]?.v ?? SCHEMA_VERSION);
+    // Cached GraphQL bodies from an older build can hold shapes the app no longer reads (stale media paths).
+    if (previous < SCHEMA_VERSION) this.db.run("DELETE FROM cache_queries");
     this.db.run("INSERT OR REPLACE INTO meta (k, v) VALUES ('schema_version', ?)", [String(SCHEMA_VERSION)]);
   }
 

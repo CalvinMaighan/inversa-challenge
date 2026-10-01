@@ -3,7 +3,8 @@
  * runs it on each open. The dialect is plain SQLite so bun:sqlite runs the same statements in tests.
  */
 
-export const SCHEMA_VERSION = 2;
+/** 3: cached evidence bodies carried the pre-app media path `/v1/media/<id>`; `migrate` drops cached query bodies when upgrading from an older version. */
+export const SCHEMA_VERSION = 3;
 
 /** Columns added after a version shipped: `ALTER TABLE` has no IF NOT EXISTS, so `migrate` tries each and ignores a duplicate. */
 export const SCHEMA_UPGRADES: readonly string[] = ["ALTER TABLE messages ADD COLUMN to_node TEXT", "ALTER TABLE messages ADD COLUMN thread TEXT"];
