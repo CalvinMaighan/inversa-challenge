@@ -124,8 +124,8 @@ export const HELP_ENTRIES: readonly HelpEntry[] = [
   {
     id: "missions-tab",
     group: "Chat column",
-    control: "Missions tab",
-    what: "The team board: plan a mission from a hotspot cell, log removals, add notes, chat with the team and see who is online. A dot on a tab means something new arrived there.",
+    control: "Notes tab",
+    what: "The team board: write a note about what you saw (pick a spot on the globe, or start from a sighting's card), read everyone's notes live, chat with the team and see who is online. Crew missions fold out at the bottom. A dot on a tab means something new arrived there.",
   },
   {
     id: "mic",

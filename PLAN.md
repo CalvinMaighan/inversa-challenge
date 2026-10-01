@@ -312,3 +312,4 @@ The same strings appear in agent citations `[e:<id>]`, in `evidence(id)`, in UI 
 - T38 merged 10/10 (agent data panels, globe highlights). Web 586 tests. Live eval 14-15/15 typical.
 - T40 merged 18/18 (chat-left layout, legend, tooltips, help). Web 620 tests.
 - T30/T31 merged 11/11 (axe 0/0 over 12 scans, keyboard walk, rate limits, injection test live, prod surface). Web 630, API 206, clippy clean.
+- T43 field notes: the `note` entity carries field notes (text, lat, lon, species?, sightingId?, createdBy, callsign, createdAt); NOTES state key (pins, pick-on-map); notes globe layer (`note:<id>` pins, C14 kind `note`); the board tab reads "Notes" with crew missions behind a disclosure; drawer note card plus "Add note about this sighting"; read-only agent `notes` tool (C17 table); 3 CRDT note vectors (17/17 in both runners); `e2e:notes` on the dev stack (e2e/dev-stack.ts, shared with e2e:team). Authorship, length and rate caps are client-side (docs/security.md).

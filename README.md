@@ -73,7 +73,7 @@ The daily token budget is `AGENT_DAILY_TOKENS`, 10,000,000 by default. At $0.10/
 
 The page has two panes. The **chat column** sits on the left: always open, full height and 420 px wide. Drag its right edge to make it anywhere from 360 to 560 px wide, and your browser keeps that width. It has two tabs:
 - **Agent**: the thread and the composer, with a mic button for voice and a send button.
-- **Missions**: the team board.
+- **Notes**: the team board. Field notes first (write what you saw, pinned to a spot on the globe), then team chat and who is online, with crew missions folded away at the bottom.
 
 A dot on a tab means something new arrived there while you were on the other one. The **globe** fills the right pane, with the top bar, the timeline and the evidence drawer inside it. Below 768 px wide, the globe goes full screen and the column becomes a bottom sheet with the same tabs. When collapsed, the sheet is a composer bar. Drag or tap its handle to open it to half or full height.
 
@@ -90,6 +90,7 @@ On a first visit, a hint above the composer offers example questions you can cli
 | Haze from violet to yellow | Hotspots, on a heuristic score from low to high. Layers can pin the haze to a single species. |
 | Ramp from blue to red | Land and sea surface temperature (LST 0–45 °C, SST 16–33 °C). Both are off by default. |
 | Outlined areas: red, orange, amber, teal | NWS alerts in effect at the cursor, coloured by severity: extreme, severe, moderate, minor. |
+| Outlined pins in a teammate's colour | Field notes: what someone on the team wrote at that spot. Hover to read the first line, click to open it. |
 | Diamonds: yellow, orange, green | Missions on the team board that are planned, in progress or done. |
 | Small coloured dots with callsigns | Team cursors: teammates on the same board. |
 | Diagonal hatching | Missing data, never zero. On the rasters it marks cloud-masked cells. On the timeline, red means no data, amber means cloud, and grey means quiet: no sightings for 12 h or more. |
@@ -120,7 +121,7 @@ The **?** button in the top bar opens a help sheet that lists every control. Its
 | Timeline | Date jump | Loads any UTC day, including days outside the 30-day window. |
 | Timeline | Scrubber | Drag through time. The line is sightings, amber bands are alerts, and hatching marks gaps. |
 | Chat column | Agent tab | Ask the agent. Answers cite evidence, show their tool rows and data panels, and fly the globe. |
-| Chat column | Missions tab | Plan missions, log removals, add notes, chat with the team and see who is online. |
+| Chat column | Notes tab | Write a note about what you saw (pick a spot on the globe, or start from a sighting's card), read everyone's notes live, chat with the team and see who is online. Crew missions fold out at the bottom. |
 | Chat column | Mic | Talk instead of typing. Press it again to stop. |
 | Chat column | Citations [1] [2] … | Open the cited record in the evidence drawer. |
 | Chat column | Data panels and Expand | Show the tables and charts behind an answer. Expand opens them wide next to the column. |
@@ -130,7 +131,7 @@ The **?** button in the top bar opens a help sheet that lists every control. Its
 
 ```
  Browser
-   main: chat column (Agent | Missions), CesiumJS globe and HUD, mic and playback
+   main: chat column (Agent | Notes), CesiumJS globe and HUD, mic and playback
    workers: gql (GraphQL HTTP + WS), db (sqlite-wasm OPFS, CRDT, frame cache)
    SharedArrayBuffer rings between them (@calvinjs/active-state/threads)
         |  /v1/*  GraphQL, WS, frames, media        |  /api/agent/*, /api/voice/*  NDJSON

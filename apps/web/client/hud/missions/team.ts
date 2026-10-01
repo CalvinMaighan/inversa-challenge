@@ -16,6 +16,7 @@ import { get, set } from "@calvinjs/active-state";
 
 import { ensureIdentity, ME, type MeState } from "client/state/me";
 import { DEFAULT_BOARD_ID, MISSIONS, type MissionsState } from "client/state/missions";
+import { setNotePins } from "client/state/notes";
 import type { Peer } from "client/state/peers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { bootThreads, type Threads } from "client/threads/boot";
@@ -23,6 +24,7 @@ import { Clock, HlcDriftError } from "client/threads/crdt/hlc";
 import type { Op } from "client/threads/crdt/types";
 import { startPeers, type TeamLink } from "client/threads/rtc/peers";
 
+import { pinsOf } from "../notes/model";
 import { cell, type Cell } from "../store";
 import { boardModel, messageOp, type BoardModel, type OpFactory } from "./board";
 
@@ -80,7 +82,11 @@ export function ensureTeam(boardId: string = get<MissionsState>(MISSIONS)?.board
 
   const read = async () => {
     const view = await threads.db("readBoard", { boardId });
-    if (!closed) board.set(boardModel(view));
+    if (closed) return;
+    const model = boardModel(view);
+    board.set(model);
+    // The globe's note pins (T43) read NOTES, never the team session.
+    setNotePins(pinsOf(model.fieldNotes));
   };
   const sync = () =>
     threads

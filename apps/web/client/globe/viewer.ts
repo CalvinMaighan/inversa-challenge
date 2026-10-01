@@ -11,6 +11,7 @@ import type { Cartesian2 as CartesianXY } from "cesium";
 
 import { LAYERS, type LayersState } from "client/state/layers";
 import { MISSIONS, type MissionsState } from "client/state/missions";
+import { NOTES, setNotePick, type NotesState } from "client/state/notes";
 import { PEERS, type Peer } from "client/state/peers";
 import { parseEvidenceId, SELECTION, type SelectionState } from "client/state/selection";
 import { TIME, type TimeState } from "client/state/time";
@@ -113,6 +114,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     layers: () => ({ ...LAYERS.defaults, ...get<LayersState>(LAYERS) }),
     missions: () => ({ ...MISSIONS.defaults, ...get<MissionsState>(MISSIONS) }),
     peers: () => get<Peer[]>(PEERS) ?? [],
+    notes: () => get<NotesState>(NOTES)?.pins ?? [],
     gql: (query, variables, signal) => gqlRequest(query, variables, signal),
   };
 
@@ -173,6 +175,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
   );
   disposers.push(subscribe(MISSIONS, scheduleRefresh));
   disposers.push(subscribe(PEERS, scheduleRefresh));
+  disposers.push(subscribe(NOTES, scheduleRefresh));
 
   // Grid version: Atomics.waitAsync where it exists; elsewhere a slow poll (the ring fallback polls every ms).
   let watchToken = 0;
@@ -353,6 +356,12 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement): GlobeH
     });
   }, ScreenSpaceEventType.MOUSE_MOVE);
   handler.setInputAction((click: { position: CartesianXY }) => {
+    // "Pick on map" (T43): while the note composer is armed, a click is a place, not a selection.
+    if (get<NotesState>(NOTES)?.picking) {
+      const at = globePoint(click.position.x, click.position.y);
+      if (at) setNotePick(at);
+      return;
+    }
     const id = pickId(click.position.x, click.position.y);
     if (id?.startsWith(MISSION_ID_PREFIX)) {
       const missionId = id.slice(MISSION_ID_PREFIX.length);

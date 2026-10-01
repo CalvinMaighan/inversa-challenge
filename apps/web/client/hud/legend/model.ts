@@ -15,7 +15,7 @@ import { LAYER_IDS, SPECIES_IDS } from "shared/voice/ui-tools";
 
 import { NETWORK_LABELS, OTHER_SPECIES_NAME, SPECIES_NAMES } from "../tooltip/model";
 
-const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
 
 export type SwatchShape = "dot" | "square" | "diamond" | "area" | "hatch";
 
@@ -118,9 +118,15 @@ export function legendRows(layers: LayersState, stats: readonly LayerStats[] | n
       ramp: { css: rampGradient(HEAT_STOPS), min: "low", max: "high", caption: "heuristic score" },
       pin: typeof pinned === "string" ? pinned : null,
     }),
+    row(NOTES, {
+      label: "Field notes",
+      note: "Pins where someone on the team wrote a note, in the author's colour. Hover to read it, click to open it.",
+      unit: "pins",
+      swatches: [],
+    }),
     row(MISSIONS, {
       label: "Missions",
-      note: "Team missions on the board, by status. Click one to open it in the Missions tab.",
+      note: "Team missions on the board, by status. Click one to open it under Crew missions in the Notes tab.",
       unit: "on the board",
       swatches: [
         { key: "planned", label: "Planned", color: statusColor("planned"), shape: "diamond", count: null },

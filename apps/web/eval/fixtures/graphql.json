@@ -1,5 +1,11 @@
 {
   "now": "2026-01-15T03:00:00Z",
+  "notes": [
+    { "id": "0194a1b2-0001-7000-8000-000000000001", "fields": { "text": "Two tegus crossing the canal road by the pump station, both headed west into the brush.", "lat": 25.4712, "lon": -80.4651, "species": "tegu", "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0", "callsign": "Ranger-A1B2", "createdAt": "2026-01-15T01:20:00Z" } },
+    { "id": "0194a1b2-0002-7000-8000-000000000002", "fields": { "text": "Iguana carcass on the levee after the cold night; no live ones seen.", "lat": 25.4553, "lon": -80.4902, "species": "iguana", "sightingId": "7", "createdBy": "b2c3d4e5f6a1-7000-8000-00000000b1b1", "callsign": "Ranger-B2C3", "createdAt": "2026-01-14T22:05:00Z" } },
+    { "id": "0194a1b2-0003-7000-8000-000000000003", "fields": { "text": "Boat ramp at Flamingo closed for dredging until Friday.", "lat": 25.1417, "lon": -80.9237, "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0", "callsign": "Ranger-A1B2", "createdAt": "2026-01-12T15:00:00Z" } },
+    { "id": "0194a1b2-0004-7000-8000-000000000004", "fields": { "missionId": "m1", "body": "bring the long hook", "createdBy": "a1b2c3d4e5f6-7000-8000-00000000a0a0", "at": "2026-01-14T12:00:00Z" } }
+  ],
   "feeds": [
     { "source": "inat", "mode": "POLL", "state": "NOMINAL", "newestObservedAt": "2026-01-15T02:41:00Z", "lastFetchAt": "2026-01-15T02:58:00Z", "lagSeconds": 1140, "note": null, "lastFetchRunId": "90412" },
     { "source": "nas", "mode": "POLL", "state": "LAGGING", "newestObservedAt": "2025-12-20T15:00:00Z", "lastFetchAt": "2026-01-14T06:00:00Z", "lagSeconds": 2203200, "note": "USGS NAS publishes curated records weeks after the observation", "lastFetchRunId": "90377" },

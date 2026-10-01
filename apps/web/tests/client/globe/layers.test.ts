@@ -6,6 +6,7 @@ import { createLayers } from "client/globe/layers";
 import { alertBucket } from "client/globe/layers/alerts";
 import { createHotspotLayer } from "client/globe/layers/hotspots";
 import { createMissionsLayer, MISSION_ID_PREFIX, missionMark } from "client/globe/layers/missions";
+import { createNotesLayer, pinsKey } from "client/globe/layers/notes";
 import { createPeersLayer, cursorPeers } from "client/globe/layers/peers";
 import { createSightingsLayer, SIGHTING_TRAIL_MS, trailAlpha, trailFromFrames, visibleRecords } from "client/globe/layers/sightings";
 import { createStationsLayer, latestPerStation, stationBreakdown, stationBucket } from "client/globe/layers/stations";
@@ -33,10 +34,10 @@ describe("layer contract", () => {
   test("every LAYER_ID has exactly one layer, in draw order rasters → areas → points → people", () => {
     const layers = createLayers(fakeContext());
     expect(layers.map((l) => l.id).sort()).toEqual([...LAYER_IDS].sort());
-    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "sightings", "missions", "peers"]);
+    expect(layers.map((l) => l.id)).toEqual(["lst", "sst", "hotspots", "alerts", "stations", "sightings", "missions", "notes", "peers"]);
   });
 
-  test("init / enable / update / disable / stats / destroy on a fake viewer, for all eight layers", async () => {
+  test("init / enable / update / disable / stats / destroy on a fake viewer, for all nine layers", async () => {
     const ctx = fakeContext({ timeMs: T0 + 2 * STEP, meta: fakeMeta(T0, 3), sightings: () => [rec()] });
     const viewer = fakeViewer();
     const grid = smallGrid(3);
@@ -383,6 +384,64 @@ describe("missions", () => {
     layer.update(0, null);
     await flush();
     expect(asked).toEqual([{ id: "everglades" }, { id: "everglades" }]);
+  });
+});
+
+describe("notes", () => {
+  const pin = (id: string, over: Partial<{ lon: number; lat: number; text: string; color: string; callsign: string }> = {}) => ({
+    id,
+    text: `note ${id}`,
+    lat: 25.47,
+    lon: -80.48,
+    species: null,
+    sightingId: null,
+    createdBy: `node-${id}`,
+    callsign: `Ranger-${id}`,
+    createdAt: "2026-09-30T12:00:00Z",
+    color: "#4fb3ff",
+    ...over,
+  });
+
+  test("one outlined pin per note carrying note:<id>; describe() gives the author and the text as written", () => {
+    const ctx = fakeContext({ notes: [pin("a"), pin("b", { color: "#f2c14e", text: "<img src=x onerror=alert(1)> two tegus" })] });
+    const viewer = fakeViewer();
+    const layer: GlobeLayer = createNotesLayer(ctx);
+    layer.init(viewer);
+    layer.enable();
+    layer.update(0, null);
+    const marks = viewer.added[0] as BillboardCollection;
+    expect(marks.length).toBe(2);
+    expect([marks.get(0).id, marks.get(1).id]).toEqual(["note:a", "note:b"]);
+    // One icon per author colour, shared by every pin of that colour.
+    expect(marks.get(0).image).not.toBe(marks.get(1).image);
+    expect(layer.stats().count).toBe(2);
+    expect(layer.describe?.("note:b")).toEqual({ kind: "note", id: "b", callsign: "Ranger-b", text: "<img src=x onerror=alert(1)> two tegus", lon: -80.48, lat: 25.47 });
+    expect(layer.describe?.("note:zzz")).toBeNull();
+    expect(layer.describe?.("sighting:1")).toBeNull();
+
+    // A deleted note drops its pin on the next update; an unchanged list redraws nothing.
+    const renders = ctx.state.renders;
+    layer.update(0, null);
+    expect(ctx.state.renders).toBe(renders);
+    ctx.state.notes = [pin("b")];
+    layer.update(0, null);
+    expect(marks.length).toBe(1);
+    expect(marks.get(0).id).toBe("note:b");
+    expect(layer.describe?.("note:a")).toBeNull();
+    layer.disable();
+    expect(marks.show).toBe(false);
+    expect(layer.describe?.("note:b")).toBeNull();
+    layer.destroy();
+    expect(viewer.added).toEqual([]);
+  });
+
+  test("pinsKey changes when a pin moves, recolours, or its text changes", () => {
+    const base = pinsKey([pin("a")]);
+    expect(pinsKey([pin("a")])).toBe(base);
+    expect(pinsKey([pin("a", { lon: -80.5 })])).not.toBe(base);
+    expect(pinsKey([pin("a", { color: "#000000" })])).not.toBe(base);
+    expect(pinsKey([pin("a", { text: "longer text" })])).not.toBe(base);
+    expect(pinsKey([])).toBe("");
   });
 });
 

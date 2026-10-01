@@ -16,7 +16,7 @@ export const CATALOG_VOCABULARY = {
   /** shared/voice/ui-tools.ts SPECIES_IDS (same order as shared/frames.ts EVF_SPECIES) */
   SPECIES_IDS: ["python", "tegu", "iguana", "lionfish"],
   /** shared/voice/ui-tools.ts LAYER_IDS */
-  LAYER_IDS: ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers"],
+  LAYER_IDS: ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"],
   /** shared/frames.ts QUALITY_CODES */
   QUALITY_CODES: ["research", "needs_id", "casual", "curated"],
 };

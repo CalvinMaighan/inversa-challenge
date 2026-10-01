@@ -2,7 +2,7 @@ import { key } from "@calvinjs/active-state";
 
 import type { EvidenceKind } from "shared/agent/events";
 
-/** Chat column tabs (PRD §12 "Layout"): the agent thread, or the team board (shown as "Missions"). */
+/** Chat column tabs (PRD §12 "Layout"): the agent thread, or the team board (shown as "Notes", T43). */
 export const AGENT_TABS = ["agent", "board"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 

@@ -11,18 +11,21 @@ import type { AgentThread } from "../chat/thread";
 export type BoardActivityInput = {
   missions: readonly { id: string; status: string }[];
   notes: readonly unknown[];
+  /** Field notes (T43), newest first; an edit changes the text. */
+  fieldNotes?: readonly { id: string; text: string }[];
   messages: readonly unknown[];
   totals: { overall: number };
 };
 
 /**
- * Mission ops the team would want to see: missions added, removed or re-statused, notes, team chat, removals.
- * Null before the board has loaded.
+ * Board ops the team would want to see: field notes posted, edited or deleted, missions added, removed or
+ * re-statused, mission notes, team chat, removals. Null before the board has loaded.
  */
 export function boardActivity(board: BoardActivityInput | null | undefined): string | null {
   if (!board) return null;
   const statuses = board.missions.map((m) => `${m.id}=${m.status}`).join(",");
-  return `${board.missions.length}|${statuses}|${board.notes.length}|${board.messages.length}|${board.totals.overall}`;
+  const fieldNotes = (board.fieldNotes ?? []).map((n) => `${n.id}=${n.text.length}`).join(",");
+  return `${board.missions.length}|${statuses}|${board.notes.length}|${board.messages.length}|${board.totals.overall}|${fieldNotes}`;
 }
 
 /** Agent activity: assistant turns that finished (typed or voice), so a voice answer landing behind Missions shows. */

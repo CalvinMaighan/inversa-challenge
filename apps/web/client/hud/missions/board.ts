@@ -34,6 +34,29 @@ export type Mission = { id: string } & MissionFields;
 
 export type Note = { id: string; missionId: string; body: string; createdBy: string; at: string };
 
+/** Plain text, at most this many characters (T43). The composer and the view both cap it. */
+export const MAX_NOTE_CHARS = 500;
+
+/**
+ * A field note (T43): what someone saw, pinned on the map. Same `note` entity as mission notes on the CRDT board;
+ * the two are told apart by their fields (`text` + `lat`/`lon` here, `missionId` + `body` there).
+ */
+export type FieldNoteFields = {
+  text: string;
+  lat: number;
+  lon: number;
+  species?: Species;
+  /** `sightings.id` the note is about, when it started from a sighting's evidence card. */
+  sightingId?: string;
+  /** Author node id (ME.nodeId). Only the author's UI offers edit and delete; nothing enforces it server side. */
+  createdBy: string;
+  callsign: string;
+  /** RFC 3339. */
+  createdAt: string;
+};
+
+export type FieldNote = { id: string } & Required<Pick<FieldNoteFields, "text" | "lat" | "lon" | "createdBy" | "callsign" | "createdAt">> & { species: Species | null; sightingId: string | null };
+
 export type MissionForm = { title: string; species: string; cell: string; at: string };
 
 export type FormErrors = Partial<Record<keyof MissionForm, string>>;
@@ -101,7 +124,8 @@ export function missionFieldsFromForm(form: MissionForm, createdBy: string): Mis
 
 export type OpFactory = { clock: Clock; boardId: string; nodeId: string; now?: () => number };
 
-function stamp(f: OpFactory, entity: Op["entity"], entityId: string, field: string, value: unknown): Op {
+/** One LWW register op (PLAN.md C5), stamped by the factory's clock. */
+export function stamp(f: OpFactory, entity: Op["entity"], entityId: string, field: string, value: unknown): Op {
   const now = f.now ?? (() => Date.now());
   return { id: uuidv7(now()), hlc: format(f.clock.tick(now())), boardId: f.boardId, entity, entityId, field, value, nodeId: f.nodeId };
 }
@@ -128,6 +152,44 @@ export function createNoteOps(f: OpFactory, missionId: string, body: string): Op
   const id = uuidv7((f.now ?? Date.now)());
   const at = new Date((f.now ?? Date.now)()).toISOString();
   return [stamp(f, "note", id, "missionId", missionId), stamp(f, "note", id, "body", body), stamp(f, "note", id, "createdBy", f.nodeId), stamp(f, "note", id, "at", at)];
+}
+
+/** Trimmed, capped text, or the reason it cannot be posted. */
+export function validateNoteText(text: string): { text: string; error: null } | { text: string; error: string } {
+  const trimmed = text.trim();
+  if (!trimmed) return { text: trimmed, error: "Write something first" };
+  if (trimmed.length > MAX_NOTE_CHARS) return { text: trimmed, error: `Notes are at most ${MAX_NOTE_CHARS} characters` };
+  return { text: trimmed, error: null };
+}
+
+const inRange = (lat: number, lon: number) => Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+
+/** One LWW op per set field; `species` and `sightingId` are left out when absent, never written as null. */
+export function createFieldNoteOps(f: OpFactory, fields: FieldNoteFields, id: string = uuidv7((f.now ?? Date.now)())): { id: string; ops: Op[] } {
+  const { text, error } = validateNoteText(fields.text);
+  if (error) throw new Error(error);
+  if (!inRange(fields.lat, fields.lon)) throw new Error("Pick a place on the map first");
+  const set: [string, unknown][] = [
+    ["text", text],
+    ["lat", fields.lat],
+    ["lon", fields.lon],
+    ["createdBy", fields.createdBy],
+    ["callsign", fields.callsign],
+    ["createdAt", fields.createdAt],
+  ];
+  if (fields.species !== undefined) set.push(["species", fields.species]);
+  if (fields.sightingId !== undefined) set.push(["sightingId", fields.sightingId]);
+  return { id, ops: set.map(([field, value]) => stamp(f, "note", id, field, value)) };
+}
+
+export function editFieldNoteOp(f: OpFactory, noteId: string, text: string): Op {
+  const v = validateNoteText(text);
+  if (v.error) throw new Error(v.error);
+  return stamp(f, "note", noteId, "text", v.text);
+}
+
+export function deleteFieldNoteOp(f: OpFactory, noteId: string): Op {
+  return stamp(f, "note", noteId, DELETED_FIELD, true);
 }
 
 /** Grow-only counter: `value` is this node's running total for the mission (PLAN.md C5). */
@@ -199,6 +261,33 @@ export function toNote(e: EntityView): Note | null {
   return { id: e.id, missionId: f.missionId, body: f.body, createdBy: str(f.createdBy), at: str(f.at) };
 }
 
+/** A field note from its merged registers; null for mission notes or rows without text and a place. */
+export function toFieldNote(e: EntityView): FieldNote | null {
+  const f = e.fields;
+  const lat = num(f.lat);
+  const lon = num(f.lon);
+  if (typeof f.text !== "string" || lat === null || lon === null || !inRange(lat, lon)) return null;
+  return {
+    id: e.id,
+    text: f.text.slice(0, MAX_NOTE_CHARS),
+    lat,
+    lon,
+    species: isSpecies(f.species) ? f.species : null,
+    sightingId: typeof f.sightingId === "string" && f.sightingId ? f.sightingId : null,
+    createdBy: str(f.createdBy),
+    callsign: str(f.callsign),
+    createdAt: str(f.createdAt),
+  };
+}
+
+/** Field notes newest first: by `createdAt`, then id (uuidv7 sorts by time too). */
+export function fieldNotes(notes: readonly EntityView[]): FieldNote[] {
+  return notes
+    .map(toFieldNote)
+    .filter((n): n is FieldNote => n !== null)
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+}
+
 export type Totals = { overall: number; bySpecies: Record<Species, number> };
 
 /** Merged removal totals per species and overall, over live missions. */
@@ -213,11 +302,11 @@ export function totals(missions: readonly Mission[], removals: Readonly<Record<s
   return { overall, bySpecies };
 }
 
-export type BoardModel = { missions: Mission[]; notes: Note[]; messages: MessageView[]; removals: Record<string, number>; totals: Totals };
+export type BoardModel = { missions: Mission[]; notes: Note[]; fieldNotes: FieldNote[]; messages: MessageView[]; removals: Record<string, number>; totals: Totals };
 
-/** Everything the panel renders, derived once per board change. Missions newest first (uuidv7 sorts by time). */
+/** Everything the panel renders, derived once per board change. Missions and field notes newest first. */
 export function boardModel(view: BoardView): BoardModel {
   const missions = view.missions.map(toMission).filter((m): m is Mission => m !== null).sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   const notes = view.notes.map(toNote).filter((n): n is Note => n !== null);
-  return { missions, notes, messages: view.messages, removals: view.removals, totals: totals(missions, view.removals) };
+  return { missions, notes, fieldNotes: fieldNotes(view.notes), messages: view.messages, removals: view.removals, totals: totals(missions, view.removals) };
 }

@@ -16,6 +16,8 @@ describe("SELECTION", () => {
     });
     expect(parseEvidenceId("hotspot:python:120:44:1759262400000")?.kind).toBe("hotspot");
     expect(parseEvidenceId("backtest:python:14")).toEqual({ kind: "backtest", key: "python:14" });
+    // Field notes (T43) are board entities, not Axum evidence, but they carry C14 ids like everything else.
+    expect(parseEvidenceId("note:0199a1b2-0001-7000-8000-000000000001")).toEqual({ kind: "note", key: "0199a1b2-0001-7000-8000-000000000001" });
   });
 
   test("parseEvidenceId rejects unknown kinds and empty parts", () => {

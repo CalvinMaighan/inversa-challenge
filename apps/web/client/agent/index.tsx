@@ -41,7 +41,8 @@ import { agentPhase, voiceIsLive } from "./phase";
 /** localStorage key: the first-visit hint was dismissed or a question was asked. */
 export const HINT_STORAGE_KEY = "inversa:chat-hint-seen";
 
-const TAB_LABEL: Record<AgentTab, string> = { agent: "Agent", board: "Missions" };
+/** The board tab reads "Notes" (T43): field notes first, crew missions behind a disclosure inside it. */
+const TAB_LABEL: Record<AgentTab, string> = { agent: "Agent", board: "Notes" };
 const TABS: readonly AgentTab[] = ["agent", "board"];
 /** A handle press that moves less than this is a tap (cycle snaps), not a drag. */
 const TAP_SLOP_PX = 6;
@@ -103,8 +104,8 @@ export function setSheet(sheet: SheetSnap): void {
 const NO_BOARD = cell<BoardModel | null>(null);
 
 /**
- * Unread dots: the Agent tab lights when an answer (typed or voice) finishes behind Missions; the Missions tab
- * lights on mission ops, notes, removals or team chat behind Agent. The first signature is the baseline.
+ * Unread dots: the Agent tab lights when an answer (typed or voice) finishes behind Notes; the Notes tab lights
+ * on field notes, mission ops, removals or team chat behind Agent. The first signature is the baseline.
  */
 function useUnreadTracking(agentSignature: string): void {
   const team = useCell(teamCell);
@@ -128,8 +129,9 @@ function useUnreadTracking(agentSignature: string): void {
 }
 
 /**
- * The chat column (PRD §12 "Layout", T40): always open left of the globe, with Agent and Missions tabs. The
- * Agent tab is the field agent's thread and composer (typed and voice), the Missions tab the team board. The
+ * The chat column (PRD §12 "Layout", T40): always open left of the globe, with Agent and Notes tabs. The
+ * Agent tab is the field agent's thread and composer (typed and voice), the Notes tab the team board (field
+ * notes, chat, presence, crew missions). The
  * right edge drags (or arrow-keys) between 360 and 560 px, remembered per browser. Under 768 px it becomes a
  * bottom sheet over the globe: a composer bar when collapsed, dragged or tapped up to half or full height.
  */
@@ -160,7 +162,8 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
     });
   }, []);
 
-  // MISSIONS.panelOpen mirrors the Missions tab; a mission clicked on the globe opens the tab (and the sheet).
+  // MISSIONS.panelOpen mirrors the Notes tab; a mission clicked on the globe, or "Add note about this sighting",
+  // opens the tab (and the sheet).
   useEffect(() => {
     const syncFromMissions = () => {
       const open = get<MissionsState>(MISSIONS)?.panelOpen === true;

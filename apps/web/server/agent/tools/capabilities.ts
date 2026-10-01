@@ -20,6 +20,7 @@ import {
 } from "@/server/agent/tools/evidence";
 import { lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWithFeeds, toFeedState, type GqlFeedState } from "@/server/agent/tools/gql";
+import { notes } from "@/server/agent/tools/notes";
 import {
   alertsView,
   backtestView,
@@ -775,6 +776,7 @@ export function buildAgentRegistry(): CapabilityRegistry {
     .register(explainCell)
     .register(backtest)
     .register(feedState)
+    .register(notes)
     .register(setView);
 }
 

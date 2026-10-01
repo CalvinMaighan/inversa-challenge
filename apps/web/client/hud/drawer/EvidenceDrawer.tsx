@@ -10,7 +10,8 @@ import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
-import { evidenceBadges, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
+import NoteCard, { AddNoteButton } from "../notes/NoteCard";
+import { evidenceBadges, evidenceLocation, loadEvidence, parseBacktestId, parseHotspotId, recordRevisions, type BadgeGroup, type Evidence } from "./evidence";
 import { BacktestPanel, ExplainPanel } from "./HotspotPanels";
 import JsonTree from "./JsonTree";
 import { useLoad } from "./use-load";
@@ -242,6 +243,17 @@ function Record({ evidence }: { evidence: Evidence }) {
   );
 }
 
+/** "Add note about this sighting" (T43), small and under the id: prefills the Notes composer with its place. */
+function SightingNoteAction({ id, evidence }: { id: string; evidence: Evidence }) {
+  const at = evidenceLocation(evidence.record);
+  if (!at) return null;
+  return (
+    <Section>
+      <AddNoteButton sightingId={id.slice("sighting:".length)} lon={at.lon} lat={at.lat} />
+    </Section>
+  );
+}
+
 /**
  * Evidence drawer (PRD §3 flow 2): opens on `SELECTION.evidenceId` and shows the normalized record, the raw
  * payload as fetched, source link, fetch time, ingest lag, feed state, and duplicate / revision / conflict
@@ -252,8 +264,10 @@ export default function EvidenceDrawer() {
   const open = isDrawerOpen(selection);
   const id = open ? selection!.evidenceId! : null;
   const [backtestFor, setBacktestFor] = useState<string | null>(null);
-  const state = useLoad(id, () => loadEvidence(id!));
   const kind = id ? id.slice(0, id.indexOf(":")) : "";
+  // Field notes (T43) are not Axum evidence: the card reads the local board, so nothing is requested for them.
+  const note = kind === "note" ? id!.slice("note:".length) : null;
+  const state = useLoad(note ? null : id, () => loadEvidence(id!));
   const hotspot = id ? parseHotspotId(id) : null;
   const backtest = id ? parseBacktestId(id) : null;
   const showBacktest = hotspot !== null && backtestFor === id;
@@ -282,6 +296,8 @@ export default function EvidenceDrawer() {
           {id}
         </Mono>
       </Section>
+      {note && <NoteCard id={note} />}
+      {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
       {hotspot && (
         <Section>
           {showBacktest ? (

@@ -7,10 +7,15 @@ import {
   boardModel,
   bumpCounter,
   counterKey,
+  createFieldNoteOps,
   createMissionOps,
   createNoteOps,
+  deleteFieldNoteOp,
   deleteMissionOp,
+  editFieldNoteOp,
+  fieldNotes,
   formFromHotspot,
+  MAX_NOTE_CHARS,
   MAX_TITLE_CHARS,
   memoryCounterStore,
   messageOp,
@@ -19,10 +24,12 @@ import {
   readCounter,
   removalOp,
   setStatusOp,
+  toFieldNote,
   toMission,
   totals,
   uuidv7,
   validateMissionForm,
+  validateNoteText,
   type MissionForm,
   type OpFactory,
 } from "client/hud/missions/board";
@@ -117,6 +124,88 @@ describe("op builders", () => {
     expect(view.removals).toEqual({ [id]: 3 }); // per-node max, not a sum of this node's own ops
     const gone = viewBoard(applyOps(createState("everglades"), [...ops, ...later, deleteMissionOp(f, id)]));
     expect(gone.missions).toEqual([]);
+  });
+});
+
+describe("field note ops (T43)", () => {
+  const fields = (over: Partial<Parameters<typeof createFieldNoteOps>[1]> = {}) => ({
+    text: "Two tegus by the canal gate",
+    lat: 25.4687,
+    lon: -80.4776,
+    createdBy: "node-a",
+    callsign: "Ranger-A",
+    createdAt: "2026-09-30T12:00:00.000Z",
+    ...over,
+  });
+
+  test("create: one valid LWW op per set field on the note entity; optional fields are left out, not nulled", () => {
+    const f = factory();
+    const { id, ops } = createFieldNoteOps(f, fields());
+    expect(ops.map((o) => o.field).sort()).toEqual(["callsign", "createdAt", "createdBy", "lat", "lon", "text"]);
+    for (const o of ops) {
+      expect(validateOp(o, "everglades")).toBeNull();
+      expect(o).toMatchObject({ entity: "note", entityId: id, nodeId: "node-a", boardId: "everglades" });
+    }
+    expect(new Set(ops.map((o) => o.id)).size).toBe(ops.length);
+    const tagged = createFieldNoteOps(f, fields({ species: TEGU, sightingId: "77" }));
+    expect(tagged.ops.map((o) => o.field)).toContain("species");
+    expect(tagged.ops.map((o) => o.field)).toContain("sightingId");
+    const view = viewBoard(applyOps(createState("everglades"), [...ops, ...tagged.ops]));
+    expect(view.notes).toHaveLength(2);
+    expect(toFieldNote(view.notes.find((n) => n.id === id)!)).toEqual({ id, text: "Two tegus by the canal gate", lat: 25.4687, lon: -80.4776, species: null, sightingId: null, createdBy: "node-a", callsign: "Ranger-A", createdAt: "2026-09-30T12:00:00.000Z" });
+    expect(toFieldNote(view.notes.find((n) => n.id === tagged.id)!)).toMatchObject({ species: TEGU, sightingId: "77" });
+  });
+
+  test("validation: empty text, the 500-character cap, and a missing place are refused before any op exists", () => {
+    expect(validateNoteText("   ").error).toBe("Write something first");
+    expect(validateNoteText("x".repeat(MAX_NOTE_CHARS)).error).toBeNull();
+    expect(validateNoteText("x".repeat(MAX_NOTE_CHARS + 1)).error).toMatch(/500 characters/);
+    expect(validateNoteText("  trims  ").text).toBe("trims");
+    const f = factory();
+    expect(() => createFieldNoteOps(f, fields({ text: "" }))).toThrow("Write something first");
+    expect(() => createFieldNoteOps(f, fields({ text: "x".repeat(MAX_NOTE_CHARS + 1) }))).toThrow(/500/);
+    expect(() => createFieldNoteOps(f, fields({ lat: Number.NaN }))).toThrow(/Pick a place/);
+    expect(() => createFieldNoteOps(f, fields({ lon: 181 }))).toThrow(/Pick a place/);
+    expect(() => editFieldNoteOp(f, "n", " ")).toThrow("Write something first");
+  });
+
+  test("edit: a later text op wins; an older one that arrives late does not; the view caps a stored overlong text", () => {
+    const f = factory();
+    const { id, ops } = createFieldNoteOps(f, fields());
+    f.t += 10;
+    const edit = editFieldNoteOp(f, id, "Three tegus by the canal gate");
+    const stale: Op = { ...edit, id: "stale-op", hlc: "1600000000000:0:node-z", value: "older text" };
+    const view = viewBoard(applyOps(createState("everglades"), [...ops, edit, stale]));
+    expect(toFieldNote(view.notes[0]!)!.text).toBe("Three tegus by the canal gate");
+    const long = viewBoard(applyOps(createState("everglades"), [...ops, { ...edit, id: "long-op", value: "y".repeat(900) }]));
+    expect(toFieldNote(long.notes[0]!)!.text).toHaveLength(MAX_NOTE_CHARS);
+  });
+
+  test("delete: the tombstone hides the note; an edit that arrives after it does not resurrect it", () => {
+    const f = factory();
+    const { id, ops } = createFieldNoteOps(f, fields());
+    f.t += 10;
+    const gone = deleteFieldNoteOp(f, id);
+    expect(gone).toMatchObject({ entity: "note", entityId: id, field: "_deleted", value: true });
+    f.t += 10;
+    const late = editFieldNoteOp(f, id, "edited after delete");
+    expect(viewBoard(applyOps(createState("everglades"), [...ops, gone])).notes).toEqual([]);
+    expect(viewBoard(applyOps(createState("everglades"), [...ops, late, gone])).notes).toEqual([]);
+    expect(viewBoard(applyOps(createState("everglades"), [...ops, gone, late])).notes).toEqual([]);
+  });
+
+  test("ordering and separation: field notes newest first by createdAt; mission notes and placeless rows are not field notes", () => {
+    const f = factory();
+    const first = createFieldNoteOps(f, fields({ createdAt: "2026-09-30T10:00:00.000Z", text: "first" }));
+    const second = createFieldNoteOps(f, fields({ createdAt: "2026-09-30T11:00:00.000Z", text: "second" }));
+    const { id: missionId, ops: missionOps } = createMissionOps(f, missionFieldsFromForm(form(), f.nodeId));
+    const state = applyOps(createState("everglades"), [...second.ops, ...first.ops, ...missionOps, ...createNoteOps(f, missionId, "bring the long hook")]);
+    const model = boardModel(viewBoard(state));
+    expect(model.fieldNotes.map((n) => n.text)).toEqual(["second", "first"]);
+    expect(model.notes.map((n) => n.body)).toEqual(["bring the long hook"]);
+    expect(fieldNotes([{ id: "x", fields: { text: "no place" } }])).toEqual([]);
+    expect(fieldNotes([{ id: "x", fields: { text: "bad place", lat: 99, lon: 0 } }])).toEqual([]);
+    expect(fieldNotes([{ id: "x", fields: { text: 7, lat: 25, lon: -80 } }])).toEqual([]);
   });
 });
 

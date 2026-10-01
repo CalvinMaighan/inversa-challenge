@@ -160,7 +160,7 @@ describe("ui command handler", () => {
     expect(hud.camera.place).toBe("Key West");
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
-    expect(hud.layers).toEqual(["sightings", "hotspots", "stations", "alerts", "missions", "peers"]);
+    expect(hud.layers).toEqual(["sightings", "hotspots", "stations", "alerts", "missions", "peers", "notes"]);
     expect(hud.species).toEqual(["python", "tegu", "lionfish"]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");
   });

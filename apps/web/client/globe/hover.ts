@@ -48,9 +48,20 @@ export type HotspotFacts = {
   score: number;
 };
 
-export type HoverFacts = StationFacts | SightingFacts | AlertFacts | HotspotFacts;
+export type NoteFacts = {
+  kind: "note";
+  /** The note's board entity id. */
+  id: string;
+  callsign: string;
+  /** Plain text, as written. */
+  text: string;
+  lon: number;
+  lat: number;
+};
+
+export type HoverFacts = StationFacts | SightingFacts | AlertFacts | HotspotFacts | NoteFacts;
 
 /** Facts with a fixed place, so the tooltip can anchor to the marker instead of the pointer. */
 export function anchorOf(facts: HoverFacts): { lon: number; lat: number } | null {
-  return facts.kind === "station" || facts.kind === "sighting" ? { lon: facts.lon, lat: facts.lat } : null;
+  return facts.kind === "station" || facts.kind === "sighting" || facts.kind === "note" ? { lon: facts.lon, lat: facts.lat } : null;
 }

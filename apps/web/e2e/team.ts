@@ -1,189 +1,27 @@
 /**
- * Team realtime browser gates (gates/leaf-T21.md G2, G3) against the real stack:
+ * Team realtime browser gates (gates/leaf-T21.md G2, G3) against the real stack (e2e/dev-stack.ts: `wrangler
+ * dev --local`, a real Axum, `next dev`, all on free ports), so `applyOps`, `opsSince` and the `ops`
+ * subscription are the production code.
  *
- *   - `wrangler dev --local` for the signal Worker on a free port, allowing the page's origin;
- *   - a real Axum (`cargo run --release`) on a free port with a temp INVERSA_DATA_DIR and INVERSA_SOURCES=off,
- *     so `applyOps`, `opsSince` and the `ops` subscription are the production code;
- *   - `next dev` on a free port proxying /v1 to it.
- *
- * Free ports throughout, so a developer's own `bun run dev` (3050, 8799) keeps running. Two Playwright
- * contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops page and switch
- * the chat column to its Missions tab. A edits through the panel, B is watched by a MutationObserver; both timestamps come from the same
- * machine clock. 20 chat lines over RTC, then 20 more with peer traffic blocked (`window.__team.blockRtc`)
- * so they ride applyOps → Axum → the WebSocket. Then concurrent removal logging from both contexts must sum,
- * and an edit made while B is offline must converge after it reconnects.
+ * Two Playwright contexts (separate storage: two identities, two db workers, one WebRTC mesh) open the ops page
+ * and switch the chat column to its Notes tab, where the crew missions sit behind a disclosure (T43). A edits
+ * through the panel, B is watched by a MutationObserver; both timestamps come from the same machine clock.
+ * 20 chat lines over RTC, then 20 more with peer traffic blocked (`window.__team.blockRtc`) so they ride
+ * applyOps → Axum → the WebSocket. Then concurrent removal logging from both contexts must sum, and an edit made
+ * while B is offline must converge after it reconnects.
  *
  * Prints `TEAM rtc_p50=<ms> ws_p50=<ms> converged=1` and `COUNTERS-OK OFFLINE-OK` on success.
  */
-import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { chromium, type BrowserContext, type Page } from "playwright";
 
-const APP_DIR = join(import.meta.dir, "..");
-const REPO_DIR = join(APP_DIR, "../..");
-const SIGNAL_DIR = join(REPO_DIR, "apps/signal-worker");
-const WRANGLER = "wrangler@4.145.0";
-/** Free ports, never the developer's own `bun run dev` (next on 3050, the signal Worker on 8799). */
-const SIGNAL_PORT = freePort();
-const NEXT_PORT = freePort(SIGNAL_PORT);
-const SIGNAL_URL = `http://127.0.0.1:${SIGNAL_PORT}`;
-const PAGE = `http://127.0.0.1:${NEXT_PORT}/`;
+import { fail, openBoard, openCrewMissions, sleep, startDevStack, tail, watchFor, type DevStack } from "./dev-stack";
+
 const EDITS = 20;
 const REMOVALS_EACH = 5;
-const READY_TIMEOUT_MS = 240_000;
 const RTC_TIMEOUT_MS = 90_000;
 const CONVERGE_TIMEOUT_MS = 60_000;
 
-const scratch = mkdtempSync(join(tmpdir(), "team-e2e-"));
 const log = (...args: unknown[]) => console.error("[e2e:team]", ...args);
-
-function fail(msg: string): never {
-  throw new Error(msg);
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** A port the OS says is free, other than `not`. */
-function freePort(not?: number): number {
-  for (;;) {
-    const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-    const port = probe.port!;
-    probe.stop(true);
-    if (port !== not) return port;
-  }
-}
-
-async function portBusy(port: number): Promise<boolean> {
-  try {
-    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) });
-    return true;
-  } catch (err) {
-    return err instanceof Error && err.name === "TimeoutError";
-  }
-}
-
-// ---- processes --------------------------------------------------------------------------------------
-
-type Proc = { name: string; child: ChildProcess; logPath: string; stop(): Promise<void> };
-
-function start(name: string, cmd: string, args: string[], cwd: string, env: Record<string, string | undefined>): Proc {
-  const logPath = join(scratch, `${name}.log`);
-  const fd = openSync(logPath, "a");
-  const child = spawn(cmd, args, { cwd, detached: true, stdio: ["ignore", fd, fd], env: { ...process.env, ...env } });
-  let exited = false;
-  const exitedPromise = new Promise<void>((resolve) => child.once("exit", () => ((exited = true), resolve())));
-  return {
-    name,
-    child,
-    logPath,
-    async stop() {
-      if (exited || child.pid === undefined) return;
-      try {
-        process.kill(-child.pid, "SIGTERM");
-      } catch {}
-      const killer = setTimeout(() => {
-        try {
-          process.kill(-child.pid!, "SIGKILL");
-        } catch {}
-      }, 5_000);
-      await exitedPromise;
-      clearTimeout(killer);
-    },
-  };
-}
-
-const tail = (p: Proc, n = 40) => {
-  try {
-    return readFileSync(p.logPath, "utf8").split("\n").slice(-n).join("\n");
-  } catch {
-    return "";
-  }
-};
-
-async function waitFor(what: string, probe: () => Promise<boolean>, timeoutMs: number, dead?: () => boolean): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (dead?.()) fail(`${what}: process exited`);
-    if (await probe()) return;
-    await sleep(300);
-  }
-  fail(`${what}: not ready after ${timeoutMs / 1000}s`);
-}
-
-async function startSignal(): Promise<Proc> {
-  const p = start("signal", "bunx", [WRANGLER, "dev", "--local", "--env", "dev", "--port", String(SIGNAL_PORT), "--ip", "127.0.0.1", "--persist-to", join(scratch, "wrangler-state"), "--var", `ALLOWED_ORIGIN:http://127.0.0.1:${NEXT_PORT}`], SIGNAL_DIR, {
-    WRANGLER_SEND_METRICS: "false",
-  });
-  await waitFor(
-    "wrangler dev",
-    async () => {
-      try {
-        const res = await fetch(`${SIGNAL_URL}/turn`, { headers: { Origin: `http://127.0.0.1:${NEXT_PORT}` }, signal: AbortSignal.timeout(1000) });
-        return res.ok;
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => p.child.exitCode !== null,
-  );
-  return p;
-}
-
-async function startApi(): Promise<{ proc: Proc; port: number }> {
-  const port = freePort();
-  const proc = start("api", "cargo", ["run", "-q", "--release", "--manifest-path", join(REPO_DIR, "api/Cargo.toml")], REPO_DIR, {
-    INVERSA_DATA_DIR: join(scratch, "data"),
-    INVERSA_SOURCES: "off",
-    INVERSA_BIND: `127.0.0.1:${port}`,
-    RUST_LOG: "info",
-  });
-  await waitFor(
-    "axum",
-    async () => {
-      try {
-        return (await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok;
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => proc.child.exitCode !== null,
-  );
-  return { proc, port };
-}
-
-async function startNext(apiPort: number): Promise<Proc> {
-  // What `predev` does; then bind next to 127.0.0.1 itself, or Next 16 blocks its own dev chunks as cross-origin.
-  for (const script of ["cesium:copy", "sqlite:copy"]) {
-    const res = Bun.spawnSync(["bun", "run", script], { cwd: APP_DIR, stdout: "pipe", stderr: "pipe" });
-    if (res.exitCode !== 0) fail(`${script}: ${res.stderr.toString()}`);
-  }
-  const proc = start("next", "bun", ["x", "next", "dev", "-p", String(NEXT_PORT), "-H", "127.0.0.1"], APP_DIR, {
-    INVERSA_API_ORIGIN: `http://127.0.0.1:${apiPort}`,
-    NEXT_PUBLIC_INVERSA_WS_URL: `ws://127.0.0.1:${apiPort}/v1/graphql`,
-    NEXT_PUBLIC_SIGNAL_URL: SIGNAL_URL,
-    NEXT_TELEMETRY_DISABLED: "1",
-    BROWSER: "none",
-  });
-  await waitFor(
-    "next dev",
-    async () => {
-      try {
-        const res = await fetch(PAGE, { signal: AbortSignal.timeout(20_000) });
-        return res.ok && (await res.text()).includes("data-shell");
-      } catch {
-        return false;
-      }
-    },
-    READY_TIMEOUT_MS,
-    () => proc.child.exitCode !== null,
-  );
-  return proc;
-}
 
 // ---- page helpers -----------------------------------------------------------------------------------
 
@@ -198,19 +36,14 @@ const pageErrors = new Map<string, string[]>();
 /** Pages whose browser refused to transfer the RTCDataChannel and relayed through main instead. */
 const relayed = new Set<string>();
 
-async function open(ctx: BrowserContext, name: string): Promise<Page> {
+async function open(ctx: BrowserContext, name: string, url: string): Promise<Page> {
   const page = await ctx.newPage();
   const errs: string[] = [];
   pageErrors.set(name, errs);
-  page.on("pageerror", (err) => errs.push(err.message));
-  page.on("console", (m) => {
-    if (m.type() === "error") errs.push(m.text());
-    if (/relaying through main/.test(m.text())) relayed.add(name);
+  await openBoard(page, url, errs, (text) => {
+    if (/relaying through main/.test(text)) relayed.add(name);
   });
-  await page.goto(PAGE, { waitUntil: "domcontentloaded" });
-  // The board lives in the chat column's Missions tab (T40); the session starts with the page either way.
-  await page.click('[data-tab="board"]', { timeout: 120_000 });
-  await page.waitForFunction(() => Boolean(window.__team) && document.querySelector('[data-testid="team-panel"][data-ready="1"]') !== null, null, { timeout: 120_000 });
+  await openCrewMissions(page);
   return page;
 }
 
@@ -218,37 +51,6 @@ const nodeId = (page: Page) => page.evaluate(() => window.__team!.nodeId);
 
 async function waitRtc(page: Page, peer: string): Promise<void> {
   await page.waitForFunction((id) => window.__team!.peers().some((p) => p.peerId === id && p.link === "open"), peer, { timeout: RTC_TIMEOUT_MS, polling: 250 });
-}
-
-/** Resolve with the observer's Date.now() once `text` appears inside `selector`. Started before the edit. */
-function watchFor(page: Page, selector: string, text: string, timeoutMs = 30_000): Promise<number> {
-  return page.evaluate(
-    ({ selector, text, timeoutMs }) =>
-      new Promise<number>((resolve, reject) => {
-        const root = document.querySelector(selector);
-        if (!root) {
-          reject(new Error(`no ${selector}`));
-          return;
-        }
-        const hit = () => (root.textContent ?? "").includes(text);
-        if (hit()) {
-          resolve(Date.now());
-          return;
-        }
-        const timer = setTimeout(() => {
-          mo.disconnect();
-          reject(new Error(`timed out waiting for ${JSON.stringify(text)}`));
-        }, timeoutMs);
-        const mo = new MutationObserver(() => {
-          if (!hit()) return;
-          clearTimeout(timer);
-          mo.disconnect();
-          resolve(Date.now());
-        });
-        mo.observe(root, { subtree: true, childList: true, characterData: true });
-      }),
-    { selector, text, timeoutMs },
-  );
 }
 
 /** Type into the chat box and press Enter; `__t0` is stamped by a capture-phase submit listener in the page. */
@@ -295,26 +97,19 @@ async function waitBoard(page: Page, pred: (b: Awaited<ReturnType<typeof board>>
   fail(`${what}: ${JSON.stringify(last).slice(0, 600)}`);
 }
 
-async function serverBoard(apiPort: number): Promise<{ missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> }> {
-  const res = await fetch(`http://127.0.0.1:${apiPort}/v1/graphql`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ query: 'query { board(id: "everglades") { missions { id fields } messages { body } removals } }' }),
-  });
-  const json = (await res.json()) as { data?: { board: { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> } }; errors?: unknown };
-  if (!json.data) fail(`board query: ${JSON.stringify(json.errors)}`);
-  return json.data.board;
-}
+type ServerBoard = { board: { missions: { id: string; fields: Record<string, unknown> }[]; messages: { body: string }[]; removals: Record<string, number> } };
+
+const serverBoard = (stack: DevStack) => stack.graphql<ServerBoard>('query { board(id: "everglades") { missions { id fields } messages { body } removals } }').then((d) => d.board);
 
 // ---- scenario ---------------------------------------------------------------------------------------
 
-async function scenario(apiPort: number): Promise<string[]> {
+async function scenario(stack: DevStack): Promise<string[]> {
   const browser = await chromium.launch({ headless: true, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
   try {
     const ctxA = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const ctxB = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-    const a = await open(ctxA, "A");
-    const b = await open(ctxB, "B");
+    const a = await open(ctxA, "A", stack.page);
+    const b = await open(ctxB, "B", stack.page);
     const [idA, idB] = await Promise.all([nodeId(a), nodeId(b)]);
     if (!idA || !idB || idA === idB) fail(`identities: ${idA} ${idB}`);
     log(`A=${idA.slice(0, 8)} B=${idB.slice(0, 8)}; waiting for the data channel`);
@@ -368,7 +163,7 @@ async function scenario(apiPort: number): Promise<string[]> {
       const overall = await p.textContent('[data-testid="totals-overall"]');
       if (overall !== String(expected)) fail(`${name} overall total ${overall}, expected ${expected}`);
     }
-    const server1 = await serverBoard(apiPort);
+    const server1 = await serverBoard(stack);
     if (server1.removals[missionId] !== expected) fail(`server removals ${JSON.stringify(server1.removals)}`);
     log(`counters: ${expected} on A, B and the server`);
 
@@ -386,7 +181,7 @@ async function scenario(apiPort: number): Promise<string[]> {
     const [fa, fb] = await Promise.all([board(a), board(b)]);
     const canon = (x: Awaited<ReturnType<typeof board>>) => JSON.stringify({ m: x.missions, r: x.removals, msgs: x.messages.map((y) => y.id).sort() });
     if (canon(fa) !== canon(fb)) fail(`boards differ after reconnect:\nA ${canon(fa)}\nB ${canon(fb)}`);
-    const server2 = await serverBoard(apiPort);
+    const server2 = await serverBoard(stack);
     if (server2.missions.find((x) => x.id === missionId)?.fields.status !== "in_progress") fail("server did not get B's offline status change");
     if (server2.messages.length !== fa.messages.length) fail(`server has ${server2.messages.length} messages, clients ${fa.messages.length}`);
     log("offline edit converged on A, B and the server");
@@ -401,30 +196,19 @@ async function scenario(apiPort: number): Promise<string[]> {
 }
 
 async function main(): Promise<number> {
-  for (const port of [SIGNAL_PORT, NEXT_PORT]) {
-    if (await portBusy(port)) {
-      console.log(`port ${port} is already in use; stop that process first`);
-      return 1;
-    }
-  }
-  const procs: Proc[] = [];
+  let stack: DevStack | null = null;
   try {
-    log("starting wrangler dev, axum and next dev");
-    const [signal, api] = await Promise.all([startSignal(), startApi()]);
-    procs.push(signal, api.proc);
-    procs.push(await startNext(api.port));
-    log(`signal ${SIGNAL_URL}, api :${api.port}, next ${PAGE}`);
-    const lines = await scenario(api.port);
+    stack = await startDevStack("team");
+    const lines = await scenario(stack);
     for (const l of lines) console.log(l);
     return 0;
   } catch (err) {
-    for (const p of procs) console.log(`---- ${p.name} log ----\n${tail(p)}`);
+    for (const p of stack?.procs ?? []) console.log(`---- ${p.name} log ----\n${tail(p)}`);
     for (const [name, errs] of pageErrors) if (errs.length) console.log(`---- page ${name} errors ----\n${errs.slice(-20).join("\n")}`);
     console.log(`TEAM-FAIL: ${err instanceof Error ? err.message : String(err)}`);
     return 1;
   } finally {
-    await Promise.all(procs.map((p) => p.stop()));
-    rmSync(scratch, { recursive: true, force: true });
+    await stack?.stop();
   }
 }
 

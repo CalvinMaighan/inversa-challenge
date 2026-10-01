@@ -28,8 +28,8 @@ export type AgentStreamEvent =
   /** Grounding notices, e.g. an unverified citation was stripped. */
   | { type: "debug"; text: string };
 
-/** Evidence ids are `<kind>:<key>` (PLAN.md C14). */
-export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest";
+/** Evidence ids are `<kind>:<key>` (PLAN.md C14). `note:<id>` is a team field note on the CRDT board (T43). */
+export type EvidenceKind = "sighting" | "reading" | "alert" | "fetch" | "hotspot" | "backtest" | "note";
 
 export type AgentStreamRequest = {
   sessionId: string;

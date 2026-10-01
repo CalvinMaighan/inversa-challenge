@@ -24,6 +24,8 @@ describe("layout: unread dots", () => {
     expect(boardActivity(board())).toBe(base);
     expect(boardActivity(board({ missions: [{ id: "m1", status: "active" }] }))).not.toBe(base);
     expect(boardActivity(board({ notes: [{}] }))).not.toBe(base);
+    expect(boardActivity(board({ fieldNotes: [{ id: "n1", text: "two tegus" }] }))).not.toBe(base);
+    expect(boardActivity(board({ fieldNotes: [{ id: "n1", text: "two tegus" }] }))).not.toBe(boardActivity(board({ fieldNotes: [{ id: "n1", text: "three tegus!" }] })));
     expect(boardActivity(board({ messages: [{}] }))).not.toBe(base);
     expect(boardActivity(board({ totals: { overall: 3 } }))).not.toBe(base);
   });

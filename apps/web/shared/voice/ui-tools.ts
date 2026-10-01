@@ -8,7 +8,7 @@ import { z } from "zod";
 const lat = z.number().min(-90).max(90);
 const lon = z.number().min(-180).max(180);
 
-export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers"] as const;
+export const LAYER_IDS = ["sightings", "hotspots", "lst", "sst", "stations", "alerts", "missions", "peers", "notes"] as const;
 export const SPECIES_IDS = ["python", "tegu", "iguana", "lionfish"] as const;
 
 export const uiToolSchemas = {

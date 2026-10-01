@@ -11,6 +11,7 @@ import { C4_GEOMETRY } from "client/globe/geometry";
 import type { GlobeViewer, LayerContext } from "client/globe/layers/types";
 import { LAYERS, type LayersState } from "client/state/layers";
 import { MISSIONS, type MissionsState } from "client/state/missions";
+import type { NotePin } from "client/state/notes";
 import type { Peer } from "client/state/peers";
 import type { FrameMeta } from "client/threads/api";
 import {
@@ -110,6 +111,7 @@ export type ContextState = {
   layers: LayersState;
   missions: MissionsState;
   peers: Peer[];
+  notes: NotePin[];
   gql: (query: string, variables?: Record<string, unknown>) => Promise<unknown>;
   renders: number;
 };
@@ -129,6 +131,7 @@ export function fakeContext(overrides: Partial<ContextState> = {}): LayerContext
     layers: LAYERS.defaults,
     missions: MISSIONS.defaults,
     peers: [],
+    notes: [],
     gql: () => new Promise(() => {}),
     renders: 0,
     ...overrides,
@@ -145,6 +148,7 @@ export function fakeContext(overrides: Partial<ContextState> = {}): LayerContext
     layers: () => state.layers,
     missions: () => state.missions,
     peers: () => state.peers,
+    notes: () => state.notes,
     gql: <T>(query: string, variables?: Record<string, unknown>) => state.gql(query, variables) as Promise<T>,
   };
 }

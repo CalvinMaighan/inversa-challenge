@@ -1,0 +1,30 @@
+{
+  "name": "note-field-delete",
+  "ops": [
+    { "id": "op-0111", "hlc": "1700000000100:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Boat ramp closed", "nodeId": "a" },
+    { "id": "op-0112", "hlc": "1700000000100:1:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lat", "value": 25.1417, "nodeId": "a" },
+    { "id": "op-0113", "hlc": "1700000000100:2:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lon", "value": -80.9237, "nodeId": "a" },
+    { "id": "op-0114", "hlc": "1700000000100:3:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdBy", "value": "a", "nodeId": "a" },
+    { "id": "op-0115", "hlc": "1700000000100:4:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdAt", "value": "2026-09-30T12:00:00.000Z", "nodeId": "a" },
+    { "id": "op-0116", "hlc": "1700000000110:0:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "text", "value": "Iguana carcass on the levee", "nodeId": "b" },
+    { "id": "op-0117", "hlc": "1700000000110:1:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "lat", "value": 25.4553, "nodeId": "b" },
+    { "id": "op-0118", "hlc": "1700000000110:2:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "lon", "value": -80.4902, "nodeId": "b" },
+    { "id": "op-0119", "hlc": "1700000000110:3:b", "boardId": "everglades", "entity": "note", "entityId": "fn2", "field": "sightingId", "value": "7", "nodeId": "b" },
+    { "id": "op-0120", "hlc": "1700000000300:0:b", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "edit that lands after the delete", "nodeId": "b" },
+    { "id": "op-0121", "hlc": "1700000000200:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "_deleted", "value": true, "nodeId": "a" },
+    { "id": "op-0121", "hlc": "1700000000200:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "_deleted", "value": true, "nodeId": "a" }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {
+      "fn2": {
+        "text": "Iguana carcass on the levee",
+        "lat": 25.4553,
+        "lon": -80.4902,
+        "sightingId": "7"
+      }
+    },
+    "messages": [],
+    "removals": {}
+  }
+}

@@ -8,7 +8,7 @@
  * Pure over the layer's `HoverFacts`, the time cursor and, for sightings, the record the evidence cache may
  * already hold (source and exact time).
  */
-import type { AlertFacts, HoverFacts, HotspotFacts, SightingFacts, StationFacts } from "client/globe/hover";
+import type { AlertFacts, HoverFacts, HotspotFacts, NoteFacts, SightingFacts, StationFacts } from "client/globe/hover";
 import { speciesIndexOfTaxon } from "client/globe/species";
 import { QUALITY_CODES } from "shared/frames";
 import { SPECIES_IDS } from "shared/voice/ui-tools";
@@ -112,9 +112,19 @@ function hotspot(f: HotspotFacts): TooltipText {
   return { title: `${name} hotspot`, parts: [`score ${f.score.toFixed(2)}`, "heuristic"] };
 }
 
+/** Note text is shown as written, as a text node (never HTML); the first 80 characters here. */
+const NOTE_PREVIEW_CHARS = 80;
+
+function note(f: NoteFacts): TooltipText {
+  const flat = f.text.replace(/\s+/g, " ").trim();
+  return { title: f.callsign || "Note", parts: [flat.length > NOTE_PREVIEW_CHARS ? `${flat.slice(0, NOTE_PREVIEW_CHARS)}…` : flat] };
+}
+
 /** Tooltip text for a marker. `atMs` is the time cursor (ages read against it, so replay reads right). */
 export function tooltipText(facts: HoverFacts, atMs: number, record: SightingRecordHint | null = null): TooltipText {
   switch (facts.kind) {
+    case "note":
+      return note(facts);
     case "station":
       return station(facts, atMs);
     case "sighting":

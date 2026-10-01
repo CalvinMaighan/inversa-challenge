@@ -8,6 +8,7 @@ import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import { cellCenter, cellFor, parseEvidenceId } from "@/server/agent/tools/evidence";
 import { lookupGazetteer } from "@/server/agent/tools/gazetteer";
 import { dataVersion, resetFeedFieldProbe, toFeedState } from "@/server/agent/tools/gql";
+import { viewOf } from "@/server/agent/tools/views";
 import { startStub } from "@/eval/stub-server";
 import type { AgentStreamEvent } from "@/shared/agent/events";
 
@@ -35,8 +36,37 @@ async function run(name: string, input: unknown): Promise<CapabilityOutput> {
 }
 
 describe("capability tools", () => {
-  test("registry exposes the nine tools", () => {
-    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "set_view"]);
+  test("registry exposes the ten tools", () => {
+    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "feed_state", "notes", "set_view"]);
+  });
+
+  test("notes (T43): one board query, filtered by bbox and window, newest first, as a C17 table with note:<id> ids", async () => {
+    const homestead = { west: -80.56, south: 25.38, east: -80.33, north: 25.56 };
+    const output = await run("notes", { bbox: homestead, hours: 24 });
+    expect(env.stub.requests.map((request) => request.operationName)).toEqual(["AgentNotes"]);
+    expect(env.stub.requests[0]!.variables).toEqual({ id: "everglades" });
+    // Two notes near Homestead inside 24 h; the Flamingo note is outside the box, the older one outside the window,
+    // and the mission note (missionId + body) is not a field note at all.
+    expect(output.count).toBe(2);
+    expect(output.evidence.map((row) => row.id)).toEqual(["note:0194a1b2-0001-7000-8000-000000000001", "note:0194a1b2-0002-7000-8000-000000000002"]);
+    for (const row of output.evidence) expect(parseEvidenceId(row.id)?.kind).toBe("note");
+    expect(output.feeds).toEqual([]);
+    const rows = output.data.rows as { author: string; species: string | null; aboutSighting: string | null; text: string }[];
+    expect(rows[0]).toMatchObject({ author: "Ranger-A1B2", species: "tegu", aboutSighting: null });
+    expect(rows[1]).toMatchObject({ author: "Ranger-B2C3", species: "iguana", aboutSighting: "sighting:7" });
+    expect(output.data.onBoard).toBe(3);
+    const view = viewOf(output)!;
+    expect(view.result?.view).toBe("table");
+    expect(view.highlight).toEqual(output.evidence.map((row) => row.id));
+    const table = view.result as unknown as { rows: { evidenceId: string; note: string; lat: number; lon: number }[] };
+    expect(table.rows[0]).toMatchObject({ evidenceId: "note:0194a1b2-0001-7000-8000-000000000001", lat: 25.4712, lon: -80.4651 });
+    expect(table.rows[0]!.note).toMatch(/^Two tegus/);
+    expect(view.bbox!.west).toBeLessThan(-80.4651);
+
+    // Species filter and a wider window reach the Flamingo note only through the region box.
+    expect((await run("notes", { bbox: homestead, hours: 24, species: "iguana" })).count).toBe(1);
+    expect((await run("notes", { hours: 24 * 7 })).count).toBe(3);
+    await expect(run("notes", { from: "2026-01-16T00:00:00Z", to: "2026-01-15T00:00:00Z" })).rejects.toThrow(/empty/);
   });
 
   test("each data tool makes exactly one GraphQL POST and carries evidence plus feeds", async () => {

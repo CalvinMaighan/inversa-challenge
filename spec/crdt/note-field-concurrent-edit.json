@@ -1,0 +1,26 @@
+{
+  "name": "note-field-concurrent-edit",
+  "ops": [
+    { "id": "op-0131", "hlc": "1700000000100:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Python crossing the levee road", "nodeId": "a" },
+    { "id": "op-0132", "hlc": "1700000000100:1:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lat", "value": 25.7573, "nodeId": "a" },
+    { "id": "op-0133", "hlc": "1700000000100:2:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lon", "value": -80.7664, "nodeId": "a" },
+    { "id": "op-0134", "hlc": "1700000000100:3:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdBy", "value": "a", "nodeId": "a" },
+    { "id": "op-0135", "hlc": "1700000000500:0:b", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Python crossing the levee road, headed east", "nodeId": "b" },
+    { "id": "op-0136", "hlc": "1700000000500:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Python crossing the levee road, about 3 m", "nodeId": "a" },
+    { "id": "op-0137", "hlc": "1700000000400:9:z", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "older wall clock, higher counter, loses", "nodeId": "z" },
+    { "id": "op-0138", "hlc": "1700000000500:0:b", "boardId": "other-board", "entity": "note", "entityId": "fn1", "field": "text", "value": "same id on another board never leaks", "nodeId": "b" }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {
+      "fn1": {
+        "text": "Python crossing the levee road, headed east",
+        "lat": 25.7573,
+        "lon": -80.7664,
+        "createdBy": "a"
+      }
+    },
+    "messages": [],
+    "removals": {}
+  }
+}

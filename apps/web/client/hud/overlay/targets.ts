@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import { get } from "@calvinjs/active-state";
+
 import { AGENT_CHAT, AGENT_HIGHLIGHT, type AgentChatState, type AgentHighlightState, type AgentHighlightTarget } from "client/state/agent";
+import { NOTES, type NotesState } from "client/state/notes";
 import { parseEvidenceId, SELECTION } from "client/state/selection";
 
 import { cellCenter, evidenceLocation, loadEvidence, parseHotspotId } from "../drawer/evidence";
@@ -120,10 +123,14 @@ function isPlaced(id: string): boolean {
   return kind !== undefined && kind !== "fetch" && kind !== "backtest";
 }
 
-/** Location for an id without a request, when the id itself carries it (hotspot cells). */
+/** Location for an id without a request: hotspot cells carry it, field notes are on the board (NOTES.pins). */
 function localLocation(id: string): Located | undefined {
   const hotspot = parseHotspotId(id);
-  return hotspot ? cellCenter(hotspot.col, hotspot.row) : undefined;
+  if (hotspot) return cellCenter(hotspot.col, hotspot.row);
+  const parsed = parseEvidenceId(id);
+  if (parsed?.kind !== "note") return undefined;
+  const pin = get<NotesState>(NOTES)?.pins.find((p) => p.id === parsed.key);
+  return pin ? { lon: pin.lon, lat: pin.lat } : null;
 }
 
 /**
