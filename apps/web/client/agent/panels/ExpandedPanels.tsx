@@ -19,20 +19,36 @@ function paneElement(): Element | null {
   return document.querySelector(GLOBE_PANE_SELECTOR);
 }
 
-/** Window resizes and pane resizes (dragging the column's edge moves the pane without a window resize). */
+/** Window resizes, pane resizes and chat card resizes (dragging its edge moves the room without a window resize). */
 function subscribeLayout(cb: () => void): () => void {
   window.addEventListener("resize", cb);
   const pane = paneElement();
+  const column = document.querySelector("[data-chat-column]");
   const observer = pane && typeof ResizeObserver === "function" ? new ResizeObserver(cb) : null;
   if (pane) observer?.observe(pane);
+  if (column) observer?.observe(column);
   return () => {
     window.removeEventListener("resize", cb);
     observer?.disconnect();
   };
 }
 
-function layoutKey(): string {
+/**
+ * The part of the globe pane the panel may use. On the stage layout (GODS_EYE GC1) the pane fills the page and
+ * the chat card floats over its left side: the room starts right of the card and is kept symmetric about the
+ * pane centre, so "clear of the centre" still means the stage centre.
+ */
+function paneRoom(): DOMRect | null {
   const r = paneElement()?.getBoundingClientRect();
+  if (!r) return null;
+  const column = document.querySelector('[data-chat-column][data-layout="column"]')?.getBoundingClientRect();
+  if (!column || column.right <= r.left || column.left >= r.left + r.width / 2) return r;
+  const centre = r.left + r.width / 2;
+  return new DOMRect(column.right, r.top, Math.max(0, 2 * (centre - column.right)), r.height);
+}
+
+function layoutKey(): string {
+  const r = paneRoom();
   return `${window.innerWidth}x${window.innerHeight}|${r ? `${r.left},${r.top},${r.width},${r.height}` : ""}`;
 }
 

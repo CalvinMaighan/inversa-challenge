@@ -6,18 +6,20 @@ import { CESIUM_BASE_URL } from "client/globe/cesium";
 import Hud from "client/hud";
 import { AppScope } from "client/hud/appselect/AppBoot";
 import MissionsPanel from "client/hud/missions";
-import AppShell from "client/ui/AppShell";
+import StageShell from "client/hud/shell/StageShell";
 
 /**
- * Ops view (T40): the chat column (Agent | Missions) on the left, the globe and its HUD on the right. The column
- * and the HUD remount per app (`AppScope`, PLAN.md C-A5); the globe stays and follows the app's view and layers.
+ * Ops view (T40, docs/GODS_EYE.md GC1): a black page with the globe in a centred circular stage, the chat card
+ * (Agent | Notes) floating at the left, the HUD over the page with the sighting card at the right. Phones keep
+ * the docked sheets. The chat card and the HUD remount per app (`AppScope`, PLAN.md C-A5); the globe stays and
+ * follows the app's view and layers.
  */
 export default function Page() {
   // Cesium (4.7 MB, imported at runtime by the client-only globe) starts downloading and compiling with the HTML
   // instead of after hydration (docs/perf.md, cold load).
   preloadModule(`${CESIUM_BASE_URL}/index.js`, { as: "script" });
   return (
-    <AppShell
+    <StageShell
       side={
         <AppScope>
           <AgentColumn missions={<MissionsPanel />} />

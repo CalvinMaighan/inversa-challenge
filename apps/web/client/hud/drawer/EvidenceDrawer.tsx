@@ -31,6 +31,18 @@ import JsonTree from "./JsonTree";
 import { plainSummary } from "./summary";
 import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
+import { CARD_MAX_WIDTH_CSS, STAGE_MEDIA } from "../shell/geometry";
+
+/** The drawer is the sighting card at the right of the stage (GODS_EYE GC1): its inner edge never reaches the stage centre. */
+const CardScope = styled.div`
+  display: contents;
+
+  ${STAGE_MEDIA} {
+    & > section {
+      max-width: ${CARD_MAX_WIDTH_CSS};
+    }
+  }
+`;
 
 const Section = styled.section`
   margin-bottom: var(--gap-l);
@@ -459,51 +471,53 @@ export default function EvidenceDrawer() {
   const showBacktest = hotspot !== null && backtestFor === id;
 
   return (
-    <Panel
-      side="right"
-      open={open}
-      onClose={closeDrawer}
-      width={400}
-      title={KIND_TITLES[kind] ?? "Record"}
-      tabLabel="Evidence"
-      actions={
-        <>
-          {state.status === "ready" && <SourcePageLink url={state.data.sourcePageUrl} />}
-          <IconButton type="button" onClick={clearSelection} title="Clear selection">
-            Clear
-          </IconButton>
-        </>
-      }
-      data-testid="hud-drawer"
-    >
-      {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
-      {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
-      {note && <NoteCard id={note} />}
-      {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
-      {hotspot && (
-        <Section>
-          {showBacktest ? (
-            <BacktestPanel initialSpecies={hotspot.species} onBack={() => setBacktestFor(null)} />
-          ) : (
-            <ExplainPanel hotspot={hotspot} onBacktest={() => setBacktestFor(id)} />
-          )}
-        </Section>
-      )}
-      {backtest && (
-        <Section>
-          <BacktestPanel key={id} initialSpecies={backtest.species} initialDays={backtest.days} />
-        </Section>
-      )}
-      {state.status === "loading" && <Note>Loading evidence…</Note>}
-      {state.status === "error" && (
-        <Note role="alert">
-          Could not load {id}: {state.error}{" "}
-          <IconButton type="button" onClick={state.retry}>
-            Retry
-          </IconButton>
-        </Note>
-      )}
-      <ExpertDetails id={id} evidence={state.status === "ready" ? state.data : null} />
-    </Panel>
+    <CardScope>
+      <Panel
+        side="right"
+        open={open}
+        onClose={closeDrawer}
+        width={400}
+        title={KIND_TITLES[kind] ?? "Record"}
+        tabLabel="Evidence"
+        actions={
+          <>
+            {state.status === "ready" && <SourcePageLink url={state.data.sourcePageUrl} />}
+            <IconButton type="button" onClick={clearSelection} title="Clear selection">
+              Clear
+            </IconButton>
+          </>
+        }
+        data-testid="hud-drawer"
+      >
+        {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
+        {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
+        {note && <NoteCard id={note} />}
+        {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
+        {hotspot && (
+          <Section>
+            {showBacktest ? (
+              <BacktestPanel initialSpecies={hotspot.species} onBack={() => setBacktestFor(null)} />
+            ) : (
+              <ExplainPanel hotspot={hotspot} onBacktest={() => setBacktestFor(id)} />
+            )}
+          </Section>
+        )}
+        {backtest && (
+          <Section>
+            <BacktestPanel key={id} initialSpecies={backtest.species} initialDays={backtest.days} />
+          </Section>
+        )}
+        {state.status === "loading" && <Note>Loading evidence…</Note>}
+        {state.status === "error" && (
+          <Note role="alert">
+            Could not load {id}: {state.error}{" "}
+            <IconButton type="button" onClick={state.retry}>
+              Retry
+            </IconButton>
+          </Note>
+        )}
+        <ExpertDetails id={id} evidence={state.status === "ready" ? state.data : null} />
+      </Panel>
+    </CardScope>
   );
 }
