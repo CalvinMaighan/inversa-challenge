@@ -36,7 +36,7 @@ Behaviour to preserve: with `app=python` everything the current api tests prove 
 
 - [x] G7: backfill accepts `--app <id>` and writes only that app's DB (`backfill --fixtures --app python` ends with `BACKFILL-OK`); the signal worker accepts `:` in room ids (worker test)
   CHECK: INVERSA_DATA_DIR=$(mktemp -d) cargo run -q --release --manifest-path api/Cargo.toml -- backfill --fixtures --app python 2>&1 | grep -c BACKFILL-OK
-  EXPECT: /^1$/
+  EXPECT: /^\s*1\s*$/m
   EVIDENCE: 1 (run by hand 2026-10-01: last lines "gbif: payloads=1 rows_in=20 written=20 ..." then "BACKFILL-OK", data dir got python/{observations,team}.db; gate-check reports FAIL only because it tests `stdout + "\n" + stderr` against /^1$/ without the m flag, so a bare `1` never matches; signal worker: bun test 36 pass incl. "room ids may carry an app prefix: <app>:main")
 
 - [x] G8: the full api suite, clippy and schema-diff test pass; the test count is at least the previous 219 minus tests deliberately rewritten (state the rewritten ones)
