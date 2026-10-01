@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
+import { useActiveApp } from "client/hud/appselect/use-active-app";
 import styled from "client/styled";
 
 /**
@@ -98,10 +99,12 @@ const Title = styled.h1`
 `;
 
 export default function AppShell({ side, globe, hud }: AppShellSlots) {
+  // The page's heading names the active app (server HTML: the default app).
+  const app = useActiveApp();
   const hasSide = side !== undefined && side !== null;
   return (
     <Main data-shell="">
-      <Title>Everglades Ops</Title>
+      <Title>{app.name}</Title>
       {hasSide ? <SideSlot data-slot="side">{side}</SideSlot> : null}
       <GlobePane data-slot="globe-pane" $sheet={hasSide} style={hasSide ? undefined : { gridColumn: "1 / -1" }}>
         <GlobeLayer data-slot="globe">{globe}</GlobeLayer>

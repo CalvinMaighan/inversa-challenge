@@ -1,5 +1,5 @@
 import type { AgentView } from "@/server/agent/runtime/registry";
-import { copyText, LAYER_IDS, type AppConfig } from "@/shared/apps";
+import { appTimeZone, LAYER_IDS, type AppConfig } from "@/shared/apps";
 import { SIGHTING_WINDOW_HOURS } from "@/shared/frames";
 
 /** Tools named after the layer they fill. */
@@ -66,10 +66,7 @@ function scoreWords(app: AppConfig): string {
   return app.score.components.map((c) => (typeof c === "string" ? c : String((c as { id?: unknown }).id ?? "")).replace(/_/g, " ")).filter(Boolean).join(" × ");
 }
 
-/** IANA zone for local times (`copy.timezone`); Florida's when the config names none. */
-export function appTimeZone(app: AppConfig): string {
-  return copyText(app, "timezone", "America/New_York");
-}
+export { appTimeZone };
 
 function workingMethod(app: AppConfig): string {
   const tools = new Set(app.agent.tools);

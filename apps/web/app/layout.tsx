@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
 import { appBootstrapScript } from "client/state/app";
+import { DEFAULT_APP_ID, getApp } from "shared/apps";
 import { themeBootstrapScript } from "client/themes/bootstrap";
 import { DEFAULT_ACCENT, DEFAULT_MODE } from "client/themes/palette";
 import Providers from "client/ui/Providers";
@@ -22,8 +23,9 @@ const jetbrainsMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Everglades Ops",
-  description: "Where are invasive species active across South Florida right now, and where should removal crews go next?",
+  // The default app's; AppBoot sets the tab title to the active app's name.
+  title: getApp(DEFAULT_APP_ID).name,
+  description: getApp(DEFAULT_APP_ID).question,
 };
 
 export const viewport: Viewport = {

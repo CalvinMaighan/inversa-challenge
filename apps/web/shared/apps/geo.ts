@@ -83,6 +83,11 @@ export function copyText(app: AppConfig, key: string, fallback: string): string 
   return typeof v === "string" && v.trim() ? v : fallback;
 }
 
+/** IANA zone of the app's local times (`copy.timezone`); Florida's when the config names none. */
+export function appTimeZone(app: AppConfig): string {
+  return copyText(app, "timezone", "America/New_York");
+}
+
 /** One line for the legend header: the legend string, or its `title`. */
 export function legendTitle(app: AppConfig): string | null {
   const l = app.legend;

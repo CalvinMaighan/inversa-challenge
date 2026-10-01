@@ -17,7 +17,7 @@ import { TAXA, taxonName, type TaxaState, type TaxonInfo } from "client/state/ta
 import { QUALITY_CODES } from "shared/frames";
 
 import { feedLabel } from "../topbar/feed-chips";
-import { REGION_TIME_ZONE } from "../topbar/clock";
+import { regionTimeZone, zoneFormatter } from "../topbar/clock";
 
 export type TooltipText = {
   /** Bold lead: what the marker is. */
@@ -58,7 +58,9 @@ const PARAMS: Record<string, { label: string; unit: string; digits: number }> = 
   WIND_MS: { label: "wind", unit: "m/s", digits: 1 },
 };
 
-const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: REGION_TIME_ZONE, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const tooltipFmt = (timeZone: string) => new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+/** Times in the active app's zone. */
+const timeFmt = { format: (d: Date) => zoneFormatter("tooltip", regionTimeZone(), tooltipFmt).format(d) };
 
 /** `12 min ago`, `2 h ago`, `3 d ago`; `just now` under a minute; `in 5 min` for times after `atMs`. */
 export function ago(ms: number, atMs: number): string {

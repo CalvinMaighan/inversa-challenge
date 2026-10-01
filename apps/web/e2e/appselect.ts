@@ -18,7 +18,8 @@
  *   5. keyboard only: Enter opens, the current app has focus, ArrowDown moves, Enter picks python (keyboard);
  *   6. Escape closes the popover and focus is back on the button; after a pick focus is on the new button
  *      (focus_return);
- *   7. no `/v1` request without an app prefix (APPSELECT-PREFIX);
+ *   7. no `/v1` request without an app prefix (APPSELECT-PREFIX); axe-core finds no violation in the open
+ *      popover (dark, light, phone);
  *   8. screenshots: docs/evidence/appselect-dark.png, appselect-light.png (1440×900) and appselect-mobile.png
  *      (375×812, dark).
  *
@@ -127,6 +128,18 @@ async function openPopover(page: Page): Promise<void> {
   await page.waitForFunction(() => [...document.querySelectorAll("[data-app-option]")].every((el) => el.getAttribute("data-health") !== "unknown"), undefined, { timeout: 10_000 });
 }
 
+const AXE_PATH = Bun.resolveSync("axe-core/axe.min.js", APP_DIR);
+
+/** axe-core over the open popover and its button: violations as `rule@target` strings. */
+async function axePopover(page: Page): Promise<string[]> {
+  if (!(await page.evaluate(() => "axe" in window))) await page.addScriptTag({ path: AXE_PATH });
+  return page.evaluate(async () => {
+    const axe = (window as unknown as { axe: { run: (ctx: object, opts: object) => Promise<{ violations: { id: string; nodes: { target: string[] }[] }[] }> } }).axe;
+    const res = await axe.run({ include: [['[data-testid="app-select-popover"]'], ['[data-testid="app-select-button"]']] }, { resultTypes: ["violations"] });
+    return res.violations.flatMap((v) => v.nodes.map((n) => `${v.id}@${n.target.join(" ")}`));
+  });
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   mkdirSync(SHOT_DIR, { recursive: true });
   const file = path.join(SHOT_DIR, name);
@@ -196,6 +209,8 @@ async function main(): Promise<string> {
       if (row.health !== HEALTH[id]) fail(`${id} health ${row.health}, /health says ${HEALTH[id]}`);
     }
     if (rows.find((r) => r.current === "true")?.id !== "carp") fail("carp is not marked current");
+    const axeDark = await axePopover(page);
+    if (axeDark.length) fail(`axe (dark): ${axeDark.join(", ")}`);
     await shot(page, "appselect-dark.png");
 
     // 3. Switch to lionfish, timed in the page.
@@ -288,6 +303,8 @@ async function main(): Promise<string> {
     await ready(lightPage, "python");
     if ((await lightPage.evaluate(() => document.documentElement.dataset.theme)) !== "light") fail("light theme not applied");
     await openPopover(lightPage);
+    const axeLight = await axePopover(lightPage);
+    if (axeLight.length) fail(`axe (light): ${axeLight.join(", ")}`);
     await shot(lightPage, "appselect-light.png");
     await light.close();
 
@@ -298,6 +315,9 @@ async function main(): Promise<string> {
     await openPopover(phonePage);
     const box = await phonePage.locator(POPOVER).boundingBox();
     if (!box || box.x < 0 || box.x + box.width > 375) fail(`phone popover off screen: ${JSON.stringify(box)}`);
+    const axePhone = await axePopover(phonePage);
+    if (axePhone.length) fail(`axe (phone): ${axePhone.join(", ")}`);
+    log("axe: 0 violations in the popover (dark, light, phone)");
     await shot(phonePage, "appselect-mobile.png");
     await phone.close();
 
