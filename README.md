@@ -30,7 +30,7 @@ bun run dev       # Axum on 127.0.0.1:4041, Next on http://localhost:3050, signa
 
 Open http://localhost:3050. It opens on carp; `?app=lionfish` or `?app=python` opens the others, or use the app selector.
 
-- `bun run dev` needs ports 4041, 3050 and 8799 free. `INVERSA_DATA_DIR` moves the databases (default `./data`, git-ignored; one folder per app). `INVERSA_SOURCES=off` stops all fetching.
+- `bun run dev` needs ports 4041, 3050 and 8799 free (`INVERSA_API_PORT`, `INVERSA_WEB_PORT`, `INVERSA_SIGNAL_PORT` move them). It loads `data/local-keys.env` under the shell and Doppler and restarts the API and web when that file changes. `INVERSA_DATA_DIR` moves the databases (default `./data`, git-ignored; one folder per app). `INVERSA_SOURCES=off` stops all fetching.
 - Offline, load the recorded fixtures instead of the live backfill, one app at a time:
 
   ```sh
@@ -49,17 +49,23 @@ Open http://localhost:3050. It opens on carp; `?app=lionfish` or `?app=python` o
 | `bun run check:questions` | validates the three question files and prints their counts |
 | `bun run --cwd apps/web e2e:firstload --app carp` | Playwright on the real stack: what a newcomer sees; `--evidence-shots` also writes `docs/evidence/<app>-desktop.png` and `docs/evidence/mobile/<app>-375.png` |
 
-### Keys (all optional; put them in `.env.local` or Doppler)
+### Keys (all optional; Doppler, the shell, or the Developer panel)
 
-| Variable | Enables | Without it |
-|---|---|---|
-| `OPENROUTER_API_KEY` | the agent: `openai/gpt-6-luna` on OpenRouter | `/api/agent/stream` answers 503 `agent unavailable`; there is no mock or scripted fallback |
-| `XAI_API_KEY` | voice through the grok-voice relay | voice answers 503; text works |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Cesium ion imagery and 3D tiles | keyless Esri imagery |
-| `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | GOES-19 push (python, lionfish) | the GOES feed reads DOWN with the reason |
-| `NWWS_USER`, `NWWS_PASS` | NWS products over NWWS-OI XMPP | `nwws` reads DOWN; the `api.weather.gov` poll covers alerts |
-| `INGEST_HOOK_SECRET`, `INGEST_NUDGE_TOKEN` | the signed ingest webhook and provider nudges | hook and nudges answer 503; feeds still poll |
-| `R2_*` | raw payload archive and Litestream in R2 | raw payloads go to `<data dir>/archive/` |
+The globe runs with no key at all. The **Developer** button (a key, top right) opens "Power up the globe": one row per provider, set or missing, a MANAGE or GET KEY link, and a password field for each missing key. Browser-side keys are stored in that browser's localStorage and never sent to our server. Server-side keys pasted there are written to `data/local-keys.env` (git-ignored, mode 0600) only under `bun run dev` on loopback; `bun run dev` then restarts the API and web with them. A key set in the shell or Doppler wins over that file and shows CONFIGURED EXTERNALLY. Anywhere else the panel shows the `doppler secrets set NAME` command. Step by step: [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) section 14.
+
+| Variable | Where | Get it | Enables | Without it |
+|---|---|---|---|---|
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | browser: Developer panel or build env | https://developers.google.com/maps/documentation/tile/get-api-key (enable Map Tiles API, restrict by HTTP referrer) | Google Photorealistic 3D Tiles direct, tried before ion; capped at 1,000 sessions per browser per month (editable in the panel) | Google 3D through ion, else none |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | browser: Developer panel or build env | https://ion.cesium.com/tokens | Cesium World Terrain, Bing aerial and Google 3D through ion | keyless Esri imagery |
+| `AISSTREAM_API_KEY` | server | https://aisstream.io/apikeys | live ships | the ships layer replays stored history |
+| `OPENROUTER_API_KEY` | server | https://openrouter.ai/settings/keys | the agent: `openai/gpt-6-luna` on OpenRouter | `/api/agent/stream` answers 503 `agent unavailable`; there is no mock or scripted fallback |
+| `XAI_API_KEY` | server | https://console.x.ai/ | voice through the grok-voice relay | voice answers 503; text works |
+| `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | server | AWS console, see docs/HUMAN_STEPS.md section 7 | GOES-19 push (python, lionfish) | the GOES feed reads DOWN with the reason |
+| `NWWS_USER`, `NWWS_PASS` | server | email `NWWS.Issue@noaa.gov`, docs/HUMAN_STEPS.md section 8 | NWS products over NWWS-OI XMPP | `nwws` reads DOWN; the `api.weather.gov` poll covers alerts |
+| `INGEST_HOOK_SECRET`, `INGEST_NUDGE_TOKEN` | server (Doppler) | you choose them | the signed ingest webhook and provider nudges | hook and nudges answer 503; feeds still poll |
+| `R2_*` | server (Doppler) | docs/HUMAN_STEPS.md section 3 | raw payload archive and Litestream in R2 | raw payloads go to `<data dir>/archive/` |
+
+Google bills Map Tiles per root-tileset request after a monthly free allowance. Check the current price at https://developers.google.com/maps/billing-and-pricing/pricing before you enable billing; this README does not state it.
 
 Agent spend is capped per day: $5 across all apps, $2 per app, priced at $0.10/M input and $0.50/M output (`apps/web/server/agent/budget.ts`).
 
@@ -112,6 +118,7 @@ Open the same app in two browser windows. In the **Notes** tab, pick a spot on t
 | Map | More data (for experts) | Inside About: a switch, legend and live count for every layer. |
 | Map | Focus | Inside About: dims the globe outside a circle around the selection. |
 | Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
+| Map | Developer (key) | Top right: "Power up the globe", every API key with set or missing, where to get it and a paste field (see Keys below). |
 | Map | Help | Inside About: opens the help sheet. |
 | Map | Share links | The address bar holds the app, camera, time, layers and selection. |
 | Timeline (species) | Play / pause (Space) | Plays time forward at the chosen speed. |

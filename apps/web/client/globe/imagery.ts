@@ -1,15 +1,30 @@
 /**
  * Applies a `LadderPlan` to a Cesium widget: terrain, one base imagery layer with automatic fallback down the
- * ladder, and the Google Photorealistic 3D tileset while the camera is low over Miami and the Keys.
+ * ladder, and the Google Photorealistic 3D tileset while the camera is low over the app's zone: straight from the
+ * Map Tiles API with the browser's Google key, else (or when that load fails) through ion.
  *
  * Every provider gets its token explicitly; `Ion.defaultAccessToken` (Cesium's shared demo token) is never
- * used. Every request is CORS (ion, Esri, OSM, Google via ion), which is what COEP `require-corp` allows.
+ * used, and the direct route is only called with a key (Cesium would quietly fall back to ion without one).
+ * Every request is CORS (ion, Esri, OSM, tile.googleapis.com), which is what COEP `require-corp` allows.
  */
 import type { Cesium3DTileset, CesiumWidget, ImageryLayer, ImageryProvider } from "cesium";
 
+import type { BBox } from "shared/agent/events";
+
 import { cesium } from "./cesium";
-import { googleZoneActive, ION_ASSETS, nextRung, planLadder, type BaseImagery, type CameraSample, type LadderPlan } from "./ladder";
-import { quotaExhausted, readQuota, recordQuota, type QuotaStore } from "./quota";
+import {
+  GOOGLE_3D_ZONE,
+  googleZoneActive,
+  ION_ASSETS,
+  loadGoogle3d,
+  nextRung,
+  planLadder,
+  type BaseImagery,
+  type CameraSample,
+  type Google3dRoute,
+  type LadderPlan,
+} from "./ladder";
+import { googleCapReached, quotaExhausted, readGoogleQuota, readQuota, recordGoogleSession, recordQuota, type QuotaStore } from "./quota";
 
 export const ESRI_WORLD_IMAGERY_URL = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer";
 export const OSM_TILE_URL = "https://tile.openstreetmap.org/";
@@ -23,6 +38,8 @@ export type ImageryState = {
   base: BaseImagery | null;
   terrain: "world" | "ellipsoid";
   google3d: "off" | "loading" | "shown" | "hidden" | "failed";
+  /** The route the loaded tileset came from. */
+  google3dRoute: Google3dRoute | null;
   errors: string[];
 };
 
@@ -47,13 +64,25 @@ function baseProvider(rung: BaseImagery, token: string): Promise<ImageryProvider
 
 export function installImagery(
   widget: CesiumWidget,
-  opts: { ionToken: string | undefined; quotaStore: QuotaStore | null; now?: () => number; requestRender(): void; onChange?(state: ImageryState): void },
+  opts: {
+    ionToken: string | undefined;
+    /** Browser key for the Map Tiles API (Developer panel or NEXT_PUBLIC_GOOGLE_MAPS_API_KEY). */
+    googleKey?: string | undefined;
+    quotaStore: QuotaStore | null;
+    /** Where Google 3D may show, read on each camera update (the active app can change). Miami/Keys by default. */
+    zones?: () => readonly Readonly<BBox>[];
+    now?: () => number;
+    requestRender(): void;
+    onChange?(state: ImageryState): void;
+  },
 ): ImageryController {
-  const { Cesium3DTileset, CesiumTerrainProvider, ImageryLayer, IonResource } = cesium();
+  const { Cesium3DTileset, CesiumTerrainProvider, ImageryLayer, IonResource, createGooglePhotorealistic3DTileset } = cesium();
   const now = opts.now ?? Date.now;
   const token = (opts.ionToken ?? "").trim();
-  const plan = planLadder({ ionToken: token, quota: readQuota(opts.quotaStore, now()) });
-  const state: ImageryState = { plan, base: null, terrain: "ellipsoid", google3d: "off", errors: [] };
+  const googleKey = (opts.googleKey ?? "").trim();
+  const zones = opts.zones ?? (() => GOOGLE_3D_ZONE);
+  const plan = planLadder({ ionToken: token, quota: readQuota(opts.quotaStore, now()), googleKey, google: readGoogleQuota(opts.quotaStore, now()) });
+  const state: ImageryState = { plan, base: null, terrain: "ellipsoid", google3d: "off", google3dRoute: null, errors: [] };
   const scene = widget.scene;
   let destroyed = false;
   let baseLayer: ImageryLayer | null = null;
@@ -70,7 +99,8 @@ export function installImagery(
     if (state.errors.length > 20) state.errors.shift();
   };
 
-  if (plan.route === "ion") recordQuota(opts.quotaStore, "sessions", now());
+  // An ion imagery session whenever the base layer comes through ion (with or without the direct Google route).
+  if (plan.base === "bing") recordQuota(opts.quotaStore, "sessions", now());
 
   const setBase = (rung: BaseImagery) => {
     if (destroyed) return;
@@ -126,22 +156,40 @@ export function installImagery(
     state.google3d = on ? "shown" : "hidden";
   };
 
+  const tilesetOptions = { showCreditsOnScreen: true, maximumScreenSpaceError: 16 };
+  const loaders: Record<Google3dRoute, () => Promise<Cesium3DTileset>> = {
+    // The quota is re-read at load time: another tab may have used it up since the plan was made.
+    async direct() {
+      if (!googleKey) throw new Error("no Google key");
+      if (googleCapReached(readGoogleQuota(opts.quotaStore, now()))) throw new Error("Google monthly cap near limit");
+      // The root request opens a billed session whether or not the tileset then loads.
+      recordGoogleSession(opts.quotaStore, now());
+      return createGooglePhotorealistic3DTileset({ key: googleKey, onlyUsingWithGoogleGeocoder: true }, tilesetOptions);
+    },
+    async ion() {
+      if (quotaExhausted(readQuota(opts.quotaStore, now()))) throw new Error("ion quota near limit");
+      const loaded = await Cesium3DTileset.fromUrl(await IonResource.fromAssetId(ION_ASSETS.googlePhotorealistic, { accessToken: token }), tilesetOptions);
+      recordQuota(opts.quotaStore, "rootTiles", now());
+      return loaded;
+    },
+  };
+
   const loadGoogle = () => {
     if (state.google3d !== "off") return;
-    if (quotaExhausted(readQuota(opts.quotaStore, now()))) {
-      fail("google3d", "ion quota near limit");
-      state.google3d = "failed";
-      return;
-    }
     state.google3d = "loading";
-    IonResource.fromAssetId(ION_ASSETS.googlePhotorealistic, { accessToken: token })
-      .then((resource) => Cesium3DTileset.fromUrl(resource, { showCreditsOnScreen: true, maximumScreenSpaceError: 16 }))
-      .then((loaded) => {
+    loadGoogle3d(plan, loaders, (route, err) => fail(`google3d ${route}`, err))
+      .then((result) => {
+        if (!result) {
+          state.google3d = "failed";
+          changed();
+          return;
+        }
+        const loaded = result.tileset;
         if (destroyed) {
           loaded.destroy();
           return;
         }
-        recordQuota(opts.quotaStore, "rootTiles", now());
+        state.google3dRoute = result.route;
         tileset = scene.primitives.add(loaded, 0) as Cesium3DTileset;
         const onInitial = () => {
           tilesetReady = true;
@@ -166,7 +214,7 @@ export function installImagery(
     state: () => ({ ...state, errors: [...state.errors] }),
     update(camera) {
       if (destroyed) return;
-      const active = googleZoneActive(plan, camera);
+      const active = googleZoneActive(plan, camera, zones());
       if (active === lastActive && (tileset || !active)) return;
       lastActive = active;
       if (active && !tileset) loadGoogle();

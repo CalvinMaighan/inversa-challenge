@@ -46,13 +46,14 @@ const feed = (source: string, state: FeedState["state"], extra: Partial<FeedStat
 });
 
 describe("status popover", () => {
-  test("status popover: the chrome is two icon buttons with popovers and no visible text", () => {
+  test("status popover: the chrome is three icon buttons (About, Theme, Developer) with dialogs and no visible text", () => {
     const markup = html(<TopBarView focus={false} onFocus={noop} helpOpen={false} onHelp={noop} feeds={[feed("inat", "down")]} mode="dark" onTheme={noop} />);
     const triggers = [...markup.matchAll(/<button[^>]*aria-haspopup="dialog"[^>]*>/g)];
-    expect(triggers).toHaveLength(2);
-    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(2);
+    expect(triggers).toHaveLength(3);
+    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(3);
     expect(markup).toContain('data-testid="status-button"');
     expect(markup).toContain('data-testid="theme-button"');
+    expect(markup).toContain('data-testid="developer-button"');
     expect(textOf(markup)).toBe("");
     // Feeds, theme, focus and help are not on the bar: they live in the popovers.
     for (const gone of ["data-feed", 'role="radiogroup"', "data-help-button", "aria-pressed", "Everglades Ops", "LIVE", "CURSOR"]) expect(markup).not.toContain(gone);
@@ -146,7 +147,8 @@ describe("plain evidence summary", () => {
   test("plain evidence summary: the card leads with it; the raw record and payload sit in a collapsed Details for experts", () => {
     const lead = html(<Summary kind="sighting" evidence={sighting} atMs={NOW} />);
     expect(lead).toContain("<h3>Burmese python spotted near Coral Gables</h3>");
-    expect(lead).toContain('src="/v1/media/48213"');
+    // The photo loads through the media cache (client/media): its URL is on the element until the blob is ready.
+    expect(lead).toContain('data-src="/v1/media/48213"');
     expect(lead).not.toContain("48213<"); // no id in the lead
     const expert = html(<ExpertDetails id={sighting.id} evidence={sighting} />).replace(/<style[\s\S]*?<\/style>/g, "");
     expect(expert).toMatch(/^<details[^>]*data-testid="drawer-expert"/);

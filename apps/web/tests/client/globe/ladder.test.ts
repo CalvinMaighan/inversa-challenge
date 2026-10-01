@@ -22,7 +22,7 @@ describe("imagery ladder selection", () => {
       terrain: "world",
       base: "bing",
       fallback: "esri",
-      google3d: true,
+      google3d: ["ion"],
       reason: "token",
     });
   });
@@ -34,7 +34,7 @@ describe("imagery ladder selection", () => {
         terrain: "ellipsoid",
         base: "esri",
         fallback: "osm",
-        google3d: false,
+        google3d: [],
         reason: "no-token",
       });
     }
@@ -48,7 +48,7 @@ describe("imagery ladder selection", () => {
     expect(planLadder({ ionToken: "tok", quota: readQuota(store, now) }).route).toBe("ion");
     recordQuota(store, "sessions", now);
     const plan = planLadder({ ionToken: "tok", quota: readQuota(store, now) });
-    expect(plan).toMatchObject({ route: "keyless", base: "esri", google3d: false, reason: "quota" });
+    expect(plan).toMatchObject({ route: "keyless", base: "esri", google3d: [], reason: "quota" });
 
     const tiles = planLadder({ ionToken: "tok", quota: { month: "2026-09", sessions: 3, rootTiles: 900 } });
     expect(tiles.reason).toBe("quota");

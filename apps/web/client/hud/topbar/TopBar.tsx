@@ -10,6 +10,7 @@ import { THEME } from "client/state/theme";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
+import DeveloperButton from "../developer/DeveloperButton";
 import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
@@ -399,7 +400,8 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
  * The globe pane's chrome (T41): two icon buttons, top right, and no text until one opens. About (ⓘ, with a dot
  * in the colour of the worst feed when a source is delayed) holds what this is, how fresh the data is in plain
  * words, Focus, Help, the technical feed list under "Data sources" and the expert layers under "More data (for
- * experts)". Theme holds light, dark and tactical.
+ * experts)". Theme holds light, dark and tactical. Developer (a key) opens "Power up the globe", the API keys
+ * panel (client/hud/developer, docs/GODS_EYE.md GC1 and GC3).
  */
 export default function TopBar(props: ChromeProps) {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
@@ -415,6 +417,7 @@ export function TopBarView({ feeds, mode, onTheme, ...props }: ChromeProps & { f
     <Bar data-testid="hud-topbar">
       <About list={feeds} {...props} />
       <Theme mode={mode} onPick={onTheme} />
+      <DeveloperButton />
     </Bar>
   );
 }
