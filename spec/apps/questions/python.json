@@ -1968,7 +1968,7 @@
     {
       "date": "2026-10-01",
       "by": "K1",
-      "change": "py-legacy-tegu-sightings-homestead deleted: since K1 the tegu is no longer a context taxon of the app but any other species, and py-legacy-quality-id-conflict-tegu asks the same refusal for the same species and place. Without the removed python focus guard the model refused it correctly but called geocode first in 7 of 7 live runs, which the refuse mode counts as a failure."
+      "change": "py-legacy-tegu-sightings-homestead deleted: since K1 the tegu is no longer a context taxon of the app but any other species, and py-legacy-quality-id-conflict-tegu asks the same refusal for the same species and place. Without the removed python focus guard the model refused it correctly but called geocode first in 9 of 9 live runs, which the refuse mode counts as a failure."
     }
   ]
 }
