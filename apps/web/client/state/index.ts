@@ -11,6 +11,7 @@ import { MESSAGES } from "./messages";
 import { MISSIONS } from "./missions";
 import { NOTES } from "./notes";
 import { PEERS } from "./peers";
+import { RANGE_DAYS } from "./range";
 import { SELECTION } from "./selection";
 import { ACCENT_COLOR, THEME } from "./theme";
 import { TIME } from "./time";
@@ -28,6 +29,7 @@ export { MESSAGES } from "./messages";
 export { MISSIONS } from "./missions";
 export { NOTES } from "./notes";
 export { PEERS } from "./peers";
+export { RANGE_DAYS } from "./range";
 export { SELECTION } from "./selection";
 export { ACCENT_COLOR, THEME } from "./theme";
 export { TIME } from "./time";
@@ -35,7 +37,7 @@ export { VIEW } from "./view";
 export { VOICE } from "./voice";
 
 /** Snapshot for `<ActiveState init={state} />`. Importing this module runs every `key()`. */
-export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE);
+export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, RANGE_DAYS);
 
 export type StateKeyId =
   | "APP"
@@ -59,7 +61,8 @@ export type StateKeyId =
   | "LOOK"
   | "SCOPE_FEATHER"
   | "SCOPE_SHAPE"
-  | "SCOPE_SIZE";
+  | "SCOPE_SIZE"
+  | "RANGE_DAYS";
 
 /**
  * Every key id in code-unit order. PLAN.md C6: a key's position here is its `keyIndex` on the SAB transport,

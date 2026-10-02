@@ -6,7 +6,7 @@ import { Icon, Pill } from "client/hud/primitives";
 import styled from "client/styled";
 import { copyText, LAYER_IDS, type AppConfig } from "shared/apps";
 
-import { baaWord, componentText, feedChip, isoDay, utcText, WINDOW_DAYS, type AreaHeat, type Basis, type FeedRow, type LagStats, type PriorityCell, type ReportCount, type SstPair, type WindowDays } from "./model";
+import { componentText, feedChip, isoDay, utcText, WINDOW_DAYS, type AreaHeat, type Basis, type FeedRow, type LagStats, type PriorityCell, type ReportCount, type SstPair, type WindowDays } from "./model";
 import type { HelpTopic } from "./store";
 import { Chip, ChipRow, ComponentBar, Section, Tag } from "./ui";
 
@@ -134,35 +134,6 @@ const Sparse = styled.div`
   border-radius: var(--radius-s);
   background: repeating-linear-gradient(135deg, color-mix(in oklch, var(--warn) 8%, transparent) 0 6px, transparent 6px 12px);
   font: 400 12.5px / 1.45 var(--font-ui);
-`;
-
-const Dl = styled.dl`
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 3px 10px;
-  margin: 0;
-  font-size: 12.5px;
-  dt {
-    color: var(--muted);
-    font: 600 10.5px / 18px var(--font-mono);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-  dd {
-    margin: 0;
-    min-width: 0;
-    overflow-wrap: anywhere;
-    line-height: 18px;
-  }
-`;
-
-/** Area name over its values: the panel is too narrow for a name column. */
-const Stacked = styled(Dl)`
-  grid-template-columns: 1fr;
-  gap: 0;
-  dd {
-    margin-bottom: 8px;
-  }
 `;
 
 const Conflict = styled.div<{ $disagree: boolean }>`

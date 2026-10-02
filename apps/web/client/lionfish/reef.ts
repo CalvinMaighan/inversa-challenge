@@ -15,8 +15,8 @@ const PX_PER_CELL = 6;
 const CELL_DEG = 0.05;
 const MAX_PX = 1400;
 
-export type ReefMode = "dhw" | "baa" | "hotspot" | "sst";
-export const REEF_MODES: readonly ReefMode[] = ["dhw", "baa", "hotspot", "sst"];
+export type ReefMode = "dhw" | "baa" | "hotspot" | "temp";
+export const REEF_MODES: readonly ReefMode[] = ["dhw", "baa", "hotspot", "temp"];
 export const DEFAULT_REEF_MODE: ReefMode = "dhw";
 
 /** ERDDAP's Rainbow palette, low to high, as the legend draws it. */
@@ -78,8 +78,8 @@ export const REEF_SPECS: Record<ReefMode, ReefSpec> = {
     low: "0",
     high: "3 °C+",
   },
-  sst: {
-    id: "sst",
+  temp: {
+    id: "temp",
     label: "Sea temp",
     variable: "CRW_SST",
     min: 24,

@@ -12,10 +12,12 @@ const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS"
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
 /** The look of the globe (docs/GODS_EYE.md GC2, GE9): preset, and the map window: on or off, soft edge, shape, size. */
 const LOOK_KEYS = ["LOOK", "SCOPE_FEATHER", "SCOPE_SHAPE", "SCOPE_SIZE"];
+/** How far back the timelines go (the period button in the top row). */
+const RANGE_KEYS = ["RANGE_DAYS"];
 
 describe("state catalog", () => {
   test("holds exactly the PLAN keys plus the theme and look keys", () => {
-    expect(Object.keys(state).sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS].sort());
+    expect(Object.keys(state).sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS, ...RANGE_KEYS].sort());
   });
 
   test("every catalog entry is the key's registered default", () => {
@@ -29,7 +31,7 @@ describe("state catalog", () => {
 
   test("the lint rule reads the same registration list", () => {
     const registered = registeredStateKeys(process.cwd());
-    expect([...(registered ?? [])].sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS].sort());
+    expect([...(registered ?? [])].sort()).toEqual([...PLAN_KEYS, ...THEME_KEYS, ...LOOK_KEYS, ...RANGE_KEYS].sort());
   });
 
   test("only ME and the theme keys persist; only the theme keys sync across tabs", () => {
