@@ -5,17 +5,17 @@ import { copyText, type AppConfig } from "shared/apps";
 
 import Panel from "client/hud/Panel";
 
-import { localTime } from "./format";
+import { localTime, shortAgo } from "./format";
 import type { Site } from "./model";
-import { sortBoard, STATUS_WORDS, type SiteReview } from "./review";
-import { FRESHNESS_WORDS, StatusGlyph, STATUS_TONE } from "./StatusGlyph";
+import { RULE_SHORT, sortBoard, STATUS_WORDS, type SiteReview } from "./review";
+import { StatusGlyph, STATUS_TONE } from "./StatusGlyph";
 
-const Presets = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: var(--gap-m);
-`;
+/** When a location's newest data point was made: the derived time, else the newest time its reasons name. */
+function dataTimeOf(review: SiteReview): number | null {
+  if (review.observedAtMs != null) return review.observedAtMs;
+  const times = review.reasons.flatMap((r) => [r.observedAt, r.issuedAt]).map((t) => (t ? Date.parse(t) : Number.NaN)).filter(Number.isFinite);
+  return times.length ? Math.max(...times) : null;
+}
 
 export const Chip = styled.button<{ $on?: boolean }>`
   height: 28px;
@@ -143,33 +143,27 @@ export type BoardViewProps = {
   onSelect: (lid: string) => void;
 };
 
-/** The review board's contents: presets, the as-of note, sites by severity with reasons, the boundary notice. */
-export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs, loading, error, presets, activePreset, onPreset, onSelect }: BoardViewProps) {
+/** The locations list: one row per location with its status icon, its newest data age and the one or two reasons that matter. */
+export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs, loading, error, onSelect }: BoardViewProps) {
   const zone = app.copy.timezone;
+  const nowMs = asOfMs ?? reviewedAtMs ?? 0;
   const rows = sortBoard(sites.filter((s) => reviews[s.lid]).map((site) => ({ site, review: reviews[site.lid]! })));
   const counts = { review: 0, ok: 0, cannot_assess: 0 };
   for (const r of rows) counts[r.review.status] += 1;
   return (
     <div data-testid="carp-board" data-asof={asOfMs ?? "live"} data-reviewed-at={reviewedAtMs ?? ""} aria-busy={loading}>
-      <Presets role="group" aria-label="Camera presets">
-        {presets.map((p) => (
-          <Chip key={p.id} type="button" $on={activePreset === p.id} aria-pressed={activePreset === p.id} data-carp-preset={p.id} onClick={() => onPreset(p.id)}>
-            {p.name}
-          </Chip>
-        ))}
-      </Presets>
       {asOfMs !== undefined ? (
         <AsOf data-testid="carp-board-asof">
-          Statuses as known at <strong>{localTime(asOfMs, zone)}</strong>, from what was held then. USGS readings carry no receipt time, so they are placed by observation time.
+          Statuses as known at <strong>{localTime(asOfMs, zone)}</strong>
         </AsOf>
       ) : null}
-      {error ? <Empty role="alert">Could not load the board: {error}. Statuses below may be out of date.</Empty> : null}
+      {error ? <Empty role="alert">Could not load the locations: {error}. What is shown may be out of date.</Empty> : null}
       {rows.length === 0 ? (
-        <Empty>{loading ? "Loading the eight locations…" : "No location data could be loaded."}</Empty>
+        <Empty>{loading ? "Loading locations…" : "No location data could be loaded."}</Empty>
       ) : (
         <>
           <Empty aria-live="polite" style={{ marginBottom: 8 }} data-testid="carp-board-counts">
-            {counts.review} need review · {counts.cannot_assess} cannot be assessed · {counts.ok} no rule fired
+            {counts.review} need review · {counts.cannot_assess} no data · {counts.ok} fine
           </Empty>
           <List>
             {rows.map(({ site, review }) => {
@@ -181,6 +175,7 @@ export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs,
                     $tone={STATUS_TONE[review.status]}
                     $on={selected === site.lid}
                     aria-pressed={selected === site.lid}
+                    aria-label={`${site.name}: ${STATUS_WORDS[review.status]}, ${shortAgo(dataTimeOf(review), nowMs)}`}
                     data-carp-row={site.lid}
                     data-status={review.status}
                     onClick={() => onSelect(site.lid)}
@@ -190,23 +185,17 @@ export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs,
                       {site.name}
                       <small>{site.lid}</small>
                     </span>
-                    <span className="status">
-                      {STATUS_WORDS[review.status]} · {FRESHNESS_WORDS[review.freshness]}
-                    </span>
+                    <span className="status">{shortAgo(dataTimeOf(review), nowMs)}</span>
                     {lines.length ? (
                       <ul>
-                        {lines.slice(0, 3).map((r, i) => (
+                        {lines.slice(0, 2).map((r, i) => (
                           <li key={i} className={r.kind} data-rule={r.rule}>
-                            {r.text}
+                            {RULE_SHORT[r.rule] ?? r.rule}
                           </li>
                         ))}
-                        {lines.length > 3 ? <li className="gap">{lines.length - 3} more in the briefing</li> : null}
+                        {lines.length > 2 ? <li className="gap">+{lines.length - 2} more</li> : null}
                       </ul>
-                    ) : (
-                      <ul>
-                        <li className="gap">No rule fired: stage, forecast, alerts and freshness are within bounds.</li>
-                      </ul>
-                    )}
+                    ) : null}
                   </Row>
                 </li>
               );
@@ -230,7 +219,7 @@ export type BoardPanelProps = BoardViewProps & { open: boolean; onOpen: () => vo
 /** The board in the left edge panel (a bottom sheet on phones). */
 export default function Board({ open, onOpen, onClose, ...view }: BoardPanelProps) {
   return (
-    <Panel side="left" title="Locations to review" tabLabel="Sites" open={open} onOpen={onOpen} onClose={onClose} width={340} data-testid="carp-board-panel">
+    <Panel side="left" title={`All locations for ${view.app.name.split(" ")[0]}`} tabLabel="Locations" open={open} onOpen={onOpen} onClose={onClose} width={340} data-testid="carp-board-panel">
       <BoardView {...view} />
     </Panel>
   );

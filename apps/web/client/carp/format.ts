@@ -55,6 +55,15 @@ export function ago(ms: number | null | undefined, nowMs: number): string {
   return d >= 0 ? `${words} ago` : `in ${words}`;
 }
 
+/** The compact age for a list: "5m ago", "3h ago", "2d ago"; "—" when there is no time. */
+export function shortAgo(ms: number | null | undefined, nowMs: number): string {
+  if (!valid(ms)) return "—";
+  const abs = Math.max(0, nowMs - ms);
+  if (abs < 60 * 60_000) return `${Math.max(1, Math.round(abs / 60_000))}m ago`;
+  if (abs < 48 * 3_600_000) return `${Math.round(abs / 3_600_000)}h ago`;
+  return `${Math.round(abs / 86_400_000)}d ago`;
+}
+
 const fixed = (v: number, digits: number) => (Math.abs(v) >= 100 ? Math.round(v).toLocaleString("en-US") : v.toFixed(digits));
 
 /** `4.05 ft`; `—` for no value. */

@@ -13,15 +13,11 @@ import { Surface } from "../primitives";
 const VESSELS = LAYER_IDS[9];
 
 /**
- * Ships, one tap: an icon button under the app and species chips on the left (carp and lionfish only), the word
+ * Ships, one tap: an icon button right of the species chip in the top row (carp and lionfish only), the word
  * "Ships" and, while the layer is on, how many ships it draws, to the right of the icon like "Python 5". It flips
  * the same layer switch as the Layers popover, so the two always agree. Off at first load, like every extra layer.
  */
 const Chip = styled(Surface.withComponent("button"))`
-  position: absolute;
-  z-index: 4;
-  top: var(--hud-top);
-  left: max(var(--gap-m), env(safe-area-inset-left));
   display: inline-flex;
   align-items: center;
   gap: var(--gap-s);

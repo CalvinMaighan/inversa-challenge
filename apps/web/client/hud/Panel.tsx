@@ -14,7 +14,7 @@ type Side = "left" | "right";
  *
  * On the stage layout (docs/GODS_EYE.md GC1, from 768 px) the HUD starts right of the chat card, so a left panel
  * (carp's "Locations to review", the lionfish survey) opens at the left of the globe, next to the chat card, at the
- * bottom just above the timeline and below the Ships button.
+ * bottom just above the timeline.
  */
 const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
@@ -22,8 +22,8 @@ const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number
   top: var(--hud-top);
   bottom: var(--hud-bottom);
   ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom)));` : "")}
-  /* A left panel sits at the bottom, just above the timeline, and stops under the Ships button (36 px and a gutter below the top row). */
-  ${(p) => (p.$side === "left" ? "top: auto; bottom: var(--hud-bottom); height: auto; max-height: calc(100cqh - var(--hud-top) - 36px - var(--gap-m) - var(--hud-bottom));" : "")}
+  /* A left panel sits at the bottom, just above the timeline, and stops under the top row. */
+  ${(p) => (p.$side === "left" ? "top: auto; bottom: var(--hud-bottom); height: auto; max-height: calc(100cqh - var(--hud-top) - var(--hud-bottom));" : "")}
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
   width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
   display: flex;

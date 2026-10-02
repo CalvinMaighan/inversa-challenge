@@ -152,10 +152,9 @@ function HudBody({ sync = true }: HudProps) {
         <TopRow ref={barRef} data-testid="hud-toprow">
           <AppSelect />
           {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
+          <ShipsChip />
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
         </TopRow>
-        {/* Ships: carp and lionfish, under the app and species chips. */}
-        <ShipsChip />
         {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
         {conditions ? <CarpHud key={app.id} app={app} /> : null}
         {survey ? <LionfishHud key={app.id} app={app} /> : null}

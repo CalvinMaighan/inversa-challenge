@@ -48,6 +48,25 @@ export type SiteReview = {
   freshness: Freshness;
   /** Where the status came from: C5's review service or this file's derivation. */
   origin: "c5" | "derived";
+  /** When the newest stage observation was made (derived reviews), for "5m ago" in lists. */
+  observedAtMs?: number | null;
+};
+
+/** The short phrase a list shows for a rule (the long text stays in the briefing). */
+export const RULE_SHORT: Record<string, string> = {
+  observed_category: "Over action stage",
+  forecast_category: "Forecast over action stage",
+  forecast_drift: "Forecast moved 1 ft+",
+  stage_change: "Stage moved 1 ft+ in 24 h",
+  nws_alerts: "Weather alert",
+  stale_observation: "Gauge data old",
+  missing_observation: "No gauge data",
+  stale_forecast: "Forecast old",
+  missing_forecast: "No forecast",
+  no_thresholds: "No flood levels",
+  stale_input: "Data old",
+  missing_input: "Data missing",
+  source_conflict: "Sources disagree",
 };
 
 /** Stage change over 24 h that asks for review, feet. */
@@ -202,7 +221,7 @@ export function deriveReview(input: ReviewInput): SiteReview {
 
   const review = reasons.some((r) => r.kind === "review");
   const blind = obsFresh === "STALE" || obsFresh === "MISSING" || fFresh === "STALE" || fFresh === "MISSING" || (status !== null && thresholds.length === 0) || status === null;
-  return { site: site.lid, asOfMs, status: review ? "review" : blind ? "cannot_assess" : "ok", reasons, freshness, origin: "derived" };
+  return { site: site.lid, asOfMs, status: review ? "review" : blind ? "cannot_assess" : "ok", reasons, freshness, origin: "derived", observedAtMs: Number.isFinite(newest) ? newest : null };
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : null);
