@@ -10,7 +10,7 @@ export const AGENT_MODEL_ID = "openai/gpt-6-luna";
 
 /** OpenRouter app attribution. */
 export const OPENROUTER_HEADERS = {
-  "HTTP-Referer": "https://inversa.calvinmaighan.dev",
+  "HTTP-Referer": "https://inversa.bigvalue.lol",
   "X-Title": "Everglades Ops",
 } as const;
 

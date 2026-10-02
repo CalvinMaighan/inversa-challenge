@@ -36,7 +36,7 @@
 
 ## 1. Goal
 
-Build and deploy https://inversa.calvinmaighan.dev. It is a full-screen, natural-language, voice-capable command center that answers:
+Build and deploy https://inversa.bigvalue.lol. It is a full-screen, natural-language, voice-capable command center that answers:
 
 > "Where are invasive species active across South Florida right now, and where should removal crews go next?"
 
@@ -58,7 +58,7 @@ It provides evidence tracing to raw payloads, 30-day timeline replay, explainabl
 - **R4:** Interactive timeline that visualizes and replays change, and scrubs smoothly (PRD §12, §13).
 - **R5:** Clear treatment of stale, missing, conflicting, duplicate and late data (PRD §7).
 - **R6:** A production agent that gives grounded answers with citations to evidence, and evidence traceable to its source (PRD §10).
-- **R7:** Deployed at the shared URL `https://inversa.calvinmaighan.dev` (PRD §14).
+- **R7:** Deployed at the shared URL `https://inversa.bigvalue.lol` (PRD §14).
 - **R8:** At least one meaningful new technology: SAB threads, client SQLite + CRDT, WebRTC over Workers/R2 (PRD §12).
 
 ### User decisions
@@ -167,7 +167,7 @@ It provides evidence tracing to raw payloads, 30-day timeline replay, explainabl
 | ID | Human action | Blocks |
 |---|---|---|
 | H1 | Hetzner VM (Ubuntu 24.04, CX22) and SSH access | T33, T34 |
-| H2 | DNS for `inversa.calvinmaighan.dev` | T33 |
+| H2 | DNS for `inversa.bigvalue.lol` | T33 |
 | H3 | Cloudflare R2 buckets `inversa-raw`, `inversa-litestream`, `inversa-signal` (1-day lifecycle), an R2 token, and a TURN key | T5 live, T20 live, T33 |
 | H4 | AWS SQS queue subscribed to NODD with the filter policy from T7, and an IAM user with receive/delete permissions | T7 live |
 | H5 | `FIREWORKS_API_KEY` | T13 live |

@@ -2,7 +2,7 @@
 
 Everything here needs an account owner's login, payment details, an email click or a judgement call, so the agent did none of it (R19 in `docs/OVERNIGHT_BRIEF.md`: production-ready, not deployed). Nothing was pushed, deployed or entered. Do the steps in order; each one says the exact command or URL, why it matters and what breaks without it. Secret **values** go only into Doppler or GitHub secrets, never into this repository, a chat or a shell history.
 
-The target is one Hetzner VM serving `https://inversa.calvinmaighan.dev` with three apps: carp (default), lionfish and python. Caddy sends `/v1/*` and `/health` to Axum, `/signal/*` to the Cloudflare signal Worker and the rest to Next (`deploy/Caddyfile`). Background: `deploy/README.md` (units, paths, migration, restore drill), `docs/security.md`, `docs/ingest-modes.md`.
+The target is one Hetzner VM serving `https://inversa.bigvalue.lol` with three apps: carp (default), lionfish and python. Caddy sends `/v1/*` and `/health` to Axum, `/signal/*` to the Cloudflare signal Worker and the rest to Next (`deploy/Caddyfile`). Background: `deploy/README.md` (units, paths, migration, restore drill), `docs/security.md`, `docs/ingest-modes.md`.
 
 ## 0. Push the branch
 
@@ -31,8 +31,8 @@ git push origin pivot/three-apps          # then open a PR into main, or push ma
 
 ## 2. DNS
 
-- At the DNS host of `calvinmaighan.dev`: an `A` record `inversa` → the VM's IPv4 (and `AAAA` if you use IPv6).
-- Check: `dig +short inversa.calvinmaighan.dev` prints the VM address.
+- At the DNS host of `bigvalue.lol` (Cloudflare): an `A` record `inversa` → the VM's IPv4 (and `AAAA` if you use IPv6).
+- Check: `dig +short inversa.bigvalue.lol` prints the VM address.
 - Why: Caddy gets its Let's Encrypt certificate over HTTP-01/TLS-ALPN-01 on ports 80/443 of that name. If Cloudflare proxies the record, use SSL mode "Full (strict)".
 - Without it: no certificate, so the site does not load over HTTPS.
 
@@ -131,15 +131,15 @@ Sign in at <https://weather.im/iembot/config/> (Google sign-in) and add a webhoo
 
 | Room | URL |
 |---|---|
-| `lixchat`, `lchchat`, `shvchat` (warnings) | `https://inversa.calvinmaighan.dev/v1/carp/ingest/nudge/nws-alerts/<INGEST_NUDGE_TOKEN>` |
-| same rooms, flood products if the form allows a second hook | `https://inversa.calvinmaighan.dev/v1/carp/ingest/nudge/nwps/<INGEST_NUDGE_TOKEN>` |
+| `lixchat`, `lchchat`, `shvchat` (warnings) | `https://inversa.bigvalue.lol/v1/carp/ingest/nudge/nws-alerts/<INGEST_NUDGE_TOKEN>` |
+| same rooms, flood products if the form allows a second hook | `https://inversa.bigvalue.lol/v1/carp/ingest/nudge/nwps/<INGEST_NUDGE_TOKEN>` |
 
-- Check: `curl -X POST https://inversa.calvinmaighan.dev/v1/carp/ingest/nudge/nws-alerts/<token>` answers 202 `accepted`, then 200 `duplicate` within 60 s. Caddy masks the token in its access log.
+- Check: `curl -X POST https://inversa.bigvalue.lol/v1/carp/ingest/nudge/nws-alerts/<token>` answers 202 `accepted`, then 200 `duplicate` within 60 s. Caddy masks the token in its access log.
 - Without it: carp alerts wait for the 60 s poll and NWPS forecasts for the 15 min loop.
 
 ## 11. ERDDAP subscription (lionfish nudge)
 
-<https://pae-paha.pacioos.hawaii.edu/erddap/subscriptions/add.html> → dataset `dhw_5km`, your email, action URL `https://inversa.calvinmaighan.dev/v1/lionfish/ingest/nudge/crw/<INGEST_NUDGE_TOKEN>` → submit, then click the validation link in the email.
+<https://pae-paha.pacioos.hawaii.edu/erddap/subscriptions/add.html> → dataset `dhw_5km`, your email, action URL `https://inversa.bigvalue.lol/v1/lionfish/ingest/nudge/crw/<INGEST_NUDGE_TOKEN>` → submit, then click the validation link in the email.
 
 - Without it: Coral Reef Watch updates land on the 3 h backstop poll instead of minutes after publication.
 
@@ -149,10 +149,10 @@ Sign in at <https://weather.im/iembot/config/> (Google sign-in) and add a webhoo
 2. Deploy: Actions → `deploy` → Run workflow, `release_run_id` blank (latest). It renders `/etc/inversa/env` from Doppler, unpacks, migrates the data layout, restores missing databases from R2, restarts the units and waits for `/health` and `/api/health`.
 3. Smoke from your laptop:
    ```sh
-   curl -sI https://inversa.calvinmaighan.dev/ | grep -iE 'cross-origin-(opener|embedder)-policy|content-security-policy'
-   curl -fsS https://inversa.calvinmaighan.dev/health | jq '.status, [.apps[].id]'        # "ok", ["carp","lionfish","python"]
-   curl -sS https://inversa.calvinmaighan.dev/api/health | jq '.status, .api, .signal, .agent.state, [.apps[] | {id, db, downFeeds}]'
-   GRADE_URL=https://inversa.calvinmaighan.dev bun run grade -- --only deploy
+   curl -sI https://inversa.bigvalue.lol/ | grep -iE 'cross-origin-(opener|embedder)-policy|content-security-policy'
+   curl -fsS https://inversa.bigvalue.lol/health | jq '.status, [.apps[].id]'        # "ok", ["carp","lionfish","python"]
+   curl -sS https://inversa.bigvalue.lol/api/health | jq '.status, .api, .signal, .agent.state, [.apps[] | {id, db, downFeeds}]'
+   GRADE_URL=https://inversa.bigvalue.lol bun run grade -- --only deploy
    ```
    `/api/health` is `degraded` (200) while an optional credential is missing and names it; `down` (503) means the API or a database is broken.
 4. By hand on a laptop and a phone: open `/?app=carp`, `/?app=lionfish`, `/?app=python`; ask the agent one question in each; open a board in two browsers and type.
@@ -173,7 +173,7 @@ The Developer button (a key, top right of the globe) opens "Power up the globe":
 
 | Key | Get it | What it unlocks | Where it goes |
 |---|---|---|---|
-| Google Maps (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) | <https://developers.google.com/maps/documentation/tile/get-api-key>: a Google Cloud project with billing, enable **Map Tiles API**, create an API key, restrict it to HTTP referrers `https://inversa.calvinmaighan.dev/*` and `http://localhost:3050/*`, and to the Map Tiles API | the photorealistic 3D planet, loaded straight from Google before the ion route | browser: paste it in the panel (that browser only), or set it in Doppler `prd` before the release build (it is inlined at build time) |
+| Google Maps (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) | <https://developers.google.com/maps/documentation/tile/get-api-key>: a Google Cloud project with billing, enable **Map Tiles API**, create an API key, restrict it to HTTP referrers `https://inversa.bigvalue.lol/*` and `http://localhost:3050/*`, and to the Map Tiles API | the photorealistic 3D planet, loaded straight from Google before the ion route | browser: paste it in the panel (that browser only), or set it in Doppler `prd` before the release build (it is inlined at build time) |
 | Cesium ion (`NEXT_PUBLIC_CESIUM_ION_TOKEN`) | <https://ion.cesium.com/tokens>: a token with the default asset scopes; add assets 1 (World Terrain), 2 (Bing aerial) and 2275207 (Google Photorealistic 3D Tiles) to My Assets | real terrain, sharper aerial imagery, and Google 3D through ion when there is no Google key | browser, as above |
 | AISStream (`AISSTREAM_API_KEY`) | <https://aisstream.io/apikeys>: sign in with GitHub, create a key | live ships for carp and lionfish | server: Doppler `prd` (`doppler secrets set AISSTREAM_API_KEY`), or the panel under `bun run dev` |
 | OpenRouter, xAI, AWS GOES, NWWS | sections 4, 7 and 8, and <https://console.x.ai/> for `XAI_API_KEY` | the agent, voice, GOES push, NWWS push | server, as above |

@@ -22,7 +22,7 @@ The criteria, weights and checks are in `docs/grading/rubric.json`, explained in
 | `bun scripts/grade.ts --validate` | Check the rubric itself; prints `RUBRIC criteria=24 weight=100 ok` |
 | `bun test scripts/grade.test.ts` | The grader's own tests, including that a failing, silent or timed-out check never earns points |
 
-Live checks need Doppler access to `inversa/dev` (OpenRouter key). The deployed-URL check runs only when `GRADE_URL` is set, for example `GRADE_URL=https://inversa.calvinmaighan.dev bun run grade -- --only deploy`.
+Live checks need Doppler access to `inversa/dev` (OpenRouter key). The deployed-URL check runs only when `GRADE_URL` is set, for example `GRADE_URL=https://inversa.bigvalue.lol bun run grade -- --only deploy`.
 
 With `--only` or `--app`, `TOTAL` is the score over the selected criteria, scaled to 100.
 

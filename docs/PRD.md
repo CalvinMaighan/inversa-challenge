@@ -6,7 +6,7 @@ Research and decisions: [research.md](research.md).
 
 **Status at D1 (2026-10-01).** This PRD now specifies the python app, Everglades Ops, one of three apps on one engine; the carp and lionfish apps are specified in [APPS.md](APPS.md) and [LIONFISH_WATCH.md](LIONFISH_WATCH.md), and the system-level picture is in the [README](../README.md). Superseded below: the agent model is `openai/gpt-6-luna` on OpenRouter through cordis, not DeepSeek (§10); every API route carries the app (`/v1/{app}/graphql`, `/v1/{app}/frames`), not `/v1/graphql` (§9); each app has its own `observations.db` and `team.db` under `<data dir>/<app>/` (§7). Design alternatives and scaling are maintained in [design-alternatives.md](design-alternatives.md) and [scaling.md](scaling.md); §17 is kept as written.
 
-- **Deploy target:** https://inversa.calvinmaighan.dev
+- **Deploy target:** https://inversa.bigvalue.lol
 - **Deadline:** 72 h. Sized as about 2 weeks (10 working days) for one senior developer; agent tooling (Claude, Cursor) runs the work in parallel.
 
 ## 1. Problem
@@ -453,7 +453,7 @@ Transferring data channels works in Chrome/Edge 130+ and Safari 15+. On Firefox,
 
 ## 14. Deployment and cost
 
-- **Hetzner CX22-class VM** (Ubuntu 24.04, about €5/mo), with Caddy for `inversa.calvinmaighan.dev`:
+- **Hetzner CX22-class VM** (Ubuntu 24.04, about €5/mo), with Caddy for `inversa.bigvalue.lol`:
   - `/v1/*` and `/health` go to Axum (`127.0.0.1:4041`), including WebSocket upgrades.
   - Everything else goes to Next (`127.0.0.1:3050`).
   - COOP/COEP are set on every response.

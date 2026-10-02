@@ -65,7 +65,7 @@ describe("OpenRouter route", () => {
   test("one model, OpenRouter base URL, attribution headers", () => {
     expect(endpoint).toMatchObject({ provider: "openrouter", model: "openai/gpt-6-luna", baseUrl: OPENROUTER_BASE_URL });
     expect(OPENROUTER_BASE_URL).toBe("https://openrouter.ai/api/v1");
-    expect(OPENROUTER_HEADERS).toEqual({ "HTTP-Referer": "https://inversa.calvinmaighan.dev", "X-Title": "Everglades Ops" });
+    expect(OPENROUTER_HEADERS).toEqual({ "HTTP-Referer": "https://inversa.bigvalue.lol", "X-Title": "Everglades Ops" });
     expect(() => resolveAgentEndpoint("openai/gpt-4o")).toThrow("Unknown agent model");
   });
 });

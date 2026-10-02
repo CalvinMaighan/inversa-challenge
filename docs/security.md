@@ -1,6 +1,6 @@
 # Security
 
-Threat model and controls for the three-app deployment (carp, lionfish, python) at `inversa.calvinmaighan.dev`. First written in the T31 pass (`gates/leaf-T31.md`), re-audited in H1 (`gates/leaf-H1.md` G3) for the three apps, the ingest hook and nudges, the signal Worker and peer messaging. Each control names the file that implements it and the check that proves it. "Findings" at the end lists everything H1 found, fixed or accepted with a reason.
+Threat model and controls for the three-app deployment (carp, lionfish, python) at `inversa.bigvalue.lol`. First written in the T31 pass (`gates/leaf-T31.md`), re-audited in H1 (`gates/leaf-H1.md` G3) for the three apps, the ingest hook and nudges, the signal Worker and peer messaging. Each control names the file that implements it and the check that proves it. "Findings" at the end lists everything H1 found, fixed or accepted with a reason.
 
 ## What we protect
 
@@ -81,7 +81,7 @@ Threat model and controls for the three-app deployment (carp, lionfish, python) 
 
 ### 6. Signal Worker abuse
 
-- **Controls** (`apps/signal-worker/src/signal.ts`): only `ALLOWED_ORIGIN` (`https://inversa.calvinmaighan.dev`) gets CORS headers, and a request from any other `Origin` is 403, including simple POSTs; ids match `^[A-Za-z0-9_:-]{1,64}$`; names 1–64 characters; bodies 64 KB (counted on bytes received); peers expire after 60 s; an inbox poll reads at most 32 messages; TURN credentials live 1 h; R2 objects under `rooms/` expire after a day (lifecycle rule, `docs/HUMAN_STEPS.md` step 3). Through Caddy the page origin is the allowed origin, and Caddy's `defer` header block gives `/signal/*` responses the same isolation headers as the rest of the site.
+- **Controls** (`apps/signal-worker/src/signal.ts`): only `ALLOWED_ORIGIN` (`https://inversa.bigvalue.lol`) gets CORS headers, and a request from any other `Origin` is 403, including simple POSTs; ids match `^[A-Za-z0-9_:-]{1,64}$`; names 1–64 characters; bodies 64 KB (counted on bytes received); peers expire after 60 s; an inbox poll reads at most 32 messages; TURN credentials live 1 h; R2 objects under `rooms/` expire after a day (lifecycle rule, `docs/HUMAN_STEPS.md` step 3). Through Caddy the page origin is the allowed origin, and Caddy's `defer` header block gives `/signal/*` responses the same isolation headers as the rest of the site.
 - **Accepted:** a request with no `Origin` (curl) is served, and the Worker has no per-IP rate limit, so a script can write to rooms directly at its `workers.dev` host. Every write is bounded (64 KB, one object per message, expiry after a day), board data never travels through the Worker (only WebRTC offers, answers and ICE), and the cost is R2 operations ($4.50 per million writes). The fix if it is ever abused: a Workers rate-limiting binding keyed on `CF-Connecting-IP`, or a Cloudflare WAF rule on a custom route.
 - **Check:** `bun run --cwd apps/signal-worker test`, 37 tests, including the CORS cases.
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://inversa.calvinmaighan.dev/spec/apps/app-config.schema.json",
+  "$id": "https://inversa.bigvalue.lol/spec/apps/app-config.schema.json",
   "title": "AppConfig",
   "description": "One app of the three-app engine (PLAN.md C-A3). Rust (api/src/app/config.rs, serde) and TS (apps/web/shared/apps, zod) load the same files; a conformance test loads all three in both.",
   "type": "object",

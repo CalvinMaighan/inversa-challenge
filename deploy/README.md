@@ -1,6 +1,6 @@
 # Deploy
 
-One Hetzner VM runs everything behind Caddy at `inversa.calvinmaighan.dev`:
+One Hetzner VM runs everything behind Caddy at `inversa.bigvalue.lol`:
 
 | Unit | Listens | Runs |
 |---|---|---|
@@ -58,7 +58,7 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
 
 ### H2: DNS
 
-- [ ] Create an `A` record (and `AAAA` if IPv6 is used) for `inversa.calvinmaighan.dev` that points at the VM.
+- [ ] Create an `A` record (and `AAAA` if IPv6 is used) for `inversa.bigvalue.lol` that points at the VM.
   - Caddy gets its own Let's Encrypt certificate, so the record must reach the VM on ports 80 and 443.
   - If Cloudflare proxies it, use SSL mode "Full (strict)".
 
@@ -94,8 +94,8 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
 1. Run `release` (tag `v0.1.0`, or dispatch it by hand) and wait until it succeeds.
 2. Run `deploy` with `release_run_id` blank.
 3. Check it:
-   - `curl -sI https://inversa.calvinmaighan.dev/` shows `cross-origin-opener-policy: same-origin` and `cross-origin-embedder-policy: require-corp`.
-   - `curl -fsS https://inversa.calvinmaighan.dev/health` returns JSON with `"status":"ok"` and one entry per app in `apps`. A `503` with `"status":"degraded"` means one app's database failed; its entry carries the error.
+   - `curl -sI https://inversa.bigvalue.lol/` shows `cross-origin-opener-policy: same-origin` and `cross-origin-embedder-policy: require-corp`.
+   - `curl -fsS https://inversa.bigvalue.lol/health` returns JSON with `"status":"ok"` and one entry per app in `apps`. A `503` with `"status":"degraded"` means one app's database failed; its entry carries the error.
 
 ## Multi-app migration
 

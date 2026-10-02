@@ -126,10 +126,10 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 ## 5. Constraints from the user (2026-09-30)
 
 - **Deadline:** 72 h. The PRD is sized for about 2 weeks of one senior developer. Agent tooling (Claude, Cursor) does the parallel work.
-- **Domain:** `inversa.calvinmaighan.dev`.
+- **Domain:** `inversa.bigvalue.lol`.
 - **active-state fork:** git subtree in this repo.
 - **Low runtime budget.**
-  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.calvinmaighan.dev/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. ~~Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).~~ Dropped in K1 (R14): no app needs them.
+  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.bigvalue.lol/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. ~~Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).~~ Dropped in K1 (R14): no app needs them.
   - **Runtime LLM.** A cheap model runs the tool loop, with prompt caching on system and tool definitions, a daily spend cap (God's Eye View uses $5), and answer caching keyed by question + data version. A stronger model is used only for final synthesis when needed. Current pricing and model IDs need confirming via the `claude-api` skill before building.
 
 ## 6. Decisions (2026-09-30)

@@ -44,7 +44,7 @@ The checkboxes in §5 are left as first written. Where each task stands, from th
 
 ## 1. Goal
 
-Ship one deployed-ready product at `inversa.calvinmaighan.dev` that serves **three apps** on one engine, chosen by a species icon button popover in the HUD:
+Ship one deployed-ready product at `inversa.bigvalue.lol` that serves **three apps** on one engine, chosen by a species icon button popover in the HUD:
 
 1. **Carp** (Louisiana): default app. Field conditions explorer for an operations manager.
 2. **Lionfish Watch**: survey prioritization in four areas (Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean).

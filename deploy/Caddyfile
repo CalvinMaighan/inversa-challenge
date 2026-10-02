@@ -1,4 +1,4 @@
-# inversa.calvinmaighan.dev on the Hetzner box. Caddy terminates TLS with its own
+# inversa.bigvalue.lol on the Hetzner box. Caddy terminates TLS with its own
 # Let's Encrypt cert (HTTP-01 / TLS-ALPN-01), so DNS must point straight at the VM or
 # through a proxy that passes those challenges.
 #
@@ -14,7 +14,7 @@
 # Caddy's reverse_proxy handles Connection: Upgrade on its own; nothing extra is needed
 # for WebSockets beyond keeping them open across config reloads (stream_close_delay).
 
-inversa.calvinmaighan.dev {
+inversa.bigvalue.lol {
 	encode zstd gzip
 
 	header {

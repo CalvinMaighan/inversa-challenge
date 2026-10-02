@@ -22,7 +22,7 @@ const SPECIES = [
 ] as const;
 const INAT_DATASET = "50c9509d-22c7-4a22-a47d-8c48425ef4a7";
 const TTL_MS = 10 * 60_000;
-const HEADERS = { "user-agent": "inversa-carp/1.0 (https://inversa.calvinmaighan.dev)", accept: "application/json" };
+const HEADERS = { "user-agent": "inversa-carp/1.0 (https://inversa.bigvalue.lol)", accept: "application/json" };
 
 
 let cache: { at: number; body: { fetchedAt: string; sightings: CarpSighting[]; sources: Record<string, number | string> } } | null = null;

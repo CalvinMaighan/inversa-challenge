@@ -10,7 +10,7 @@ A natural-language interface for exploring questions about the physical world fr
 
 ![Carp Field Conditions at first load: chat column on the left, the eight demonstration sites on the globe with the review board, the stage timeline with replay coverage at the bottom](docs/evidence/carp-desktop.png)
 
-- Target URL: https://inversa.calvinmaighan.dev. **Not deployed yet**: the build is production-ready and the deploy waits on the human steps in [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md).
+- Target URL: https://inversa.bigvalue.lol. **Not deployed yet**: the build is production-ready and the deploy waits on the human steps in [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md).
 - Brief, line by line, with status per app: [docs/brief-compliance.md](docs/brief-compliance.md). Interview prep: [docs/interview-notes.md](docs/interview-notes.md). Design choices: [docs/design-alternatives.md](docs/design-alternatives.md). Scaling: [docs/scaling.md](docs/scaling.md). New technology: [docs/new-technology.md](docs/new-technology.md). Walkthrough: [docs/demo-script.md](docs/demo-script.md). App specs: [docs/APPS.md](docs/APPS.md), [docs/LIONFISH_WATCH.md](docs/LIONFISH_WATCH.md), [docs/PRD.md](docs/PRD.md).
 
 ## Run locally
