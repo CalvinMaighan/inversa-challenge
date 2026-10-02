@@ -4,7 +4,7 @@ import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } 
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import CarpChip from "client/carp/CarpChip";
-import CarpHud from "client/carp/CarpHud";
+import CarpFishHud from "client/carp/CarpFishHud";
 import LionfishChip from "client/lionfish/LionfishChip";
 import LionfishHud from "client/lionfish/LionfishHud";
 import { isSurveyApp, parseCellEvidenceId } from "client/lionfish/model";
@@ -157,7 +157,7 @@ function HudBody({ sync = true }: HudProps) {
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
         </TopRow>
         {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}
-        {conditions ? <CarpHud key={app.id} app={app} /> : null}
+        {conditions ? <CarpFishHud key={app.id} /> : null}
         {survey ? <LionfishHud key={app.id} app={app} /> : null}
         {cardOwnsSelection ? null : <EvidenceDrawer />}
         {conditions ? null : <Timeline />}
