@@ -5,17 +5,10 @@ import type { AppConfig } from "shared/apps";
 
 import Panel from "client/hud/Panel";
 
-import { localTime, shortAgo } from "./format";
+import { localTime } from "./format";
+import type { SiteReview } from "./review";
 import type { Site } from "./model";
-import { RULE_SHORT, sortBoard, STATUS_WORDS, type SiteReview } from "./review";
-import { StatusGlyph, STATUS_TONE } from "./StatusGlyph";
 
-/** When a location's newest data point was made: the derived time, else the newest time its reasons name. */
-function dataTimeOf(review: SiteReview): number | null {
-  if (review.observedAtMs != null) return review.observedAtMs;
-  const times = review.reasons.flatMap((r) => [r.observedAt, r.issuedAt]).map((t) => (t ? Date.parse(t) : Number.NaN)).filter(Number.isFinite);
-  return times.length ? Math.max(...times) : null;
-}
 
 export const Chip = styled.button<{ $on?: boolean }>`
   height: 28px;
@@ -53,60 +46,14 @@ const List = styled.ol`
   gap: 6px;
 `;
 
-const Row = styled.button<{ $tone: string; $on: boolean }>`
-  width: 100%;
-  display: grid;
-  grid-template-columns: 44px 22px 1fr;
-  gap: 2px 8px;
-  padding: 8px;
-  border: 1px solid ${(p) => (p.$on ? "var(--accent)" : "var(--border)")};
-  border-left: 3px solid ${(p) => p.$tone};
-  border-radius: var(--radius-s);
-  background: ${(p) => (p.$on ? "color-mix(in oklch, var(--accent) 12%, transparent)" : "transparent")};
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  &:hover {
-    border-color: var(--hud-line);
-    border-left-color: ${(p) => p.$tone};
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  svg {
-    grid-row: span 3;
-    margin-top: 1px;
-  }
-  .name {
-    font: 600 13px / 1.3 var(--font-ui);
-  }
-  .name small {
-    margin-left: 6px;
-    color: var(--muted);
-    font: 600 10px / 1 var(--font-mono);
-    letter-spacing: 0.04em;
-  }
-  .status {
-    font: 600 11px / 1.3 var(--font-mono);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-  ul {
-    margin: 2px 0 0;
-    padding-left: 14px;
-    color: var(--text);
-    font: 400 12px / 1.4 var(--font-ui);
-  }
-  li.gap {
-    color: var(--muted);
-  }
+const Empty = styled.p`
+  margin: 0;
+  color: var(--muted);
+  font: 400 13px / 1.4 var(--font-ui);
 `;
 
 /** A satellite thumbnail of the location (Esri World Imagery, a small export around its coordinates). */
 const Thumb = styled.img`
-  grid-row: span 3;
   width: 44px;
   height: 44px;
   border-radius: var(--radius-s);
@@ -120,10 +67,38 @@ export function thumbUrl(lat: number, lon: number): string {
   return `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${lon - d},${lat - d},${lon + d},${lat + d}&bboxSR=4326&imageSR=4326&size=96,96&format=jpg&f=image`;
 }
 
-const Empty = styled.p`
-  margin: 0;
-  color: var(--muted);
-  font: 400 13px / 1.4 var(--font-ui);
+const Row = styled.button<{ $on: boolean }>`
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 0 var(--gap-m);
+  padding: var(--gap-s);
+  border: 0;
+  border-radius: var(--radius-s);
+  /* Selected: a lighter, still transparent background and the shadow; no border. */
+  background: ${(p) => (p.$on ? "color-mix(in oklch, var(--text) 10%, transparent)" : "transparent")};
+  box-shadow: ${(p) => (p.$on ? "var(--shadow)" : "none")};
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  &:hover {
+    background: color-mix(in oklch, var(--text) 7%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .name {
+    font: 600 13px / 1.3 var(--font-ui);
+  }
+  .name small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font: 600 10px / 1 var(--font-mono);
+    letter-spacing: 0.04em;
+  }
 `;
 
 export type Preset = { id: string; name: string };
@@ -144,13 +119,9 @@ export type BoardViewProps = {
   onSelect: (lid: string) => void;
 };
 
-/** The locations list: one row per location with its status icon, its newest data age and the one or two reasons that matter. */
+/** The locations list: one row per location, its satellite image, its name and its id. */
 export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs, loading, error, onSelect }: BoardViewProps) {
   const zone = app.copy.timezone;
-  const nowMs = asOfMs ?? reviewedAtMs ?? 0;
-  const rows = sortBoard(sites.filter((s) => reviews[s.lid]).map((site) => ({ site, review: reviews[site.lid]! })));
-  const counts = { review: 0, ok: 0, cannot_assess: 0 };
-  for (const r of rows) counts[r.review.status] += 1;
   return (
     <div data-testid="carp-board" data-asof={asOfMs ?? "live"} data-reviewed-at={reviewedAtMs ?? ""} aria-busy={loading}>
       {asOfMs !== undefined ? (
@@ -158,52 +129,31 @@ export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs,
           Statuses as known at <strong>{localTime(asOfMs, zone)}</strong>
         </AsOf>
       ) : null}
-      {error ? <Empty role="alert">Could not load the locations: {error}. What is shown may be out of date.</Empty> : null}
-      {rows.length === 0 ? (
+      {error ? <Empty role="alert">Could not load the locations: {error}.</Empty> : null}
+      {sites.length === 0 ? (
         <Empty>{loading ? "Loading locations…" : "No location data could be loaded."}</Empty>
       ) : (
-        <>
-          <Empty aria-live="polite" style={{ marginBottom: 8 }} data-testid="carp-board-counts">
-            {counts.review} need review · {counts.cannot_assess} no data · {counts.ok} fine
-          </Empty>
-          <List>
-            {rows.map(({ site, review }) => {
-              const lines = review.reasons.filter((r) => r.kind !== "info");
-              return (
-                <li key={site.lid}>
-                  <Row
-                    type="button"
-                    $tone={STATUS_TONE[review.status]}
-                    $on={selected === site.lid}
-                    aria-pressed={selected === site.lid}
-                    aria-label={`${site.name}: ${STATUS_WORDS[review.status]}, ${shortAgo(dataTimeOf(review), nowMs)}`}
-                    data-carp-row={site.lid}
-                    data-status={review.status}
-                    onClick={() => onSelect(site.lid)}
-                  >
-                    <Thumb src={thumbUrl(site.lat, site.lon)} alt="" loading="lazy" crossOrigin="anonymous" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
-                    <StatusGlyph status={review.status} />
-                    <span className="name">
-                      {site.name}
-                      <small>{site.lid}</small>
-                    </span>
-                    <span className="status">{shortAgo(dataTimeOf(review), nowMs)}</span>
-                    {lines.length ? (
-                      <ul>
-                        {lines.slice(0, 2).map((r, i) => (
-                          <li key={i} className={r.kind} data-rule={r.rule}>
-                            {RULE_SHORT[r.rule] ?? r.rule}
-                          </li>
-                        ))}
-                        {lines.length > 2 ? <li className="gap">+{lines.length - 2} more</li> : null}
-                      </ul>
-                    ) : null}
-                  </Row>
-                </li>
-              );
-            })}
-          </List>
-        </>
+        <List>
+          {sites.map((site) => (
+            <li key={site.lid}>
+              <Row
+                type="button"
+                $on={selected === site.lid}
+                aria-pressed={selected === site.lid}
+                aria-label={`${site.name} (${site.lid})`}
+                data-carp-row={site.lid}
+                data-status={reviews[site.lid]?.status ?? "loading"}
+                onClick={() => onSelect(site.lid)}
+              >
+                <Thumb src={thumbUrl(site.lat, site.lon)} alt="" loading="lazy" crossOrigin="anonymous" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+                <span className="name">
+                  {site.name}
+                  <small>{site.lid}</small>
+                </span>
+              </Row>
+            </li>
+          ))}
+        </List>
       )}
     </div>
   );

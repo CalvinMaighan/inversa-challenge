@@ -7,8 +7,7 @@ import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
 import type { Site } from "./model";
-import { STATUS_WORDS, type SiteReview } from "./review";
-import { FRESHNESS_WORDS, FreshnessRing, StatusGlyph } from "./StatusGlyph";
+import type { SiteReview } from "./review";
 
 const SIZE = 30;
 
@@ -37,6 +36,7 @@ const Marker = styled.button`
   border: 0;
   border-radius: 50%;
   background: color-mix(in oklch, #0b0d12 55%, transparent);
+  color: #e8edf2;
   cursor: pointer;
   pointer-events: auto;
   will-change: transform;
@@ -99,6 +99,14 @@ const Marker = styled.button`
   }
 `;
 
+/** A plain map pin (Lucide map-pin, ISC): where the location is, nothing about its status. */
+const PIN = (
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
+);
+
 export type SiteMarkersProps = {
   sites: readonly Site[];
   reviews: Record<string, SiteReview>;
@@ -148,10 +156,6 @@ export default function SiteMarkers({ sites, reviews, selected, onSelect }: Site
   return (
     <Layer data-testid="carp-markers" aria-label="Locations on the map">
       {sites.map((site) => {
-        const review = reviews[site.lid];
-        const status = review?.status ?? "cannot_assess";
-        const freshness = review?.freshness ?? "MISSING";
-        const top = review?.reasons.find((r) => r.kind === "review") ?? review?.reasons[0];
         return (
           <Marker
             key={site.lid}
@@ -161,23 +165,18 @@ export default function SiteMarkers({ sites, reviews, selected, onSelect }: Site
             }}
             type="button"
             data-carp-site={site.lid}
-            data-status={review ? status : "loading"}
-            data-freshness={freshness.toLowerCase()}
+            data-status={reviews[site.lid]?.status ?? "loading"}
             data-hidden=""
             aria-pressed={selected === site.lid}
-            aria-label={`${site.name} (${site.lid}): ${review ? STATUS_WORDS[status] : "loading"}, ${FRESHNESS_WORDS[freshness]}`}
+            aria-label={`${site.name} (${site.lid})`}
             onClick={() => onSelect(site.lid)}
           >
-            <FreshnessRing freshness={freshness} size={SIZE} />
-            <StatusGlyph status={status} />
+            {PIN}
             <span className="lid" aria-hidden="true">
               {site.lid}
             </span>
             <span className="tip" role="tooltip" aria-hidden="true">
               <b>{site.name}</b>
-              {review ? STATUS_WORDS[status] : "Loading…"}
-              {top ? <small>{top.text}</small> : null}
-              <small>Freshness: {FRESHNESS_WORDS[freshness]}</small>
             </span>
           </Marker>
         );
