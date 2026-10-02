@@ -69,8 +69,8 @@ path data copied from https://github.com/Templarian/MaterialDesign `svg/fish.svg
 ## Fish apps: colour emoji (carp, lionfish)
 
 The carp and lionfish apps use colour emoji images from Noto Emoji (Google; Apache-2.0 for the images, SIL OFL 1.1 for the font),
-fetched as SVG through Iconify (https://icon-sets.iconify.design/noto/): `noto:fish` for carp and `noto:blowfish` for
-lionfish. The files are `apps/web/public/icons/noto-fish.svg` and `noto-blowfish.svg`, mapped in
+fetched as SVG through Iconify (https://icon-sets.iconify.design/noto/): `noto:tropical-fish` for carp and `noto:blowfish` for
+lionfish. The files are `apps/web/public/icons/noto-tropical-fish.svg` and `noto-blowfish.svg`, mapped in
 `apps/web/client/noto-icons.ts`; they replace the outline fish for those two apps in the app selector, the chips and the map
 markers. This supersedes the Material Design Icons fish entry above.
 
