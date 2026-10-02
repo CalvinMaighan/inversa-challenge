@@ -33,13 +33,15 @@ describe("species chip", () => {
   });
 
   test("the app icon draws the shared shape, outlined, in the given colour", () => {
-    const svg = renderToStaticMarkup(<AppIcon icon="python" color="#e4572e" size={18} />);
+    const svg = renderToStaticMarkup(<AppIcon icon="python" color="#e4572e" size={18} emoji={false} />);
     expect(svg).toContain('data-app-icon="python"');
     expect(svg).toContain('width="18"');
     expect(svg).toContain('aria-hidden="true"');
     for (const d of APP_ICONS.python.paths) expect(svg).toContain(`d="${d}"`);
     // Outline first, then the tint.
     expect(svg.indexOf('stroke="#0b0d12"')).toBeLessThan(svg.indexOf('stroke="#e4572e"'));
+    // Python's colour emoji is a snake image; the plain shape stays one prop away.
+    expect(renderToStaticMarkup(<AppIcon icon="python" color="#e4572e" />)).toContain('src="/icons/noto-snake.svg"');
     // The fish apps use their colour emoji images (Noto Emoji via Iconify): carp the tropical fish, lionfish the blowfish.
     expect(renderToStaticMarkup(<AppIcon icon="carp" color="#7f7fff" title="Carp" />)).toContain('src="/icons/noto-tropical-fish.svg"');
     expect(renderToStaticMarkup(<AppIcon icon="lionfish" color="#a06cd5" />)).toContain('src="/icons/noto-blowfish.svg"');
