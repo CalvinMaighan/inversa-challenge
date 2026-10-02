@@ -5,10 +5,10 @@ import { get, subscribe } from "@calvinjs/active-state";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
-import { featherOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf } from "client/state/look";
+import { featherOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
 import styled from "client/styled";
 
-import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_CLIP_CSS, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
+import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
 import { scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
 
 /**
@@ -24,14 +24,16 @@ import { scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
  *   label placement keep clear of it; the shell writes its right edge to `--chat-inset`, where the HUD chrome
  *   starts (each control then keeps one gutter from it).
  * - `globe`: fills the pane; on the stage layout its canvas is masked to the map window (shape, size and soft
- *   edge, client/hud/shell/scope.ts) and clipped there for the pointer, so the black margin takes no clicks.
+ *   edge, client/hud/shell/scope.ts): fully visible inside the shape, fading out beyond it. With a hard edge (soft
+ *   edge 0) the pointer is clipped there too, so the black margin takes no clicks.
  * - `hud`: fills the pane above the globe, a size container (`globe`) for the HUD's container queries. The
  *   layer lets the pointer through; its direct children take it back.
  *
- * `[data-stage]` marks the window's box (layout only, nothing drawn). It is the app's one scope (GE7): the Look
- * popover writes SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE and SCOPE_FEATHER (client/state/look.ts), and the shell follows
- * them (`data-scope="off"` drops the mask; `--scope-mask` and `--scope-clip` draw the window, `--scope-w`,
- * `--scope-h` and `--scope-corner` size `[data-stage]`). Before hydration the CSS defaults draw the default circle.
+ * `[data-stage]` marks the window's box (layout only, nothing drawn). It is the app's one scope (GE7, GE11): the
+ * Look popover writes SCOPE_SHAPE, SCOPE_SIZE and SCOPE_FEATHER (client/state/look.ts), and the shell follows them
+ * (`--scope-mask` and `--scope-clip` draw the window, `--scope-w`, `--scope-h` and `--scope-corner` size
+ * `[data-stage]`). There is no on/off: the window is always there. Before hydration the CSS defaults draw the
+ * default circle.
  */
 export type StageShellSlots = {
   side?: ReactNode;
@@ -91,7 +93,7 @@ const SCOPE_RULES = `
   mask-image: var(--scope-mask, ${SCOPE_MASK_CSS});
   mask-repeat: no-repeat;
   mask-position: 0 0;
-  clip-path: var(--scope-clip, ${SCOPE_CLIP_CSS});
+  clip-path: var(--scope-clip, none);
 `;
 
 const GlobeLayer = styled.div`
@@ -103,7 +105,7 @@ const GlobeLayer = styled.div`
     & [data-globe] {
       background: #000;
     }
-    [data-shell]:not([data-scope="off"]) & [data-globe] canvas {
+    [data-shell] & [data-globe] canvas {
       ${SCOPE_RULES}
     }
   }
@@ -115,7 +117,7 @@ const GlobeLayer = styled.div`
  */
 export const STAGE_SCOPE_CSS = `
   ${STAGE_MEDIA} {
-    [data-shell]:not([data-scope="off"]) & {
+    [data-shell] & {
       ${SCOPE_RULES}
     }
   }
@@ -171,10 +173,8 @@ export function useStageLayout(): boolean {
   return useSyncExternalStore(subscribeStage, () => window.matchMedia(STAGE_QUERY).matches, () => false);
 }
 
-/** The window on or off, and its shape, size and soft edge for the shell's size, from the four keys. */
+/** The window's shape, size and soft edge for the shell's size, from the three keys. */
 function applyScope(shell: HTMLElement): void {
-  if (scopeOnOf(get(SCOPE_ON))) delete shell.dataset.scope;
-  else shell.dataset.scope = "off";
   const vw = shell.clientWidth;
   const vh = shell.clientHeight;
   if (vw <= 0 || vh <= 0) return;
@@ -186,7 +186,7 @@ function applyScope(shell: HTMLElement): void {
   style.setProperty("--scope-w", `${win.width}px`);
   style.setProperty("--scope-h", `${win.height}px`);
   style.setProperty("--scope-corner", win.shape === "oval" ? "50%" : `${win.corner}px`);
-  // The soft edge as a share of half the shorter side: the first-paint circle and the camera framings read it.
+  // The soft edge as a share of the window's radius: the first-paint circle reads it.
   style.setProperty("--scope-feather", featherValue(featherOf(get(SCOPE_FEATHER)) / 100));
 }
 
@@ -205,7 +205,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
     if (!main) return;
     const sync = () => applyScope(main);
     sync();
-    const offs = [SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER].map((k) => subscribe(k, sync));
+    const offs = [SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER].map((k) => subscribe(k, sync));
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(sync) : null;
     observer?.observe(main);
     return () => {

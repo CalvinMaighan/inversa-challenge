@@ -8,7 +8,6 @@ import {
   DEFAULT_FEATHER,
   featherValue,
   GUTTER_PX,
-  SCOPE_CLIP_CSS,
   SCOPE_MASK_CSS,
   SIDE_ROOM_PX,
   STAGE_DIAMETER_CSS,
@@ -58,9 +57,11 @@ describe("stage geometry", () => {
 
   test("the CSS mirrors the function", () => {
     expect(STAGE_DIAMETER_CSS).toBe("min(100dvh - 24px, 100vw - 24px, max(100vw - 768px, 72dvh))");
+    // First paint: fully visible to the radius, then a fade OUTSIDE it, over the feather share of the radius.
     expect(SCOPE_MASK_CSS).toContain(`var(--scope-feather, ${DEFAULT_FEATHER})`);
-    expect(SCOPE_MASK_CSS.startsWith("radial-gradient(circle calc(")).toBe(true);
-    expect(SCOPE_CLIP_CSS.startsWith("circle(calc(")).toBe(true);
+    expect(SCOPE_MASK_CSS.startsWith("radial-gradient(circle at 50% 50%, #000 calc(")).toBe(true);
+    expect(SCOPE_MASK_CSS).toContain("(1 + var(--scope-feather");
+    expect(DEFAULT_FEATHER).toBe(0.4);
   });
 
   test("feather values are clamped to 0..1", () => {

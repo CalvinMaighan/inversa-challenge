@@ -142,16 +142,16 @@ describe("stage framing", () => {
 });
 
 /** A fake page at 1024×768: the shell, the pane, the stage circle, the chat card and maybe a sighting card. */
-function stageDom(opts: { scopeOff?: boolean; feather?: string; card?: Rect }) {
+function stageDom(opts: { feather?: string; card?: Rect }) {
   const rect = (r: Rect) => ({ ...r, width: r.right - r.left, height: r.bottom - r.top, x: r.left, y: r.top });
-  const shell = { dataset: opts.scopeOff ? { scope: "off" } : {} };
+  const shell = { dataset: {} };
   const stage = { getBoundingClientRect: () => rect({ left: 236, top: 108, right: 788, bottom: 660 }) };
   const obstacles = [{ left: 16, top: 16, right: 436, bottom: 752 }, ...(opts.card ? [opts.card] : [])].map((r) => ({ getBoundingClientRect: () => rect(r) }));
   const pane = { getBoundingClientRect: () => rect({ left: 0, top: 0, right: 1024, bottom: 768 }), querySelectorAll: () => obstacles };
   const g = globalThis as Record<string, unknown>;
   const saved = [g.document, g.getComputedStyle] as const;
   g.document = { querySelector: (sel: string) => (sel === "[data-shell]" ? shell : sel === "[data-stage]" ? stage : sel.includes("globe-pane") ? pane : null) };
-  g.getComputedStyle = () => ({ getPropertyValue: (p: string) => (p === "--scope-feather" ? (opts.feather ?? "0.11") : "") });
+  g.getComputedStyle = () => ({ getPropertyValue: (p: string) => (p === "--scope-feather" ? (opts.feather ?? "0.4") : "") });
   return () => {
     g.document = saved[0];
     g.getComputedStyle = saved[1];
@@ -169,13 +169,18 @@ describe("stage framing in the page", () => {
     registerGlobe(null);
   });
 
-  test("stage framing: paneFrame reads the circle's opaque disc (feather) and drops it when the scope is off", () => {
+  test("stage framing: paneFrame reads the window itself as the opaque disc (the soft edge lies outside it) and drops it when there is no vignette", () => {
     restore = stageDom({ feather: "0.2" });
     const f = paneFrame()!;
-    expect(f.circle).toEqual({ cx: 512, cy: 384, r: 276 * 0.8 });
+    expect(f.circle).toEqual({ cx: 512, cy: 384, r: 276 });
     expect(f.free.left).toBe(436);
     restore();
-    restore = stageDom({ scopeOff: true });
+    // The same window at any soft edge below the maximum.
+    restore = stageDom({ feather: "0.9" });
+    expect(paneFrame()!.circle).toEqual({ cx: 512, cy: 384, r: 276 });
+    restore();
+    // Soft edge at its maximum: no vignette, the whole free page is visible.
+    restore = stageDom({ feather: "1" });
     expect(paneFrame()!.circle).toBeNull();
   });
 

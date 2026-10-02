@@ -14,7 +14,7 @@
  * - `e`: selected evidence id (PLAN.md C14).
  * - `site`, `asof` (carp): the selected location's NWPS id and the "what we knew" time, UTC to the minute; no
  *   `asof` means live.
- * - `look`, `scope`, `shape`, `size`, `feather` (docs/GODS_EYE.md GC2, GE9): the visual preset, the map window
+ * - `look`, `shape`, `size`, `feather` (docs/GODS_EYE.md GC2, GE9): the visual preset, the map window
  *   (`0` off), its shape (circle, oval, rounded, frame), its size (30..100) and its soft edge (0..100), each
  *   omitted at its default (normal, on, circle, 100, 11).
  *
@@ -29,7 +29,6 @@ import { layersFor, type SpeciesId } from "client/state/layers";
 import {
   DEFAULT_LOOK,
   DEFAULT_SCOPE_FEATHER,
-  DEFAULT_SCOPE_ON,
   DEFAULT_SCOPE_SHAPE,
   DEFAULT_SCOPE_SIZE,
   featherOf,
@@ -65,7 +64,6 @@ export type ShareState = {
   asOf?: string;
   /** The globe's look (GC2); absent means the default. */
   look?: LookId;
-  scope?: boolean;
   shape?: ScopeShape;
   size?: number;
   feather?: number;
@@ -131,7 +129,6 @@ export function encodeShareLink(state: ShareState): string {
     if (k) params.set("asof", k);
   }
   if (state.look && state.look !== DEFAULT_LOOK && isLookId(state.look)) params.set("look", state.look);
-  if (state.scope !== undefined && state.scope !== DEFAULT_SCOPE_ON) params.set("scope", state.scope ? "1" : "0");
   if (state.shape !== undefined && isScopeShape(state.shape) && state.shape !== DEFAULT_SCOPE_SHAPE) params.set("shape", state.shape);
   if (state.size !== undefined && sizeOf(state.size) !== DEFAULT_SCOPE_SIZE) params.set("size", String(sizeOf(state.size)));
   if (state.feather !== undefined && featherOf(state.feather) !== DEFAULT_SCOPE_FEATHER) params.set("feather", String(featherOf(state.feather)));
@@ -190,8 +187,6 @@ export function decodeShareLink(hash: string): ShareState {
   if (asof && Number.isFinite(Date.parse(asof))) out.asOf = new Date(Date.parse(asof)).toISOString();
   const look = params.get("look");
   if (isLookId(look)) out.look = look;
-  const scope = params.get("scope");
-  if (scope === "0" || scope === "1") out.scope = scope === "1";
   const shape = params.get("shape");
   if (isScopeShape(shape)) out.shape = shape;
   const size = params.get("size");

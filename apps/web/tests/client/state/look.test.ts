@@ -6,13 +6,13 @@ import * as presets from "client/globe/look/presets";
 import { LOOK_PRESETS, lookPreset } from "client/globe/look/presets";
 import { decodeShareLink, encodeShareLink, type ShareState } from "client/hud/share-link";
 import { applyShareState, readShareState } from "client/hud/share-link-store";
-import { DEFAULT_LOOK, DEFAULT_SCOPE_FEATHER, DEFAULT_SCOPE_ON, featherOf, isLookId, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER, SCOPE_ON, scopeOnOf } from "client/state/look";
+import * as lookState from "client/state/look";
+import { DEFAULT_LOOK, DEFAULT_SCOPE_FEATHER, featherOf, isLookId, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER } from "client/state/look";
 
 selectPython();
 
 const resetLook = () => {
   set(LOOK, LOOK.defaults);
-  set(SCOPE_ON, SCOPE_ON.defaults);
   set(SCOPE_FEATHER, SCOPE_FEATHER.defaults);
 };
 
@@ -23,13 +23,14 @@ describe("look presets", () => {
     expect(new Set(LOOK_PRESETS.map((p) => p.label)).size).toBe(7);
   });
 
-  test("defaults: normal, scope on, feather 11", () => {
+  test("defaults: normal, a visible soft edge of 40, and no on/off for the window (scope feather)", () => {
     expect(LOOK.defaults).toBe("normal");
     expect(DEFAULT_LOOK).toBe("normal");
-    expect(SCOPE_ON.defaults).toBe(true);
-    expect(DEFAULT_SCOPE_ON).toBe(true);
-    expect(SCOPE_FEATHER.defaults).toBe(11);
-    expect(DEFAULT_SCOPE_FEATHER).toBe(11);
+    expect(SCOPE_FEATHER.defaults).toBe(40);
+    expect(DEFAULT_SCOPE_FEATHER).toBe(40);
+    // GE11: the map window is always there; the switch and its key are gone.
+    expect("SCOPE_ON" in lookState).toBe(false);
+    expect("scopeOnOf" in lookState).toBe(false);
   });
 
   test("normal has no shader; every other preset mixes by intensity and reads the scene; no shader draws the scope", () => {
@@ -63,18 +64,15 @@ describe("look presets", () => {
     expect(featherOf(60.4)).toBe(60);
     expect(featherOf(-5)).toBe(0);
     expect(featherOf(250)).toBe(100);
-    expect(featherOf(Number.NaN)).toBe(11);
-    expect(featherOf("soft")).toBe(11);
-    expect(featherOf(undefined)).toBe(11);
-    expect(scopeOnOf(false)).toBe(false);
-    expect(scopeOnOf("no")).toBe(true);
-    expect(scopeOnOf(undefined)).toBe(true);
+    expect(featherOf(Number.NaN)).toBe(40);
+    expect(featherOf("soft")).toBe(40);
+    expect(featherOf(undefined)).toBe(40);
   });
 
-  test("share-link round trip of look, scope and feather", () => {
-    const state: ShareState = { app: "python", look: "nvg", scope: false, feather: 60 };
+  test("share-link round trip of look and feather", () => {
+    const state: ShareState = { app: "python", look: "nvg", feather: 60 };
     const hash = encodeShareLink(state);
-    expect(hash).toBe("v=2&app=python&look=nvg&scope=0&feather=60");
+    expect(hash).toBe("v=2&app=python&look=nvg&feather=60");
     expect(decodeShareLink(hash)).toEqual(state);
     expect(decodeShareLink(`#${hash}`)).toEqual(state);
     expect(encodeShareLink(decodeShareLink(hash))).toBe(hash);
@@ -84,12 +82,14 @@ describe("look presets", () => {
   });
 
   test("share link omits the look at its defaults and drops invalid look fields", () => {
-    expect(encodeShareLink({ app: "python", look: "normal", scope: true, feather: 11 })).toBe("v=2&app=python");
-    expect(encodeShareLink({ app: "python", feather: 11.3 })).toBe("v=2&app=python");
+    expect(encodeShareLink({ app: "python", look: "normal", feather: 40 })).toBe("v=2&app=python");
+    expect(encodeShareLink({ app: "python", feather: 40.3 })).toBe("v=2&app=python");
     expect(encodeShareLink({ app: "python", feather: 999 })).toBe("v=2&app=python&feather=100");
     const bad = decodeShareLink("v=2&app=python&look=thermal&scope=yes&feather=abc&c=25,-80,1000,0,-90");
     expect(bad.look).toBeUndefined();
-    expect(bad.scope).toBeUndefined();
+    // The old on/off field is ignored without error and without effect.
+    expect("scope" in bad).toBe(false);
+    expect(decodeShareLink("v=2&app=python&scope=0")).toEqual({ app: "python" });
     expect(bad.feather).toBeUndefined();
     expect(bad.camera).toBeDefined();
     expect(decodeShareLink("v=2&app=python&feather=101").feather).toBeUndefined();
@@ -101,16 +101,14 @@ describe("look presets", () => {
     resetLook();
     try {
       const atDefaults = readShareState();
-      expect([atDefaults.look, atDefaults.scope, atDefaults.feather]).toEqual(["normal", true, 11]);
+      expect([atDefaults.look, atDefaults.feather]).toEqual(["normal", 40]);
       expect(new URLSearchParams(encodeShareLink(atDefaults)).has("look")).toBe(false);
 
-      applyShareState({ app: "python", look: "snow", scope: false, feather: 33 })();
+      applyShareState({ app: "python", look: "snow", feather: 33 })();
       expect(get<string>(LOOK)).toBe("snow");
-      expect(get<boolean>(SCOPE_ON)).toBe(false);
       expect(get<number>(SCOPE_FEATHER)).toBe(33);
       const hash = encodeShareLink(readShareState());
       expect(new URLSearchParams(hash).get("look")).toBe("snow");
-      expect(new URLSearchParams(hash).get("scope")).toBe("0");
       expect(new URLSearchParams(hash).get("feather")).toBe("33");
 
       // A link without look fields leaves the look alone.

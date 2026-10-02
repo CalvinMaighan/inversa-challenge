@@ -11,7 +11,6 @@ import {
   MAX_SCOPE_SIZE,
   MIN_SCOPE_SIZE,
   SCOPE_FEATHER,
-  SCOPE_ON,
   SCOPE_SHAPE,
   SCOPE_SHAPES,
   SCOPE_SIZE,
@@ -25,8 +24,8 @@ import styled from "client/styled";
 import { IconButton, Surface } from "../primitives";
 
 /**
- * The Look controls (docs/GODS_EYE.md GC2, GE9): the seven presets and the map window (on or off, its shape, its
- * size and its soft edge). The button that opens them is an icon in the top-right cluster (client/hud/topbar,
+ * The Look controls (docs/GODS_EYE.md GC2, GE9, GE11): the seven presets and the map window: its shape and size
+ * (always fully visible) and its soft edge (how the map fades out beyond it; there is no on/off). The button that opens them is an icon in the top-right cluster (client/hud/topbar,
  * between Theme and Developer); this module holds the popover's body and the writers, and the bottom bar's pill
  * and popover styles that Layers uses.
  */
@@ -112,53 +111,11 @@ const Presets = styled.div`
   }
 `;
 
-const ScopeRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: var(--gap-s);
-  margin-bottom: var(--gap-s);
-
-  span {
-    flex: 1;
-    font: 600 12px / 1.3 var(--font-ui);
-  }
-`;
-
-const Switch = styled.button`
-  position: relative;
-  width: 34px;
-  height: 20px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-2, transparent);
-  cursor: pointer;
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: transform 120ms ease-out;
-  }
-
-  &[aria-checked="true"] {
-    border-color: var(--accent);
-    background: color-mix(in oklch, var(--accent) 35%, transparent);
-  }
-  &[aria-checked="true"]::after {
-    background: var(--text);
-    transform: translateX(14px);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    &::after {
-      transition: none;
-    }
-  }
+/** A line of plain words under a control. */
+const Note = styled.p`
+  margin: var(--gap-xs) 0 0;
+  color: var(--muted);
+  font: 400 11px / 1.4 var(--font-ui);
 `;
 
 /** Shape: four segments in one row, one picked. */
@@ -208,16 +165,15 @@ export function LookIcon() {
 }
 
 const SHAPE_LABELS: Record<ScopeShape, { label: string; title: string }> = {
-  circle: { label: "Circle", title: "A round window on the map" },
+  circle: { label: "Circle", title: "A round, always clear window on the map" },
   oval: { label: "Oval", title: "A wide oval window" },
   rounded: { label: "Rounded", title: "A wide window with rounded corners" },
-  frame: { label: "Frame", title: "The whole page, with only the soft edge" },
+  frame: { label: "Frame", title: "The whole page is the clear window; only the soft edge fades" },
 };
 /** Size slider step, percent. */
 export const SIZE_STEP = 5;
 
 export const setLook = (id: LookId) => set<LookId>(LOOK, id);
-export const setScopeOn = (on: boolean) => set<boolean>(SCOPE_ON, on);
 export const setScopeShape = (shape: ScopeShape) => set<ScopeShape>(SCOPE_SHAPE, shapeOf(shape));
 export const setScopeSize = (pct: number) => set<number>(SCOPE_SIZE, sizeOf(pct));
 export const setScopeFeather = (pct: number) => set<number>(SCOPE_FEATHER, featherOf(pct));
@@ -238,19 +194,17 @@ function arrowFocus(e: KeyboardEvent<HTMLDivElement>, selector: string): HTMLBut
 
 export type LookChoicesProps = {
   look: LookId;
-  scopeOn: boolean;
   shape: ScopeShape;
   size: number;
   feather: number;
   onLook: (id: LookId) => void;
-  onScope: (on: boolean) => void;
   onShape: (shape: ScopeShape) => void;
   onSize: (pct: number) => void;
   onFeather: (pct: number) => void;
 };
 
 /** The popover's body over plain props, so it renders anywhere (tests included). */
-export function LookChoices({ look, scopeOn, shape, size, feather, onLook, onScope, onShape, onSize, onFeather }: LookChoicesProps) {
+export function LookChoices({ look, shape, size, feather, onLook, onShape, onSize, onFeather }: LookChoicesProps) {
   const ids = useId();
   return (
     <>
@@ -263,10 +217,6 @@ export function LookChoices({ look, scopeOn, shape, size, feather, onLook, onSco
         ))}
       </Presets>
       <Heading>Map window</Heading>
-      <ScopeRow>
-        <span id={`${ids}-scope`}>Show the map through a window</span>
-        <Switch type="button" role="switch" aria-checked={scopeOn} aria-labelledby={`${ids}-scope`} data-testid="scope-switch" onClick={() => onScope(!scopeOn)} />
-      </ScopeRow>
       <Shapes
         role="radiogroup"
         aria-label="Window shape"
@@ -285,7 +235,6 @@ export function LookChoices({ look, scopeOn, shape, size, feather, onLook, onSco
             aria-checked={shape === s}
             tabIndex={shape === s ? 0 : -1}
             $active={shape === s}
-            disabled={!scopeOn}
             title={SHAPE_LABELS[s].title}
             data-shape={s}
             onClick={() => onShape(s)}
@@ -303,7 +252,6 @@ export function LookChoices({ look, scopeOn, shape, size, feather, onLook, onSco
           max={MAX_SCOPE_SIZE}
           step={SIZE_STEP}
           value={size}
-          disabled={!scopeOn}
           aria-label="Window size"
           aria-valuetext={`${size} percent`}
           data-testid="scope-size"
@@ -320,13 +268,14 @@ export function LookChoices({ look, scopeOn, shape, size, feather, onLook, onSco
           max={MAX_SCOPE_FEATHER}
           step={1}
           value={feather}
-          disabled={!scopeOn}
-          aria-label="Window edge softness"
+          aria-label="Window soft edge"
+          aria-valuetext={feather === 0 ? "0, sharp edge" : feather === MAX_SCOPE_FEATHER ? "100, no vignette" : `${feather}, fades out past the window`}
           data-testid="scope-feather"
           onChange={(e) => onFeather(Number(e.currentTarget.value))}
         />
         <output aria-hidden="true">{feather}</output>
       </SliderRow>
+      <Note>The window is always clear. Soft edge fades the map out past it: sharp at 0, no vignette at 100.</Note>
     </>
   );
 }

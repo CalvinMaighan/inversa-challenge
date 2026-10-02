@@ -170,31 +170,30 @@ export function paneFrame(): { width: number; height: number; free: Rect; circle
 }
 
 /**
- * `[data-stage]`'s window in pane pixels, shrunk to its opaque part (the soft edge fades the rest to black): a disc
- * or an oval for the round shapes, a rect for `rounded` and `frame` (client/hud/shell/scope.ts). The soft edge is
- * `--scope-feather` of half the window's shorter side.
+ * `[data-stage]`'s window in pane pixels: a disc or an oval for the round shapes, a rect for `rounded` and
+ * `frame` (client/hud/shell/scope.ts). The window is the always fully visible part; the soft edge lies outside it (none, at its maximum).
  */
 function stageWindow(pane: DOMRect): Circle | Rect | null {
   const shell = document.querySelector<HTMLElement>("[data-shell]");
   const stage = document.querySelector<HTMLElement>("[data-stage]");
-  if (!shell || !stage || shell.dataset.scope === "off") return null;
+  if (!shell || !stage) return null;
   const s = stage.getBoundingClientRect();
   if (s.width < 50 || s.height < 50) return null;
-  const share = Number.parseFloat(getComputedStyle(shell).getPropertyValue("--scope-feather"));
+  // No vignette (soft edge at its maximum): the whole free page is visible, not only the window.
+  if (Number.parseFloat(getComputedStyle(shell).getPropertyValue("--scope-feather")) >= 1) return null;
   const short = Math.min(s.width, s.height);
-  const f = (Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0) * (short / 2);
   const cx = s.left + s.width / 2 - pane.left;
   const cy = s.top + s.height / 2 - pane.top;
   const shape = shell.dataset.shape ?? "circle";
   if (shape === "circle" || shape === "oval") {
-    const rx = Math.max(0, s.width / 2 - f);
-    const ry = Math.max(0, s.height / 2 - f);
+    const rx = s.width / 2;
+    const ry = s.height / 2;
     return shape === "circle" ? { cx, cy, r: rx } : { cx, cy, r: rx, ry };
   }
   // A rounded corner's opaque arc cuts about 0.3 of its radius off the corner: keep that much clear too.
-  const corner = shape === "rounded" ? Math.max(0, short * ROUNDED_CORNER_SHARE - f) * 0.3 : 0;
-  const hw = Math.max(0, s.width / 2 - f - corner);
-  const hh = Math.max(0, s.height / 2 - f - corner);
+  const corner = shape === "rounded" ? short * ROUNDED_CORNER_SHARE * 0.3 : 0;
+  const hw = Math.max(0, s.width / 2 - corner);
+  const hh = Math.max(0, s.height / 2 - corner);
   return { left: cx - hw, top: cy - hh, right: cx + hw, bottom: cy + hh };
 }
 

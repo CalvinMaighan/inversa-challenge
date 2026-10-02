@@ -7,7 +7,7 @@ import type { FeedState } from "shared/feed-state";
 
 import { SHEET_MEDIA } from "client/agent/layout/geometry";
 import { FEEDS } from "client/state/feeds";
-import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
+import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
@@ -17,7 +17,7 @@ import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
 import { aboutSentence, WINDOW_NOTE } from "../help/content";
 import DeveloperPanel from "../developer/DeveloperPanel";
-import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeOn, setScopeShape, setScopeSize } from "../look/LookBar";
+import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
@@ -436,7 +436,7 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
  * Look (GE9): the visual presets and the map window (shape, size, soft edge), as an icon button in the cluster. Its
  * popover opens below it, right edges aligned.
  */
-function Look({ look, scopeOn, shape, size, feather }: LookState) {
+function Look({ look, shape, size, feather }: LookState) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const pop = usePopover(triggerRef, popRef);
@@ -460,12 +460,10 @@ function Look({ look, scopeOn, shape, size, feather }: LookState) {
         <PopoverBox id={id} label="Look" testId="look-popover" popRef={popRef} onClose={pop.close} align="right">
           <LookChoices
             look={look}
-            scopeOn={scopeOn}
             shape={shape}
             size={size}
             feather={feather}
             onLook={setLook}
-            onScope={setScopeOn}
             onShape={setScopeShape}
             onSize={setScopeSize}
             onFeather={setScopeFeather}
@@ -524,7 +522,6 @@ export default function TopBar(props: ChromeProps) {
   const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
   const look: LookState = {
     look: lookOf(useActiveState<LookId>(LOOK)[0]),
-    scopeOn: scopeOnOf(useActiveState<boolean>(SCOPE_ON)[0]),
     shape: shapeOf(useActiveState<ScopeShape>(SCOPE_SHAPE)[0]),
     size: sizeOf(useActiveState<number>(SCOPE_SIZE)[0]),
     feather: featherOf(useActiveState<number>(SCOPE_FEATHER)[0]),
@@ -534,8 +531,8 @@ export default function TopBar(props: ChromeProps) {
 
 type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
 /** The Look keys the Look popover shows. */
-type LookState = { look: LookId; scopeOn: boolean; shape: ScopeShape; size: number; feather: number };
-const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), scopeOn: scopeOnOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined) };
+type LookState = { look: LookId; shape: ScopeShape; size: number; feather: number };
+const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined) };
 
 /** The chrome over plain props (the stores are read by TopBar), so it renders anywhere, tests included. */
 export function TopBarView({

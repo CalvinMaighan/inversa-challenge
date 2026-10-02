@@ -47,7 +47,6 @@ const LOAD_TIMEOUT_MS = 120_000;
 const PYTHON_TAXON = "1";
 const BUTTON = "[data-testid=look-button]";
 const POPOVER = "[data-testid=look-popover]";
-const SWITCH = "[data-testid=scope-switch]";
 const FEATHER = "[data-testid=scope-feather]";
 const BENCH_FRAMES = 30;
 const SOFTWARE_GL = ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
@@ -69,7 +68,7 @@ type LookState = {
   compiled: string[];
   errors: string[];
   lastFade: { requestedAt: number; startedAt: number | null; endedAt: number | null; ticks: number[] } | null;
-  scope: { on: boolean; shape: string; size: number; feather: number };
+  scope: { shape: string; size: number; feather: number };
 };
 
 const lookState = (page: Page) => page.evaluate(() => window.__look!.state() as unknown as LookState);
@@ -155,39 +154,125 @@ async function analyze(page: Page, png: Buffer, pane: Rect, centreHalf: number, 
   );
 }
 
-/** Pixels along a ray whose brightness sits strictly between the unmasked value and black: the soft edge. */
-function edgeWidth(on: number[], off: number[]): number {
-  let n = 0;
-  for (let i = 0; i < Math.min(on.length, off.length); i++) {
-    const o = off[i]!;
-    if (o < 24) continue;
-    const ratio = on[i]! / o;
-    if (ratio > 0.08 && ratio < 0.92) n += 1;
-  }
-  return n;
-}
-
-/** Distance from the centre to the first pixel along a ray that is darker than half its unmasked value. */
-function edgeAt(on: number[], off: number[]): number {
-  for (let i = 0; i < Math.min(on.length, off.length); i++) {
-    const o = off[i]!;
-    if (o >= 24 && on[i]! / o < 0.5) return i;
-  }
-  return -1;
-}
-
 const SHAPE = (s: string) => `[data-testid=scope-shape] button[data-shape="${s}"]`;
 const SIZE = "[data-testid=scope-size]";
-/** Hides the HUD and the chat card while a window is measured, so only the masked globe is on the page. */
+/** Hides the HUD and the chat card while the window is measured, so only the masked globe is on the page. */
 const HIDE_HUD = '[data-slot="hud"], [data-slot="side"] { visibility: hidden !important; }';
+const DRAWER = '[data-testid="hud-drawer"]';
+const M_PER_DEG = 111_320;
+const pct = (n: number) => Math.round(n);
+
+/** Sets the soft edge (0..100) through the popover's slider and waits for the shell to follow. */
+async function setFeatherPct(page: Page, value: number): Promise<void> {
+  await openPopover(page);
+  await page.locator(FEATHER).fill(String(value));
+  await page.waitForFunction((want) => window.__look!.state().scope.feather === want, value, { timeout: 10_000 });
+}
+
+async function setShape(page: Page, shape: string): Promise<void> {
+  await openPopover(page);
+  await page.locator(SHAPE(shape)).click();
+  await page.waitForFunction((want) => window.__look!.state().scope.shape === want, shape, { timeout: 10_000 });
+}
+
+async function setSizePct(page: Page, value: number): Promise<void> {
+  await openPopover(page);
+  await page.locator(SIZE).fill(String(value));
+  await page.waitForFunction((want) => window.__look!.state().scope.size === want, value, { timeout: 10_000 });
+}
+
+/** A screenshot of the masked globe alone: popover closed, HUD hidden, the mask settled. */
+async function shot(page: Page, name?: string): Promise<Buffer> {
+  await closePopover(page);
+  const style = await page.addStyleTag({ content: HIDE_HUD });
+  await page.waitForTimeout(450);
+  const png = await page.screenshot(name ? { path: path.join(SHOT_DIR, `look-${name}.png`) } : {});
+  await style.evaluate((el) => (el as HTMLElement).remove());
+  return png;
+}
+
+/**
+ * Mean visibility (masked brightness over unmasked, percent) in rings around the window's centre, as multiples of its
+ * radius `R`; pixels whose unmasked brightness is under 24 are too dark to judge and left out. `-1` for a ring with
+ * nothing to judge.
+ */
+async function ringRatios(page: Page, on: Buffer, off: Buffer, c: { x: number; y: number; r: number }, pane: Rect, rings: [number, number][]): Promise<number[]> {
+  return page.evaluate(
+    async ({ a, b, c, pane, rings }) => {
+      const load = async (b64: string) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = img.width;
+        cv.height = img.height;
+        const g = cv.getContext("2d")!;
+        g.drawImage(img, 0, 0);
+        return { w: cv.width, d: g.getImageData(0, 0, cv.width, cv.height).data };
+      };
+      const on = await load(a);
+      const off = await load(b);
+      const sumOn = rings.map(() => 0);
+      const sumOff = rings.map(() => 0);
+      for (let y = Math.max(0, Math.floor(pane.y)); y < pane.y + pane.height; y += 2) {
+        for (let x = Math.max(0, Math.floor(pane.x)); x < pane.x + pane.width; x += 2) {
+          const i = (y * on.w + x) * 4;
+          const o = Math.max(off.d[i]!, off.d[i + 1]!, off.d[i + 2]!);
+          if (o < 24) continue;
+          const r = Math.hypot(x - c.x, y - c.y) / c.r;
+          rings.forEach(([r0, r1], k) => {
+            if (r >= r0 && r < r1) {
+              sumOn[k] += Math.max(on.d[i]!, on.d[i + 1]!, on.d[i + 2]!);
+              sumOff[k] += o;
+            }
+          });
+        }
+      }
+      return sumOn.map((v, k) => (sumOff[k]! > 0 ? (100 * v) / sumOff[k]! : -1));
+    },
+    { a: on.toString("base64"), b: off.toString("base64"), c, pane, rings },
+  );
+}
+
+/** Visibility (percent) in a small square around each point: masked over unmasked. */
+async function pointRatios(page: Page, on: Buffer, off: Buffer, pts: { x: number; y: number }[], half = 4): Promise<number[]> {
+  return page.evaluate(
+    async ({ a, b, pts, half }) => {
+      const load = async (b64: string) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = img.width;
+        cv.height = img.height;
+        const g = cv.getContext("2d")!;
+        g.drawImage(img, 0, 0);
+        return { w: cv.width, d: g.getImageData(0, 0, cv.width, cv.height).data };
+      };
+      const on = await load(a);
+      const off = await load(b);
+      return pts.map((p) => {
+        let sOn = 0;
+        let sOff = 0;
+        for (let y = Math.round(p.y) - half; y <= Math.round(p.y) + half; y++) {
+          for (let x = Math.round(p.x) - half; x <= Math.round(p.x) + half; x++) {
+            const i = (y * on.w + x) * 4;
+            const o = Math.max(off.d[i]!, off.d[i + 1]!, off.d[i + 2]!);
+            if (o < 24) continue;
+            sOn += Math.max(on.d[i]!, on.d[i + 1]!, on.d[i + 2]!);
+            sOff += o;
+          }
+        }
+        return sOff > 0 ? (100 * sOn) / sOff : -1;
+      });
+    },
+    { a: on.toString("base64"), b: off.toString("base64"), pts, half },
+  );
+}
 
 type WindowArea = { area: number; eligible: number; cx: number; cy: number };
 
-/**
- * The visible window on a screenshot, against the same view with the window off: the sampled pixels (every 2 px) at
- * least half as bright as unmasked, as an area in px², and the centre of their bounding box. Pixels too dark to
- * judge (unmasked brightness under 24) are left out and counted.
- */
+/** The visible window on a screenshot at soft edge 0: the sampled pixels at least half as bright as unmasked, as an area in px². */
 async function windowArea(page: Page, on: Buffer, off: Buffer): Promise<WindowArea> {
   return page.evaluate(
     async ({ a, b }) => {
@@ -195,12 +280,12 @@ async function windowArea(page: Page, on: Buffer, off: Buffer): Promise<WindowAr
         const img = new Image();
         img.src = `data:image/png;base64,${b64}`;
         await img.decode();
-        const c = document.createElement("canvas");
-        c.width = img.width;
-        c.height = img.height;
-        const g = c.getContext("2d")!;
+        const cv = document.createElement("canvas");
+        cv.width = img.width;
+        cv.height = img.height;
+        const g = cv.getContext("2d")!;
         g.drawImage(img, 0, 0);
-        return { w: c.width, h: c.height, d: g.getImageData(0, 0, c.width, c.height).data };
+        return { w: cv.width, h: cv.height, d: g.getImageData(0, 0, cv.width, cv.height).data };
       };
       const on = await load(a);
       const off = await load(b);
@@ -233,78 +318,179 @@ async function windowArea(page: Page, on: Buffer, off: Buffer): Promise<WindowAr
   );
 }
 
-/**
- * GE9 (gates/leaf-GE9.md G6): the four shapes give four different visible areas, size 50 about a quarter of size 100,
- * feather 0 vs 60 only widens the edge, and every window is centred on the stage. Measured on screenshots with the
- * HUD hidden. `SCOPE-SHAPE circle=<px²> oval=<px²> rounded=<px²> frame=<px²> size50_over_size100=<r>
- * feather_edge0=<px> feather_edge60=<px> centred=1`.
- */
-async function shapeChecks(page: Page, pane: Rect, setFeather: (pct: number) => Promise<void>): Promise<boolean> {
-  const vp = page.viewportSize()!;
-  const setSize = async (pct: number) => {
-    await openPopover(page);
-    await page.locator(SIZE).focus();
-    await page.keyboard.press("Home");
-    for (let s = 30; s < pct; s += 5) await page.keyboard.press("ArrowRight");
-    await page.waitForFunction((want) => window.__look!.state().scope.size === want, pct, { timeout: 10_000 });
-  };
-  const setShape = async (shape: string) => {
-    await openPopover(page);
-    await page.locator(SHAPE(shape)).click();
-    await page.waitForFunction((want) => window.__look!.state().scope.shape === want, shape, { timeout: 10_000 });
-  };
-  const shot = async (name?: string) => {
-    await closePopover(page);
-    const style = await page.addStyleTag({ content: HIDE_HUD });
-    await page.waitForTimeout(400);
-    const png = await page.screenshot(name ? { path: path.join(SHOT_DIR, `look-shape-${name}.png`) } : {});
-    await style.evaluate((el) => (el as HTMLElement).remove());
-    return png;
-  };
-  await openPopover(page);
-  await page.locator(SWITCH).click();
-  await page.waitForFunction(() => !window.__look!.state().scope.on, undefined, { timeout: 10_000 });
-  const off = await shot("off");
-  await openPopover(page);
-  await page.locator(SWITCH).click();
-  await page.waitForFunction(() => window.__look!.state().scope.on, undefined, { timeout: 10_000 });
+async function flyTo(page: Page, lat: number, lon: number, altitudeM: number): Promise<void> {
+  await page.evaluate(
+    ([la, lo, alt]) => {
+      location.hash = `#v=1&c=${la.toFixed(5)},${lo.toFixed(5)},${alt},0,-90&t=2026-09-09T20:00Z`;
+    },
+    [lat, lon, altitudeM] as const,
+  );
+  await page.waitForFunction(
+    ([la, lo]) => {
+      const v = window.__inversa?.state("VIEW") as { lat: number; lon: number } | undefined;
+      return !!v && Math.abs(v.lat - la) < 0.01 && Math.abs(v.lon - lo) < 0.01 && !!window.__inversa?.project(lo, la);
+    },
+    [lat, lon] as const,
+    { timeout: 30_000 },
+  );
+  await page.waitForTimeout(1_500);
+}
 
+/**
+ * GE11 (gates/leaf-GE11.md G2): the circle is always fully visible; the soft edge fades the map out OUTSIDE it. Visibility
+ * (masked over unmasked pixels, HUD hidden) inside, just outside and far outside the circle at soft edge 0, the default and
+ * 100 (100 is the unmasked baseline: no vignette). Prints `SCOPE-FEATHER inside_f0=<%> inside_f40=<%> inside_f100=<%>
+ * outside_f0=<%> near_default=<%> far_default=<%> outside_f100=<%> default=<n>`.
+ */
+async function featherChecks(page: Page, pane: Rect, stage: Rect): Promise<boolean> {
+  const c = { x: stage.x + stage.width / 2, y: stage.y + stage.height / 2, r: stage.width / 2 };
+  const initial = await lookState(page);
+  const def = initial.scope.feather;
+  const rings: [number, number][] = [
+    [0, 0.9],
+    [1.1, 1.2],
+    [1.5, 99],
+    [1.05, 99],
+  ];
+  await setFeatherPct(page, 100);
+  const off = await shot(page, "feather-100");
+  const f100 = await ringRatios(page, await shot(page), off, c, pane, rings);
+  await setFeatherPct(page, 0);
+  const f0 = await ringRatios(page, await shot(page, "feather-0"), off, c, pane, rings);
+  await setFeatherPct(page, 70);
+  await shot(page, "feather-70");
+  await setFeatherPct(page, def);
+  const fd = await ringRatios(page, await shot(page, "feather-default"), off, c, pane, rings);
+  console.log(
+    `SCOPE-FEATHER inside_f0=${pct(f0[0]!)} inside_f40=${pct(fd[0]!)} inside_f100=${pct(f100[0]!)} outside_f0=${pct(f0[3]!)} near_default=${pct(fd[1]!)} far_default=${pct(fd[2]!)} outside_f100=${pct(f100[3]!)} default=${def}`,
+  );
+  return (
+    f0[0]! >= 99 && fd[0]! >= 99 && f100[0]! >= 99 && f0[3]! <= 2 && fd[1]! >= 60 && fd[1]! <= 95 && fd[2]! >= 5 && fd[2]! <= 60 && fd[2]! < fd[1]! && f100[3]! >= 97 && def >= 30 && def <= 50
+  );
+}
+
+/**
+ * GE11 G3: oval, rounded and frame at size 70 and the default soft edge: fully visible inside, and the fade runs outward
+ * from each shape's own edge (measured along the horizontal and the vertical through the centre). `SCOPE-SHAPES oval=ok
+ * rounded=ok frame=ok`; also the four shapes' areas at soft edge 0 (`SCOPE-SHAPE`, as GE9).
+ */
+async function shapeChecks(page: Page, pane: Rect): Promise<boolean> {
+  const verdict: Record<string, boolean> = {};
+  const def = (await lookState(page)).scope.feather;
+  await setFeatherPct(page, 100);
+  await setShape(page, "circle");
+  await setSizePct(page, 100);
+  const off = await shot(page);
+
+  // The four shapes' areas at a hard edge, and size 50 about a quarter of size 100.
+  await setFeatherPct(page, 0);
   const areas: Record<string, WindowArea> = {};
   for (const shape of ["circle", "oval", "rounded", "frame"]) {
-    await setShape(shape);
-    areas[shape] = await windowArea(page, await shot(shape), off);
+    await setShape(page, shape);
+    areas[shape] = await windowArea(page, await shot(page, `shape-${shape}`), off);
   }
-  await setShape("circle");
-  await setSize(50);
-  const half = await windowArea(page, await shot("circle-size50"), off);
-  await setSize(100);
+  await setShape(page, "circle");
+  await setSizePct(page, 50);
+  const half = await windowArea(page, await shot(page, "shape-circle-size50"), off);
+  await setSizePct(page, 100);
   const cx = pane.x + pane.width / 2;
   const cy = pane.y + pane.height / 2;
-  const all = { ...areas, size50: half };
-  const centred = Object.values(all).every((a) => Math.abs(a.cx - cx) <= 3 && Math.abs(a.cy - cy) <= 3);
-  for (const [k, a] of Object.entries(all)) log(`window ${k}: ${a.area} px² visible, centre (${a.cx.toFixed(1)}, ${a.cy.toFixed(1)}) vs stage (${cx}, ${cy}), ${(a.eligible * 100).toFixed(0)}% of the page bright enough to judge`);
+  const centred = Object.values({ ...areas, size50: half }).every((a) => Math.abs(a.cx - cx) <= 3 && Math.abs(a.cy - cy) <= 3);
   const ratio = half.area / areas.circle!.area;
-
-  // The soft edge on the circle: feather 0 vs 60, along the rays right and up (the HUD hidden: nothing in the way).
-  const stage = await stageRect(page);
-  const ray = async (pct: number) => {
-    await openPopover(page);
-    await setFeather(pct);
-    return analyze(page, await shot(), pane, 30, stage);
-  };
-  const offRays = await analyze(page, off, pane, 30, stage);
-  const f0 = await ray(0);
-  const f60 = await ray(60);
-  const e0 = Math.max(edgeWidth(f0.rays[0]!, offRays.rays[0]!), edgeWidth(f0.rays[2]!, offRays.rays[2]!));
-  const e60 = Math.max(edgeWidth(f60.rays[0]!, offRays.rays[0]!), edgeWidth(f60.rays[2]!, offRays.rays[2]!));
-  await openPopover(page);
-  await setFeather(11);
   const distinct = new Set(Object.values(areas).map((a) => Math.round(a.area / 1000))).size === 4;
   console.log(
-    `SCOPE-SHAPE circle=${areas.circle!.area} oval=${areas.oval!.area} rounded=${areas.rounded!.area} frame=${areas.frame!.area} size50_over_size100=${ratio.toFixed(2)} feather_edge0=${e0} feather_edge60=${e60} centred=${centred ? 1 : 0}`,
+    `SCOPE-SHAPE circle=${areas.circle!.area} oval=${areas.oval!.area} rounded=${areas.rounded!.area} frame=${areas.frame!.area} size50_over_size100=${ratio.toFixed(2)} centred=${centred ? 1 : 0}`,
   );
-  log(`shapes distinct ${distinct}; viewport ${vp.width}×${vp.height}`);
-  return distinct && ratio >= 0.2 && ratio <= 0.3 && e60 > e0 && centred;
+
+  // The fade outside each shape at the default soft edge.
+  await setFeatherPct(page, def);
+  await setSizePct(page, 70);
+  for (const shape of ["oval", "rounded", "frame"]) {
+    await setShape(page, shape);
+    const png = await shot(page, `shape-${shape}-default`);
+    const st = await rectOf(page, "[data-stage]");
+    const hw = st.width / 2;
+    const hh = st.height / 2;
+    const w = (def / 100) * Math.min(hw, hh);
+    const sx = st.x + hw;
+    const sy = st.y + hh;
+    const pts = [
+      { x: sx + 0.9 * hw, y: sy },
+      { x: sx + hw + 0.3 * w, y: sy },
+      { x: sx + hw + 1.1 * w, y: sy },
+      { x: sx, y: sy - 0.9 * hh },
+      { x: sx, y: sy - hh - 0.3 * w },
+      { x: sx, y: sy - hh - 1.1 * w },
+    ];
+    const v = await pointRatios(page, png, off, pts);
+    const fadeX = v[0]! >= 97 && v[1]! < v[0]! - 1 && v[2]! < v[1]! - 3 && v[2]! >= 0;
+    const fadeY = v[3]! >= 97 && v[4]! < v[3]! - 1 && v[5]! < v[4]! - 3 && v[5]! >= 0;
+    log(`${shape} size 70: along x ${v.slice(0, 3).map((n) => n.toFixed(0)).join(" > ")}, along y ${v.slice(3).map((n) => n.toFixed(0)).join(" > ")}`);
+    verdict[shape] = fadeX && fadeY;
+  }
+  await setSizePct(page, 100);
+  await setShape(page, "circle");
+  console.log(`SCOPE-SHAPES oval=${verdict.oval ? "ok" : "no"} rounded=${verdict.rounded ? "ok" : "no"} frame=${verdict.frame ? "ok" : "no"}`);
+  return distinct && ratio >= 0.2 && ratio <= 0.3 && centred && Object.values(verdict).every(Boolean);
+}
+
+/**
+ * GE11 G4: where the map is visible outside the circle it is interactive: nothing clips the pointer to the circle, the globe
+ * can be dragged from there, and a sighting marker drawn in the fade can be clicked. `SCOPE-INPUT outside_marker_click=ok
+ * drag=ok`.
+ */
+async function inputChecks(page: Page, pane: Rect, stage: Rect, list: { id: string; lat: number; lon: number }[]): Promise<boolean> {
+  await setShape(page, "circle");
+  await setSizePct(page, 100);
+  await setFeatherPct(page, (await lookState(page)).scope.feather);
+  await closePopover(page);
+  const cx = stage.x + stage.width / 2;
+  const cy = stage.y + stage.height / 2;
+  const reach = Math.min(1.15 * (stage.width / 2), pane.x + pane.width - cx - 20);
+  const probe = await page.evaluate(
+    ([x, y]) => {
+      const el = document.elementFromPoint(x!, y!);
+      const canvas = document.querySelector("[data-globe] canvas");
+      return { inGlobe: !!el?.closest('[data-slot="globe"]'), clip: canvas ? getComputedStyle(canvas).clipPath : "?" };
+    },
+    [cx + reach, cy],
+  );
+  // Where a fixed place is on screen before and after a drag that starts outside the circle.
+  const anchor = { lon: -80.95, lat: 25.05 };
+  const where = () => page.evaluate(([lo, la]) => window.__inversa!.project(lo!, la!), [anchor.lon, anchor.lat]);
+  const before = await where();
+  await page.mouse.move(cx + reach, cy);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++) await page.mouse.move(cx + reach - i * 15, cy, { steps: 2 });
+  await page.mouse.up();
+  await page.waitForTimeout(800);
+  const after = await where();
+  const drag = !!before && !!after && Math.hypot(after.x - before.x, after.y - before.y) > 20;
+  log(`drag from outside the circle moved the map ${before && after ? Math.round(Math.hypot(after.x - before.x, after.y - before.y)) : "?"} px`);
+
+  // A marker in the fade: fly so a python sighting sits 1.15 radii right of the centre, then click it.
+  const vp = page.viewportSize()!;
+  const altitudeM = 4_000;
+  const mpp = (altitudeM * 2 * Math.tan(Math.PI / 6)) / Math.max(vp.width, vp.height);
+  const dx = 1.15 * (stage.width / 2);
+  let marker = false;
+  for (const sg of list.slice(0, 12)) {
+    await flyTo(page, sg.lat, sg.lon - (dx * mpp) / (M_PER_DEG * Math.cos((sg.lat * Math.PI) / 180)), altitudeM);
+    const pt = await page.evaluate(([lo, la]) => window.__inversa!.project(lo!, la!), [sg.lon, sg.lat]);
+    if (!pt) continue;
+    if ((await page.evaluate(([x, y]) => window.__inversa!.pick(x!, y!), [pt.x, pt.y])) !== `sighting:${sg.id}`) continue;
+    log(`marker sighting:${sg.id} at x=${Math.round(pt.x)} (${((pt.x - cx) / (stage.width / 2)).toFixed(2)} radii right of the centre)`);
+    await page.mouse.click(pt.x, pt.y);
+    marker = await page
+      .locator(DRAWER)
+      .waitFor({ timeout: 15_000 })
+      .then(() => true)
+      .catch(() => false);
+    break;
+  }
+  log(`outside the circle: element under the pointer in the globe ${probe.inGlobe}, canvas clip-path ${probe.clip}`);
+  console.log(`SCOPE-INPUT outside_marker_click=${marker ? "ok" : "no"} drag=${drag && probe.inGlobe && probe.clip === "none" ? "ok" : "no"}`);
+  return marker && drag && probe.inGlobe && probe.clip === "none";
 }
 
 const median = (xs: number[]) => {
@@ -343,7 +529,7 @@ async function main() {
     log(`webgl2 renderer: ${renderer}`);
     log(`pane ${Math.round(pane.width)}×${Math.round(pane.height)} at ${Math.round(pane.x)},${Math.round(pane.y)}; ${drawn} sightings drawn`);
     const initial = await lookState(page);
-    if (initial.target !== "normal" || !initial.scope.on || initial.scope.feather !== 11) fail(`initial look ${JSON.stringify(initial)}; want normal, scope on, feather 11`);
+    if (initial.target !== "normal" || initial.scope.feather !== 40 || initial.scope.shape !== "circle" || initial.scope.size !== 100) fail(`initial look ${JSON.stringify(initial)}; want normal, a circle at size 100 and soft edge 40`);
 
     // ---- 1. presets ---------------------------------------------------------------------------------------
     let nonblack = 0;
@@ -405,52 +591,17 @@ async function main() {
     console.log(`LOOK fade ms=${Math.round(fadeMs)} monotonic=${monotonic ? 1 : 0}`);
     if (!monotonic || fadeMs < 350 || fadeMs > 700) failed = true;
 
-    // ---- 3. scope -----------------------------------------------------------------------------------------
+    // ---- 3. the map window (GE11): always there; the soft edge fades outside it -----------------------------------
     await pick(page, "normal");
-    const slider = page.locator(FEATHER);
-    const setFeather = async (pct: number) => {
-      await slider.focus();
-      await page.keyboard.press("Home");
-      for (let i = 0; i < pct; i++) await page.keyboard.press("ArrowRight");
-      await page.waitForFunction((want) => window.__look!.state().scope.feather === want, pct, { timeout: 10_000 });
-      await page.waitForTimeout(400);
-    };
-    const scopeShot = async (name: string) => {
-      const png = await page.screenshot({ path: path.join(SHOT_DIR, `look-scope-${name}.png`) });
-      return analyze(page, png, pane, 60, stage);
-    };
-    await page.locator(SWITCH).click();
-    await page.waitForFunction(() => !window.__look!.state().scope.on, undefined, { timeout: 10_000 });
-    await page.waitForTimeout(400);
-    const off = await scopeShot("off");
-    await page.locator(SWITCH).click();
-    await page.waitForFunction(() => window.__look!.state().scope.on, undefined, { timeout: 10_000 });
-    await setFeather(0);
-    const f0 = await scopeShot("feather-0");
-    await setFeather(60);
-    const f60 = await scopeShot("feather-60");
-    // The right-hand ray leaves the circle (the pane is wider than tall): its last pixels are outside.
-    const edgeOff = off.rays[0]!.at(-3)!;
-    const edgeOn = f0.rays[0]!.at(-3)!;
-    const centreOff = off.rays[0]![0]!;
-    const centreOn = f0.rays[0]![0]!;
-    const scopeOn = Math.abs(centreOn - centreOff) <= 8 && edgeOn <= 6 && edgeOff >= 24;
-    const scopeOff = edgeOff >= 24 && off.centre.bright / off.centre.total >= 0.25;
-    // The right and upward rays only: the left one runs under the chat card, whose glass shows the mask through it.
-    const clear = [0, 2];
-    const e0 = Math.max(...clear.map((i) => edgeWidth(f0.rays[i]!, off.rays[i]!)));
-    const e60 = Math.max(...clear.map((i) => edgeWidth(f60.rays[i]!, off.rays[i]!)));
-    // Centred on [data-stage]: the hard edge (feather 0) as far to the right as upwards, at the stage's radius.
-    const radius = stage.width / 2;
-    const [edgeRight, edgeUp] = clear.map((i) => edgeAt(f0.rays[i]!, off.rays[i]!));
-    const centred = edgeRight > 0 && edgeUp > 0 && Math.abs(edgeRight - edgeUp) <= 3 && Math.abs(edgeRight - radius) <= 3;
-    log(`scope: centre off ${centreOff} on ${centreOn}; edge off ${edgeOff} on ${edgeOn}; stage ${JSON.stringify(stage)} radius ${radius} px, edge right ${edgeRight} up ${edgeUp}`);
-    console.log(`SCOPE on=${scopeOn ? 1 : 0} off=${scopeOff ? 1 : 0} feather0_edge=${e0} feather60_edge=${e60} centred=${centred ? 1 : 0} radius=${Math.round(radius)}`);
-    if (!scopeOn || !scopeOff || e60 <= e0 || e0 > 4 || !centred) failed = true;
-    await setFeather(11);
-
-    // ---- 3b. GE9: shape, size and soft edge as three controls -------------------------------------------------------
-    if (!(await shapeChecks(page, pane, setFeather))) failed = true;
+    await closePopover(page);
+    if (!(await featherChecks(page, pane, stage))) failed = true;
+    if (!(await shapeChecks(page, pane))) failed = true;
+    const atMs = Date.parse("2026-09-09T20:00:00.000Z");
+    const found = await stack.graphql<{ sightings: { id: string; lat: number; lon: number; canonicalId: string | null }[] }>(
+      "query($bbox: BBox!, $from: Time!, $to: Time!, $taxa: [ID!]) { sightings(bbox: $bbox, from: $from, to: $to, taxa: $taxa) { id lat lon canonicalId } }",
+      { bbox: { west: -83.2, south: 24.3, east: -79.8, north: 27.5 }, from: new Date(atMs - 168 * 3_600_000 + 3_600_000).toISOString(), to: new Date(atMs).toISOString(), taxa: [PYTHON_TAXON] },
+    );
+    if (!(await inputChecks(page, pane, stage, found.sightings.filter((x) => x.canonicalId === null)))) failed = true;
 
     // ---- 4. keyboard --------------------------------------------------------------------------------------
     await closePopover(page);
@@ -476,15 +627,14 @@ async function main() {
 
     // ---- 5. share link ------------------------------------------------------------------------------------
     await pick(page, "flir");
-    await setFeather(60);
+    await setFeatherPct(page, 60);
     // GE9: a shape and a size ride along.
     await page.locator(SHAPE("rounded")).click();
     await page.locator(SIZE).focus();
     await page.keyboard.press("Home");
     for (let s = 30; s < 70; s += 5) await page.keyboard.press("ArrowRight");
-    await page.locator(SWITCH).click();
     await page.waitForFunction(
-      () => /look=flir/.test(location.hash) && /scope=0/.test(location.hash) && /feather=60/.test(location.hash) && /shape=rounded/.test(location.hash) && /size=70/.test(location.hash),
+      () => /look=flir/.test(location.hash) && !/scope=/.test(location.hash) && /feather=60/.test(location.hash) && /shape=rounded/.test(location.hash) && /size=70/.test(location.hash),
       undefined,
       { timeout: 10_000 },
     );
@@ -492,8 +642,8 @@ async function main() {
     await page.reload({ waitUntil: "load" });
     await page.waitForFunction(() => Boolean(window.__look) && window.__look!.state().shown === "flir", undefined, { timeout: LOAD_TIMEOUT_MS });
     const restored = await lookState(page);
-    const link = restored.target === "flir" && !restored.scope.on && restored.scope.feather === 60 && restored.scope.shape === "rounded" && restored.scope.size === 70;
-    log(`share link ${hash.replace(/^#/, "").split("&").filter((f) => /^(look|scope|shape|size|feather)=/.test(f)).join("&")} → reopened as ${restored.target}, scope ${restored.scope.on ? "on" : "off"}, shape ${restored.scope.shape}, size ${restored.scope.size}, feather ${restored.scope.feather}`);
+    const link = restored.target === "flir" && restored.scope.feather === 60 && restored.scope.shape === "rounded" && restored.scope.size === 70;
+    log(`share link ${hash.replace(/^#/, "").split("&").filter((f) => /^(look|scope|shape|size|feather)=/.test(f)).join("&")} → reopened as ${restored.target}, shape ${restored.scope.shape}, size ${restored.scope.size}, feather ${restored.scope.feather}`);
     console.log(`LOOK link=${link ? "ok" : "fail"}`);
     if (!link) failed = true;
 
@@ -502,8 +652,6 @@ async function main() {
     await page.waitForTimeout(4_000);
     await page.locator(BUTTON).click();
     await page.locator(POPOVER).waitFor({ timeout: 10_000 });
-    await page.locator(SWITCH).click();
-    await page.waitForFunction(() => window.__look!.state().scope.on, undefined, { timeout: 10_000 });
     const bench = async (id: string) => {
       await pick(page, id);
       await page.evaluate((n) => window.__look!.bench(n), 5);

@@ -1,6 +1,6 @@
 /**
  * Share link ↔ store. Reads the app and the keys a link carries (VIEW, TIME, LAYERS, SELECTION, and the look:
- * LOOK, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER) into a `ShareState`, and applies a decoded link back onto them, flying the globe to the restored camera once it is up.
+ * LOOK, SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER) into a `ShareState`, and applies a decoded link back onto them, flying the globe to the restored camera once it is up.
  * The link's fields are the active app's: `ShareLinkSync` skips a link of another app (the URL's `?app=` wins).
  */
 import { get, set } from "@calvinjs/active-state";
@@ -12,7 +12,7 @@ import { onGlobeReady } from "client/globe/api";
 import { activeApp, activeAppId } from "client/state/app";
 import { applyCarpView, carpState, type CarpState } from "client/state/carp";
 import { LAYERS, shownSpecies, type LayersState } from "client/state/layers";
-import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf, shapeOf, sizeOf } from "client/state/look";
+import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf } from "client/state/look";
 import { SELECTION } from "client/state/selection";
 import { retime, TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
@@ -36,7 +36,6 @@ export function readShareState(): ShareState {
     evidenceId: selection.evidenceId,
     ...(activeApp().kind === "conditions" ? carpShareFields(carpState()) : {}),
     look: lookOf(get(LOOK)),
-    scope: scopeOnOf(get(SCOPE_ON)),
     shape: shapeOf(get(SCOPE_SHAPE)),
     size: sizeOf(get(SCOPE_SIZE)),
     feather: featherOf(get(SCOPE_FEATHER)),
@@ -90,7 +89,6 @@ export function applyShareState(state: ShareState): () => void {
   // Carp: a link without `asof` is live; a site the app does not have is ignored.
   if (app.kind === "conditions" && (state.site || state.asOf)) applyCarpView({ site: state.site, asOf: state.asOf ?? null, replay: false });
   if (state.look !== undefined) set(LOOK, lookOf(state.look));
-  if (state.scope !== undefined) set(SCOPE_ON, scopeOnOf(state.scope));
   if (state.shape !== undefined) set(SCOPE_SHAPE, shapeOf(state.shape));
   if (state.size !== undefined) set(SCOPE_SIZE, sizeOf(state.size));
   if (state.feather !== undefined) set(SCOPE_FEATHER, featherOf(state.feather));

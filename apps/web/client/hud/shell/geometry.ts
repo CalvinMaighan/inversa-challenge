@@ -24,8 +24,8 @@ export const SIDE_ROOM_PX = 360 + 2 * GUTTER_PX;
 export const STAGE_MIN_HEIGHT_SHARE = 0.72;
 /** A card's right (chat) or left (details) edge stays this far from the stage centre. */
 export const CENTRE_CLEAR_PX = 48;
-/** Scope feather default (GC2 SCOPE_FEATHER 11 of 100): the share of the radius that fades to black. */
-export const DEFAULT_FEATHER = 0.11;
+/** Soft edge default (GC2 SCOPE_FEATHER 40 of 100): the fade outside the window, as a share of its radius. */
+export const DEFAULT_FEATHER = 0.4;
 
 /**
  * Stage diameter in px for a viewport: as tall as the screen allows, narrowed so both cards fit beside it on a
@@ -56,10 +56,10 @@ export function featherValue(feather: number): string {
 
 /**
  * The default window (circle, size 100) as CSS alone, for the first paint before the shell measures the page and
- * sets `--scope-mask` (client/hud/shell/scope.ts): opaque inside, fading to transparent (the black page) over the
- * feather share of the radius, read from `--scope-feather` on the shell.
+ * sets `--scope-mask` (client/hud/shell/scope.ts): fully visible inside the radius, then fading out beyond it over
+ * the feather share of the radius, down to a floor of the share squared (the same profile as the measured mask,
+ * with a straight fade), read from `--scope-feather` on the shell.
  */
 const STAGE_RADIUS_CSS = `calc(${STAGE_DIAMETER_CSS} / 2)`;
-export const SCOPE_MASK_CSS = `radial-gradient(circle ${STAGE_RADIUS_CSS} at 50% 50%, #000 calc(${STAGE_RADIUS_CSS} * (1 - var(--scope-feather, ${DEFAULT_FEATHER}))), transparent ${STAGE_RADIUS_CSS})`;
-/** Hit area: outside the circle the black page takes no clicks meant for hidden markers. */
-export const SCOPE_CLIP_CSS = `circle(${STAGE_RADIUS_CSS} at 50% 50%)`;
+const FEATHER_VAR = `var(--scope-feather, ${DEFAULT_FEATHER})`;
+export const SCOPE_MASK_CSS = `radial-gradient(circle at 50% 50%, #000 ${STAGE_RADIUS_CSS}, rgb(0 0 0 / calc(${FEATHER_VAR} * ${FEATHER_VAR})) calc(${STAGE_RADIUS_CSS} * (1 + ${FEATHER_VAR})))`;

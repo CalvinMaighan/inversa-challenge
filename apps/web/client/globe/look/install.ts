@@ -1,6 +1,6 @@
 /**
  * Looks on the Cesium scene (docs/GODS_EYE.md GC2): one `PostProcessStage` per preset shader, driven by the LOOK
- * key. The map window (SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER) is no stage: the stage shell draws it once,
+ * key. The map window (SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER) is no stage: the stage shell draws it once,
  * as the CSS mask over the canvas (client/hud/shell/StageShell.tsx); `state().scope` only reports the keys. Switching preset crossfades over `FADE_MS`: the
  * outgoing stage's `intensity` ramps down as the incoming one ramps up, their sum one on every frame, and a
  * stage is enabled only while its intensity is above zero. Animated presets ask for frames at a low rate while
@@ -13,7 +13,7 @@ import type { PostProcessStage, Scene } from "cesium";
 
 import { DEBUG_HOOK } from "client/debug";
 import { prefersReducedMotion } from "client/motion";
-import { featherOf, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER, SCOPE_ON, SCOPE_SHAPE, SCOPE_SIZE, scopeOnOf, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
+import { featherOf, LOOK, LOOK_IDS, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 
 import { cesium } from "../cesium";
 import { LOOK_PRESETS } from "./presets";
@@ -53,7 +53,7 @@ export type LookDiagnostics = {
   errors: string[];
   /** The fade in progress, else the last one finished. */
   lastFade: LookFade | null;
-  scope: { on: boolean; shape: ScopeShape; size: number; feather: number };
+  scope: { shape: ScopeShape; size: number; feather: number };
   /** Frames are being requested for an animated preset. */
   animating: boolean;
 };
@@ -236,7 +236,7 @@ export function installLook(scene: Scene, opts: LookOptions): LookHandle {
     compiled: LOOK_IDS.filter((id) => compiled.has(id)),
     errors: [...errors],
     lastFade: fade ? { ...fade, ticks: [...fade.ticks] } : lastFade ? { ...lastFade, ticks: [...lastFade.ticks] } : null,
-    scope: { on: scopeOnOf(get(SCOPE_ON)), shape: shapeOf(get(SCOPE_SHAPE)), size: sizeOf(get(SCOPE_SIZE)), feather: featherOf(get(SCOPE_FEATHER)) },
+    scope: { shape: shapeOf(get(SCOPE_SHAPE)), size: sizeOf(get(SCOPE_SIZE)), feather: featherOf(get(SCOPE_FEATHER)) },
     animating: ticker !== null,
   });
 
