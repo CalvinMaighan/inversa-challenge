@@ -216,6 +216,32 @@ export function fitInPane(bbox: BBox, insetPx = 0, margin = 1.05): CameraPose | 
   return fitBBox(bbox, frame.width, frame.height, inset(rect, insetPx), margin);
 }
 
+const EARTH_RADIUS_M = 6_378_137;
+
+/**
+ * The whole globe, its edge on the scope circle's: the camera is high enough that the Earth's limb has the circle's
+ * radius, over `centre`, and tilted off the straight-down view so the Earth's centre lands on the circle's centre
+ * (a straight-down camera always has it at the pane's centre, which the chat card pushes off the circle's).
+ * Null before the pane is laid out.
+ */
+export function fitGlobeInPane(centre: { lat: number; lon: number }): CameraPose | null {
+  const frame = paneFrame();
+  if (!frame) return null;
+  const { width, height, free, circle } = frame;
+  const cx = circle?.cx ?? (free.left + free.right) / 2;
+  const cy = circle?.cy ?? (free.top + free.bottom) / 2;
+  const r = circle ? Math.min(circle.r, circle.ry ?? circle.r) : Math.min(free.right - free.left, free.bottom - free.top) / 2;
+  // The field of view spans the larger side: `f` px from the eye to the image plane.
+  const f = Math.max(width, height) / 2 / Math.tan(HALF_FOV);
+  const altitudeM = Math.round(EARTH_RADIUS_M / Math.sin(Math.atan(r / f)) - EARTH_RADIUS_M);
+  const dx = cx - width / 2;
+  const dy = cy - height / 2;
+  // Look away from the offset: the Earth's centre then appears on its side of the pane's centre.
+  const tilt = (Math.atan(Math.hypot(dx, dy) / f) * 180) / Math.PI;
+  const heading = tilt < 0.01 ? 0 : (((Math.atan2(-dx, dy) * 180) / Math.PI) + 360) % 360;
+  return { lat: centre.lat, lon: centre.lon, altitudeM, heading, pitch: -90 + tilt };
+}
+
 /** A screen point lies inside a rect. */
 export const inRect = (p: { x: number; y: number }, r: Rect) => p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
 

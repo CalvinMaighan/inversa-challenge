@@ -328,6 +328,12 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         if app.cfg.has_feed(iem::SOURCE_ID) {
             soft_fetch(&target, iem::SOURCE_ID, &Iem::new(app.clone()).with_days(days as i64), &mut out, &mut skipped).await;
         }
+        // Reef heat stress (Lionfish Watch): the recent CRW product days, one request per region, once. The live
+        // poller keeps it current afterwards (its cursor continues from the newest stored day).
+        if app.cfg.has_feed(crw::SOURCE_ID) {
+            let src = crw::Crw::new(app.clone()).with_days((days as i64).min(CRW_BACKFILL_DAYS));
+            soft_fetch(&target, crw::SOURCE_ID, &src, &mut out, &mut skipped).await;
+        }
         out
     };
 
@@ -385,6 +391,9 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
     println!("{}", if args.dry_run { "BACKFILL-DRY-RUN-OK" } else { "BACKFILL-OK" });
     Ok(())
 }
+
+/// Product days of CRW reef heat stress a network backfill stores (the most `--days` can ask for).
+const CRW_BACKFILL_DAYS: i64 = 14;
 
 /// One governed fetch through the pipeline with [`retry`]; a source that still fails is recorded in `skipped`.
 async fn soft_fetch(target: &AppState, id: &'static str, src: &dyn Source, out: &mut Vec<(&'static str, Tally)>, skipped: &mut Vec<&'static str>) {

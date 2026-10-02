@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { set } from "@calvinjs/active-state";
+import { get, set } from "@calvinjs/active-state";
 
 import type { FeedState } from "shared/feed-state";
 
 import { FEEDS, mergeFeedState, upsertFeedState } from "client/state/feeds";
+import { DEFAULT_RANGE_DAYS, RANGE_DAYS } from "client/state/range";
 import { TIME, timeWindow, type TimeState } from "client/state/time";
 import { gqlRequest, gqlSubscribe } from "client/threads/api";
 
@@ -52,8 +53,9 @@ function LiveFollow() {
     const tick = () =>
       set<TimeState>(TIME, (prev = TIME.defaults) => {
         if (prev.playing || !isLive(prev, Date.now())) return prev;
-        const next = timeWindow(Date.now());
-        return next.to === prev.to && next.at === prev.at ? prev : { ...prev, ...next };
+        // The window is the chosen period long (the range button), sliding with the clock.
+        const next = timeWindow(Date.now(), get<number>(RANGE_DAYS) ?? DEFAULT_RANGE_DAYS);
+        return next.to === prev.to && next.at === prev.at && next.from === prev.from ? prev : { ...prev, ...next };
       });
     tick();
     const id = setInterval(tick, LIVE_TICK_MS);

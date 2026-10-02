@@ -65,11 +65,12 @@ export function appFromHash(hash: string | null | undefined): AppId | null {
 }
 
 /**
- * `?app=` beats a share link's app beats localStorage beats the default; anything invalid falls through. The
- * hash is the view within the app, so it only decides when the URL names none (an old `v=1` link opens python).
+ * `?app=` beats a share link's app beats the default (carp); anything invalid falls through. A new visit always opens
+ * carp: the last app is no longer remembered across visits. The hash is the view within the app, so it only decides
+ * when the URL names none (an old `v=1` link opens python).
  */
 export function resolveActiveApp(input: { search?: string | null; hash?: string | null; storage?: StorageLike | null }): AppId {
-  return appFromSearch(input.search) ?? appFromHash(input.hash) ?? readStoredApp(input.storage) ?? DEFAULT_APP_ID;
+  return appFromSearch(input.search) ?? appFromHash(input.hash) ?? DEFAULT_APP_ID;
 }
 
 export function activeAppId(): AppId {
@@ -95,7 +96,6 @@ export function appBootstrapScript(): string {
     `try{a=new URLSearchParams(location.search).get(c.p)}catch(e){}` +
     `if(c.ids.indexOf(a)<0){a=null;try{var h=new URLSearchParams(location.hash.slice(1)),v=h.get("v")||"1";` +
     `if(v==="2")a=h.get(c.p);else if(v==="1"&&c.f.some(function(k){return h.has(k)}))a=c.v1}catch(e){}}` +
-    `if(c.ids.indexOf(a)<0){a=null;try{a=localStorage.getItem(c.k)}catch(e){}}` +
     `if(c.ids.indexOf(a)<0)a=c.d;` +
     `d.setAttribute("data-app",a);` +
     `if(a!==c.d){d.setAttribute("data-app-pending","");setTimeout(function(){d.removeAttribute("data-app-pending")},4000)}` +

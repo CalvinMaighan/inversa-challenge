@@ -4,11 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { isLive } from "client/hud/topbar/clock";
+import { DEFAULT_RANGE_DAYS } from "client/state/range";
 import { TIME, type TimeState } from "client/state/time";
 import type { AppConfig } from "shared/apps";
 
-import { loadBuoys, loadExplain, loadFeeds, loadHeat, loadMarine, loadReports, loadSnapshot, loadSnapshots, loadSources, snapshotTimes, type CellExplain, type ReportsLoad } from "./data";
-import { areasOf, DAY, fieldPoints, groupHeat, HOUR, type Area, type FeedRow, type GqlReading, type HeatPixel, type MarinePoint, type PrioritySnapshot } from "./model";
+import { loadBuoys, loadExplain, loadFeeds, loadMarine, loadReports, loadSnapshot, loadSnapshots, loadSources, snapshotTimes, type CellExplain, type ReportsLoad } from "./data";
+import { areasOf, DAY, fieldPoints, HOUR, type Area, type FeedRow, type GqlReading, type HeatPixel, type MarinePoint, type PrioritySnapshot } from "./model";
 
 /** Reports are loaded this far back (the 90-day window option). */
 const REPORT_BACK_MS = 90 * DAY;
@@ -40,13 +41,12 @@ export type LionfishData = {
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /** Everything the lionfish HUD draws, loaded once per mount, anchored to the load time. */
-export function useLionfishData(app: AppConfig): LionfishData {
+export function useLionfishData(app: AppConfig, withField = false, rangeDays = DEFAULT_RANGE_DAYS): LionfishData {
   const areas = useMemo(() => areasOf(app), [app]);
   const species = app.taxa[0]?.id ?? "";
   // Ten-minute steps keep the db worker's cache keys stable across quick reloads.
   const [liveMs] = useState(() => Math.floor(Date.now() / (10 * 60_000)) * 10 * 60_000);
   const [reports, setReports] = useState<ReportsLoad | null>(null);
-  const [heatRows, setHeatRows] = useState<GqlReading[] | null>(null);
   const [buoys, setBuoys] = useState<GqlReading[] | null>(null);
   const [marineRows, setMarineRows] = useState<GqlReading[] | null>(null);
   const [snapshots, setSnapshots] = useState<PrioritySnapshot[]>([]);
@@ -73,16 +73,38 @@ export function useLionfishData(app: AppConfig): LionfishData {
         const times = snapshotTimes(liveMs, liveMs - REPLAY_BACK_MS).slice(1);
         void loadSnapshots(species, areas, times, FETCH_CELLS, add, signal).then(() => !signal.aborted && setReplayReady(true));
       });
-    loadReports(areas, liveMs - REPORT_BACK_MS, liveMs, signal).then((r) => !signal.aborted && setReports(r), fail("reports"));
-    loadHeat(areas, liveMs - REPLAY_BACK_MS, liveMs, signal).then((r) => !signal.aborted && setHeatRows(r), fail("reef heat stress"));
     loadBuoys(areas.slice(0, 1), liveMs - REPLAY_BACK_MS, liveMs, signal).then((r) => !signal.aborted && setBuoys(r), fail("buoys"));
-    loadMarine(areas, liveMs - HOUR, FIELD_HOURS + 1, signal).then((r) => !signal.aborted && setMarineRows(r), fail("waves and currents"));
     loadFeeds(signal).then((f) => !signal.aborted && setFeeds(f), fail("feeds"));
     loadSources(signal).then((s) => !signal.aborted && setSources(s), () => {});
     return () => ctl.abort();
   }, [species, areas, liveMs]);
 
-  const heat = useMemo(() => (heatRows ? groupHeat(heatRows, areas) : null), [heatRows, areas]);
+  // Reports reach back as far as the selected period (the range button), and at least the 90-day window option, so a
+  // longer period has its reports to draw. Reloaded on its own when the period changes, not with the rest.
+  const reportBackMs = Math.max(REPORT_BACK_MS, (rangeDays + 1) * DAY);
+  useEffect(() => {
+    const ctl = new AbortController();
+    loadReports(areas, liveMs - reportBackMs, liveMs, ctl.signal).then(
+      (r) => !ctl.signal.aborted && setReports(r),
+      (err) => !ctl.signal.aborted && setErrors((e) => [...e, `reports: ${message(err)}`]),
+    );
+    return () => ctl.abort();
+  }, [areas, liveMs, reportBackMs]);
+
+  // Waves and currents are dense grids (the Colombian area alone passes the API's 10000-reading cap): fetched only
+  // while the Field window layer is on, which it is not at first load.
+  useEffect(() => {
+    if (!withField) return;
+    const ctl = new AbortController();
+    loadMarine(areas, liveMs - HOUR, FIELD_HOURS + 1, ctl.signal).then(
+      (r) => !ctl.signal.aborted && setMarineRows(r),
+      (err) => !ctl.signal.aborted && setErrors((e) => [...e, `waves and currents: ${message(err)}`]),
+    );
+    return () => ctl.abort();
+  }, [withField, areas, liveMs]);
+
+  // Reef heat is drawn from NOAA's finished maps (reef.ts), not from readings: nothing to load or group here.
+  const heat = useMemo<HeatPixel[]>(() => [], []);
   const marine = useMemo(() => (marineRows ? fieldPoints(marineRows, areas, liveMs, FIELD_HOURS) : null), [marineRows, areas, liveMs]);
   return { areas, liveMs, reports, heat, buoys, marine, snapshots, replayReady, feeds, sources, errors };
 }

@@ -15,7 +15,6 @@
 import type { FrameGrid } from "@calvinjs/active-state/threads";
 import type { BillboardCollection } from "cesium";
 
-import { sightingHoursOf } from "client/state/layers";
 import { SIGHTING_FLAG, SIGHTING_WINDOW_HOURS, type SightingRecord } from "shared/frames";
 import { isSurveyApp } from "client/lionfish/model";
 import { activeApp } from "client/state/app";
@@ -24,7 +23,7 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 import { cesium } from "../cesium";
 import { sightingEvidenceId } from "../evidence";
 import { stepMsOf } from "../frame-index";
-import { markerImage, markerImageCount, ringImage } from "../marker-icons";
+import { markerImage, markerImageCount, pulseImage, ringImage } from "../marker-icons";
 import { colorOfTaxon, recordShown } from "../species";
 import type { GlobeLayer, GlobeViewer, LayerContext, LayerStats } from "./types";
 
@@ -38,8 +37,6 @@ const OLDEST_ALPHA = 0.3;
 const NO_DEPTH_TEST_WITHIN_M = 200_000;
 const CONFLICT_RING = "#ff3b3b";
 const SELECTED_RING = "#ffffff";
-/** QUALITY_CODES indices drawn at full strength (research grade, curated); needs_id and casual draw dimmer. */
-const STRONG_QUALITY: ReadonlySet<number> = new Set([0, 3]);
 /** Marker scale; the selected one larger. A conflict ring sits a little inside the marker. */
 const MARKER_SCALE = 1;
 const RING_SCALE = 0.85;
@@ -127,7 +124,30 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
   let windowIndex: SightingWindowIndex | null = null;
   let windowKey = "";
 
+  /** The selected dot's pulse: a disc behind it that grows and fades, over and over, until the next draw. */
+  let pulseFrame = 0;
+  const stopPulse = () => {
+    if (pulseFrame) cancelAnimationFrame(pulseFrame);
+    pulseFrame = 0;
+  };
+  const PULSE_MS = 1600;
+  const startPulse = (halo: { scale: number; color: unknown }) => {
+    stopPulse();
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const { Color } = cesium();
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const phase = ((now - t0) % PULSE_MS) / PULSE_MS;
+      halo.scale = 0.5 + phase * 1.9;
+      halo.color = Color.WHITE.withAlpha(0.6 * (1 - phase));
+      ctx.requestRender();
+      pulseFrame = requestAnimationFrame(step);
+    };
+    pulseFrame = requestAnimationFrame(step);
+  };
+
   const clear = () => {
+    stopPulse();
     if (!icons || !rings || drawnKey === "none") return;
     icons.removeAll();
     rings.removeAll();
@@ -148,7 +168,8 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     }
     const layers = ctx.layers();
     const filter = layers.species;
-    const hours = sightingHoursOf(layers);
+    // Every sighting of the selected period (the timeline's start date to the cursor), not a trailing few days.
+    const hours = Math.ceil((meta.frameCount * stepMsOf(meta)) / 3_600_000);
     const selected = ctx.selection?.() ?? null;
     const filterKey = Object.entries(filter)
       .map(([k, v]) => `${k}=${String(v)}`)
@@ -166,8 +187,8 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     }
     const trail = distinctRecords(windowRecords(windowIndex!, frame, hours));
     const visible = visibleRecords(trail, filter);
-    const trailLength = trailMs(hours);
     const icon = activeApp().icon;
+    stopPulse();
     icons.removeAll();
     rings.removeAll();
     // The selected marker goes in last, so it draws over its neighbours.
@@ -175,7 +196,8 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
     const ordered = selectedIndex < 0 ? visible : [...visible.slice(0, selectedIndex), ...visible.slice(selectedIndex + 1), visible[selectedIndex]!];
     for (const r of ordered) {
       const position = Cartesian3.fromDegrees(r.lon, r.lat);
-      const alpha = trailAlpha(r.ageMs, trailLength) * (STRONG_QUALITY.has(r.quality) ? 1 : 0.8);
+      // Full opacity whatever the age or quality: colour, not fading, tells the species apart.
+      const alpha = 1;
       const conflict = (r.flags & SIGHTING_FLAG.conflict) !== 0;
       const id = sightingEvidenceId(r.id);
       const isSelected = id === selected;
@@ -185,18 +207,25 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
         id,
         position,
         scale: isSelected ? SELECTED_SCALE : MARKER_SCALE,
-        color: Color.WHITE.withAlpha(isSelected ? 1 : alpha),
+        color: Color.WHITE,
         verticalOrigin: VerticalOrigin.CENTER,
         disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
       });
       marker.setImage(image.id, image.image);
+      if (isSelected) {
+        // Behind the ring: a disc in the species' colour that pulses outward.
+        const pulse = pulseImage(colorOfTaxon(r.taxon)!);
+        const disc = rings.add({ id, position, scale: 0.5, color: Color.WHITE.withAlpha(0.6), verticalOrigin: VerticalOrigin.CENTER, disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M });
+        disc.setImage(pulse.id, pulse.image);
+        startPulse(disc);
+      }
       if (isSelected || conflict) {
         const ring = ringImage(isSelected ? SELECTED_RING : CONFLICT_RING);
         const halo = rings.add({
           id,
           position,
           scale: isSelected ? SELECTED_SCALE : RING_SCALE,
-          color: Color.WHITE.withAlpha(isSelected ? 1 : Math.max(alpha, 0.6)),
+          color: Color.WHITE.withAlpha(alpha),
           verticalOrigin: VerticalOrigin.CENTER,
           disableDepthTestDistance: NO_DEPTH_TEST_WITHIN_M,
         });
@@ -226,6 +255,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
       drawnKey = "";
     },
     disable() {
+      stopPulse();
       enabled = stats.enabled = false;
       if (icons && rings) {
         icons.show = rings.show = false;
@@ -246,6 +276,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
         : null;
     },
     destroy() {
+      stopPulse();
       drawnById = new Map();
       if (viewer) {
         if (icons) viewer.scene.primitives.remove(icons);

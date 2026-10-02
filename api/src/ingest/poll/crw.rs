@@ -235,7 +235,7 @@ impl Crw {
         Crw { app, base, days }
     }
 
-    #[cfg(test)]
+    /// The product days one fetch asks for (the backfill asks for more than the live poller's `params.days`).
     pub fn with_days(mut self, days: i64) -> Self {
         self.days = days.max(1);
         self

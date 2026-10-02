@@ -1,8 +1,10 @@
 "use client";
 
-import { useId, useMemo, useRef } from "react";
+import { useId, useLayoutEffect, useMemo, useRef } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import ReefLayerRow from "client/lionfish/ReefControls";
+import { isSurveyApp } from "client/lionfish/model";
 import { LAYERS, type LayersState } from "client/state/layers";
 import styled from "client/styled";
 import type { AppConfig } from "shared/apps";
@@ -65,6 +67,12 @@ export function LayersChoices({ app, layers, active }: { app: AppConfig; layers:
           ))}
         </Group>
       ))}
+      {isSurveyApp(app) ? (
+        <Group aria-label="Reef" data-testid="layers-group-reef">
+          <GroupHead>Reef</GroupHead>
+          <ReefLayerRow />
+        </Group>
+      ) : null}
       <WaterWeather app={app} active={active} />
     </>
   );
@@ -78,8 +86,28 @@ export default function LayersBar() {
   const popRef = useRef<HTMLDivElement>(null);
   const pop = usePopover(triggerRef, popRef);
   const id = useId();
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // The popover's right edge sits one gutter from the page's right edge, whatever the pill's own place is.
+  useLayoutEffect(() => {
+    if (!pop.open) return;
+    const place = () => {
+      const el = popRef.current;
+      const bar = barRef.current;
+      if (!el || !bar) return;
+      const pageRight = document.querySelector('[data-slot="hud"]')?.getBoundingClientRect().right ?? window.innerWidth;
+      const gap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--gap-m")) || 12;
+      el.style.left = "auto";
+      el.style.transform = "none";
+      el.style.right = `${bar.getBoundingClientRect().right - (pageRight - gap)}px`;
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [pop.open]);
+
   return (
-    <Bar data-testid="layers-bar">
+    <Bar ref={barRef} data-testid="layers-bar">
       <Round
         ref={triggerRef}
         type="button"

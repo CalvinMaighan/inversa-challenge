@@ -59,10 +59,22 @@ function dopplerSecrets(): { secrets: Record<string, string> } | { error: string
 
 // INVERSA_DOPPLER=off: the plain environment only (e2e/developer.ts runs a stack without your secrets).
 const doppler = process.env.INVERSA_DOPPLER === "off" ? { error: "INVERSA_DOPPLER=off" } : dopplerSecrets();
-if ("error" in doppler) {
-  console.warn(`\x1b[33mwarning:\x1b[0m Doppler inversa/dev not loaded (${doppler.error}); using the plain environment.`);
+// Without Doppler (not installed, not logged in, offline) the root `.env` that `bun run env` wrote stands in for it.
+let dotEnv: Record<string, string> = {};
+try {
+  dotEnv = parseEnvFile(readFileSync(join(root, ".env"), "utf8"));
+} catch {
+  // No .env: the plain environment.
 }
-const dopplerEnv = "secrets" in doppler ? doppler.secrets : {};
+if ("error" in doppler) {
+  const names = Object.keys(dotEnv).length;
+  console.warn(
+    names > 0
+      ? `\x1b[33mwarning:\x1b[0m Doppler inversa/dev not loaded (${doppler.error}); using ${names} keys from .env (run bun run env to refresh it).`
+      : `\x1b[33mwarning:\x1b[0m Doppler inversa/dev not loaded (${doppler.error}); using the plain environment.`,
+  );
+}
+const dopplerEnv = "secrets" in doppler ? doppler.secrets : dotEnv;
 
 /**
  * Dev-only hook secret (PLAN.md C18): with it the signed ingest hook is on, so a raw provider body can be
@@ -149,8 +161,16 @@ function start(name: string, color: string, cmd: string[], cwd: string, optional
     })();
   }
   void proc.exited.then((code) => {
-    process.stdout.write(`${prefix}exited with ${code}\n`);
-    if (!optional && !child.restarting) shutdown(code ?? 1);
+    // Stopped by a signal (`bun run api:kill`, a manual kill): deliberate, not a crash, so the others keep running.
+    // The supervisor itself ends once every child is gone.
+    const signalled = proc.signalCode != null || code === 143 || code === 137 || code === 130;
+    process.stdout.write(`${prefix}${signalled ? `stopped (${proc.signalCode ?? `exit ${code}`})` : `exited with ${code}`}\n`);
+    if (child.restarting) return;
+    if (!signalled) {
+      if (!optional) shutdown(code ?? 1);
+    } else if (procs.get(name) === child && [...procs.values()].every((c) => c.proc.exitCode !== null || c.proc.signalCode !== null)) {
+      shutdown(0);
+    }
   });
 }
 
@@ -254,7 +274,10 @@ const agent = keySource
 const localNote = Object.keys(localKeys).length ? ` · local keys: ${Object.keys(localKeys).sort().join(", ")}` : "";
 console.log(`data: ${DATA_DIR} · agent: ${agent} · web: http://localhost:${WEB_PORT} · signal: http://127.0.0.1:${SIGNAL_PORT}${localNote}`);
 if (generatedHookSecret) console.log(`ingest hook (dev only): POST http://127.0.0.1:${API_PORT}/v1/<app>/ingest/hook/<source>, INGEST_HOOK_SECRET=${generatedHookSecret}`);
-startApi();
+// An API already answering on the port (a separate `bun run api`) is reused, not fought over: no bind panic.
+const apiRunning = await fetch(`http://127.0.0.1:${API_PORT}/health`).then((r) => r.ok, () => false);
+if (apiRunning) console.log(`\x1b[36m[api]\x1b[0m already running on :${API_PORT}; using it`);
+else startApi();
 void ensureWeb();
 // Same pinned wrangler as apps/signal-worker (package.json `dev`, scripts/e2e.ts); env dev allows origin localhost:3050.
 start("signal", "33", ["bunx", "wrangler@4.145.0", "dev", "--local", "--port", SIGNAL_PORT, "--ip", "127.0.0.1", "--env", "dev", "--log-level", "warn"], `${root}apps/signal-worker`, true);

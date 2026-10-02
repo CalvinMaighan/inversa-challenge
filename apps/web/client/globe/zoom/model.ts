@@ -9,7 +9,7 @@ export const MIN_ALT_3D_M = 30;
 /** Closest over flat imagery: below about 400 m aerial tiles stretch into mush. */
 export const MIN_ALT_FLAT_M = 400;
 /** Farthest: the whole planet fits a 1440×900 canvas (Cesium's 60° field of view) with room to spare. */
-export const MAX_ALT_M = 20_000_000;
+export const MAX_ALT_M = 40_000_000;
 
 /** One press of `+` halves the altitude, one press of `-` doubles it. */
 export const STEP_IN = 0.5;
@@ -18,6 +18,9 @@ export const STEP_OUT = 2;
 export const STEP_MS = 300;
 /** Animation of a wheel notch; a run of notches retargets it, so it never queues up. */
 export const WHEEL_MS = 180;
+/** Zooming out, the wheel's pivot slides from the cursor to the screen centre between these altitudes (metres). */
+export const CENTRE_FROM_M = 1_500_000;
+export const CENTRE_FULL_M = 8_000_000;
 
 /** One wheel notch (100 px of `deltaY`) zooms in to 80% of the altitude, or out to 125%. */
 export const WHEEL_NOTCH_FACTOR = 1.25;

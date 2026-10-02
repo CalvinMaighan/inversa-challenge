@@ -1,8 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { set } from "@calvinjs/active-state";
+import { useActiveState } from "@calvinjs/active-state/react";
 
 import ExternalLink from "client/external-link";
+import { FEEDS } from "client/state/feeds";
+import type { FeedState } from "shared/feed-state";
 import { readGoogleCap, readGoogleCounts, writeGoogleCap } from "client/globe/quota";
 import { browserKeyStore } from "client/keys";
 import { savePlacesCapField } from "client/places/budget";
@@ -11,6 +15,8 @@ import styled from "client/styled";
 import type { BrowserKeyId, ServerKeyStatus } from "shared/keys";
 
 import { Dot, Icon, IconButton } from "../primitives";
+import { feedChip, sortFeedsForStatus } from "../topbar/feed-chips";
+import { DEVELOPER_TAB, DEVELOPER_TABS, type DeveloperTab } from "./tab";
 import { DEV_KEYS_URL, panelRows, removeBrowserKey, saveBrowserKeys, splitPasted, type PanelRow } from "./model";
 
 const Dialog = styled.dialog`
@@ -70,12 +76,48 @@ const Head = styled.header`
   }
 `;
 
+const TabList = styled.div`
+  display: flex;
+  flex: none;
+  gap: 4px;
+  padding: 8px 18px 0;
+  border-bottom: 1px solid var(--border);
+
+  button {
+    margin-bottom: -1px;
+    padding: 8px 14px;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: var(--radius-s) var(--radius-s) 0 0;
+    background: none;
+    color: var(--muted);
+    font: 600 12px / 1 var(--font-ui);
+    cursor: pointer;
+  }
+  button:hover {
+    color: var(--text);
+  }
+  button[aria-selected="true"] {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+  }
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+`;
+
 const Body = styled.form`
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+
+  &[hidden] {
+    display: none;
+  }
 
   > p {
     margin: 0;
@@ -240,6 +282,52 @@ async function fetchStatus(): Promise<ServerKeyStatus[] | null> {
   }
 }
 
+const FeedsBody = styled.div`
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+
+  > p {
+    margin: 0;
+    padding: 10px 18px;
+    color: var(--muted);
+  }
+`;
+
+/** Tab 1: every data source the app reads, worst first, each with its mode, state and lag (the lionfish survey's feed list, for all apps). */
+function FeedsPane() {
+  const [feeds] = useActiveState<FeedState[]>(FEEDS);
+  const list = sortFeedsForStatus(feeds ?? []);
+  return (
+    <FeedsBody role="tabpanel" id="developer-pane-feeds" aria-labelledby="developer-tab-feeds" data-testid="developer-feeds">
+      <p>Every data source this app reads, worst first. Each shows how it is fetched and how fresh its newest data is.</p>
+      {list.length === 0 ? (
+        <p>No feed state received yet.</p>
+      ) : (
+        <Rows tabIndex={0} aria-label="Feeds">
+          {list.map((feed) => {
+            const chip = feedChip(feed);
+            return (
+              <li key={chip.source} data-feed={chip.source} data-state={chip.state} title={chip.title}>
+                <Line>
+                  <Dot $tone={chip.tone} role="img" aria-label={chip.state} />
+                  <b>{chip.label}</b>
+                  <Badge>{chip.mode.toUpperCase()}</Badge>
+                  <Badge>{chip.state.toUpperCase()}</Badge>
+                  <span style={{ marginLeft: "auto", color: "var(--muted)", font: "500 11px / 1.2 var(--font-mono)" }}>lag {chip.lag}</span>
+                </Line>
+                {chip.state !== "nominal" && feed.note ? <Purpose>{feed.note}</Purpose> : null}
+              </li>
+            );
+          })}
+        </Rows>
+      )}
+    </FeedsBody>
+  );
+}
+
 function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: number; onRemove: (id: BrowserKeyId) => void }) {
   return (
     <li data-key-row={row.id} data-scope={row.scope} data-set={row.set ? "1" : "0"} data-pending={row.pending ? "1" : "0"}>
@@ -316,6 +404,7 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
   const [needsReload, setNeedsReload] = useState(false);
   const [busy, setBusy] = useState(false);
   const [openedAt] = useState(() => Date.now());
+  const tab = useActiveState<DeveloperTab>(DEVELOPER_TAB)[0] ?? "feeds";
   const store = browserKeyStore();
   const rows = panelRows(store, server);
   const cap = readGoogleCap(store);
@@ -325,6 +414,8 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
   useLayoutEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
+    // Each opening starts on the feeds.
+    set(DEVELOPER_TAB, "feeds");
     return () => dialog?.close();
   }, []);
 
@@ -437,7 +528,15 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
           <Icon name="close" />
         </IconButton>
       </Head>
-      <Body ref={formRef} onSubmit={save} key={revision} autoComplete="off">
+      <TabList role="tablist" aria-label="Provider settings">
+        {DEVELOPER_TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" id={`developer-tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`developer-pane-${t.id}`} data-tab={t.id} onClick={() => set(DEVELOPER_TAB, t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </TabList>
+      {tab === "feeds" ? <FeedsPane /> : null}
+      <Body ref={formRef} onSubmit={save} key={revision} autoComplete="off" hidden={tab !== "keys"} role="tabpanel" id="developer-pane-keys" aria-labelledby="developer-tab-keys">
         <p>The globe works without any keys. Each key below switches on another real feed.</p>
         <Rows tabIndex={0} aria-label="Providers">
           {rows.map((row) => (

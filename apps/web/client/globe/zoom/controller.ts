@@ -27,6 +27,8 @@ import {
   clampAltitude,
   easeInOutCubic,
   easeOutCubic,
+  CENTRE_FROM_M,
+  CENTRE_FULL_M,
   limitsFor,
   MIN_ALT_3D_M,
   MIN_ALT_FLAT_M,
@@ -357,7 +359,17 @@ export function installZoom(widget: CesiumWidget, deps: ZoomDeps): ZoomControlle
     // A run of notches accumulates on the running target, so fast scrolling goes further, never jumps.
     const base = tween?.kind === "wheel" ? tween.targetM : camera.positionCartographic.height;
     const p = local(e);
-    zoomAbout(p.x, p.y, clampAltitude(base * factor, limits), { kind: "wheel", durationMs: WHEEL_MS, ease: easeOutCubic });
+    const target = clampAltitude(base * factor, limits);
+    // Zooming out about the cursor swings the camera away from it; over a run of notches with a moving mouse that
+    // drift piles up and the globe ends off-centre. Past a few thousand km the pivot slides to the screen centre,
+    // wholly there once the whole globe shows.
+    if (factor > 1) {
+      const c = centre();
+      const t = Math.min(1, Math.max(0, Math.log(target / CENTRE_FROM_M) / Math.log(CENTRE_FULL_M / CENTRE_FROM_M)));
+      p.x = c.x + (p.x - c.x) * (1 - t);
+      p.y = c.y + (p.y - c.y) * (1 - t);
+    }
+    zoomAbout(p.x, p.y, target, { kind: "wheel", durationMs: WHEEL_MS, ease: easeOutCubic });
   };
   const onDoubleClick = (e: MouseEvent) => {
     e.preventDefault();

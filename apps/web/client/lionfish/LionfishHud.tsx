@@ -4,8 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import { DEFAULT_RANGE_DAYS, RANGE_DAYS } from "client/state/range";
+import { TIME, type TimeState } from "client/state/time";
+
 import { getGlobe } from "client/globe/api";
-import { fitInPane } from "client/globe/fit";
+import { fitGlobeInPane, fitInPane } from "client/globe/fit";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
 import { GUTTER_PX } from "client/hud/shell/geometry";
@@ -121,8 +124,9 @@ const [SIGHTINGS, HOTSPOTS] = LAYER_IDS;
  */
 export default function LionfishHud({ app }: { app: AppConfig }) {
   const species = app.taxa[0]?.id ?? "";
-  const data = useLionfishData(app);
   const view = useView();
+  const rangeDays = useActiveState<number>(RANGE_DAYS)[0] ?? DEFAULT_RANGE_DAYS;
+  const data = useLionfishData(app, view.field, rangeDays);
   const mobile = useIsMobile();
   const stage = useStageLayout();
   const cursor = useCursor();
@@ -142,11 +146,12 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   // Fitted to the free rect measured after layout (panel, banner and timeline in place), so no area's markers sit
   // under them or off the edge of a phone; the fixed-margin framing is the fallback.
   useEffect(() => {
-    if (/(^|[#&])c=/.test(window.location.hash)) return;
     const id = requestAnimationFrame(() => {
       const areas = areasOf(app);
       const box = { west: Math.min(...areas.map((a) => a.bbox.west)), south: Math.min(...areas.map((a) => a.bbox.south)), east: Math.max(...areas.map((a) => a.bbox.east)), north: Math.max(...areas.map((a) => a.bbox.north)) };
-      const frame = fitInPane(box, AREA_INSET_PX) ?? frameAreas(areas, !window.matchMedia(MOBILE_QUERY).matches);
+      // A load always starts on the whole globe, its edge on the scope circle's, over the areas.
+      const centre = { lat: (box.south + box.north) / 2, lon: (box.west + box.east) / 2 };
+      const frame = fitGlobeInPane(centre) ?? fitInPane(box, AREA_INSET_PX) ?? frameAreas(areas, !window.matchMedia(MOBILE_QUERY).matches);
       set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
     });
     return () => cancelAnimationFrame(id);
@@ -164,7 +169,9 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
     copyText(app, "priorityNote", "Survey priority is not a risk or a probability."),
   ];
   const reports = useMemo(() => data.reports?.reports ?? [], [data.reports]);
-  const q = useMemo(() => ({ basis: view.basis, atMs, days: view.days, lateOnly: view.lateOnly }), [view.basis, atMs, view.days, view.lateOnly]);
+  // The period is the timeline's: one dot per report from its start date to the cursor.
+  const fromMs = Date.parse(useActiveState<TimeState, string>(TIME, (t) => t.from)[0] ?? "") || undefined;
+  const q = useMemo(() => ({ basis: view.basis, atMs, days: view.days, fromMs, lateOnly: view.lateOnly }), [view.basis, atMs, view.days, fromMs, view.lateOnly]);
   const drawn = useMemo(() => windowReports(reports, { ...q, areaId: view.area }), [reports, q, view.area]);
   const total = useMemo(() => countReports(reports, { ...q, areaId: view.area }), [reports, q, view.area]);
   const lag = useMemo(() => (data.reports ? lagStats(reports) : null), [data.reports, reports]);
@@ -228,7 +235,8 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const panelRoom = panelOpen && !mobile ? `${PANEL_WIDTH + GUTTER_PX}px` : "0px";
   const panelVars = { [stage ? "--lf-panel-r" : "--lf-panel-l"]: panelRoom } as Record<string, string>;
   const onHelp = (t: HelpTopic | "all") => setView({ help: t });
-  const show = { reports: visible.sightings !== false, heat: view.heat, priority: visible.hotspots !== false, field: view.field && live };
+  // The ranked survey cells (numbered squares) are not drawn on the map: reports are dots, like carp and python.
+  const show = { reports: visible.sightings !== false, heat: view.heat, priority: false, field: view.field && live };
 
   return (
     <div
@@ -243,7 +251,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
         atMs={atMs}
         reports={data.reports ? drawn : null}
         cells={mapCells}
-        heat={data.heat}
+        reef={view.reef}
         marine={data.marine}
         show={show}
         selectedCell={picked?.cell ?? null}

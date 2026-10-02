@@ -25,7 +25,7 @@ export const STAGE_MIN_HEIGHT_SHARE = 0.72;
 /** A card's right (chat) or left (details) edge stays this far from the stage centre. */
 export const CENTRE_CLEAR_PX = 48;
 /** Soft edge default (GC2 SCOPE_FEATHER 40 of 100): the fade outside the window, as a share of its radius. */
-export const DEFAULT_FEATHER = 0.4;
+export const DEFAULT_FEATHER = 0.35;
 
 /**
  * Stage diameter in px for a viewport: as tall as the screen allows, narrowed so both cards fit beside it on a

@@ -14,7 +14,7 @@ export { LOOK_IDS, type LookId };
 
 export const DEFAULT_LOOK: LookId = "normal";
 /** Soft edge, 0 (hard edge, black outside the shape) to 100 (no vignette); the default is a gentle visible fade. */
-export const DEFAULT_SCOPE_FEATHER = 40;
+export const DEFAULT_SCOPE_FEATHER = 35;
 export const MAX_SCOPE_FEATHER = 100;
 
 /** The window's shape: a circle, a wide oval, a wide rounded rectangle, or the whole page with only the soft edge. */
@@ -24,7 +24,7 @@ export const DEFAULT_SCOPE_SHAPE: ScopeShape = "circle";
 /** Window size as a percentage of the room its shape may take, scaled about the stage centre. */
 export const MIN_SCOPE_SIZE = 30;
 export const MAX_SCOPE_SIZE = 100;
-export const DEFAULT_SCOPE_SIZE = 100;
+export const DEFAULT_SCOPE_SIZE = 65;
 
 export const LOOK = key<"LOOK", LookId>("LOOK", DEFAULT_LOOK);
 export const SCOPE_FEATHER = key<"SCOPE_FEATHER", number>("SCOPE_FEATHER", DEFAULT_SCOPE_FEATHER);

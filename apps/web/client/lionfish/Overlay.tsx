@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useActiveState } from "@calvinjs/active-state/react";
 
 import { onGlobeReady } from "client/globe/api";
+import { SELECTION, type SelectionState } from "client/state/selection";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
-import { drawField, drawHeat, drawHeatLabels, type HeatDrawStats } from "./draw";
-import { componentText, heatAt, isCopy, isLate, isoDay, type Area, type HeatPixel, type MarinePoint, type PriorityCell, type Report } from "./model";
+import { drawField } from "./draw";
+import { reefImage, reefUrl, type ReefMode } from "./reef";
+import { componentText, heatAt, isLate, isoDay, type Area, type HeatPixel, type MarinePoint, type PriorityCell, type Report } from "./model";
 
 const Layer = styled.div`
   position: absolute;
@@ -44,22 +47,41 @@ const Marker = styled.button`
     outline-offset: 3px;
   }
 
-  /* A report: one dot per record, by date basis; a GBIF copy is a hollow dashed ring, never counted. */
+  /* A report: one dot per record, by date basis. */
   &[data-kind="report"] {
-    width: 14px;
-    height: 14px;
-    margin: -7px 0 0 -7px;
+    width: 9px;
+    height: 9px;
+    margin: -4.5px 0 0 -4.5px;
     border-radius: 50%;
     background: var(--lionfish, #a06cd5);
-    box-shadow: 0 0 0 1.5px #0b0d12, 0 0 6px color-mix(in oklch, #a06cd5 70%, transparent);
+    box-shadow: 0 0 0 1.5px rgb(0 0 0 / 70%), 0 1px 3px rgb(0 0 0 / 60%);
   }
-  &[data-kind="report"][data-copy] {
-    width: 18px;
-    height: 18px;
-    margin: -9px 0 0 -9px;
-    background: transparent;
-    border: 2px dashed #d9c6f2;
-    box-shadow: none;
+  /* Selected: a halo, and a disc in the species' colour that pulses outward, as on the Inversa site. */
+  &[data-kind="report"][data-selected] {
+    z-index: 9;
+    box-shadow: 0 0 0 1.5px #0b0d12, 0 0 0 5px color-mix(in oklch, var(--lionfish, #a06cd5) 35%, transparent);
+  }
+  &[data-kind="report"][data-selected]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--lionfish, #a06cd5);
+    pointer-events: none;
+    @keyframes dot-pulse {
+      from {
+        transform: scale(1);
+        opacity: 0.6;
+      }
+      to {
+        transform: scale(4);
+        opacity: 0;
+      }
+    }
+    animation: dot-pulse 1.6s ease-out infinite;
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
   }
   &[data-kind="report"][data-late]::after {
     content: "";
@@ -138,7 +160,6 @@ export function reportLabel(r: Report): string {
     r.submittedMs !== null ? `submitted ${isoDay(r.submittedMs)}` : "no submitted date",
     r.quality.toLowerCase().replace("_", " "),
   ];
-  if (isCopy(r)) parts.push("GBIF copy of an iNaturalist record, not counted");
   if (isLate(r)) parts.push("uploaded more than 30 days after the dive");
   return parts.join(", ");
 }
@@ -154,7 +175,8 @@ export type OverlayProps = {
   /** Reports to draw (window, basis and filters applied). */
   reports: readonly Report[] | null;
   cells: readonly { cell: PriorityCell; rank: number }[];
-  heat: readonly HeatPixel[] | null;
+  /** The reef heat map shown when `show.heat` is on. */
+  reef: ReefMode;
   marine: readonly MarinePoint[] | null;
   show: { reports: boolean; heat: boolean; priority: boolean; field: boolean };
   selectedCell: string | null;
@@ -171,6 +193,7 @@ type Placed = { lat: number; lon: number };
  */
 export default function Overlay(p: OverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const selectedEvidence = useActiveState<SelectionState, string | null>(SELECTION, (s) => s.evidenceId)[0] ?? null;
   const refs = useRef(new Map<string, { el: HTMLButtonElement; at: Placed }>());
   const props = useRef(p);
   const redraw = useRef<() => void>(() => {});
@@ -207,17 +230,24 @@ export default function Overlay(p: OverlayProps) {
         ctx.clearRect(0, 0, w, h);
         const cur = props.current;
         const project = (lon: number, lat: number) => api.project(lon, lat);
-        let stats: HeatDrawStats = { ok: 0, stale: 0, missing: 0, disagree: 0 };
-        if (cur.show.heat && cur.heat) {
-          stats = drawHeat(ctx, cur.heat, cur.atMs, project);
-          // The numbered priority markers are DOM buttons above this canvas: a label is moved off them.
-          const markers = cur.show.priority ? cur.cells.flatMap(({ cell }) => project(cell.lon, cell.lat) ?? []) : [];
-          drawHeatLabels(ctx, heatLabels(cur.areas, cur.heat, cur.atMs), project, markers);
+        // Reef heat: one NOAA picture per area, the chosen map for the product day at the cursor, pinned by its corners.
+        let maps = 0;
+        if (cur.show.heat) {
+          for (const a of cur.areas) {
+            const img = reefImage(reefUrl(a, cur.reef, cur.atMs), () => redraw.current());
+            const nw = project(a.bbox.west, a.bbox.north);
+            const se = project(a.bbox.east, a.bbox.south);
+            if (!img || !nw || !se) continue;
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+            ctx.globalAlpha = 0.8;
+            ctx.drawImage(img, Math.min(nw.x, se.x), Math.min(nw.y, se.y), Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
+            ctx.restore();
+            maps += 1;
+          }
         }
         const field = cur.show.field && cur.marine ? drawField(ctx, cur.marine, project) : 0;
-        canvas.dataset.heatOk = String(stats.ok);
-        canvas.dataset.heatStale = String(stats.stale);
-        canvas.dataset.heatMissing = String(stats.missing);
+        canvas.dataset.heatMaps = String(maps);
         canvas.dataset.field = String(field);
       };
       redraw.current = () => {
@@ -251,14 +281,14 @@ export default function Overlay(p: OverlayProps) {
               type="button"
               data-kind="report"
               data-report={r.id}
-              data-copy={isCopy(r) ? "" : undefined}
               data-late={isLate(r) ? "" : undefined}
+              data-selected={selectedEvidence === `sighting:${r.id}` ? "" : undefined}
               data-hidden=""
               aria-label={reportLabel(r)}
               onClick={() => p.onReport(r)}
             >
               <span className="tip" role="tooltip" aria-hidden="true">
-                <b>{isCopy(r) ? "GBIF copy (not counted)" : `Lionfish report · ${sourceName(r.source)}`}</b>
+                <b>{`Lionfish report · ${sourceName(r.source)}`}</b>
                 Observed {isoDay(r.observedMs)}
                 <small>{r.submittedMs !== null ? `Submitted ${isoDay(r.submittedMs)}` : "No submitted date at the source"}</small>
                 <small>{r.quality.toLowerCase().replace("_", " ")}</small>

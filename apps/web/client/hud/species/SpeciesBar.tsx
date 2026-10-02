@@ -3,18 +3,16 @@
 import { useId, useMemo } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { LAYERS, setSpeciesVisible, sightingHoursOf, type LayersState } from "client/state/layers";
+import { LAYERS, setSpeciesVisible, type LayersState } from "client/state/layers";
 import styled from "client/styled";
 import { hasLayer } from "shared/apps";
-import { windowLabel } from "shared/frames";
 import { LAYER_IDS } from "shared/voice/ui-tools";
 
-import AppIcon from "../appselect/AppIcon";
 import { useActiveApp } from "../appselect/use-active-app";
 import { formatCount } from "../legend/model";
 import { useGlobeStats } from "../legend/useGlobeStats";
 import { MOBILE, Mono, Surface } from "../primitives";
-import { speciesChip, type ChipModel } from "./model";
+import { speciesChips, type ChipModel } from "./model";
 
 const [SIGHTINGS] = LAYER_IDS;
 
@@ -76,7 +74,13 @@ const Chip = styled.button<{ $color: string }>`
   user-select: none;
   max-width: 190px;
 
-  svg {
+  /* The species' dot, as on the map. */
+  i {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1.5px rgb(0 0 0 / 70%);
     opacity: 0.55;
   }
 
@@ -90,7 +94,7 @@ const Chip = styled.button<{ $color: string }>`
     color: var(--text);
     border-color: var(--border);
     background: color-mix(in oklch, ${(p) => p.$color} 16%, transparent);
-    svg {
+    i {
       opacity: 1;
     }
   }
@@ -118,7 +122,7 @@ const Count = styled(Mono)`
   font-size: 11px;
 `;
 
-function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
+function SpeciesChip({ chip }: { chip: ChipModel }) {
   const tipId = useId();
   return (
     <Slot>
@@ -131,12 +135,12 @@ function SpeciesChip({ chip, hours }: { chip: ChipModel; hours: number }) {
         data-empty={chip.count === 0 ? "" : undefined}
         onClick={() => setSpeciesVisible(chip.key, !chip.on)}
       >
-        <AppIcon icon={chip.icon} color={chip.color} size={18} />
-        <span className="name">{chip.name}</span>
+        <i style={{ background: chip.color }} aria-hidden="true" />
+        <span className="name">{chip.full}</span>
         <Count data-species-count="">{formatCount(chip.count)}</Count>
       </Chip>
       <span role="tooltip" id={tipId}>
-        <b>{chip.full}</b>: {chip.line.replace(/\.$/, "")}. {formatCount(chip.count)} seen in the last {windowLabel(hours)}. Click to show or hide them.
+        <b>{chip.full}</b>: {chip.line.replace(/\.$/, "")}. {formatCount(chip.count)} seen in the selected period. Click to show or hide them.
       </span>
     </Slot>
   );
@@ -156,14 +160,15 @@ export default function SpeciesBar() {
 function SpeciesBarBody() {
   const layers = useActiveState<LayersState>(LAYERS)[0];
   const filter = layers?.species ?? LAYERS.defaults.species;
-  const hours = sightingHoursOf(layers);
   const stats = useGlobeStats();
   const breakdown = stats?.find((s) => s.id === SIGHTINGS)?.breakdown ?? null;
-  const chip = useMemo(() => speciesChip(filter, breakdown), [filter, breakdown]);
-  if (!chip) return null;
+  const chips = useMemo(() => speciesChips(filter, breakdown), [filter, breakdown]);
+  if (chips.length === 0) return null;
   return (
     <Bar role="group" aria-label="Species filter" data-hud-obstacle="" data-testid="species-bar">
-      <SpeciesChip chip={chip} hours={hours} />
+      {chips.map((chip) => (
+        <SpeciesChip key={chip.key} chip={chip} />
+      ))}
     </Bar>
   );
 }

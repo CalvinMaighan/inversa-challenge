@@ -314,7 +314,7 @@ export default function ChatPane({
       {showHint ? (
         <Hint data-chat-hint="" role="region" aria-label="Welcome">
           <p>
-            <span data-welcome="">{welcome(app)}</span>
+            {app.kind === "conditions" ? null : <span data-welcome="">{welcome(app)}</span>}
             <IconButton type="button" aria-label="Dismiss hint" onClick={onDismissHint}>
               <CloseIcon />
             </IconButton>

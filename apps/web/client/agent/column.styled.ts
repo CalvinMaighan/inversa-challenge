@@ -19,7 +19,9 @@ export const Column = styled.aside`
   max-width: ${CARD_MAX_WIDTH_CSS};
   height: 100%;
   min-height: 0;
-  background: var(--surface);
+  background: color-mix(in oklch, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
   box-shadow: var(--shadow);
@@ -90,7 +92,7 @@ export const CreditSlot = styled.div`
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 6px;
+    gap: var(--gap-m);
     min-width: 0;
   }
   /* Cesium's own credit box sits absolutely at the bottom-left of the globe, in white with a shadow: here it is a
@@ -134,30 +136,36 @@ export const CreditSlot = styled.div`
   & .cesium-credit-delimiter {
     padding: 0 3px;
   }
-  /* With on-screen credits the ion logo gives them room: its mark only. */
-  & [data-globe-credits]:has(.cesium-credit-textContainer > *) .cesium-credit-logoContainer img {
-    width: 14px;
-    height: 14px;
+  /* The ion logo is its mark only, the same size as the map icon. */
+  & .cesium-credit-logoContainer img {
+    width: 18px;
+    height: 18px;
+    max-height: 18px;
     object-fit: cover;
     object-position: left center;
   }
+  /* "Data attribution" is a map icon button: the text is hidden, the icon is a mask in the text colour. */
   & .cesium-credit-expand-link {
     flex: none;
-    text-decoration: underline;
+    order: -1;
+    width: 18px;
+    height: 18px;
+    overflow: hidden;
+    font-size: 0;
+    text-decoration: none;
     cursor: pointer;
+  }
+  & .cesium-credit-expand-link::before {
+    content: "";
+    display: block;
+    width: 18px;
+    height: 18px;
+    background: currentcolor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m15 19l-6-2.11V5l6 2.11M20.5 3h-.16L15 5.1L9 3L3.36 4.9c-.21.07-.36.25-.36.48V20.5a.5.5 0 0 0 .5.5c.05 0 .11 0 .16-.03L9 18.9l6 2.1l5.64-1.9c.21-.1.36-.25.36-.48V3.5a.5.5 0 0 0-.5-.5'/%3E%3C/svg%3E") center / contain no-repeat;
   }
   & .cesium-credit-expand-link:hover,
   & .cesium-credit-expand-link:focus-visible {
     color: var(--text);
-  }
-
-  @container chatcard (max-width: 400px) {
-    & .cesium-credit-logoContainer img {
-      width: 14px;
-      height: 14px;
-      object-fit: cover;
-      object-position: left center;
-    }
   }
 
   /* Phone dock: the top right of the dock, beside the grab handle, whatever the sheet's height. */

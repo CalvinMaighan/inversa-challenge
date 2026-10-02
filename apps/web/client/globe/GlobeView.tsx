@@ -77,8 +77,22 @@ function tidyCredits(...roots: HTMLElement[]): void {
     for (const img of root.querySelectorAll<HTMLImageElement>("img:not([crossorigin])")) {
       if (new URL(img.src, location.href).origin !== location.origin) img.crossOrigin = "anonymous";
     }
+    for (const el of root.querySelectorAll<HTMLElement>(".cesium-credit-textContainer *")) {
+      if (el.children.length === 0 && /upgrade for commercial use/i.test(el.textContent ?? "")) {
+        el.style.display = "none";
+        const next = el.nextElementSibling;
+        if (next?.classList.contains("cesium-credit-delimiter")) (next as HTMLElement).style.display = "none";
+      }
+    }
+    for (const link of root.querySelectorAll<HTMLElement>(".cesium-credit-expand-link")) {
+      link.title = "Data attribution";
+      link.setAttribute("aria-label", "Data attribution");
+    }
     const text = root.querySelector<HTMLElement>(".cesium-credit-textContainer");
     if (text) {
+      // An emptied container (only the hidden upgrade notice) would still take a flex gap: drop it.
+      text.style.display = "";
+      if (!text.innerText.trim()) text.style.display = "none";
       const words = text.textContent?.replace(/\s+/g, " ").trim() ?? "";
       if (text.title !== words) text.title = words;
     }

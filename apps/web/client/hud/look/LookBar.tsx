@@ -73,7 +73,9 @@ export const Popover = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
+  background: color-mix(in oklch, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
   box-shadow: var(--shadow);
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);

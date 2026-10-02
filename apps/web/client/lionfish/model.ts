@@ -97,15 +97,16 @@ export function basisMs(r: Pick<Report, "submittedMs" | "observedMs">, basis: Ba
 /** Submitted more than 30 days after it was observed. Unknown upload dates are not late. */
 export const isLate = (r: Pick<Report, "submittedMs" | "observedMs">) => r.submittedMs !== null && r.submittedMs - r.observedMs > LATE_MS;
 
-export type ReportQuery = { basis: Basis; atMs: number; days: number; lateOnly?: boolean; areaId?: string | null };
+export type ReportQuery = { basis: Basis; atMs: number; days: number; /** The period's start: when given, it replaces the trailing `days`. */ fromMs?: number; lateOnly?: boolean; areaId?: string | null };
 
 /**
- * Reports in the trailing window ending at `atMs`, on the chosen date basis, that were known by then. Copies are
- * kept (the map marks them); counting drops them.
+ * Reports from the period's start (else the trailing `days`) to `atMs`, on the chosen date basis, that were known by
+ * then. GBIF copies of iNaturalist records are not reports: they are dropped, not drawn and not counted.
  */
 export function windowReports(reports: readonly Report[], q: ReportQuery): Report[] {
-  const from = q.atMs - q.days * DAY;
+  const from = q.fromMs ?? q.atMs - q.days * DAY;
   return reports.filter((r) => {
+    if (isCopy(r)) return false;
     if (q.areaId && r.areaId !== q.areaId) return false;
     if (knownMs(r) > q.atMs) return false;
     if (q.lateOnly && !isLate(r)) return false;

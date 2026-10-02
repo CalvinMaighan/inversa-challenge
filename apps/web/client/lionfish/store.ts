@@ -7,6 +7,7 @@
 import { useSyncExternalStore } from "react";
 
 import { DEFAULT_WINDOW_DAYS, type Basis, type WindowDays } from "./model";
+import { DEFAULT_REEF_MODE, type ReefMode } from "./reef";
 
 export type HelpTopic = "temperature" | "anomaly" | "dhw" | "baa" | "waves" | "currents";
 
@@ -16,6 +17,8 @@ export type LionfishView = {
   days: WindowDays;
   lateOnly: boolean;
   heat: boolean;
+  /** Which reef heat map `heat` shows (client/lionfish/reef.ts). */
+  reef: ReefMode;
   field: boolean;
   /** Help panel open, on a topic (null: closed). */
   help: HelpTopic | "all" | null;
@@ -23,7 +26,7 @@ export type LionfishView = {
   panelOpen: boolean | null;
 };
 
-export const VIEW_DEFAULTS: LionfishView = { area: null, basis: "observed", days: DEFAULT_WINDOW_DAYS, lateOnly: false, heat: true, field: false, help: null, panelOpen: null };
+export const VIEW_DEFAULTS: LionfishView = { area: null, basis: "observed", days: DEFAULT_WINDOW_DAYS, lateOnly: false, heat: true, reef: DEFAULT_REEF_MODE, field: false, help: null, panelOpen: null };
 
 let state: LionfishView = VIEW_DEFAULTS;
 const listeners = new Set<() => void>();

@@ -21,6 +21,28 @@ export type ChipModel = {
   count: number | null;
 };
 
+/** One chip per tracked species of the active app (each its own switch), in the config's order; none in an app without any. */
+export function speciesChips(filter: LayersState["species"], breakdown: Readonly<Record<string, number>> | null): ChipModel[] {
+  const app = activeApp();
+  const guide = speciesGuide(app);
+  return app.taxa.flatMap((taxon, i): ChipModel[] => {
+    const g = guide[i];
+    if (!g) return [];
+    return [
+      {
+        key: g.id,
+        name: g.name,
+        full: g.full,
+        line: g.line,
+        color: taxon.color,
+        icon: app.icon,
+        on: filter[g.id] !== false,
+        count: breakdown ? (breakdown[String(taxon.dbId)] ?? 0) : null,
+      },
+    ];
+  });
+}
+
 /** The chip of the active app's species, or null in an app without one (carp). */
 export function speciesChip(filter: LayersState["species"], breakdown: Readonly<Record<string, number>> | null): ChipModel | null {
   const app = activeApp();

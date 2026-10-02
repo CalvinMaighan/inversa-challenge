@@ -91,7 +91,6 @@
     { "id": "missions", "label": "Team missions", "defaultOn": true },
     { "id": "peers", "label": "Teammates", "defaultOn": true },
     { "id": "notes", "label": "Field notes", "defaultOn": true },
-    { "id": "vessels", "label": "Ships (AIS)", "defaultOn": false, "description": "Ships broadcasting AIS, moving with the timeline. Vessel positions: AISStream.io." },
     { "id": "sst-map", "label": "Sea surface temperature map", "defaultOn": false, "description": "How warm the sea was, satellite picture, one per day." },
     { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
     { "id": "clouds", "label": "Clouds", "defaultOn": false, "description": "Cloud cover from the weather satellite." },

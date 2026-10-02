@@ -2,7 +2,7 @@ import { key } from "@calvinjs/active-state";
 
 /** Frame step and replay window (PLAN.md C15). */
 export const TIME_STEP_MINUTES = 15;
-export const TIME_WINDOW_DAYS = 30;
+export const TIME_WINDOW_DAYS = 365;
 /** Playback speed in frames per second; the `play_timeline` voice tool uses the same default. */
 export const DEFAULT_SPEED = 8;
 
@@ -19,11 +19,11 @@ export type TimeState = {
   to: string;
 };
 
-/** Replay window ending at the frame step that contains `nowMs`, with the cursor on the live edge. */
-export function timeWindow(nowMs: number): Pick<TimeState, "at" | "from" | "to"> {
+/** Replay window of `days` (the default window) ending at the frame step that contains `nowMs`, with the cursor on the live edge. */
+export function timeWindow(nowMs: number, days: number = TIME_WINDOW_DAYS): Pick<TimeState, "at" | "from" | "to"> {
   const to = Math.floor(nowMs / STEP_MS) * STEP_MS;
   const iso = (ms: number) => new Date(ms).toISOString();
-  return { at: iso(to), from: iso(to - WINDOW_MS), to: iso(to) };
+  return { at: iso(to), from: iso(to - days * 24 * 60 * 60_000), to: iso(to) };
 }
 
 /** Snap an instant to the frame grid and clamp it into [from, to]. */
@@ -55,6 +55,32 @@ export function retime(prev: Pick<TimeState, "from" | "to">, atMs: number, nowMs
     return { from: prev.from, to: prev.to, at: clampToWindow(atMs, prev) };
   }
   return windowFor(atMs, nowMs);
+}
+
+/** The longest period the timeline may span: the db worker fetches every frame of it. */
+export const MAX_RANGE_DAYS = 366;
+
+/**
+ * The window from the start of UTC day `startMs` to the end of UTC day `endMs` (or now, for today), cursor at its end,
+ * kept within `MAX_RANGE_DAYS`: when the span is too long the end that was not just edited (`edited`) gives way.
+ */
+export function rangeWindow(startMs: number, endMs: number, nowMs: number, edited: "start" | "end"): Pick<TimeState, "at" | "from" | "to"> {
+  const day = 24 * 60 * 60_000;
+  const nowStep = Math.floor(nowMs / STEP_MS) * STEP_MS;
+  const endOf = (ms: number) => Math.min(nowStep, Math.floor(ms / day) * day + day - STEP_MS);
+  let from = Math.min(Math.floor(startMs / day) * day, nowStep - STEP_MS);
+  let to = endOf(endMs);
+  if (to <= from) {
+    if (edited === "start") to = endOf(from);
+    else from = Math.floor(to / day) * day;
+  }
+  const max = MAX_RANGE_DAYS * day;
+  if (to - from > max) {
+    if (edited === "start") to = endOf(from + max);
+    else from = Math.floor((to - max) / day) * day;
+  }
+  const iso = (ms: number) => new Date(ms).toISOString();
+  return { from: iso(from), to: iso(to), at: iso(to) };
 }
 
 /**

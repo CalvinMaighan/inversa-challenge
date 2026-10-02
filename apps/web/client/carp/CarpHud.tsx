@@ -5,7 +5,7 @@ import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { getGlobe } from "client/globe/api";
-import { boxOf, fitInPane } from "client/globe/fit";
+import { boxOf, fitGlobeInPane, fitInPane } from "client/globe/fit";
 import { MOBILE_QUERY, useIsMobile } from "client/hud/primitives";
 import { applyCarpView, endScrub, goLive, scrubAsOf, selectSite, setAsOf } from "client/state/carp";
 import { THEME } from "client/state/theme";
@@ -107,10 +107,11 @@ export default function CarpHud({ app }: { app: AppConfig }) {
 
   // First view: every site in sight, clear of the board and the timeline, unless a link brought its own camera.
   useEffect(() => {
-    if (/(^|[#&])c=/.test(window.location.hash)) return;
-    // After layout, so a phone's free rect is measured with the timeline and the tab in place.
+    // After layout, so a phone's free rect is measured with the timeline and the tab in place. A load always starts
+    // on the whole globe, its edge on the scope circle's, over the sites.
     const id = requestAnimationFrame(() => {
-      const frame = frameFor(sites, window.matchMedia(MOBILE_QUERY).matches);
+      const box = boxOf(sites);
+      const frame = fitGlobeInPane({ lat: (box.south + box.north) / 2, lon: (box.west + box.east) / 2 }) ?? frameFor(sites, window.matchMedia(MOBILE_QUERY).matches);
       set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
     });
     return () => cancelAnimationFrame(id);

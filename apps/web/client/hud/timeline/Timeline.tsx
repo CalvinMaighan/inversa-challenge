@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { set } from "@calvinjs/active-state";
+import { get, set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { LAYERS, type LayersState } from "client/state/layers";
+import { DEFAULT_RANGE_DAYS, RANGE_DAYS } from "client/state/range";
 import { THEME } from "client/state/theme";
-import { retime, TIME, timeWindow, type TimeState } from "client/state/time";
+import { TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { frameIndexAt, type FrameSightings } from "client/threads/api";
 
@@ -16,6 +17,7 @@ import { formatClocks, isLive } from "../topbar/clock";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
 import { stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
+import RegionChip from "./RegionChip";
 import { filteredCounts } from "./sparkline";
 import { TIMELINE_STRIP_ROOM } from "../zoom/strip";
 import { useFrameGrid, useFrameSightings } from "./use-frame-grid";
@@ -85,26 +87,6 @@ const Select = styled.select`
   font: 600 11px / 1 var(--font-mono);
   option {
     background: var(--surface);
-  }
-`;
-
-const DateInput = styled.input`
-  height: 28px;
-  margin-left: var(--gap-s);
-  padding: 0 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-s);
-  background: transparent;
-  color: var(--text);
-  color-scheme: dark light;
-  font: 600 11px / 1 var(--font-mono);
-  /* Focus sits on the date field's inner segments, so the host never matches :focus-visible. */
-  &:focus-within {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  ${MOBILE} {
-    margin-left: 0;
   }
 `;
 
@@ -331,39 +313,6 @@ function TimelineTrack({ from, to }: { from: number; to: number }) {
   );
 }
 
-/**
- * Date jump: a UTC day, committed on Enter or blur (not per keystroke, so typing a year does not fetch year 2).
- * The time of day is kept; a day outside the window moves the window (`retime`) and the db worker fetches it.
- */
-function DateJump({ at }: { at: string }) {
-  const day = at.slice(0, 10);
-  const commit = (input: HTMLInputElement) => {
-    if (!input.value || input.value === day) return;
-    const ms = Date.parse(`${input.value}T${at.slice(11, 16)}:00Z`);
-    if (!Number.isFinite(ms)) {
-      input.value = day;
-      return;
-    }
-    set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...retime(prev, ms, Date.now()), playing: false }));
-  };
-  return (
-    <DateInput
-      key={day}
-      type="date"
-      defaultValue={day}
-      min="2000-01-01"
-      max={new Date().toISOString().slice(0, 10)}
-      aria-label="Jump to date (UTC)"
-      title="Jump to date (UTC)"
-      data-hud-date-jump=""
-      onBlur={(e) => commit(e.currentTarget)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") commit(e.currentTarget);
-      }}
-    />
-  );
-}
-
 function PlayControls() {
   const playing = useActiveState<TimeState, boolean>(TIME, (t) => t.playing)[0] ?? false;
   const speed = useActiveState<TimeState, number>(TIME, (t) => t.speed)[0] ?? 8;
@@ -398,13 +347,12 @@ function PlayControls() {
         data-testid="hud-live"
         aria-live="polite"
         onClick={() => {
-          if (!showingNow) set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(Date.now()), playing: false }));
+          if (!showingNow) set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(Date.now(), get<number>(RANGE_DAYS) ?? DEFAULT_RANGE_DAYS), playing: false }));
         }}
       >
         <Dot $tone={showingNow ? "ok" : "warn"} $pulse={showingNow || playing} />
         {showingNow ? "LIVE" : playing ? "REPLAY ▸" : "REPLAY"}
       </LiveButton>
-      <DateJump at={at} />
       <Readout title="Time cursor, UTC and Florida time">
         {c.utc.slice(0, 5)}Z · {c.local.slice(0, 5)} {c.zone}
       </Readout>
@@ -426,6 +374,7 @@ export default function Timeline() {
   useHudBottom(ref);
   return (
     <Root as="section" ref={ref} data-hud-obstacle="" aria-label="Timeline" data-testid="hud-timeline" onKeyDown={onKeyDown}>
+      <RegionChip />
       <PlayControls />
       <TimelineTrack from={Date.parse(from)} to={Date.parse(to)} />
     </Root>

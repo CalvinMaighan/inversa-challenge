@@ -373,38 +373,7 @@ export default function SurveyPanel(p: SurveyPanelProps) {
       <Section aria-label="Reef heat stress" data-testid="lionfish-heat">
         <h3>Reef heat stress (NOAA CRW)</h3>
         <p className="muted">{copyText(app, "heatNote", "Heat stress is context, not proof of damage.")}</p>
-        <Stacked>
-          {p.areas.map((a) => {
-            const h = a.heat;
-            const state = h.pixels === 0 ? "no pixels" : h.ok > 0 ? "ok" : h.stale > 0 ? "stale" : "missing";
-            return (
-              <div key={a.id} style={{ display: "contents" }}>
-                <dt>{a.name}</dt>
-                <dd data-heat-area={a.id} data-state={state}>
-                  {h.ok + h.stale > 0 ? (
-                    <>
-                      DHW {h.maxDhw === null ? "unknown" : h.maxDhw.toFixed(1)} °C-weeks · BAA {baaWord(h.maxBaa)}
-                      {h.disagree ? (
-                        <>
-                          {" "}
-                          <Tag $tone="warn" data-testid="lionfish-disagree">
-                            DHW and BAA disagree in places
-                          </Tag>
-                        </>
-                      ) : null}
-                      <br />
-                      <small>
-                        product day {h.dayMs ? isoDay(h.dayMs) : "?"} (observed){state === "stale" ? " · stale: older than 72 h" : ""}
-                      </small>
-                    </>
-                  ) : (
-                    <Tag $tone="muted">{state === "no pixels" ? "no CRW pixels loaded" : "missing: no CRW product held for this day"}</Tag>
-                  )}
-                </dd>
-              </div>
-            );
-          })}
-        </Stacked>
+        <p className="muted">NOAA Coral Reef Watch draws the heat map on the globe: pick Heat stress, Alert level, Hotspot or Sea temp at the top left. It follows the timeline, one picture per day.</p>
         <p>
           <LinkButton type="button" onClick={() => p.onHelp("baa")} data-testid="lionfish-help-baa">
             Why DHW and BAA can disagree

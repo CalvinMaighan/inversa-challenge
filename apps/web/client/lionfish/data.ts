@@ -163,8 +163,7 @@ async function readingsIn(areas: readonly Area[], params: string, fromMs: number
   return out;
 }
 
-/** NOAA CRW SST, anomaly, DHW and BAA pixels over the window. */
-export const loadHeat = (areas: readonly Area[], fromMs: number, toMs: number, signal?: AbortSignal) => readingsIn(areas, "SST, SST_ANOMALY, DHW, BAA", fromMs, toMs, signal);
+// Reef heat is not loaded as readings: the globe draws NOAA's finished maps (reef.ts).
 
 /** NDBC water temperature (buoys exist in Florida only). */
 export const loadBuoys = (areas: readonly Area[], fromMs: number, toMs: number, signal?: AbortSignal) => readingsIn(areas, "SST_C, WATER_C", fromMs, toMs, signal);

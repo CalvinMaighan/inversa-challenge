@@ -64,11 +64,18 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$DOPPLER_TOKEN" || { echo "::error::DOPPLER_TOKEN secret is not set"; exit 1; }
-          # NEXT_PUBLIC_* values are inlined at build time. Only this one leaves Doppler here.
-          NEXT_PUBLIC_CESIUM_ION_TOKEN="$(doppler secrets get CESIUM_ION_TOKEN --plain --project inversa --config prd)"
-          test -n "$NEXT_PUBLIC_CESIUM_ION_TOKEN" || { echo "::error::CESIUM_ION_TOKEN is empty in Doppler inversa/prd"; exit 1; }
+          # NEXT_PUBLIC_* values are inlined at build time. Only these leave Doppler here. The Doppler names are the
+          # NEXT_PUBLIC_ ones (the same names the dev supervisor passes); the older CESIUM_ION_TOKEN is still accepted.
+          NEXT_PUBLIC_CESIUM_ION_TOKEN="$(doppler secrets get NEXT_PUBLIC_CESIUM_ION_TOKEN --plain --project inversa --config prd 2>/dev/null || doppler secrets get CESIUM_ION_TOKEN --plain --project inversa --config prd 2>/dev/null || true)"
+          test -n "$NEXT_PUBLIC_CESIUM_ION_TOKEN" || { echo "::error::NEXT_PUBLIC_CESIUM_ION_TOKEN (or CESIUM_ION_TOKEN) is empty in Doppler inversa/prd"; exit 1; }
           echo "::add-mask::$NEXT_PUBLIC_CESIUM_ION_TOKEN"
           export NEXT_PUBLIC_CESIUM_ION_TOKEN
+          # Google Photorealistic 3D (restrict this key by domain in Google's console: it ships in the bundle).
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY="$(doppler secrets get NEXT_PUBLIC_GOOGLE_MAPS_API_KEY --plain --project inversa --config prd 2>/dev/null || true)"
+          if [ -n "$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY" ]; then
+            echo "::add-mask::$NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"
+            export NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+          fi
           # Same origin for the board's signal Worker: Caddy proxies /signal/* to it (deploy/Caddyfile).
           # Unset, the client would fall back to the dev Worker at 127.0.0.1:8799.
           export NEXT_PUBLIC_SIGNAL_URL=/signal

@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import CarpChip from "client/carp/CarpChip";
 import CarpFishHud from "client/carp/CarpFishHud";
+import FishLegend from "client/carp/FishLegend";
+import { fitGlobeInPane } from "client/globe/fit";
 import LionfishChip from "client/lionfish/LionfishChip";
 import LionfishHud from "client/lionfish/LionfishHud";
 import { isSurveyApp, parseCellEvidenceId } from "client/lionfish/model";
 import { SELECTION } from "client/state/selection";
+import { VIEW, viewFor, type ViewState } from "client/state/view";
 import styled from "client/styled";
 
 import AppSelect from "./appselect/AppSelect";
@@ -19,8 +22,8 @@ import HelpSheet from "./help/HelpSheet";
 import DetectionOverlay from "./overlay/DetectionOverlay";
 import { MOBILE } from "./primitives";
 import { isDrawerOpen, type HudSelection } from "./selection";
+import RangeButton from "./range/RangeButton";
 import ShareLinkSync from "./ShareLinkSync";
-import ShipsChip from "./ships/ShipsChip";
 import SpeciesBar from "./species/SpeciesBar";
 import Sync from "./Sync";
 import Timeline from "./timeline/Timeline";
@@ -142,6 +145,19 @@ function HudBody({ sync = true }: HudProps) {
   const conditions = app.kind === "conditions";
   // Lionfish Watch: its own layers, chip and priority card; a survey cell id opens that card, not the drawer.
   const survey = isSurveyApp(app);
+
+  // First view of a species app: the whole globe, its edge on the scope circle's, over the app's area (the carp and
+  // lionfish HUDs frame their own first view the same way). After layout, so the circle is measured.
+  const speciesApp = !conditions && !survey;
+  useEffect(() => {
+    if (!speciesApp) return;
+    const id = requestAnimationFrame(() => {
+      const { lat, lon } = viewFor(app);
+      const frame = fitGlobeInPane({ lat, lon });
+      if (frame) set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
+    });
+    return () => cancelAnimationFrame(id);
+  }, [app, speciesApp]);
   const cardOwnsSelection = survey && parseCellEvidenceId(selectedId) !== null;
   return (
     <Root ref={rootRef} data-hud="" data-kind={app.kind} data-drawer-open={drawerOpen ? "" : undefined}>
@@ -152,8 +168,8 @@ function HudBody({ sync = true }: HudProps) {
       <Chrome data-hud-chrome="">
         <TopRow ref={barRef} data-testid="hud-toprow">
           <AppSelect />
-          {conditions ? <CarpChip /> : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
-          <ShipsChip />
+          {conditions ? <FishLegend /> : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
+          <RangeButton />
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
         </TopRow>
         {/* Carp: sites, review board, briefing drawer and the stage timeline replace the sightings timeline. */}

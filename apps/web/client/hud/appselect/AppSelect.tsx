@@ -13,18 +13,20 @@ import { switchApp } from "./switch";
 import { useActiveApp } from "./use-active-app";
 import type { AppId } from "shared/apps";
 
-/** Same round chrome button as About and Theme (TopBar), on the left of the HUD's top row. */
+/** The chrome button of About and Theme (TopBar) with the app's name beside its icon, on the left of the HUD's top row. */
 const Trigger = styled(Surface.withComponent("button"))`
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   flex: none;
-  width: 36px;
   height: 36px;
-  padding: 0;
-  border-radius: 50%;
+  padding: 0 14px 0 11px;
+  border-radius: 18px;
   color: var(--text);
+  font: 600 12.5px / 1 var(--font-ui);
+  white-space: nowrap;
   cursor: pointer;
 
   &:hover,
@@ -162,6 +164,7 @@ export default function AppSelect() {
         onClick={pop.toggle}
       >
         <AppIcon icon={app.icon} color={appTint(app)} size={18} />
+        {app.id.charAt(0).toUpperCase() + app.id.slice(1)}
       </Trigger>
       {pop.open ? (
         <PopoverBox id={id} label="Choose an app" testId="app-select-popover" popRef={popRef} onClose={pop.close} align="left">

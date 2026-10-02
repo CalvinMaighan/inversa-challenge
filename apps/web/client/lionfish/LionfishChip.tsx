@@ -2,7 +2,6 @@
 
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import AppIcon from "client/hud/appselect/AppIcon";
 import { Surface } from "client/hud/primitives";
 import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
 import styled from "client/styled";
@@ -54,15 +53,13 @@ export default function LionfishChip({ app }: { app: AppConfig }) {
       type="button"
       data-testid="lionfish-chip"
       aria-pressed={on}
-      aria-label={`${taxon?.name ?? app.name}: ${count} ${s.basis} in ${s.days} days. ${on ? "Hide" : "Show"} reports`}
+      aria-label={`${taxon?.name ?? app.name}: ${count} ${s.basis} in the selected period. ${on ? "Hide" : "Show"} reports`}
       style={{ ["--lf-color" as string]: taxon?.color ?? "#a06cd5" }}
       onClick={() => setLayerVisible(SIGHTINGS, !on)}
     >
-      <AppIcon icon={app.icon} color={taxon?.color ?? "#a06cd5"} size={18} />
+      <i aria-hidden="true" />
       {taxon?.short ?? taxon?.name ?? app.name}
-      <small>
-        {count} · {s.days} d {s.basis}
-      </small>
+      <small>{count}</small>
     </Chip>
   );
 }
