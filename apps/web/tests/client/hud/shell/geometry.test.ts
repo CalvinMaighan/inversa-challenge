@@ -61,7 +61,7 @@ describe("stage geometry", () => {
     expect(SCOPE_MASK_CSS).toContain(`var(--scope-feather, ${DEFAULT_FEATHER})`);
     expect(SCOPE_MASK_CSS.startsWith("radial-gradient(circle at 50% 50%, #000 calc(")).toBe(true);
     expect(SCOPE_MASK_CSS).toContain("(1 + var(--scope-feather");
-    expect(DEFAULT_FEATHER).toBe(0.4);
+    expect(DEFAULT_FEATHER).toBe(0.35);
   });
 
   test("feather values are clamped to 0..1", () => {

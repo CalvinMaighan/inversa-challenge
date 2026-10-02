@@ -58,6 +58,7 @@ describe("transport key index (PLAN.md C6)", () => {
       "MISSIONS",
       "NOTES",
       "PEERS",
+      "RANGE_DAYS",
       "SCOPE_FEATHER",
       "SCOPE_SHAPE",
       "SCOPE_SIZE",

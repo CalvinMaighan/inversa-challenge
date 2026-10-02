@@ -5,7 +5,7 @@ import { clampToWindow, DEFAULT_SPEED, retime, TIME, TIME_STEP_MINUTES, TIME_WIN
 const STEP = TIME_STEP_MINUTES * 60_000;
 
 describe("TIME", () => {
-  test("defaults: paused at 8 fps on the live edge of a 30-day window", () => {
+  test("defaults: paused at 8 fps on the live edge of the default (one-year) window", () => {
     const t = TIME.defaults;
     expect(t.playing).toBe(false);
     expect(t.speed).toBe(8);
@@ -20,7 +20,7 @@ describe("TIME", () => {
     const now = Date.parse("2026-09-30T20:44:59.999Z");
     expect(timeWindow(now)).toEqual({
       at: "2026-09-30T20:30:00.000Z",
-      from: "2026-08-31T20:30:00.000Z",
+      from: "2025-09-30T20:30:00.000Z",
       to: "2026-09-30T20:30:00.000Z",
     });
     expect(timeWindow(Date.parse("2026-09-30T20:45:00.000Z")).to).toBe("2026-09-30T20:45:00.000Z");
@@ -34,14 +34,16 @@ describe("TIME", () => {
     expect(clampToWindow(Date.parse("2020-01-01T00:00:00Z"), w)).toBe(w.from);
   });
 
-  test("windowFor: the live window for recent or future times, a centred 30 days for older ones", () => {
+  test("windowFor: the live window for recent or future times, a centred window for older ones", () => {
     const now = Date.parse("2026-09-30T20:44:00Z");
     const live = timeWindow(now);
     expect(windowFor(Date.parse("2026-09-15T10:07:00Z"), now)).toEqual({ ...live, at: "2026-09-15T10:00:00.000Z" });
     expect(windowFor(Date.parse("2027-01-01T00:00:00Z"), now)).toEqual(live);
     expect(windowFor(Date.parse(live.from), now)).toEqual({ ...live, at: live.from });
-    const cold = windowFor(Date.parse("2026-02-01T17:00:00Z"), now);
-    expect(cold).toEqual({ at: "2026-02-01T17:00:00.000Z", from: "2026-01-17T17:00:00.000Z", to: "2026-02-16T17:00:00.000Z" });
+    // A cold-snap day inside the live (one-year) window is simply the live window; older than it, a window centred on it.
+    expect(windowFor(Date.parse("2026-02-01T17:00:00Z"), now)).toEqual({ ...live, at: "2026-02-01T17:00:00.000Z" });
+    const cold = windowFor(Date.parse("2025-02-01T17:00:00Z"), now);
+    expect(cold).toEqual({ at: "2025-02-01T17:00:00.000Z", from: "2024-08-03T05:00:00.000Z", to: "2025-08-03T05:00:00.000Z" });
     expect(Date.parse(cold.to) - Date.parse(cold.from)).toBe(TIME_WINDOW_DAYS * 86_400_000);
   });
 

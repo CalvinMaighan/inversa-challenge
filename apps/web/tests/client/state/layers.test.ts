@@ -20,9 +20,9 @@ const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] 
 const now = () => get<LayersState>(LAYERS)!;
 
 describe("LAYERS per app", () => {
-  test("active app: LAYERS starts as carp's (the default app): gauges and alerts on, no sightings, no species", () => {
+  test("active app: LAYERS starts as carp's (the default app): alerts on, gauge readings off, no sightings, no species", () => {
     const carp = LAYERS.defaults;
-    expect(LAYER_IDS.filter((id) => carp.visible[id])).toEqual(["stations", "alerts", "missions", "peers", "notes"]);
+    expect(LAYER_IDS.filter((id) => carp.visible[id])).toEqual(["alerts", "missions", "peers", "notes"]);
     expect(carp.species).toEqual({});
   });
 

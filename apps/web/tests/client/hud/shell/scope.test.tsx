@@ -47,8 +47,8 @@ describe("scope shape", () => {
     expect(SCOPE_SHAPES).toEqual(["circle", "oval", "rounded", "frame"]);
     expect(SCOPE_SHAPE.defaults).toBe("circle");
     expect(DEFAULT_SCOPE_SHAPE).toBe("circle");
-    expect(SCOPE_SIZE.defaults).toBe(100);
-    expect(DEFAULT_SCOPE_SIZE).toBe(100);
+    expect(SCOPE_SIZE.defaults).toBe(65);
+    expect(DEFAULT_SCOPE_SIZE).toBe(65);
     expect([MIN_SCOPE_SIZE, MAX_SCOPE_SIZE]).toEqual([30, 100]);
     for (const s of SCOPE_SHAPES) expect(shapeOf(s)).toBe(s);
     for (const bad of ["square", "", null, undefined, 3, "CIRCLE"]) {
@@ -60,21 +60,21 @@ describe("scope shape", () => {
     expect(sizeOf(10)).toBe(30);
     expect(sizeOf(250)).toBe(100);
     expect(sizeOf(64.6)).toBe(65);
-    for (const bad of [Number.NaN, "big", "", null, undefined, {}]) expect(sizeOf(bad)).toBe(100);
+    for (const bad of [Number.NaN, "big", "", null, undefined, {}]) expect(sizeOf(bad)).toBe(65);
   });
 
   test("scope shape: each shape's box at size 100 (1440×900)", () => {
-    const circle = scopeWindow(VW, VH, { shape: "circle" });
+    const circle = scopeWindow(VW, VH, { shape: "circle", size: 100 });
     expect([circle.width, circle.height, circle.corner]).toEqual([D, D, D / 2]);
-    const oval = scopeWindow(VW, VH, { shape: "oval" });
+    const oval = scopeWindow(VW, VH, { shape: "oval", size: 100 });
     expect([oval.width, oval.height]).toEqual([D * WIDE_ASPECT, D]);
-    const rounded = scopeWindow(VW, VH, { shape: "rounded" });
+    const rounded = scopeWindow(VW, VH, { shape: "rounded", size: 100 });
     expect([rounded.width, rounded.height]).toEqual([D * WIDE_ASPECT, D]);
     expect(rounded.corner).toBeCloseTo(D * ROUNDED_CORNER_SHARE, 6);
-    const frame = scopeWindow(VW, VH, { shape: "frame" });
+    const frame = scopeWindow(VW, VH, { shape: "frame", size: 100 });
     expect([frame.width, frame.height, frame.corner]).toEqual([VW - 2 * GUTTER_PX, VH - 2 * GUTTER_PX, 0]);
     // The wide shapes never pass the page's gutters.
-    const narrow = scopeWindow(800, 900, { shape: "oval" });
+    const narrow = scopeWindow(800, 900, { shape: "oval", size: 100 });
     expect(narrow.width).toBe(800 - 2 * GUTTER_PX);
     // Four distinct visible areas.
     const areas = [circle, oval, rounded, frame].map(area);
@@ -96,7 +96,7 @@ describe("scope shape", () => {
 
   test("scope shape: the share link carries shape, size and feather and restores them", () => {
     reset();
-    expect(encodeShareLink({ app: "python", shape: "circle", size: 100, feather: DEFAULT_SCOPE_FEATHER })).toBe("v=2&app=python");
+    expect(encodeShareLink({ app: "python", shape: "circle", size: DEFAULT_SCOPE_SIZE, feather: DEFAULT_SCOPE_FEATHER })).toBe("v=2&app=python");
     const hash = encodeShareLink({ app: "python", shape: "rounded", size: 70, feather: 60 });
     expect(hash).toContain("shape=rounded");
     expect(hash).toContain("size=70");
@@ -127,9 +127,9 @@ describe("scope feather", () => {
       // The window is fully visible whatever the soft edge: the framings' opaque part is the box itself.
       expect(opaqueWindow(soft)).toEqual(opaqueWindow(hard));
     }
-    const d = scopeWindow(VW, VH);
+    const d = scopeWindow(VW, VH, { size: 100 });
     expect(d.shape).toBe("circle");
-    expect(d.feather).toBeCloseTo(0.4 * (D / 2), 9);
+    expect(d.feather).toBeCloseTo((DEFAULT_SCOPE_FEATHER / 100) * (D / 2), 9);
   });
 
   test("scope feather: default is a visible fade (30..50); the fade distance and the floor never shrink as the soft edge grows; 100 is no vignette", () => {
@@ -173,14 +173,14 @@ describe("scope feather", () => {
   });
 
   test("scope feather: feather 0 is a hard edge (only the sharp shape, nothing outside) and 100 is no vignette (one opaque page)", () => {
-    const hard = scopeMaskSvg(scopeWindow(VW, VH, { shape: "circle", feather: 0 }), VW, VH);
+    const hard = scopeMaskSvg(scopeWindow(VW, VH, { shape: "circle", feather: 0, size: 100 }), VW, VH);
     expect(hard).toContain(`<ellipse cx="720" cy="450" rx="${D / 2}" ry="${D / 2}"/>`);
     expect(hard).not.toContain("<filter");
     expect(hard).not.toContain("fill-opacity");
     expect(hard.match(/<(ellipse|rect)/g)).toHaveLength(1);
     const rounded = scopeMaskSvg(scopeWindow(VW, VH, { shape: "rounded", feather: 0, size: 70 }), VW, VH);
     expect(rounded).toMatch(/<rect x="[\d.]+" y="[\d.]+" width="[\d.]+" height="[\d.]+" rx="[1-9][\d.]*"\/>/);
-    const frame = scopeMaskSvg(scopeWindow(VW, VH, { shape: "frame", feather: 0 }), VW, VH);
+    const frame = scopeMaskSvg(scopeWindow(VW, VH, { shape: "frame", feather: 0, size: 100 }), VW, VH);
     expect(frame).toContain(`<rect x="${GUTTER_PX}" y="${GUTTER_PX}" width="${VW - 2 * GUTTER_PX}" height="${VH - 2 * GUTTER_PX}" rx="0"/>`);
     const none = scopeMaskSvg(scopeWindow(VW, VH, { shape: "circle", feather: 100 }), VW, VH);
     expect(none.match(/<(ellipse|rect)/g)).toHaveLength(1);
@@ -190,9 +190,9 @@ describe("scope feather", () => {
   });
 
   test("scope feather: the pointer is clipped to the window only with a hard edge; with a soft edge the visible map outside takes clicks", () => {
-    expect(scopeClipCss(scopeWindow(VW, VH, { shape: "circle", feather: 0 }))).toBe(`ellipse(${D / 2}px ${D / 2}px at 720px 450px)`);
+    expect(scopeClipCss(scopeWindow(VW, VH, { shape: "circle", feather: 0, size: 100 }))).toBe(`ellipse(${D / 2}px ${D / 2}px at 720px 450px)`);
     expect(scopeClipCss(scopeWindow(VW, VH, { shape: "oval", size: 50, feather: 0 }))).toBe(`ellipse(${(D * WIDE_ASPECT) / 4}px ${D / 4}px at 720px 450px)`);
-    expect(scopeClipCss(scopeWindow(VW, VH, { shape: "frame", feather: 0 }))).toBe(`inset(${GUTTER_PX}px ${GUTTER_PX}px ${GUTTER_PX}px ${GUTTER_PX}px round 0px)`);
+    expect(scopeClipCss(scopeWindow(VW, VH, { shape: "frame", feather: 0, size: 100 }))).toBe(`inset(${GUTTER_PX}px ${GUTTER_PX}px ${GUTTER_PX}px ${GUTTER_PX}px round 0px)`);
     for (const shape of SCOPE_SHAPES) {
       expect(scopeClipCss(scopeWindow(VW, VH, { shape, feather: 1 }))).toBe("none");
       expect(scopeClipCss(scopeWindow(VW, VH, { shape }))).toBe("none");

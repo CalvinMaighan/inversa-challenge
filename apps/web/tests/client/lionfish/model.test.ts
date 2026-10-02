@@ -64,10 +64,12 @@ describe("lionfish model: reports", () => {
   const future = report({ observed: "2026-09-29T10:00:00Z", submitted: "2026-10-02T00:00:00Z" });
   const all = [recent, lateUpload, copy, gbif, future];
 
-  test("observed basis: the window holds what was observed in it and known by then; a copy is shown, never counted", () => {
+  test("observed basis: the window holds what was observed in it and known by then; a GBIF copy of an iNaturalist record is dropped, never drawn or counted", () => {
     const q = { basis: "observed" as const, atMs: NOW, days: 30 };
-    expect(windowReports(all, q).map((r) => r.id).sort()).toEqual([recent.id, copy.id, gbif.id].sort());
-    expect(countReports(all, q)).toEqual({ independent: 2, copies: 1, late: 0, noSubmittedDate: 0 });
+    expect(windowReports(all, q).map((r) => r.id).sort()).toEqual([recent.id, gbif.id].sort());
+    expect(countReports(all, q)).toEqual({ independent: 2, copies: 0, late: 0, noSubmittedDate: 0 });
+    // A period start replaces the trailing days: from the 15th, only the report of the 20th remains.
+    expect(windowReports(all, { ...q, fromMs: Date.parse("2026-09-15T00:00:00Z") }).map((r) => r.id)).toEqual([recent.id]);
   });
 
   test("submitted basis counts uploads in the window; records without an upload date are reported apart, not guessed", () => {

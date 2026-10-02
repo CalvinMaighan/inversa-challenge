@@ -8,6 +8,9 @@
     "apps/*",
     "packages/*"
   ],
+  "overrides": {
+    "postcss": "^8.5.28"
+  },
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "env": "doppler secrets download --no-file --format env --project inversa --config ${INVERSA_DOPPLER_CONFIG:-dev} > .env && chmod 600 .env && echo \"wrote .env ($(grep -c '=' .env) secrets, git-ignored)\"",

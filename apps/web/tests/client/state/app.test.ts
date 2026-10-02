@@ -39,16 +39,17 @@ function storage(initial: Record<string, string> = {}, fail = false) {
 }
 
 describe("active app resolution", () => {
-  test("active app: ?app= beats localStorage beats the default carp", () => {
+  test("active app: ?app= beats the default carp; the last app is not remembered across visits", () => {
     expect(DEFAULT_APP_ID).toBe("carp");
     expect(resolveActiveApp({ search: "?app=lionfish", storage: storage({ [APP_STORAGE_KEY]: "python" }) })).toBe("lionfish");
-    expect(resolveActiveApp({ search: "", storage: storage({ [APP_STORAGE_KEY]: "python" }) })).toBe("python");
+    // A stored app no longer decides: a new visit opens carp.
+    expect(resolveActiveApp({ search: "", storage: storage({ [APP_STORAGE_KEY]: "python" }) })).toBe("carp");
     expect(resolveActiveApp({ search: "?x=1", storage: storage() })).toBe("carp");
     expect(resolveActiveApp({})).toBe("carp");
   });
 
   test("active app: invalid values fall through to the next source, then to carp", () => {
-    expect(resolveActiveApp({ search: "?app=everglades", storage: storage({ [APP_STORAGE_KEY]: "python" }) })).toBe("python");
+    expect(resolveActiveApp({ search: "?app=everglades", storage: storage({ [APP_STORAGE_KEY]: "python" }) })).toBe("carp");
     expect(resolveActiveApp({ search: "?app=", storage: storage({ [APP_STORAGE_KEY]: "Lionfish" }) })).toBe("carp");
     expect(resolveActiveApp({ search: "?app=PYTHON", storage: storage({ [APP_STORAGE_KEY]: "<script>" }) })).toBe("carp");
     expect(appFromSearch("?app=carp&app=python")).toBe("carp");
@@ -114,7 +115,8 @@ describe("active app head script", () => {
 
   test("active app: the head script resolves like resolveActiveApp and hides the page only for a non-default app", () => {
     expect(run("?app=python", "", "lionfish")).toEqual({ "data-app": "python", "data-app-pending": "" });
-    expect(run("", "", "lionfish")).toEqual({ "data-app": "lionfish", "data-app-pending": "" });
+    // A remembered app is ignored: a new visit opens carp.
+    expect(run("", "", "lionfish")).toEqual({ "data-app": "carp" });
     expect(run("", "#v=1&c=25,-80,1000,0,-90", null)).toEqual({ "data-app": "python", "data-app-pending": "" });
     expect(run("", "", null)).toEqual({ "data-app": "carp" });
     expect(run("?app=carp", "", "python")).toEqual({ "data-app": "carp" });

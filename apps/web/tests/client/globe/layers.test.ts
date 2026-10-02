@@ -251,8 +251,10 @@ describe("sightings", () => {
     expect(icons.length).toBe(2);
     expect(icons.get(1).id).toBe("sighting:1");
     expect(icons.get(1).scale).toBeGreaterThan(icons.get(0).scale);
-    expect(rings.length).toBe(1);
+    // Behind the selected dot: its pulse disc and then its ring (both stamped with its id), nothing else.
+    expect(rings.length).toBe(2);
     expect(rings.get(0).id).toBe("sighting:1");
+    expect(rings.get(1).id).toBe("sighting:1");
     // The breakdown is per focus taxon id (always present), and leaves other taxa out.
     expect(layer.stats()).toMatchObject({ count: 2, breakdown: { "1": 2 }, marker: { dots: 0 } });
     expect(layer.stats().breakdown).not.toHaveProperty("77");

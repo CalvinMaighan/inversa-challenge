@@ -31,10 +31,10 @@ const flat = limitsFor(false);
 const threeD = limitsFor(true);
 
 describe("zoom model", () => {
-  test("limits follow the imagery: 30 m over Google 3D, 400 m over flat imagery, 20,000 km at most", () => {
+  test("limits follow the imagery: 30 m over Google 3D, 400 m over flat imagery, 40,000 km at most", () => {
     expect(threeD).toEqual({ minM: MIN_ALT_3D_M, maxM: MAX_ALT_M });
     expect(flat).toEqual({ minM: MIN_ALT_FLAT_M, maxM: MAX_ALT_M });
-    expect([MIN_ALT_3D_M, MIN_ALT_FLAT_M, MAX_ALT_M]).toEqual([30, 400, 20_000_000]);
+    expect([MIN_ALT_3D_M, MIN_ALT_FLAT_M, MAX_ALT_M]).toEqual([30, 400, 40_000_000]);
     // Google 3D counts only with a keyed route and the tileset on screen.
     expect(threeDActive("google-direct", "shown")).toBe(true);
     expect(threeDActive("ion", "shown")).toBe(true);
@@ -77,7 +77,7 @@ describe("zoom model", () => {
     expect(stepAltitude(12_000, 2, flat)).toBe(3_000);
     expect(stepAltitude(500, 1, flat)).toBe(MIN_ALT_FLAT_M);
     expect(stepAltitude(500, 1, threeD)).toBe(250);
-    expect(stepAltitude(15_000_000, -1, flat)).toBe(MAX_ALT_M);
+    expect(stepAltitude(30_000_000, -1, flat)).toBe(MAX_ALT_M);
   });
 
   test("clamp keeps the altitude in [min, max]", () => {

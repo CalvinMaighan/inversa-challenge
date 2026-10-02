@@ -133,6 +133,7 @@ export function createSightingsLayer(ctx: LayerContext): GlobeLayer {
   const PULSE_MS = 1600;
   const startPulse = (halo: { scale: number; color: unknown }) => {
     stopPulse();
+    if (typeof requestAnimationFrame === "undefined") return;
     if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const { Color } = cesium();
     const t0 = performance.now();

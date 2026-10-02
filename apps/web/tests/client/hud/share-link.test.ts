@@ -73,7 +73,7 @@ describe("share link encode/decode", () => {
   test("share link decode drops invalid fields and keeps the valid ones", () => {
     const hash = "v=1&c=91,0,100,0,0&t=not-a-time&l=sightings,bogus,alerts&sp=python,dragon&e=nonsense:1";
     expect(decodeShareLink(hash)).toEqual({ app: "python", layers: [SIGHTINGS, ALERTS], species: [PYTHON] });
-    expect(decodeShareLink("c=25,-80,99999999999,-30,-200").camera).toEqual({ lat: 25, lon: -80, altitudeM: 20_000_000, heading: 330, pitch: -90 });
+    expect(decodeShareLink("c=25,-80,99999999999,-30,-200").camera).toEqual({ lat: 25, lon: -80, altitudeM: 40_000_000, heading: 330, pitch: -90 });
     expect(decodeShareLink("c=25,-80,1000")).toEqual({ app: "python" });
     expect(decodeShareLink("v=9&c=25,-80,1000,0,-90")).toEqual({});
   });
@@ -212,7 +212,7 @@ describe("share link store", () => {
     registerGlobe(globe);
     expect(flights.length).toBe(1);
     // 1999 is before the live window: the window recentres on it instead of clamping the cursor.
-    expect(get<TimeState>(TIME)).toMatchObject({ at: "1999-01-01T00:00:00.000Z", from: "1998-12-17T00:00:00.000Z", to: "1999-01-16T00:00:00.000Z" });
+    expect(get<TimeState>(TIME)).toMatchObject({ at: "1999-01-01T00:00:00.000Z", from: "1998-07-02T12:00:00.000Z", to: "1999-07-02T12:00:00.000Z" });
     cancel();
     registerGlobe(null);
     set(TIME, TIME.defaults);

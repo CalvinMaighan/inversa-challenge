@@ -265,11 +265,11 @@ describe("data panels", () => {
     // Older: the cursor jumps to the first 15-minute step at or after the record, inside the window.
     expect(timeForInstant(time, Date.parse("2026-09-02T18:09:00Z"), now)).toEqual({ ...time, at: "2026-09-02T18:15:00.000Z" });
     // Before the window: the window slides to hold it, and never past now.
-    const moved = timeForInstant(time, Date.parse("2026-01-15T02:00:00Z"), now)!;
-    expect(moved.at).toBe("2026-01-15T02:00:00.000Z");
+    const moved = timeForInstant(time, Date.parse("2025-01-15T02:00:00Z"), now)!;
+    expect(moved.at).toBe("2025-01-15T02:00:00.000Z");
     expect(Date.parse(moved.from)).toBeLessThanOrEqual(Date.parse(moved.at));
     expect(Date.parse(moved.to)).toBeGreaterThanOrEqual(Date.parse(moved.at));
-    expect(Date.parse(moved.to) - Date.parse(moved.from)).toBe(30 * 24 * H);
+    expect(Date.parse(moved.to) - Date.parse(moved.from)).toBe(365 * 24 * H);
     // A future instant (a forecast) clamps to now.
     expect(timeForInstant(time, now + 5 * H, now)).toBeNull();
   });

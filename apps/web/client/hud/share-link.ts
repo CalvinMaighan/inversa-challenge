@@ -80,7 +80,7 @@ const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.
 export const SHARE_LINK_VERSION = 2;
 /** An NWPS location id (`KRZL1`); the store checks it against the app's locations. */
 const SITE_ID = /^[A-Za-z0-9]{3,8}$/;
-const MAX_ALTITUDE_M = 20_000_000;
+const MAX_ALTITUDE_M = 40_000_000;
 const MIN_ALTITUDE_M = 1;
 
 const round = (value: number, decimals: number) => {

@@ -54,10 +54,10 @@ describe("active app in the browser", () => {
     expect(b.url.href).toBe("https://x.test/?app=python");
   });
 
-  test("active app: bootApp resolves ?app= > share link > storage > carp, normalises the URL and keeps the hash", () => {
+  test("active app: bootApp resolves ?app= > share link > carp (storage is not read), normalises the URL and keeps the hash", () => {
     let b = env("https://x.test/", "lionfish");
-    expect(bootApp(b.env, b.storage)).toBe("lionfish");
-    expect(b.url.href).toBe("https://x.test/?app=lionfish");
+    expect(bootApp(b.env, b.storage)).toBe("carp");
+    expect(b.url.href).toBe("https://x.test/?app=carp");
 
     b = env("https://x.test/?app=carp", "python");
     expect(bootApp(b.env, b.storage)).toBe("carp");

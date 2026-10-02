@@ -33,11 +33,13 @@ describe("set_look schema", () => {
 
   test("set_look schema: the agent's toggle_layer ui event switches the active app's layer, never another app's", () => {
     applyApp("carp");
-    expect(visible("vessels")).toBe(false);
-    applyAgentSideEffects({ type: "ui", name: "toggle_layer", args: { layer: "vessels", visible: true } });
-    expect(visible("vessels")).toBe(true);
+    // Hotspots belong to Python (off at first load), not to carp: carp refuses the switch, Python takes it.
+    expect(visible("hotspots")).not.toBe(true);
+    applyAgentSideEffects({ type: "ui", name: "toggle_layer", args: { layer: "hotspots", visible: true } });
+    expect(visible("hotspots")).not.toBe(true);
     selectPython();
-    applyAgentSideEffects({ type: "ui", name: "toggle_layer", args: { layer: "vessels", visible: true } });
-    expect(visible("vessels")).not.toBe(true);
+    expect(visible("hotspots")).toBe(false);
+    applyAgentSideEffects({ type: "ui", name: "toggle_layer", args: { layer: "hotspots", visible: true } });
+    expect(visible("hotspots")).toBe(true);
   });
 });

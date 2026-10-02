@@ -1,13 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { selectPython } from "@/tests/client/python-app";
-import type { BillboardCollection, PolylineCollection } from "cesium";
 
-import { layerClock } from "client/globe/layers/clock";
-import { createVesselsLayer, trailThirds, vesselBucket, vesselWindow, VESSELS_QUERY } from "client/globe/layers/vessels";
+import { createVesselsLayer, trailThirds, vesselBucket, vesselWindow } from "client/globe/layers/vessels";
 import { plainSummary } from "client/hud/drawer/summary";
 import { legendRows } from "client/hud/legend/model";
 import { applyApp } from "client/state/app-switch";
-import { applyCarpView } from "client/state/carp";
 import { layersFor } from "client/state/layers";
 import { parseEvidenceId } from "client/state/selection";
 import { externalLinkProps } from "shared/links";
@@ -18,7 +15,6 @@ import {
   parseTracks,
   positionAt,
   trailAt,
-  VESSEL_CREDIT,
   VESSEL_HOLD_MS,
   vesselCard,
   vesselEvidenceId,
@@ -102,23 +98,16 @@ describe("vessels layer: track maths", () => {
 });
 
 describe("vessels layer: config, legend and card", () => {
-  test("vessels layer: default off, listed for carp and lionfish only, under Ships in the legend", () => {
+  test("vessels layer: no app lists it any more (ships were removed from the maps); the layer id and the AIS feed stay", () => {
     expect(LAYER_IDS).toContain("vessels");
-    for (const id of ["carp", "lionfish"] as const) {
+    for (const id of ["carp", "lionfish", "python"] as const) {
       const app = getApp(id);
-      expect(app.layers.find((l) => l.id === "vessels")?.defaultOn).toBe(false);
-      expect(layersFor(app).visible.vessels).toBe(false);
-      const row = legendRows(layersFor(app), null, app).find((r) => r.layer === "vessels")!;
-      expect(row.group).toBe("Ships");
-      expect(row.note).toContain(VESSEL_CREDIT);
-      expect(row.swatches.map((s) => s.key)).toContain("vessel-tanker");
-      expect(app.feeds.some((f) => f.source === "aisstream" && f.mode === "push")).toBe(true);
+      expect(app.layers.some((l) => l.id === "vessels")).toBe(false);
+      expect(legendRows(layersFor(app), null, app).some((r) => r.layer === "vessels")).toBe(false);
+      const toggle = uiToolsFor(app).find((t) => t.name === "toggle_layer")!;
+      expect(JSON.stringify(toggle.parameters)).not.toContain("vessels");
     }
-    const python = getApp("python");
-    expect(python.layers.some((l) => l.id === "vessels")).toBe(false);
-    expect(legendRows(layersFor(python), null, python).some((r) => r.layer === "vessels")).toBe(false);
-    const toggle = uiToolsFor(python).find((t) => t.name === "toggle_layer")!;
-    expect(JSON.stringify(toggle.parameters)).not.toContain("vessels");
+    for (const id of ["carp", "lionfish"] as const) expect(getApp(id).feeds.some((f) => f.source === "aisstream" && f.mode === "push")).toBe(true);
   });
 
   test("vessels layer: the evidence card names the ship, its type, speed and course, and links VesselFinder in a new tab", () => {
@@ -138,70 +127,8 @@ describe("vessels layer: config, legend and card", () => {
 });
 
 describe("vessels layer: drawing", () => {
-  test("vessels layer: draws an arrow per ship with vessel:<mmsi>, trails, and moves the ships as the carp timeline moves", async () => {
+  test("vessels layer: an app without the layer (every app now) fetches nothing", async () => {
     applyApp("carp");
-    applyCarpView({ asOf: T });
-    const requests: Record<string, unknown>[] = [];
-    // The viewer's clock (client/globe/layers/clock.ts): in carp the layers' time is CARP.asOf.
-    const ctx = {
-      ...fakeContext({
-        gql: async (query, variables) => {
-          expect(query).toBe(VESSELS_QUERY);
-          requests.push(variables ?? {});
-          return { vessels: [TUG, TANKER] };
-        },
-      }),
-      ...layerClock(),
-    };
-    const viewer = fakeViewer();
-    const credits: unknown[] = [];
-    (viewer as unknown as { creditDisplay: unknown }).creditDisplay = {
-      addStaticCredit: (c: unknown) => credits.push(c),
-      removeStaticCredit: (c: unknown) => credits.splice(credits.indexOf(c), 1),
-    };
-    const layer = createVesselsLayer(ctx);
-    layer.init(viewer);
-    layer.enable();
-    expect(credits.length).toBe(1);
-    expect((credits[0] as { html: string }).html).toBe(VESSEL_CREDIT);
-    await flush(5);
-    expect(requests.length).toBe(1);
-    expect(requests[0]!.bbox).toEqual({ west: -94, south: 28.9, east: -88.8, north: 32.9 });
-    const s1 = layer.stats();
-    expect(s1.count).toBe(2);
-    expect(s1.breakdown).toEqual({ tug: 1, tanker: 1 });
-    expect(s1.vessels!.trails).toBe(1);
-    expect(s1.vessels!.atMs).toBe(T);
-    const ships = viewer.added.find((p) => (p as object).constructor.name === "BillboardCollection") as BillboardCollection;
-    const trails = viewer.added.find((p) => (p as object).constructor.name === "PolylineCollection") as PolylineCollection;
-    expect(ships.length).toBe(2);
-    expect(ships.get(0).id).toBe("vessel:367123450");
-    expect(ships.get(0).rotation).toBeCloseTo(-Math.PI / 2, 2);
-    expect(ships.get(1).rotation).toBe(0);
-    expect(trails.length).toBe(6);
-    expect(trails.get(0).id).toBe("vessel:367123450");
-    const lonAt = (s: typeof s1) => s.vessels!.positions["367123450"]![0];
-    const before = lonAt(s1);
-    // The "what we knew" time moves 20 minutes: the tug moves east, the anchored tanker stays.
-    applyCarpView({ asOf: T + 20 * MIN });
-    // The viewer refreshes the layers when CARP moves, as it does on TIME.
-    layer.update(0, null);
-    await flush(5);
-    const s2 = layer.stats();
-    expect(lonAt(s2)).toBeCloseTo(before + 0.06, 6);
-    expect(s2.vessels!.positions["538006783"]).toEqual(s1.vessels!.positions["538006783"]!);
-    expect(requests.length).toBe(1);
-    layer.disable();
-    expect(credits.length).toBe(0);
-    expect(ships.show).toBe(false);
-    layer.destroy();
-    expect(viewer.added).toEqual([]);
-    applyCarpView({ asOf: null });
-    selectPython();
-  });
-
-  test("vessels layer: an app without the layer fetches nothing", async () => {
-    selectPython();
     let calls = 0;
     const layer = createVesselsLayer(fakeContext({ gql: async () => (calls += 1, { vessels: [TUG] }) }));
     layer.init(fakeViewer());
@@ -210,27 +137,6 @@ describe("vessels layer: drawing", () => {
     await flush(5);
     expect(calls).toBe(0);
     expect(layer.stats().count).toBe(0);
-    layer.destroy();
-  });
-
-  test("vessels layer: a species app follows TIME, and an API error is reported, not retried every frame", async () => {
-    applyApp("lionfish");
-    let calls = 0;
-    const ctx = fakeContext({
-      timeMs: T,
-      gql: async () => {
-        calls += 1;
-        throw new Error("vessels: boom");
-      },
-    });
-    const layer = createVesselsLayer(ctx);
-    layer.init(fakeViewer());
-    layer.enable();
-    await flush(5);
-    for (let i = 0; i < 5; i += 1) layer.update(i, null);
-    await flush(5);
-    expect(calls).toBe(1);
-    expect(layer.stats().error).toBe("vessels: boom");
     layer.destroy();
     selectPython();
   });

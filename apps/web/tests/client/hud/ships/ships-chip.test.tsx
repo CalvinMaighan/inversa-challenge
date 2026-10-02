@@ -12,8 +12,8 @@ const noop = () => {};
 const VESSELS = LAYER_IDS[9];
 
 describe("ships chip", () => {
-  test("ships chip: only carp and lionfish offer ships, so only they get the chip", () => {
-    expect(APP_IDS.filter((id) => hasLayer(getApp(id), VESSELS)).sort()).toEqual(["carp", "lionfish"]);
+  test("ships chip: no app lists ships any more, so none shows the chip (the view stays for the dormant layer)", () => {
+    expect(APP_IDS.filter((id) => hasLayer(getApp(id), VESSELS)).sort()).toEqual([]);
   });
 
   test("ships chip: off, an icon button with a name and the word Ships to the right of the icon", () => {

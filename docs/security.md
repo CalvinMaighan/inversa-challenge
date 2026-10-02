@@ -156,7 +156,7 @@ esbuild  >=0.27.3 <0.28.1   workspace:@calvinjs/active-state › tsup
 4 vulnerabilities (2 high, 1 moderate, 1 low)
 ```
 
-- **postcss** (through Next and tsup): build-time only. It reads source maps named in CSS comments; the only CSS it processes is this repository's own, so an attacker would need commit access. Not reachable at runtime: the standalone server does not run postcss. Disposition: accepted until Next ships postcss > 8.5.22; re-check with `bun audit`.
+- **postcss** (through Next and tsup): fixed on 2026-10-02 by a root `overrides` entry (`postcss ^8.5.28`) in `package.json`; `bun audit` then lists only the esbuild advisory. It was build-time only (source maps named in this repository's own CSS) and never ran in the standalone server. Drop the override once Next and tsup ship a postcss above 8.5.22 themselves.
 - **esbuild** (through tsup in `packages/active-state`): a Windows-only dev-server issue; the package is built, not served, and nothing runs on Windows. Accepted.
 
 `cargo audit`: not installed on the build machine and not installed by the agent (installing a tool is a human decision). `.github/workflows/audit.yml` runs `bun audit` and `cargo audit --file api/Cargo.lock` weekly and on lockfile changes, report-only.
@@ -178,7 +178,7 @@ esbuild  >=0.27.3 <0.28.1   workspace:@calvinjs/active-state › tsup
 | 11 | The signal Worker serves requests with no `Origin` and has no per-IP rate limit. | low | Accepted (section 6): bounded writes, 1-day expiry, no board data; rate-limit binding if abused. |
 | 12 | `/api/health` is public and shows which optional credentials are missing and today's agent spend. | low | Accepted: no values, no paths, no internal addresses; the same facts show in the feed chips. |
 | 13 | Rate limits and caps are per process and per IP; IPv6 clients are bucketed per address, not per /64. | low | Accepted: one Next process by design (voice sessions live in memory); the OpenRouter key limit is the cross-process backstop. |
-| 14 | postcss and esbuild advisories. | low (build-time) | Accepted, see "Dependency audit". |
+| 14 | postcss and esbuild advisories. | low (build-time) | postcss fixed by an override (2026-10-02); esbuild accepted, see "Dependency audit". |
 
 ## Accepted risks (standing)
 

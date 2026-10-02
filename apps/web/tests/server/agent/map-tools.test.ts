@@ -97,14 +97,14 @@ describe("agent map tools", () => {
   });
 
   test("agent map tools: toggle_layer emits a validated ui event for the app's own layer, and refuses another app's", async () => {
-    const reg = buildAgentRegistry(CARP);
-    const on = await reg.execute("toggle_layer", { layer: "vessels", visible: true }, ctxFor());
-    expect(on.ok).toBe(true);
-    expect(emitted).toEqual([{ type: "ui", name: "toggle_layer", args: { layer: "vessels", visible: true } }]);
-    // Python has no ships: the schema offers no such layer.
-    const py = await buildAgentRegistry(PYTHON).execute("toggle_layer", { layer: "vessels", visible: true }, ctxFor(PYTHON));
-    expect(py.ok).toBe(false);
-    expect(emitted.length).toBe(1);
+    // Carp has no hotspots layer: the schema offers none, so the switch is refused.
+    const refused = await buildAgentRegistry(CARP).execute("toggle_layer", { layer: "hotspots", visible: true }, ctxFor());
+    expect(refused.ok).toBe(false);
+    expect(emitted).toEqual([]);
+    // Python lists it: the same switch goes through.
+    const py = await buildAgentRegistry(PYTHON).execute("toggle_layer", { layer: "hotspots", visible: true }, ctxFor(PYTHON));
+    expect(py.ok).toBe(true);
+    expect(emitted).toEqual([{ type: "ui", name: "toggle_layer", args: { layer: "hotspots", visible: true } }]);
   });
 
   test("agent map tools: set_look emits the look as a ui event", async () => {
@@ -131,9 +131,10 @@ describe("agent map tools", () => {
   test("agent map tools: the prompt lists what each app can toggle, the water and weather layers, the vessel citation rule and the looks", () => {
     const carp = agentSystemPrompt(CARP);
     expect(carp).toContain("## The map: layers, ships and looks");
-    expect(carp).toContain("vessels (Ships (AIS))");
+    // Ships are no longer a layer of any app.
+    expect(carp).not.toContain("vessels (Ships (AIS))");
     for (const id of ["sst-map", "radar", "clouds", "lightning", "cyclones"]) expect(carp).toContain(`${id} (`);
-    expect(carp).toContain("[e:vessel:<mmsi>]");
+    expect(carp).not.toContain("[e:vessel:<mmsi>]");
     expect(carp).toContain("nvg (night vision");
     const python = agentSystemPrompt(PYTHON);
     expect(python).toContain("## The map: layers, ships and looks");

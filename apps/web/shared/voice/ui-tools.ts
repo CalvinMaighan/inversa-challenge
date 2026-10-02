@@ -29,7 +29,7 @@ function schemas(layers: readonly LayerId[], species: readonly string[]) {
         place: z.string().min(1).optional().describe("Place name resolved by the client gazetteer"),
         lat: lat.optional(),
         lon: lon.optional(),
-        altitudeM: z.number().positive().max(20_000_000).optional(),
+        altitudeM: z.number().positive().max(40_000_000).optional(),
       })
       .refine((v) => v.place !== undefined || (v.lat !== undefined && v.lon !== undefined), {
         message: "place or lat+lon required",

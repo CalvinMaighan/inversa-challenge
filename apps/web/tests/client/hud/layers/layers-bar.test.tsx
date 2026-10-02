@@ -30,7 +30,7 @@ const textOf = (markup: string) =>
     .trim();
 
 describe("layers bar", () => {
-  test("layers bar: Ships for carp and lionfish only, Water and weather for every app, sightings and notes where the app has them", () => {
+  test("layers bar: no Ships group in any app (ships were removed), Water and weather for every app, sightings and notes where the app has them", () => {
     const ships: string[] = [];
     for (const id of APP_IDS) {
       const app = getApp(id);
@@ -43,7 +43,7 @@ describe("layers bar", () => {
       // Nothing for experts here: no stations, alerts, hotspots, rasters, missions or cursors.
       for (const l of ids) expect<string[]>([SIGHTINGS, NOTES, VESSELS, ...OVERLAY_IDS]).toContain(l);
     }
-    expect(ships.sort()).toEqual(["carp", "lionfish"]);
+    expect(ships).toEqual([]);
   });
 
   test("layers bar: the novice default is unchanged, only sightings and notes on at first load", () => {
@@ -58,14 +58,12 @@ describe("layers bar", () => {
     const app = getApp("carp");
     const markup = html(<LayersChoices app={app} layers={layersFor(app)} active={false} />);
     const text = textOf(markup);
-    expect(text).toContain("Ships");
-    expect(text).toContain(LAYER_BLURBS[VESSELS]!);
+    expect(text).not.toContain("Ships");
+    expect(markup).not.toContain("legend-toggle-vessels");
     expect(text).toContain("Water and weather");
     // Switches with names, off by default, in the order a reader scans them.
-    expect(markup).toMatch(/<input[^>]*role="switch"[^>]*aria-label="Show Ships \(AIS\)"[^>]*data-testid="legend-toggle-vessels"[^>]*>/);
-    expect(markup).not.toMatch(/<input[^>]*data-testid="legend-toggle-vessels"[^>]*checked/);
     for (const o of OVERLAY_IDS.filter((l) => hasLayer(app, l))) expect(markup).toContain(`data-testid="legend-toggle-${o}"`);
-    expect(markup.indexOf('data-testid="legend-group-ships"')).toBeLessThan(markup.indexOf('data-testid="water-weather"'));
+    expect(markup).not.toContain('data-testid="legend-group-ships"');
   });
 
   test("layers bar: the help sheet explains Look, Layers and Developer everywhere, Ships only where the app has ships", () => {

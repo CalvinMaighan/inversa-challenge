@@ -23,11 +23,11 @@ describe("look presets", () => {
     expect(new Set(LOOK_PRESETS.map((p) => p.label)).size).toBe(7);
   });
 
-  test("defaults: normal, a visible soft edge of 40, and no on/off for the window (scope feather)", () => {
+  test("defaults: normal, a visible soft edge of 35, and no on/off for the window (scope feather)", () => {
     expect(LOOK.defaults).toBe("normal");
     expect(DEFAULT_LOOK).toBe("normal");
-    expect(SCOPE_FEATHER.defaults).toBe(40);
-    expect(DEFAULT_SCOPE_FEATHER).toBe(40);
+    expect(SCOPE_FEATHER.defaults).toBe(35);
+    expect(DEFAULT_SCOPE_FEATHER).toBe(35);
     // GE11: the map window is always there; the switch and its key are gone.
     expect("SCOPE_ON" in lookState).toBe(false);
     expect("scopeOnOf" in lookState).toBe(false);
@@ -64,9 +64,9 @@ describe("look presets", () => {
     expect(featherOf(60.4)).toBe(60);
     expect(featherOf(-5)).toBe(0);
     expect(featherOf(250)).toBe(100);
-    expect(featherOf(Number.NaN)).toBe(40);
-    expect(featherOf("soft")).toBe(40);
-    expect(featherOf(undefined)).toBe(40);
+    expect(featherOf(Number.NaN)).toBe(35);
+    expect(featherOf("soft")).toBe(35);
+    expect(featherOf(undefined)).toBe(35);
   });
 
   test("share-link round trip of look and feather", () => {
@@ -82,8 +82,8 @@ describe("look presets", () => {
   });
 
   test("share link omits the look at its defaults and drops invalid look fields", () => {
-    expect(encodeShareLink({ app: "python", look: "normal", feather: 40 })).toBe("v=2&app=python");
-    expect(encodeShareLink({ app: "python", feather: 40.3 })).toBe("v=2&app=python");
+    expect(encodeShareLink({ app: "python", look: "normal", feather: 35 })).toBe("v=2&app=python");
+    expect(encodeShareLink({ app: "python", feather: 35.3 })).toBe("v=2&app=python");
     expect(encodeShareLink({ app: "python", feather: 999 })).toBe("v=2&app=python&feather=100");
     const bad = decodeShareLink("v=2&app=python&look=thermal&scope=yes&feather=abc&c=25,-80,1000,0,-90");
     expect(bad.look).toBeUndefined();
@@ -101,7 +101,7 @@ describe("look presets", () => {
     resetLook();
     try {
       const atDefaults = readShareState();
-      expect([atDefaults.look, atDefaults.feather]).toEqual(["normal", 40]);
+      expect([atDefaults.look, atDefaults.feather]).toEqual(["normal", 35]);
       expect(new URLSearchParams(encodeShareLink(atDefaults)).has("look")).toBe(false);
 
       applyShareState({ app: "python", look: "snow", feather: 33 })();
