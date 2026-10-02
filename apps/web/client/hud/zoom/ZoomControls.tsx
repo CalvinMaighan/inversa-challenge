@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { onZoom, type ZoomApi, type ZoomState } from "client/globe/zoom/api";
 import { altitudeToSlider, altitudeValueText, formatAltitude, PLACE_SCALES, placeScale, SLIDER_MAX, SLIDER_MIN, sliderToAltitude } from "client/globe/zoom/model";
@@ -8,63 +8,57 @@ import { useActiveApp } from "client/hud/appselect/use-active-app";
 import styled from "client/styled";
 
 import { MOBILE, Surface } from "../primitives";
-import { FULL_WIDTH_PX, placeColumn, TAB_ROOM_PX } from "./place";
+import { STAGE_MEDIA } from "../shell/geometry";
+import { ScaleIcon } from "./scale-icons";
+import { STRIP_HEIGHT_PX, STRIP_WIDTH_CSS } from "./strip";
 import { appHasSightings, fitSightings, resetView } from "./view";
 
-/** Room kept above the timeline for the bottom bar and the Look button, px. */
+/** Room kept above the timeline for the bottom bar and the Look button, px (the phone's + and - pair is centred above it). */
 const BAR_ROOM_PX = 140;
-/** The full column's height before it is first measured, px. */
-const FULL_HEIGHT_GUESS_PX = 316;
 
 /**
- * Zoom controls (gates/leaf-GE8.md): `+` and `-`, a log-scale altitude slider labelled in plain place scales
- * (World … Street) with the altitude under it, Reset view and Fit sightings. A column at the right of the globe,
- * centred between the top row and the bottom bar, in the rightmost free slot: left of the sighting card and any
- * other card on that side (`data-hud-obstacle`), measured as they open and close. Where even that leaves no room,
- * and on a phone, only the `+`/`-` pair shows.
+ * Zoom strip (gates/leaf-GE8.md, gates/leaf-GE10.md): the altitude slider with one icon per place scale (a globe for the
+ * world ... a route for a street) and, under it, `-`, `+`, the altitude and Reset view and Fit sightings. A compact
+ * strip in the timeline's row, at its right end, `--gap-m` from the timeline and the pane's edges (the timeline narrows
+ * to make room, client/hud/zoom/strip.ts). The drag track is its leftmost element: far on the left, near on the right,
+ * like `-` and `+` under it. A HUD too narrow for it inline puts it just above the timeline, still at the right; on a
+ * phone only the `+`/`-` pair shows.
  *
  * Keys anywhere outside a text field or another widget: `+` / `-` step, Home resets. On the slider: arrows step,
  * Page Up / Page Down step twice, Home resets, End shows the whole planet.
  */
-const Column = styled(Surface)`
+const Strip = styled(Surface)`
   position: absolute;
-  /* A map control: under every card and sheet (panels are 3, the phone sheets 6), which it otherwise keeps clear of. */
+  /* A map control: under every card and sheet (panels are 3, the phone sheets 6). */
   z-index: 2;
-  /* Centred between the top row and the bottom bar's row (the bar and the Look button keep BAR_ROOM_PX). */
-  top: calc((var(--hud-top) + 100% - var(--hud-bottom) - ${BAR_ROOM_PX}px) / 2);
-  /* First paint: clear of the sighting card's collapsed tab; then the measured slot (--zoom-right). */
-  right: var(--zoom-right, max(${TAB_ROOM_PX}px, env(safe-area-inset-right)));
-  transform: translateY(-50%);
+  right: max(var(--gap-m), env(safe-area-inset-right));
+  bottom: max(var(--gap-m), env(safe-area-inset-bottom));
+  width: ${STRIP_WIDTH_CSS};
+  height: ${STRIP_HEIGHT_PX}px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
-  width: ${FULL_WIDTH_PX}px;
-  padding: 6px;
+  justify-content: space-between;
+  padding: 6px var(--gap-s);
   border-radius: var(--radius-m);
   font-family: var(--font-ui);
 
-  [data-drawer-open] & {
-    right: var(--zoom-right, calc(min(400px, 100cqw - 2 * var(--gap-m)) + 2 * var(--gap-m)));
-  }
-
-  &[data-compact] {
-    width: auto;
-    padding: 4px;
-
-    [data-zoom-extra] {
-      display: none;
+  /* A HUD too narrow for the strip beside the timeline: above it, at the right. */
+  ${STAGE_MEDIA} {
+    @container globe (max-width: 559px) {
+      bottom: var(--hud-bottom);
     }
   }
 
   ${MOBILE} {
+    /* The phone: the + and - pair, centred between the top row and the bottom bar. */
+    top: calc((var(--hud-top) + 100% - var(--hud-bottom) - ${BAR_ROOM_PX}px) / 2);
+    bottom: auto;
+    right: var(--gap-m);
+    transform: translateY(-50%);
     width: auto;
-    right: var(--zoom-right, var(--gap-m));
+    height: auto;
     padding: 4px;
 
-    [data-drawer-open] & {
-      right: var(--zoom-right, var(--gap-m));
-    }
     [data-zoom-extra] {
       display: none;
     }
@@ -75,8 +69,8 @@ const Btn = styled.button`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
-  min-width: 32px;
+  height: 28px;
+  min-width: 28px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
@@ -90,50 +84,56 @@ const Btn = styled.button`
   }
 
   svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 
   ${MOBILE} {
     width: 40px;
     height: 40px;
+
+    svg {
+      width: 16px;
+      height: 16px;
+    }
   }
 `;
 
-const Row = styled.div`
+/** The buttons: - and + under the track's left and right, then the altitude, Reset view and Fit sightings. */
+const Buttons = styled.div`
   display: flex;
+  align-items: center;
   gap: 4px;
 
-  & > button {
-    flex: 1;
+  ${MOBILE} {
+    flex-direction: column-reverse;
   }
 `;
 
-const SliderBox = styled.div`
+/** The scale: icons above the track, the track under them. */
+const Scale = styled.div`
   position: relative;
-  height: 168px;
-  margin: 4px 0;
+  height: 34px;
 `;
 
-/** The track sits at the right; the labels fill the room to its left. */
 const Track = styled.div`
   position: absolute;
-  top: 0;
-  bottom: 0;
+  left: 0;
   right: 0;
-  width: 36px;
-  border-radius: 18px;
+  bottom: 0;
+  height: 14px;
+  border-radius: 7px;
   cursor: pointer;
   touch-action: none;
 
   &::before {
     content: "";
     position: absolute;
-    top: 6px;
-    bottom: 6px;
-    left: 50%;
-    width: 4px;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 4px;
+    transform: translateY(-50%);
     border-radius: 2px;
     background: color-mix(in oklch, var(--text) 22%, transparent);
   }
@@ -145,9 +145,9 @@ const Track = styled.div`
 
 const Thumb = styled.span`
   position: absolute;
-  left: 50%;
-  width: 18px;
-  height: 18px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
   transform: translate(-50%, -50%);
   border: 2px solid var(--text);
   border-radius: 50%;
@@ -156,28 +156,45 @@ const Thumb = styled.span`
   pointer-events: none;
 `;
 
-const Label = styled.span<{ $on: boolean }>`
+/** One place scale: its icon over its place on the track; the current one is lit. */
+const Stop = styled.button<{ $on: boolean }>`
   position: absolute;
-  right: 40px;
-  transform: translateY(-50%);
-  color: ${(p) => (p.$on ? "var(--text)" : "var(--muted)")};
-  font: ${(p) => (p.$on ? 700 : 500)} 10px / 1 var(--font-ui);
-  white-space: nowrap;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  color: ${(p) => (p.$on ? "var(--accent)" : "var(--muted)")};
   cursor: pointer;
-  user-select: none;
+
+  svg {
+    width: ${(p) => (p.$on ? 16 : 14)}px;
+    height: ${(p) => (p.$on ? 16 : 14)}px;
+  }
+  &:hover {
+    color: var(--text);
+  }
 `;
 
 const Readout = styled.div`
+  flex: 1;
+  min-width: 0;
   text-align: center;
   color: var(--text);
-  font: 600 12px / 1.2 var(--font-mono);
+  font: 600 11px / 1.2 var(--font-mono);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 `;
 
 const Hint = styled(Surface)`
   position: absolute;
-  right: calc(100% + var(--gap-m));
-  top: 0;
+  right: 0;
+  bottom: calc(100% + var(--gap-m));
   display: flex;
   align-items: flex-start;
   gap: 6px;
@@ -198,6 +215,9 @@ const Hint = styled(Surface)`
 
   ${MOBILE} {
     width: 180px;
+    right: calc(100% + var(--gap-m));
+    bottom: auto;
+    top: 0;
   }
 `;
 
@@ -221,9 +241,9 @@ const HOME = svg("M2.5 7.5 8 3l5.5 4.5M4 6.5V13h3v-3.5h2V13h3V6.5");
 const FIT = svg("M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10M8 7.2v1.6M7.2 8h1.6");
 const CLOSE = svg("M4 4l8 8M12 4l-8 8");
 
-/** Where a slider value sits on the track (top is the closest view), inside the track's 6 px end caps. */
-const TRACK_CAP_PX = 6;
-const thumbTop = (value: number) => `calc(${TRACK_CAP_PX}px + (100% - ${2 * TRACK_CAP_PX}px) * ${(1 - value / SLIDER_MAX).toFixed(4)})`;
+/** Where a slider value sits on the track (the right end is the closest view), inside the track's 7 px end caps. */
+const TRACK_CAP_PX = 7;
+const thumbLeft = (value: number) => `calc(${TRACK_CAP_PX}px + (100% - ${2 * TRACK_CAP_PX}px) * ${(value / SLIDER_MAX).toFixed(4)})`;
 
 /** Once per browser session. */
 const HINT_KEY = "inversa:zoom:3d-hint";
@@ -280,36 +300,7 @@ export default function ZoomControls() {
   const [message, setMessage] = useState("");
   const [hint, setHint] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
-  const colRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number } | null>(null);
-  const ready = api !== null && state !== null;
-
-  // The column's slot: re-measured when the pane resizes or a card opens, closes or changes (one pass a frame).
-  useLayoutEffect(() => {
-    const col = colRef.current;
-    if (!ready || !col || typeof ResizeObserver !== "function") return;
-    let fullHeight = FULL_HEIGHT_GUESS_PX;
-    let frame = 0;
-    const place = () => {
-      frame = 0;
-      if (!col.hasAttribute("data-compact") && col.offsetHeight > 0) fullHeight = col.offsetHeight;
-      placeColumn(col, fullHeight);
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(place);
-    };
-    const root = col.closest("[data-hud]") ?? document.body;
-    const resize = new ResizeObserver(schedule);
-    resize.observe(col.offsetParent ?? root);
-    const mutations = new MutationObserver(schedule);
-    mutations.observe(root, { childList: true, subtree: true });
-    place();
-    return () => {
-      cancelAnimationFrame(frame);
-      resize.disconnect();
-      mutations.disconnect();
-    };
-  }, [ready]);
 
   // The "3D city view" hint: the first time a zoom tilts the view over Google 3D, once per session.
   useEffect(() => {
@@ -348,21 +339,21 @@ export default function ZoomControls() {
   const value = altitudeToSlider(state.altitudeM, limits);
   const current = placeScale(state.altitudeM);
 
-  const valueAt = (clientY: number) => {
+  const valueAt = (clientX: number) => {
     const r = trackRef.current?.getBoundingClientRect();
-    if (!r || r.height <= 0) return value;
-    return SLIDER_MAX * (1 - Math.min(1, Math.max(0, (clientY - r.top - TRACK_CAP_PX) / (r.height - 2 * TRACK_CAP_PX))));
+    if (!r || r.width <= 0) return value;
+    return SLIDER_MAX * Math.min(1, Math.max(0, (clientX - r.left - TRACK_CAP_PX) / (r.width - 2 * TRACK_CAP_PX)));
   };
   const onTrackDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     trackRef.current?.focus();
     trackRef.current?.setPointerCapture?.(e.pointerId);
     drag.current = { id: e.pointerId };
-    api.setAltitude(sliderToAltitude(valueAt(e.clientY), limits));
+    api.setAltitude(sliderToAltitude(valueAt(e.clientX), limits));
   };
   const onTrackMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (drag.current?.id !== e.pointerId) return;
-    api.setAltitude(sliderToAltitude(valueAt(e.clientY), limits), { animate: false });
+    api.setAltitude(sliderToAltitude(valueAt(e.clientX), limits), { animate: false });
   };
   const onTrackUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (drag.current?.id === e.pointerId) drag.current = null;
@@ -386,22 +377,31 @@ export default function ZoomControls() {
   const fit = () => setMessage(fitSightings() ? "Showing every sighting on the map" : "No sightings on the map to fit");
 
   return (
-    <Column ref={colRef} data-zoom-controls="" data-testid="zoom-controls" data-hud-obstacle="" role="group" aria-label="Zoom">
-      <Btn type="button" aria-label="Zoom in" aria-keyshortcuts="+" title="Zoom in (+)" data-testid="zoom-in" onClick={() => api.step(1)}>
-        {PLUS}
-      </Btn>
-      <SliderBox data-zoom-extra="">
+    <Strip data-zoom-controls="" data-testid="zoom-controls" data-hud-obstacle="" role="group" aria-label="Zoom">
+      <Scale data-zoom-extra="">
         {bands.map((b) => (
-          <Label key={b.name} $on={b.name === current} aria-hidden="true" style={{ top: thumbTop(altitudeToSlider(b.at, limits)) }} onClick={() => api.setAltitude(b.at)}>
-            {b.name}
-          </Label>
+          <Stop
+            key={b.name}
+            type="button"
+            $on={b.name === current}
+            tabIndex={-1}
+            aria-label={`Zoom to ${b.name.toLowerCase()} level`}
+            aria-current={b.name === current ? "true" : undefined}
+            title={b.name}
+            data-testid="zoom-stop"
+            data-scale={b.name}
+            style={{ left: thumbLeft(altitudeToSlider(b.at, limits)) }}
+            onClick={() => api.setAltitude(b.at)}
+          >
+            <ScaleIcon scale={b.name} />
+          </Stop>
         ))}
         <Track
           ref={trackRef}
           role="slider"
           tabIndex={0}
           aria-label="Altitude"
-          aria-orientation="vertical"
+          aria-orientation="horizontal"
           aria-valuemin={SLIDER_MIN}
           aria-valuemax={SLIDER_MAX}
           aria-valuenow={Math.round(value * 10) / 10}
@@ -414,25 +414,28 @@ export default function ZoomControls() {
           onPointerCancel={onTrackUp}
           onKeyDown={onTrackKey}
         >
-          <Thumb style={{ top: thumbTop(value) }} />
+          <Thumb style={{ left: thumbLeft(value) }} />
         </Track>
-      </SliderBox>
-      <Btn type="button" aria-label="Zoom out" aria-keyshortcuts="-" title="Zoom out (-)" data-testid="zoom-out" onClick={() => api.step(-1)}>
-        {MINUS}
-      </Btn>
-      <Readout data-zoom-extra="" data-testid="zoom-readout" aria-hidden="true">
-        {formatAltitude(state.altitudeM)} up
-      </Readout>
-      <Row data-zoom-extra="">
-        <Btn type="button" aria-label="Reset view" aria-keyshortcuts="Home" title="Reset view (Home)" data-testid="zoom-reset" onClick={resetView}>
+      </Scale>
+      <Buttons>
+        <Btn type="button" aria-label="Zoom out" aria-keyshortcuts="-" title="Zoom out (-)" data-testid="zoom-out" onClick={() => api.step(-1)}>
+          {MINUS}
+        </Btn>
+        <Btn type="button" aria-label="Zoom in" aria-keyshortcuts="+" title="Zoom in (+)" data-testid="zoom-in" onClick={() => api.step(1)}>
+          {PLUS}
+        </Btn>
+        <Readout data-zoom-extra="" data-testid="zoom-readout" aria-hidden="true">
+          {formatAltitude(state.altitudeM)} up
+        </Readout>
+        <Btn data-zoom-extra="" type="button" aria-label="Reset view" aria-keyshortcuts="Home" title="Reset view (Home)" data-testid="zoom-reset" onClick={resetView}>
           {HOME}
         </Btn>
         {appHasSightings(app) ? (
-          <Btn type="button" aria-label="Fit sightings" title="Fit sightings" data-testid="zoom-fit" onClick={fit}>
+          <Btn data-zoom-extra="" type="button" aria-label="Fit sightings" title="Fit sightings" data-testid="zoom-fit" onClick={fit}>
             {FIT}
           </Btn>
         ) : null}
-      </Row>
+      </Buttons>
       <VisuallyHidden aria-live="polite">{message}</VisuallyHidden>
       {hint ? (
         <Hint role="status" data-testid="zoom-hint">
@@ -445,6 +448,6 @@ export default function ZoomControls() {
           </Btn>
         </Hint>
       ) : null}
-    </Column>
+    </Strip>
   );
 }

@@ -65,8 +65,13 @@ export function spacingPairs(): { pairs: Pair[]; notes: string[] } {
     h("icon buttons: right edge", buttons.at(-1)!.right, vw, midY(buttons.at(-1)!));
     for (let i = 1; i < buttons.length; i++) h(`icon buttons: ${i} to ${i + 1}`, buttons[i - 1]!.right, buttons[i]!.left, midY(buttons[i]!));
   }
+  // GE10: the zoom strip sits in the timeline's row at its right end (same bottom edge), or just above the timeline
+  // where the HUD is too narrow for it beside it; on a phone it is the + and - pair, which keeps clear of the dock.
+  const strip = box('[data-testid="zoom-controls"]');
+  const stripInline = !!strip && !!timeline && stage && Math.abs(strip.bottom - timeline.bottom) <= 1;
   if (timeline) {
-    h("timeline: right edge", timeline.right, vw, midY(timeline));
+    if (stripInline) h("timeline: to the zoom strip", timeline.right, strip!.left, midY(strip!));
+    else h("timeline: right edge", timeline.right, vw, midY(timeline));
     v(stage ? "timeline: bottom edge" : "timeline: chat dock below it", timeline.bottom, pane.bottom, midX(timeline));
   }
   if (bar && timeline) v("bottom bar: to the timeline", bar.bottom, timeline.top, midX(bar));
@@ -98,14 +103,13 @@ export function spacingPairs(): { pairs: Pair[]; notes: string[] } {
     if (timeline) h("timeline: left edge", pane.left, timeline.left, midY(timeline));
   }
 
-  // GE8's zoom controls (merged after this leaf): their outer box to the right edge and to the timeline.
-  const zoom = [...document.querySelectorAll('[data-testid^="zoom-"]')].filter(shown).map((el) => el.getBoundingClientRect());
-  if (zoom.length === 0) notes.push("zoom controls not on the page: zoom pairs skipped");
-  else {
-    const z = { left: Math.min(...zoom.map((b) => b.left)), top: Math.min(...zoom.map((b) => b.top)), right: Math.max(...zoom.map((b) => b.right)), bottom: Math.max(...zoom.map((b) => b.bottom)) };
-    h("zoom: right edge", z.right, vw, (z.top + z.bottom) / 2);
-    if (timeline) v("zoom: to the timeline", z.bottom, timeline.top, (z.left + z.right) / 2);
-  }
+  // The zoom strip's edges: right (always), bottom (inline with the timeline) or the gap to the timeline under it.
+  if (!strip) notes.push("zoom strip not on the page: zoom pairs skipped");
+  else if (stage) {
+    h("zoom strip: right edge", strip.right, vw, midY(strip));
+    if (stripInline) v("zoom strip: bottom edge", strip.bottom, pane.bottom, midX(strip));
+    else if (timeline) v("zoom strip: to the timeline below it", strip.bottom, timeline.top, midX(strip));
+  } else h("zoom pair: right edge", strip.right, vw, midY(strip));
   return { pairs, notes };
 }
 

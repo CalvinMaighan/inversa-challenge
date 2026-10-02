@@ -15,6 +15,8 @@
  *
  * Lines:
  *   ZOOM controls buttons=ok slider=ok keys=ok reset=ok fit=ok overlap=0 mobile=ok
+ *   ZOOMSTRIP placed=ok gap=12 right=12 bottom=12 leftmost_track=1 height_le_bar=1 apps=python,carp,lionfish   (GE10)
+ *   ZOOMSTRIP icon_stops=7 click_stop=ok drag=ok
  *   ZOOM motion step_ms=<n> end_err_pct=<n> wheel_pct=<n> dblclick_px=<n>
  *   ZOOM limits min_3d_m=<n> min_flat_m=<n> max_km=<n> underground=0 3d=<measured|config>
  *   ZOOM tilt route=<route> tilt_deg=<n> hint=<0|1>
@@ -186,6 +188,33 @@ async function openApp(browser: Browser, stack: Stack, viewport: { width: number
 
 type Box = { left: number; top: number; right: number; bottom: number };
 const boxOf = (r: { x: number; y: number; width: number; height: number }): Box => ({ left: r.x, top: r.y, right: r.x + r.width, bottom: r.y + r.height });
+type Placement = { name: string; gap: number; right: number; bottom: number; trackLeftmost: boolean; heightLeBar: boolean; stops: number };
+
+/**
+ * GE10: the strip sits in the timeline's row at its right end: its left edge `--gap-m` from the timeline's right edge
+ * (the timeline gives it room), its right and bottom edges `--gap-m` from the pane, the drag track its leftmost element,
+ * and no taller than the timeline's bar. Measured on the page.
+ */
+async function stripPlacement(page: Page, name: string): Promise<Placement> {
+  const m = await page.evaluate(() => {
+    const q = (sel: string) => document.querySelector(sel)?.getBoundingClientRect();
+    const strip = q("[data-testid=zoom-controls]")!;
+    const bar = q("[data-testid=hud-timeline], [data-testid=carp-timeline]")!;
+    const track = q("[data-testid=zoom-slider]")!;
+    const lefts = [...document.querySelectorAll("[data-testid=zoom-controls] button")].map((b) => b.getBoundingClientRect().left);
+    return {
+      gap: strip.left - bar.right,
+      right: innerWidth - strip.right,
+      bottom: innerHeight - strip.bottom,
+      trackLeftmost: track.left <= Math.min(...lefts) + 0.5,
+      heightLeBar: strip.height <= bar.height + 0.5,
+      stops: document.querySelectorAll("[data-testid=zoom-stop]").length,
+    };
+  });
+  return { name, ...m };
+}
+const placementOk = (p: Placement) => Math.abs(p.gap - 12) <= 0.5 && Math.abs(p.right - 12) <= 0.5 && Math.abs(p.bottom - 12) <= 0.5 && p.trackLeftmost && p.heightLeBar && p.stops === 7;
+
 const overlaps = (a: Box, b: Box) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0.5 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0.5;
 
 /** Rects of the controls and of what they must keep clear of; overlapping pairs by name. */
@@ -292,25 +321,39 @@ async function main(): Promise<number> {
     const slider = page.locator("[data-testid=zoom-slider]");
     const valueText = (await slider.getAttribute("aria-valuetext")) ?? "";
     let sliderOk = check(/^(World|Country|State or region|County|City|Neighbourhood|Street), [\d,.]+ (m|km) up$/.test(valueText), `slider valuetext "${valueText}"`);
-    sliderOk = check((await slider.getAttribute("aria-orientation")) === "vertical" && (await slider.getAttribute("role")) === "slider", "slider role/orientation") && sliderOk;
-    // A click a quarter of the way down the track goes to that altitude (log scale).
+    sliderOk = check((await slider.getAttribute("aria-orientation")) === "horizontal" && (await slider.getAttribute("role")) === "slider", "slider role/orientation") && sliderOk;
+    // A click three quarters of the way along the track (far on the left, near on the right) goes to that altitude (log scale).
     const track = boxOf((await slider.boundingBox())!);
-    const clickY = track.top + 6 + (track.bottom - track.top - 12) * 0.25;
+    const clickX = track.left + 7 + (track.right - track.left - 14) * 0.75;
+    const clickY = (track.top + track.bottom) / 2;
     const z0 = await zoomState(page);
     const want = z0.maxM * (z0.minM / z0.maxM) ** 0.75;
-    const sliderMove = await recorded(page, () => page.mouse.click((track.left + track.right) / 2, clickY));
+    const sliderMove = await recorded(page, () => page.mouse.click(clickX, clickY));
     sliderOk = check(Math.abs(sliderMove.a1 / want - 1) < 0.03, `slider click ${round(sliderMove.a1)} m, want ${round(want)} m`) && sliderOk;
-    // A drag moves continuously.
+    // A drag moves continuously: to the left zooms out.
     const dragFrom = await zoomState(page);
     await recorded(page, async () => {
-      await page.mouse.move((track.left + track.right) / 2, clickY);
+      await page.mouse.move(clickX, clickY);
       await page.mouse.down();
-      for (let i = 1; i <= 8; i += 1) await page.mouse.move((track.left + track.right) / 2, clickY + i * 6);
+      for (let i = 1; i <= 8; i += 1) await page.mouse.move(clickX - i * 6, clickY);
       await page.mouse.up();
     });
-    sliderOk = check((await zoomState(page)).altitudeM > dragFrom.altitudeM * 1.5, "slider drag down zooms out") && sliderOk;
+    const dragOk = check((await zoomState(page)).altitudeM > dragFrom.altitudeM * 1.5, "slider drag left zooms out");
+    sliderOk = dragOk && sliderOk;
     const valueNow = Number(await slider.getAttribute("aria-valuenow"));
     sliderOk = check(Number.isFinite(valueNow) && valueNow >= 0 && valueNow <= 100, `aria-valuenow ${valueNow}`) && sliderOk;
+
+    // GE10: the strip's placement on python, and the seven icon stops: a click on one flies to that scale.
+    const placements: Placement[] = [await stripPlacement(page, "python 1440")];
+    await goTo(page, EVERGLADES, 60_000);
+    const cityStop = page.locator("[data-testid=zoom-stop][data-scale=City]");
+    const stopCount = await page.locator("[data-testid=zoom-stop]").count();
+    const stopMove = await recorded(page, () => cityStop.click());
+    const stopOk = check(stopCount === 7 && stopMove.a1 > 8_000 && stopMove.a1 < 60_000, `City icon: ${stopCount} stops, altitude after the click ${round(stopMove.a1)} m (City is 8 to 60 km)`);
+    const noWords = check(
+      (await page.evaluate(() => [...document.querySelectorAll("[data-testid=zoom-stop]")].every((b) => (b.textContent ?? "").trim() === "" && !!b.getAttribute("aria-label") && !!b.getAttribute("title")))) === true,
+      "icon stops carry no visible words, only a name and a tooltip",
+    );
 
     // Keys: + and - anywhere outside a field, arrows on the slider, Home resets.
     await goTo(page, EVERGLADES, 60_000);
@@ -545,13 +588,20 @@ async function main(): Promise<number> {
         await p.locator("[data-testid=zoom-controls]").waitFor({ timeout: LOAD_TIMEOUT_MS });
         await p.waitForTimeout(2500);
         const list = await overlapsAt(p, `${app} ${viewport.width}`);
-        const compact = await p.locator("[data-testid=zoom-controls][data-compact]").count();
-        appOverlaps.push(`${app}_${viewport.width}=${list.length}${compact ? "c" : ""}`);
+        const placement = await stripPlacement(p, `${app} ${viewport.width}`);
+        placements.push(placement);
+        appOverlaps.push(`${app}_${viewport.width}=${list.length}`);
         for (const o of list) log(`app overlap ${o}`);
         await ctx.close();
       }
     }
     console.log(`ZOOM apps ${appOverlaps.join(" ")}`);
+    for (const pl of placements) log(`strip ${pl.name}: gap to the timeline ${pl.gap.toFixed(1)}, right edge ${pl.right.toFixed(1)}, bottom ${pl.bottom.toFixed(1)}, track leftmost ${pl.trackLeftmost}, no taller than the bar ${pl.heightLeBar}, ${pl.stops} stops`);
+    const placed = placements.every(placementOk);
+    check(placed, `strip placement: ${placements.filter((x) => !placementOk(x)).map((x) => x.name).join(", ") || "all ok"}`);
+    const python = placements[0]!;
+    console.log(`ZOOMSTRIP placed=${placed ? "ok" : "fail"} gap=${Math.round(python.gap)} right=${Math.round(python.right)} bottom=${Math.round(python.bottom)} leftmost_track=${placements.every((x) => x.trackLeftmost) ? 1 : 0} height_le_bar=${placements.every((x) => x.heightLeBar) ? 1 : 0} apps=python,carp,lionfish`);
+    console.log(`ZOOMSTRIP icon_stops=${stopCount} click_stop=${stopOk ? "ok" : "fail"} drag=${dragOk ? "ok" : "fail"} no_words=${noWords ? 1 : 0}`);
 
     const overlapCount = overlapList.length;
     const mobile = collapsed && phoneOverlap.length === 0;

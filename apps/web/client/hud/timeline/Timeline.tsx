@@ -17,6 +17,7 @@ import { drawTrack, TRACK, type TrackColors } from "./draw";
 import { stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
 import { filteredCounts } from "./sparkline";
+import { TIMELINE_STRIP_ROOM } from "../zoom/strip";
 import { useFrameGrid, useFrameSightings } from "./use-frame-grid";
 
 export const SPEEDS = [1, 2, 4, 8, 16, 32] as const;
@@ -29,6 +30,8 @@ const Root = styled(Surface)`
   padding: 6px var(--gap-m) 8px;
   border-radius: var(--radius-m);
   z-index: 4;
+  /* The zoom strip sits at this row's right end (GE10). */
+  ${TIMELINE_STRIP_ROOM}
 
   ${MOBILE} {
     padding: 6px var(--gap-s) 6px;

@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { rightmostSlot } from "client/hud/zoom/place";
-
 import {
   altitudeToSlider,
   altitudeValueText,
@@ -161,21 +159,6 @@ describe("zoom model", () => {
     expect(mid).toBeCloseTo(-67.5, 6);
     expect(tiltOfPitch(-90)).toBe(0);
     expect(tiltOfPitch(-45)).toBe(45);
-  });
-});
-
-describe("zoom controls placement", () => {
-  test("the rightmost slot clear of the cards on the right", () => {
-    // Nothing in the way: against the right limit.
-    expect(rightmostSlot(452, 988, 132, [])).toBe(988);
-    // The sighting card (608..1008) open: left of it, with the gap.
-    expect(rightmostSlot(452, 988, 132, [[608, 1008]])).toBe(596);
-    // Two cards side by side leave no room for the full column, nor for the pair.
-    expect(rightmostSlot(464, 988, 132, [[816, 1012], [464, 804]])).toBeNull();
-    expect(rightmostSlot(464, 988, 48, [[816, 1012], [464, 804]])).toBeNull();
-    // A card far left of the slot does not move it; one just right of it (within the gap) does.
-    expect(rightmostSlot(452, 988, 132, [[460, 600]])).toBe(988);
-    expect(rightmostSlot(452, 988, 132, [[995, 1020]])).toBe(983);
   });
 });
 

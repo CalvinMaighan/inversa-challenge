@@ -40,3 +40,22 @@ A sighting marker draws the app's icon in its taxon's `color` from the app confi
 `apps/web/client/globe/species.ts`): `#e4572e` for the Burmese python (`spec/apps/python.json`) and `#a06cd5`
 for the lionfish (`spec/apps/lionfish.json`). The carp app tracks conditions and has no taxa. The tint sits over
 a dark outline so a marker reads on satellite imagery in every theme.
+
+## Zoom strip scale icons (GE10)
+
+The zoom strip shows one icon per place scale instead of a word, from Lucide (ISC, same licence text as above). The path
+data is copied from `lucide-react` 1.23.0 (`dist/esm/icons/<id>.mjs`, checked 2026-10-01) into
+`apps/web/client/hud/zoom/scale-icons.tsx`:
+
+| Scale | Lucide id |
+|---|---|
+| World | `globe` |
+| Country | `flag` |
+| State or region | `map` |
+| County | `map-pinned` |
+| City | `building-2` |
+| Neighbourhood | `house` |
+| Street | `route` |
+
+Each icon keeps its scale's name as its accessible name and tooltip (for example "Zoom to city level"), so the words are
+still there for screen readers and on hover.

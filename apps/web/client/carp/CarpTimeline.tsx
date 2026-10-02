@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "client/hud/primitives";
 import { useHudBottom } from "client/hud/shell/use-hud-bottom";
+import { TIMELINE_STRIP_ROOM } from "client/hud/zoom/strip";
 import styled from "client/styled";
 
 import { conflictText } from "./briefing";
@@ -22,6 +23,8 @@ const Root = styled(Surface)`
   padding: 6px var(--gap-m) 8px;
   border-radius: var(--radius-m);
   z-index: 4;
+  /* The zoom strip sits at this row's right end (GE10). */
+  ${TIMELINE_STRIP_ROOM}
   /* Series colours, darker on the light theme so lines and legend text keep their contrast. */
   --carp-usgs: #4fb3ff;
   --carp-nwps: #3fd6c6;
