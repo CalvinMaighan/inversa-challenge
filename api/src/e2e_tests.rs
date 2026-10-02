@@ -74,7 +74,7 @@ async fn int(state: &AppState, sql: &'static str) -> i64 {
 /// Number of env cells in `body` (one EVF2 frame body) with an LST value.
 fn lst_cells(layout: &Layout, body: &[u8]) -> usize {
     let lst = &body[layout.lst_offset(TAXA)..layout.sst_offset(TAXA)];
-    lst.chunks_exact(2)
+    lst.as_chunks::<2>().0.iter()
         .filter(|b| !matches!(i16::from_le_bytes([b[0], b[1]]), ENV_MISSING | ENV_FLAGGED))
         .count()
 }
@@ -512,7 +512,7 @@ async fn e2e_quality_cases() {
     }
     let values = &body[layout.lst_offset(TAXA)..layout.sst_offset(TAXA)];
     let (mut valid, mut flagged) = (0, 0);
-    for b in values.chunks_exact(2) {
+    for b in values.as_chunks::<2>().0.iter() {
         match i16::from_le_bytes([b[0], b[1]]) {
             ENV_MISSING => {}
             ENV_FLAGGED => flagged += 1,
