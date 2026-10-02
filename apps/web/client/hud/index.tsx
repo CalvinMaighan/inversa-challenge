@@ -164,8 +164,8 @@ function HudBody({ sync = true }: HudProps) {
         {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
         {/* GE8: zoom controls (+/-, altitude slider, reset, fit sightings) at the right of the globe. */}
         <ZoomControls />
+        <BottomBar />
       </Chrome>
-      <BottomBar />
     </Root>
   );
 }

@@ -5,10 +5,13 @@ import type { ReactNode } from "react";
 import styled from "client/styled";
 
 import LayersBar from "../layers/LayersBar";
+import { MOBILE } from "../primitives";
 import PlaceSearch from "../search/PlaceSearch";
+import { STRIP_HEIGHT_PX } from "../zoom/strip";
+import { STAGE_MEDIA } from "./geometry";
 
 /**
- * The bottom-centre bar (docs/GODS_EYE.md GC1): centred under the stage, one gutter above the timeline. It holds the
+ * The bottom-right bar (docs/GODS_EYE.md GC1): at the right, one gutter above the zoom strip. It holds the
  * map's search and layer controls, each a leaf's own component that brings its own button and popover:
  *
  *   Place search, GE6: client/hud/search
@@ -29,11 +32,10 @@ const ITEMS: readonly ReactNode[] = [
 const Bar = styled.div`
   position: absolute;
   z-index: 5;
-  left: 50%;
-  bottom: var(--hud-bottom);
-  /* Centred under the stage, but never under the chat card (about 1100 px and narrower, where the card reaches
-     close to the centre): its left edge stays a gutter right of --chat-inset (GE7). */
-  transform: translateX(max(-50%, calc(var(--chat-inset, 0px) + var(--gap-m) - 50vw)));
+  /* Bottom right, one gutter above the zoom strip (which sits in the timeline's row, or just above the timeline in a
+     narrow HUD). */
+  right: max(var(--gap-m), env(safe-area-inset-right));
+  bottom: calc(max(var(--gap-m), env(safe-area-inset-bottom)) + ${STRIP_HEIGHT_PX}px + var(--gap-m));
   display: flex;
   align-items: center;
   gap: var(--gap-m);
@@ -45,6 +47,18 @@ const Bar = styled.div`
 
   &:empty {
     display: none;
+  }
+
+  ${STAGE_MEDIA} {
+    @container globe (max-width: 559px) {
+      bottom: calc(var(--hud-bottom) + ${STRIP_HEIGHT_PX}px + var(--gap-m));
+    }
+  }
+
+  ${MOBILE} {
+    right: 50%;
+    transform: translateX(50%);
+    bottom: var(--hud-bottom);
   }
 `;
 
