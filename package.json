@@ -9,7 +9,8 @@
     "packages/*"
   ],
   "overrides": {
-    "postcss": "^8.5.28"
+    "postcss": "^8.5.28",
+    "esbuild": "^0.28.2"
   },
   "scripts": {
     "dev": "bun scripts/dev.ts",

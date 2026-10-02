@@ -157,7 +157,7 @@ esbuild  >=0.27.3 <0.28.1   workspace:@calvinjs/active-state › tsup
 ```
 
 - **postcss** (through Next and tsup): fixed on 2026-10-02 by a root `overrides` entry (`postcss ^8.5.28`) in `package.json`; `bun audit` then lists only the esbuild advisory. It was build-time only (source maps named in this repository's own CSS) and never ran in the standalone server. Drop the override once Next and tsup ship a postcss above 8.5.22 themselves.
-- **esbuild** (through tsup in `packages/active-state`): a Windows-only dev-server issue; the package is built, not served, and nothing runs on Windows. Accepted.
+- **esbuild** (through tsup in `packages/active-state` and `packages/active-theme`): a Windows-only dev-server issue. Fixed on 2026-10-02 by a root `overrides` entry (`esbuild ^0.28.2`); both packages still build with it. `bun audit` now reports nothing. Drop the override once tsup ships an esbuild at or above 0.28.1.
 
 `cargo audit`: not installed on the build machine and not installed by the agent (installing a tool is a human decision). `.github/workflows/audit.yml` runs `bun audit` and `cargo audit --file api/Cargo.lock` weekly and on lockfile changes, report-only.
 
@@ -178,7 +178,7 @@ esbuild  >=0.27.3 <0.28.1   workspace:@calvinjs/active-state › tsup
 | 11 | The signal Worker serves requests with no `Origin` and has no per-IP rate limit. | low | Accepted (section 6): bounded writes, 1-day expiry, no board data; rate-limit binding if abused. |
 | 12 | `/api/health` is public and shows which optional credentials are missing and today's agent spend. | low | Accepted: no values, no paths, no internal addresses; the same facts show in the feed chips. |
 | 13 | Rate limits and caps are per process and per IP; IPv6 clients are bucketed per address, not per /64. | low | Accepted: one Next process by design (voice sessions live in memory); the OpenRouter key limit is the cross-process backstop. |
-| 14 | postcss and esbuild advisories. | low (build-time) | postcss fixed by an override (2026-10-02); esbuild accepted, see "Dependency audit". |
+| 14 | postcss and esbuild advisories. | low (build-time) | postcss and esbuild both fixed by root overrides (2026-10-02), see "Dependency audit". |
 
 ## Accepted risks (standing)
 

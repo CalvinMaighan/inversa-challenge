@@ -32,7 +32,9 @@ const utcFmt = new Intl.DateTimeFormat("en-GB", {
 });
 const clockFmt = (timeZone: string) =>
   new Intl.DateTimeFormat("en-US", { timeZone, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", timeZoneName: "short" });
-const dateFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", day: "2-digit", month: "short" });
+/** Fixed three-letter months: `Intl` abbreviates September as "Sept" in newer ICU and "Sep" in older, so the label would depend on the machine. */
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
+const dateLabel = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")} ${MONTHS[d.getUTCMonth()]}`;
 
 export function formatClocks(ms: number, zone: string = regionTimeZone()): { utc: string; local: string; zone: string; date: string } {
   const d = new Date(ms);
@@ -42,7 +44,7 @@ export function formatClocks(ms: number, zone: string = regionTimeZone()): { utc
     utc: `${utcFmt.format(d)}Z`,
     local: `${pick("hour")}:${pick("minute")}:${pick("second")}`,
     zone: pick("timeZoneName"),
-    date: dateFmt.format(d).toUpperCase(),
+    date: dateLabel(d),
   };
 }
 
