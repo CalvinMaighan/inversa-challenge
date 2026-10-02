@@ -428,7 +428,7 @@ export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evid
       <h3>{s.title}</h3>
       {sp ? (
         <p className="species" data-testid="species-status">
-          <AppIcon icon={sp.icon} color={sp.color} size={16} />{" "}
+          <AppIcon icon={sp.icon} color={sp.color} size={16} emoji={false} />{" "}
           {sp.scientificName ? <i lang="la">{sp.scientificName}</i> : null}
           {sp.scientificName ? " · " : null}
           {sp.status}

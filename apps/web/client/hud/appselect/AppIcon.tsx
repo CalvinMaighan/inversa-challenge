@@ -5,8 +5,9 @@ import { appIconShape, ICON_STROKE, ICON_VIEWBOX } from "shared/app-icons";
  * An app's icon (config `icon`, `shared/app-icons.ts`) as inline SVG: strokes in `color` over a dark outline, the
  * same drawing the globe's markers use. `size` is the box in px.
  */
-export default function AppIcon({ icon, color, size = 16, outline = true, title }: { icon: string; color: string; size?: number; outline?: boolean; title?: string }) {
-  const noto = NOTO_ICON_URLS[icon];
+export default function AppIcon({ icon, color, size = 16, outline = true, title, emoji = true }: { icon: string; color: string; size?: number; outline?: boolean; title?: string; emoji?: boolean }) {
+  // `emoji={false}`: the plain outline icon in `color` (the sighting card keeps its own).
+  const noto = emoji ? NOTO_ICON_URLS[icon] : undefined;
   // The fish apps use their colour emoji (a plain image, no tint or outline).
   // eslint-disable-next-line @next/next/no-img-element -- a small same-origin SVG, no optimiser needed
   if (noto) return <img src={noto} width={size} height={size} alt={title ?? ""} aria-hidden={title ? undefined : true} data-app-icon={icon} style={{ flex: "none" }} />;
