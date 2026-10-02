@@ -34,16 +34,15 @@ const Fish = styled.a`
   margin: ${-SIZE / 2}px 0 0 ${-SIZE / 2}px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: color-mix(in oklch, #0b0d12 70%, transparent);
-  box-shadow: 0 0 0 1.5px ${FISH_COLOR};
   color: ${FISH_COLOR};
   pointer-events: auto;
   will-change: transform;
 
+  /* A solid fish with a soft dark shadow, no disc or border. */
   svg {
-    width: 14px;
-    height: 14px;
+    width: 20px;
+    height: 20px;
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 85%)) drop-shadow(0 0 1px rgb(0 0 0 / 70%));
   }
   &[data-hidden] {
     visibility: hidden;
@@ -86,7 +85,7 @@ const Fish = styled.a`
 `;
 
 const FISH_ICON = (
-  <svg viewBox={`0 0 ${ICON_VIEWBOX} ${ICON_VIEWBOX}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg viewBox={`0 0 ${ICON_VIEWBOX} ${ICON_VIEWBOX}`} fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     {APP_ICONS.carp.paths.map((d) => (
       <path key={d} d={d} />
     ))}
