@@ -19,8 +19,8 @@ Paths on the box:
 
 ## Workflows
 
-- `release.yml` runs on a `v*` tag or by manual dispatch. It builds `inversa-api` on ubuntu-24.04 with `cargo build --release --locked` and the Next standalone tree with bun. It then uploads one artifact, `inversa-release` (`inversa.tar.zst`, `SHA256SUMS`, `release.json`), kept for 90 days.
-- `deploy.yml` runs only by manual dispatch. It downloads the artifact from a release run (blank means the latest successful run) and renders the env from Doppler. It then uses scp to copy everything to `root@HETZNER_HOST` and runs `remote-unpack.sh`, which installs the units and Caddyfile, restarts the units, and health-checks 4041 and 3050. To roll back, dispatch it again with an older run id.
+- `release.yml` runs on every merge to `main` (or by manual dispatch) and publishes a GitHub Release named `v0.1.<run number>`. It builds `inversa-api` on ubuntu-24.04 with `cargo build --release --locked` and the Next standalone tree with bun. It then publishes the GitHub Release with three files: `inversa.tar.zst`, `SHA256SUMS` and `release.json`. Releases are kept, unlike workflow artifacts.
+- `deploy.yml` runs only by manual dispatch. It takes a `version` (a release such as `v0.1.7`; blank means the latest release), downloads that GitHub Release and renders the env from Doppler. It then uses scp to copy everything to `root@HETZNER_HOST` and runs `remote-unpack.sh`, which installs the units and Caddyfile, restarts the units, and health-checks 4041 and 3050. To roll back, dispatch it again with an older version.
 - `workers.yml` runs `wrangler deploy` for `apps/signal-worker`, either on a push to `main` that touches it or by manual dispatch.
 
 ## Health
@@ -91,8 +91,8 @@ Nothing here holds a secret value. Values go only into Doppler or GitHub secrets
 
 ### First deploy
 
-1. Run `release` (tag `v0.1.0`, or dispatch it by hand) and wait until it succeeds.
-2. Run `deploy` with `release_run_id` blank.
+1. Merge to `main`: `release` builds and publishes `v0.1.<n>` (or run it by hand from Actions). Wait until it succeeds and note the version on the Releases page.
+2. Run `deploy` with that `version` (blank deploys the latest release).
 3. Check it:
    - `curl -sI https://inversa.bigvalue.lol/` shows `cross-origin-opener-policy: same-origin` and `cross-origin-embedder-policy: require-corp`.
    - `curl -fsS https://inversa.bigvalue.lol/health` returns JSON with `"status":"ok"` and one entry per app in `apps`. A `503` with `"status":"degraded"` means one app's database failed; its entry carries the error.

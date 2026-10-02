@@ -145,8 +145,8 @@ Sign in at <https://weather.im/iembot/config/> (Google sign-in) and add a webhoo
 
 ## 12. First release, deploy and smoke
 
-1. Release: push a tag (`git tag v0.1.0 && git push origin v0.1.0`) or Actions → `release` → Run workflow. Wait for green.
-2. Deploy: Actions → `deploy` → Run workflow, `release_run_id` blank (latest). It renders `/etc/inversa/env` from Doppler, unpacks, migrates the data layout, restores missing databases from R2, restarts the units and waits for `/health` and `/api/health`.
+1. Release: it builds by itself when a PR merges to `main` and publishes a GitHub Release `v0.1.<n>` (or Actions → `release` → Run workflow). Wait for green and note the version under Releases.
+2. Deploy: Actions → `deploy` → Run workflow with `version` = that release (for example `v0.1.7`; blank = the latest). It renders `/etc/inversa/env` from Doppler, unpacks, migrates the data layout, restores missing databases from R2, restarts the units and waits for `/health` and `/api/health`.
 3. Smoke from your laptop:
    ```sh
    curl -sI https://inversa.bigvalue.lol/ | grep -iE 'cross-origin-(opener|embedder)-policy|content-security-policy'
@@ -162,7 +162,7 @@ Sign in at <https://weather.im/iembot/config/> (Google sign-in) and add a webhoo
 
 ## 13. Rollback
 
-Actions → `deploy` → Run workflow with `release_run_id` = the run id of the previous good `release` run (Actions → release → the run → the number in its URL). The VM keeps the three newest releases; the deploy flips `/opt/inversa/current` and restarts.
+Actions → `deploy` → Run workflow with `version` = the previous good release (the Releases page lists them, for example `v0.1.6`). The VM keeps the three newest releases; the deploy flips `/opt/inversa/current` and restarts.
 
 - Databases are not rolled back: a release older than the three-app pivot cannot read the per-app layout (`deploy/README.md` "Multi-app migration").
 - To restore data from before a bad write: on the VM, stop `inversa-litestream inversa-api`, move the app's `<db>.db*` aside and run `litestream restore -config /opt/inversa/deploy/litestream.yml -timestamp <RFC3339> /var/lib/inversa/<app>/<db>.db` as `inversa`, then start both units.
