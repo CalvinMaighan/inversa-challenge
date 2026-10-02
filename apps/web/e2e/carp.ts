@@ -351,11 +351,10 @@ async function main(): Promise<void> {
     const links = await page.$$eval('[data-testid="carp-drawer"] a[href^="http"]', (els) => els.map((a) => ({ href: a.getAttribute("href"), target: a.getAttribute("target"), rel: a.getAttribute("rel") ?? "" })));
     const newTab = check(links.length >= 3 && links.every((l) => l.target === "_blank" && /noopener/.test(l.rel)), `links ${JSON.stringify(links)}`);
     const missing = check(/Flow\s*Not measured at this gauge/.test(drawerText.replace(/\n/g, " ")) || /Not measured at this gauge/.test(drawerText), "missing flow words");
-    const boundaryText = await page.locator('[data-testid="carp-boundary"]').innerText();
     const bodyText = await page.evaluate(() => document.body.innerText);
     const forbidden = FORBIDDEN.exec(bodyText)?.[0];
     if (forbidden) log(`forbidden word on the carp page: ${forbidden}`);
-    const boundary = check(/cannot establish carp abundance, expected catch, legal access or trip safety/.test(boundaryText) && /Demonstration locations/.test(boundaryText) && /Atchafalaya/.test(boundaryText) && !forbidden, `boundary "${boundaryText}"`);
+    const boundary = check((await page.locator('[data-testid="carp-boundary"]').count()) === 0 && !forbidden, "the list carries no boundary prose and no forbidden word");
     const noSite = /Select a location/.test(noSiteMessage);
 
     // Stale: the page clock 12 h past the wall clock; every observation is then older than 6 h.

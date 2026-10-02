@@ -91,7 +91,8 @@ describe("overlay layers", () => {
   });
 
   test("overlay time: a raster overlay adds one imagery layer at the snapped time, swaps it when the time changes and reports what it shows", async () => {
-    const t0 = Date.parse("2026-10-01T18:00:00Z");
+    // Relative to now: the radar source only keeps about 7.5 h, so a fixed time stops fitting as the day goes on.
+    const t0 = Math.floor((Date.now() - 2 * 3_600_000) / (4 * MIN)) * 4 * MIN;
     const ctx = fakeContext({ timeMs: t0, layers: onLayers([RADAR]) });
     const viewer = imageryViewer();
     const layer = createOverlayRasterLayer(RADAR, ctx);

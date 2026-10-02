@@ -1,7 +1,7 @@
 "use client";
 
 import styled from "client/styled";
-import { copyText, type AppConfig } from "shared/apps";
+import type { AppConfig } from "shared/apps";
 
 import Panel from "client/hud/Panel";
 
@@ -56,7 +56,7 @@ const List = styled.ol`
 const Row = styled.button<{ $tone: string; $on: boolean }>`
   width: 100%;
   display: grid;
-  grid-template-columns: 22px 1fr;
+  grid-template-columns: 44px 22px 1fr;
   gap: 2px 8px;
   padding: 8px;
   border: 1px solid ${(p) => (p.$on ? "var(--accent)" : "var(--border)")};
@@ -104,20 +104,21 @@ const Row = styled.button<{ $tone: string; $on: boolean }>`
   }
 `;
 
-const Foot = styled.footer`
-  margin-top: var(--gap-m);
-  padding-top: var(--gap-s);
-  border-top: 1px solid var(--border);
-  color: var(--muted);
-  font: 400 12px / 1.45 var(--font-ui);
-  p {
-    margin: 0 0 6px;
-  }
-  strong {
-    color: var(--text);
-    font-weight: 600;
-  }
+/** A satellite thumbnail of the location (Esri World Imagery, a small export around its coordinates). */
+const Thumb = styled.img`
+  grid-row: span 3;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-s);
+  object-fit: cover;
+  background: var(--surface-2, transparent);
 `;
+
+/** Esri's keyless export of the imagery around a point, 96 px, about 4 km across. */
+export function thumbUrl(lat: number, lon: number): string {
+  const d = 0.02;
+  return `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/export?bbox=${lon - d},${lat - d},${lon + d},${lat + d}&bboxSR=4326&imageSR=4326&size=96,96&format=jpg&f=image`;
+}
 
 const Empty = styled.p`
   margin: 0;
@@ -180,6 +181,7 @@ export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs,
                     data-status={review.status}
                     onClick={() => onSelect(site.lid)}
                   >
+                    <Thumb src={thumbUrl(site.lat, site.lon)} alt="" loading="lazy" crossOrigin="anonymous" referrerPolicy="no-referrer" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
                     <StatusGlyph status={review.status} />
                     <span className="name">
                       {site.name}
@@ -203,13 +205,6 @@ export function BoardView({ app, sites, reviews, selected, asOfMs, reviewedAtMs,
           </List>
         </>
       )}
-      <Foot data-testid="carp-boundary">
-        <p>
-          <strong>Conditions only.</strong> {copyText(app, "boundaryNote", "")}
-        </p>
-        <p>{app.legend.locations ?? ""}</p>
-        <p>{app.score.label}.</p>
-      </Foot>
     </div>
   );
 }

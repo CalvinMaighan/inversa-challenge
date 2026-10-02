@@ -99,13 +99,11 @@ describe("carp copy", () => {
     expect(helpEntries(CARP_APP).map((e) => e.id)).toContain("carp-asof");
   });
 
-  test("carp copy: the boundary notice, the demonstration note and the score label are the config's", () => {
+  test("carp copy: the locations list carries no boundary prose (the agent still states it)", () => {
     const text = textOf(renderAll());
-    expect(text).toContain(CARP_APP.copy.boundaryNote!);
-    expect(text).toContain(CARP_APP.legend.locations!);
-    expect(text).toContain("L'CARP is reported as active in the Atchafalaya Basin");
-    expect(text).toContain(CARP_APP.score.label);
-    expect(text).toContain("Conditions only.");
+    expect(text).not.toContain(CARP_APP.copy.boundaryNote!);
+    expect(text).not.toContain("Conditions only.");
+    expect(text).not.toContain("Demonstration locations");
   });
 
   test("carp copy: units, datums and sources are written out; nothing empty reads as fine", () => {
