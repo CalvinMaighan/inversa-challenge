@@ -2,6 +2,7 @@
 
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import AppIcon from "client/hud/appselect/AppIcon";
 import { Surface } from "client/hud/primitives";
 import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
 import styled from "client/styled";
@@ -57,7 +58,7 @@ export default function LionfishChip({ app }: { app: AppConfig }) {
       style={{ ["--lf-color" as string]: taxon?.color ?? "#a06cd5" }}
       onClick={() => setLayerVisible(SIGHTINGS, !on)}
     >
-      <i aria-hidden="true" />
+      <AppIcon icon={app.icon} color={taxon?.color ?? "#a06cd5"} size={18} />
       {taxon?.short ?? taxon?.name ?? app.name}
       <small>
         {count} · {s.days} d {s.basis}

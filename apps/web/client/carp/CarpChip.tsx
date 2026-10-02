@@ -1,10 +1,10 @@
 "use client";
 
 import { Surface } from "client/hud/primitives";
+import { NOTO_ICON_URLS } from "client/noto-icons";
 import styled from "client/styled";
 
-import FishIcon from "./FishIcon";
-import { FISH_COLOR, setFishVisible, useFish } from "./fish";
+import { setFishVisible, useFish } from "./fish";
 
 const Chip = styled(Surface.withComponent("button"))`
   display: inline-flex;
@@ -16,13 +16,8 @@ const Chip = styled(Surface.withComponent("button"))`
   font: 600 12.5px / 1 var(--font-ui);
   cursor: pointer;
 
-  svg {
-    width: 16px;
-    height: 16px;
-    color: ${FISH_COLOR};
-  }
-  &[aria-pressed="false"] svg {
-    color: var(--muted);
+  &[aria-pressed="false"] img {
+    opacity: 0.45;
   }
   small {
     color: var(--muted);
@@ -46,7 +41,8 @@ export default function CarpChip() {
       aria-label={`Asian carp: ${status === "ready" ? `${shown.length} recent sightings on the map` : status === "error" ? "sightings could not be loaded" : "loading sightings"}. ${visible ? "Hide" : "Show"} them`}
       onClick={() => setFishVisible(!visible)}
     >
-      <FishIcon />
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small same-origin SVG */}
+      <img src={NOTO_ICON_URLS.carp} alt="" width={18} height={18} />
       Carp
       <small>{count}</small>
     </Chip>

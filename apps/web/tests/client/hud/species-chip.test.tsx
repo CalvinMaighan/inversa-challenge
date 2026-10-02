@@ -40,6 +40,8 @@ describe("species chip", () => {
     for (const d of APP_ICONS.python.paths) expect(svg).toContain(`d="${d}"`);
     // Outline first, then the tint.
     expect(svg.indexOf('stroke="#0b0d12"')).toBeLessThan(svg.indexOf('stroke="#e4572e"'));
-    expect(renderToStaticMarkup(<AppIcon icon="carp" color="#7f7fff" outline={false} title="Carp" />)).toMatch(/role="img"[^>]*><title>Carp<\/title>/);
+    // The fish apps use their colour emoji images (Noto Emoji via Iconify): carp the fish, lionfish the tropical fish.
+    expect(renderToStaticMarkup(<AppIcon icon="carp" color="#7f7fff" title="Carp" />)).toContain('src="/icons/noto-fish.svg"');
+    expect(renderToStaticMarkup(<AppIcon icon="lionfish" color="#a06cd5" />)).toContain('src="/icons/noto-tropical-fish.svg"');
   });
 });

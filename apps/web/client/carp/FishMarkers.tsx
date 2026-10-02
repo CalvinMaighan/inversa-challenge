@@ -3,10 +3,10 @@
 import { useEffect, useRef } from "react";
 
 import { getGlobe, onGlobeReady } from "client/globe/api";
+import { NOTO_ICON_URLS } from "client/noto-icons";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
-import FishIcon from "./FishIcon";
 import { FISH_COLOR, fishOpacity, loadFish, useFish } from "./fish";
 
 const SIZE = 22;
@@ -38,10 +38,10 @@ const Fish = styled.a`
   pointer-events: auto;
   will-change: transform;
 
-  /* A solid fish with a soft dark shadow, no disc or border. */
-  svg {
-    width: 20px;
-    height: 20px;
+  /* The colour fish emoji with a soft dark shadow, no disc or border. */
+  img {
+    width: 22px;
+    height: 22px;
     filter: drop-shadow(0 1px 2px rgb(0 0 0 / 85%)) drop-shadow(0 0 1px rgb(0 0 0 / 70%));
   }
   &[data-hidden] {
@@ -150,7 +150,8 @@ export default function FishMarkers() {
           data-fish={s.id}
           aria-label={`${s.species}, ${s.date ?? "date unknown"}, ${SOURCE_NAMES[s.source]} (opens in a new tab)`}
         >
-          <FishIcon />
+          {/* eslint-disable-next-line @next/next/no-img-element -- a small same-origin SVG */}
+          <img src={NOTO_ICON_URLS.carp} alt="" width={22} height={22} />
           <span className="tip" role="tooltip" aria-hidden="true">
             <b>{s.species}</b>
             {s.date ?? "Date unknown"}

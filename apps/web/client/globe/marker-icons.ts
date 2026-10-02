@@ -6,6 +6,8 @@
  */
 import { appIconShape, ICON_STROKE, ICON_VIEWBOX } from "shared/app-icons";
 
+import { NOTO_ICON_URLS } from "client/noto-icons";
+
 import { createCanvas } from "./layers/raster-surface";
 
 /** Marker canvas edge, px: the 24 px icon plus its outline, and the hit target (at least 24 px). */
@@ -15,7 +17,8 @@ export const RING_PX = 44;
 const OUTLINE = "#0b0d12";
 const OUTLINE_WIDTH = 5.5;
 
-export type MarkerImage = { id: string; image: HTMLCanvasElement };
+/** A canvas, or an image URL (Cesium loads it): the fish apps' colour emoji. */
+export type MarkerImage = { id: string; image: HTMLCanvasElement | string };
 
 const cache = new Map<string, MarkerImage>();
 
@@ -52,6 +55,12 @@ export function markerImage(icon: string, color: string): MarkerImage {
   const id = `sighting-icon:${icon}:${color}`;
   const hit = cache.get(id);
   if (hit) return hit;
+  const noto = NOTO_ICON_URLS[icon];
+  if (noto) {
+    const made = { id: `sighting-icon:${icon}:noto`, image: noto };
+    cache.set(id, made);
+    return made;
+  }
   const image = createCanvas(MARKER_PX, MARKER_PX);
   const g = image.getContext("2d");
   if (g) {
