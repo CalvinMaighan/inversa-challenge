@@ -5,8 +5,8 @@ import { useEffect, useRef } from "react";
 import { getGlobe, onGlobeReady } from "client/globe/api";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
-import { APP_ICONS, ICON_VIEWBOX } from "shared/app-icons";
 
+import FishIcon from "./FishIcon";
 import { FISH_COLOR, fishOpacity, loadFish, useFish } from "./fish";
 
 const SIZE = 22;
@@ -84,14 +84,6 @@ const Fish = styled.a`
   }
 `;
 
-const FISH_ICON = (
-  <svg viewBox={`0 0 ${ICON_VIEWBOX} ${ICON_VIEWBOX}`} fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {APP_ICONS.carp.paths.map((d) => (
-      <path key={d} d={d} />
-    ))}
-  </svg>
-);
-
 /**
  * The Asian carp sightings on the carp map: a fish per record, placed over its globe point after every render like the location
  * markers, hidden behind the globe and when the Carp chip is off.
@@ -158,7 +150,7 @@ export default function FishMarkers() {
           data-fish={s.id}
           aria-label={`${s.species}, ${s.date ?? "date unknown"}, ${SOURCE_NAMES[s.source]} (opens in a new tab)`}
         >
-          {FISH_ICON}
+          <FishIcon />
           <span className="tip" role="tooltip" aria-hidden="true">
             <b>{s.species}</b>
             {s.date ?? "Date unknown"}

@@ -2,8 +2,8 @@
 
 import { Surface } from "client/hud/primitives";
 import styled from "client/styled";
-import { APP_ICONS, ICON_VIEWBOX } from "shared/app-icons";
 
+import FishIcon from "./FishIcon";
 import { FISH_COLOR, setFishVisible, useFish } from "./fish";
 
 const Chip = styled(Surface.withComponent("button"))`
@@ -46,11 +46,7 @@ export default function CarpChip() {
       aria-label={`Asian carp: ${status === "ready" ? `${shown.length} recent sightings on the map` : status === "error" ? "sightings could not be loaded" : "loading sightings"}. ${visible ? "Hide" : "Show"} them`}
       onClick={() => setFishVisible(!visible)}
     >
-      <svg viewBox={`0 0 ${ICON_VIEWBOX} ${ICON_VIEWBOX}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {APP_ICONS.carp.paths.map((d) => (
-          <path key={d} d={d} />
-        ))}
-      </svg>
+      <FishIcon />
       Carp
       <small>{count}</small>
     </Chip>

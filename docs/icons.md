@@ -59,3 +59,9 @@ data is copied from `lucide-react` 1.23.0 (`dist/esm/icons/<id>.mjs`, checked 20
 
 Each icon keeps its scale's name as its accessible name and tooltip (for example "Zoom to city level"), so the words are
 still there for screen readers and on hover.
+
+## Carp fish marker (carp map and chip)
+
+The solid side-view fish on the carp map and chip is Material Design Icons "fish" (Pictogrammers Free License, Apache-2.0),
+path data copied from https://github.com/Templarian/MaterialDesign `svg/fish.svg`, checked 2026-10-01
+(`apps/web/client/carp/FishIcon.tsx`).
