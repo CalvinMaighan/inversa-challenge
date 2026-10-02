@@ -3,6 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
+import CarpChip from "client/carp/CarpChip";
 import CarpHud from "client/carp/CarpHud";
 import LionfishChip from "client/lionfish/LionfishChip";
 import LionfishHud from "client/lionfish/LionfishHud";
@@ -151,7 +152,7 @@ function HudBody({ sync = true }: HudProps) {
       <Chrome data-hud-chrome="">
         <TopRow ref={barRef} data-testid="hud-toprow">
           <AppSelect />
-          {conditions ? null : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
+          {conditions ? <CarpChip /> : survey ? <LionfishChip app={app} /> : <SpeciesBar />}
           <ShipsChip />
           <TopBar focus={focus} onFocus={setFocus} helpOpen={helpOpen} onHelp={setHelpOpen} />
         </TopRow>

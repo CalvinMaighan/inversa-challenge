@@ -13,6 +13,7 @@ import { VIEW, type ViewState } from "client/state/view";
 import type { AppConfig } from "shared/apps";
 
 import Board, { type Preset } from "./Board";
+import FishMarkers from "./FishMarkers";
 import { briefing } from "./briefing";
 import CarpTimeline from "./CarpTimeline";
 import type { ChartData } from "./chart";
@@ -85,7 +86,8 @@ export default function CarpHud({ app }: { app: AppConfig }) {
 
   // Board panel: open on desktop, a tab on phones until asked for.
   const [boardOpen, setBoardOpen] = useState<boolean | null>(null);
-  const showBoard = boardOpen ?? !mobile;
+  // The sightings are the focus; the gauge locations are a second view, closed until asked for.
+  const showBoard = boardOpen ?? false;
   // The preset chip stays lit until a site is chosen (the camera then flies to the site).
   const [presetFor, setPresetFor] = useState<{ id: string; site: string | undefined } | null>(null);
   const preset = presetFor && presetFor.site === carp.site ? presetFor.id : null;
@@ -259,7 +261,8 @@ export default function CarpHud({ app }: { app: AppConfig }) {
 
   return (
     <>
-      <SiteMarkers sites={sites} reviews={board.reviews} selected={carp.site} onSelect={(lid) => choose(lid)} />
+      <FishMarkers />
+      {showBoard ? <SiteMarkers sites={sites} reviews={board.reviews} selected={carp.site} onSelect={(lid) => choose(lid)} /> : null}
       <Board
         open={showBoard}
         onOpen={() => setBoardOpen(true)}
