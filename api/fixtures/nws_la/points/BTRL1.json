@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "s": "https://schema.org/",
+            "geo": "http://www.opengis.net/ont/geosparql#",
+            "unit": "http://codes.wmo.int/common/unit/",
+            "@vocab": "https://api.weather.gov/ontology#",
+            "geometry": {
+                "@id": "s:GeoCoordinates",
+                "@type": "geo:wktLiteral"
+            },
+            "city": "s:addressLocality",
+            "state": "s:addressRegion",
+            "distance": {
+                "@id": "s:Distance",
+                "@type": "s:QuantitativeValue"
+            },
+            "bearing": {
+                "@type": "s:QuantitativeValue"
+            },
+            "value": {
+                "@id": "s:value"
+            },
+            "unitCode": {
+                "@id": "s:unitCode",
+                "@type": "@id"
+            },
+            "forecastOffice": {
+                "@type": "@id"
+            },
+            "forecastGridData": {
+                "@type": "@id"
+            },
+            "publicZone": {
+                "@type": "@id"
+            },
+            "county": {
+                "@type": "@id"
+            }
+        }
+    ],
+    "id": "https://api.weather.gov/points/30.4292,-91.2069",
+    "type": "Feature",
+    "geometry": {
+        "type": "Point",
+        "coordinates": [
+            -91.2069,
+            30.4292
+        ]
+    },
+    "properties": {
+        "@id": "https://api.weather.gov/points/30.4292,-91.2069",
+        "@type": "wx:Point",
+        "cwa": "LIX",
+        "type": "land",
+        "forecastOffice": "https://api.weather.gov/offices/LIX",
+        "gridId": "LIX",
+        "gridX": 24,
+        "gridY": 108,
+        "forecast": "https://api.weather.gov/gridpoints/LIX/24,108/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/LIX/24,108/forecast/hourly",
+        "forecastGridData": "https://api.weather.gov/gridpoints/LIX/24,108",
+        "observationStations": "https://api.weather.gov/gridpoints/LIX/24,108/stations",
+        "relativeLocation": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -91.2074105,
+                    30.4438348
+                ]
+            },
+            "properties": {
+                "city": "Port Allen",
+                "state": "LA",
+                "distance": {
+                    "unitCode": "wmoUnit:m",
+                    "value": 160.21699363797
+                },
+                "bearing": {
+                    "unitCode": "wmoUnit:degree_(angle)",
+                    "value": 178
+                }
+            }
+        },
+        "forecastZone": "https://api.weather.gov/zones/forecast/LAZ047",
+        "county": "https://api.weather.gov/zones/county/LAC121",
+        "fireWeatherZone": "https://api.weather.gov/zones/fire/LAZ047",
+        "timeZone": "America/Chicago",
+        "radarStation": "KHDC",
+        "astronomicalData": {
+            "sunrise": "2026-10-01T06:58:27-05:00",
+            "sunset": "2026-10-01T18:50:20-05:00",
+            "transit": "2026-10-01T12:54:23-05:00",
+            "civilTwilightBegin": "2026-10-01T06:34:32-05:00",
+            "civilTwilightEnd": "2026-10-01T19:14:15-05:00",
+            "nauticalTwilightBegin": "2026-10-01T06:06:41-05:00",
+            "nauticalTwilightEnd": "2026-10-01T19:42:05-05:00",
+            "astronomicalTwilightBegin": "2026-10-01T05:38:45-05:00",
+            "astronomicalTwilightEnd": "2026-10-01T20:10:02-05:00"
+        },
+        "nwr": {
+            "transmitter": "KHB46",
+            "sameCode": "022121",
+            "areaBroadcast": "https://api.weather.gov/radio/KHB46/broadcast",
+            "pointBroadcast": "https://api.weather.gov/points/30.4292,-91.2069/radio"
+        }
+    }
+}

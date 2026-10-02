@@ -1,0 +1,265 @@
+{
+  "id": "python",
+  "name": "Everglades Ops",
+  "icon": "python",
+  "tagline": "Burmese python removal crews, South Florida",
+  "question": "Where are Burmese pythons active and where should removal crews go next?",
+  "kind": "species",
+  "taxa": [
+    {
+      "id": "python",
+      "name": "Burmese python",
+      "short": "Python",
+      "line": "giant constrictor eating Everglades wildlife",
+      "aliases": [
+        "burmese python"
+      ],
+      "scientificName": "Python bivittatus",
+      "dbId": 1,
+      "inatTaxonId": 238252,
+      "inatLineageIds": [],
+      "gbifKey": 4820533,
+      "nasGenus": "Python",
+      "nasSpecies": "bivittatus",
+      "color": "#e4572e",
+      "halfLifeDays": 21,
+      "rules": "python"
+    }
+  ],
+  "regions": [],
+  "locations": [],
+  "feeds": [
+    {
+      "source": "inat",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "nas",
+      "mode": "poll",
+      "params": {
+        "state": "FL"
+      }
+    },
+    {
+      "source": "gbif",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "nws",
+      "mode": "poll",
+      "params": {
+        "area": "FL,AM,GM",
+        "offices": [
+          "KMFL",
+          "KKEY"
+        ],
+        "senders": [
+          "NWS Miami FL",
+          "NWS Key West FL"
+        ],
+        "sameCodes": [
+          "012011",
+          "012015",
+          "012021",
+          "012027",
+          "012043",
+          "012049",
+          "012051",
+          "012055",
+          "012071",
+          "012081",
+          "012085",
+          "012086",
+          "012087",
+          "012093",
+          "012099",
+          "012111",
+          "012115"
+        ]
+      }
+    },
+    {
+      "source": "usgs",
+      "mode": "poll",
+      "params": {
+        "api": "ogc",
+        "parameters": [
+          "00065",
+          "62614",
+          "62615",
+          "00010"
+        ]
+      }
+    },
+    {
+      "source": "ndbc",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "coops",
+      "mode": "poll",
+      "params": {}
+    },
+    {
+      "source": "openmeteo",
+      "mode": "poll",
+      "params": {
+        "stepDeg": 0.25
+      }
+    },
+    {
+      "source": "goes19",
+      "mode": "push",
+      "params": {
+        "products": [
+          "ABI-L2-LSTC",
+          "ABI-L2-SSTF",
+          "ABI-L2-FDCC",
+          "ABI-L2-ACMC"
+        ]
+      }
+    },
+    {
+      "source": "nwws",
+      "mode": "push",
+      "params": {}
+    }
+  ],
+  "score": {
+    "label": "Hotspot score (density x activity x access, labelled heuristic)",
+    "components": [
+      {
+        "id": "density",
+        "label": "Recent sightings",
+        "weight": 1,
+        "description": "Kernel density of recent python sightings (21-day half-life); NAS and GBIF history as a static prior."
+      },
+      {
+        "id": "activity",
+        "label": "Activity rules",
+        "weight": 1,
+        "description": "Air and land-surface temperature rules for python activity."
+      },
+      {
+        "id": "access",
+        "label": "Crew access",
+        "weight": 1,
+        "description": "Levee and canal stage for crew access."
+      }
+    ]
+  },
+  "windows": {
+    "defaultHours": 168,
+    "optionsHours": [
+      48,
+      168,
+      720
+    ]
+  },
+  "layers": [
+    {
+      "id": "sightings",
+      "label": "Sightings",
+      "defaultOn": true
+    },
+    {
+      "id": "hotspots",
+      "label": "Hotspots",
+      "defaultOn": false
+    },
+    {
+      "id": "lst",
+      "label": "Land surface temperature (GOES)",
+      "defaultOn": false
+    },
+    {
+      "id": "sst",
+      "label": "Sea surface temperature (GOES)",
+      "defaultOn": false
+    },
+    {
+      "id": "stations",
+      "label": "Gauges and buoys",
+      "defaultOn": false
+    },
+    {
+      "id": "alerts",
+      "label": "NWS alerts",
+      "defaultOn": false
+    },
+    {
+      "id": "missions",
+      "label": "Team missions",
+      "defaultOn": true
+    },
+    {
+      "id": "peers",
+      "label": "Teammates",
+      "defaultOn": true
+    },
+    {
+      "id": "notes",
+      "label": "Field notes",
+      "defaultOn": true
+    }
+  ],
+  "legend": {
+    "sightings": "One dot per report; duplicates and ID conflicts are flagged, never hidden.",
+    "hotspots": "Score per 0.02 degree cell; brighter is higher. A heuristic, not a probability.",
+    "lst": "GOES-19 land surface temperature, hatched where cloud or bad quality.",
+    "sst": "GOES-19 sea surface temperature; buoys may disagree.",
+    "stations": "USGS gauges, NDBC buoys and CO-OPS tide stations with their latest reading.",
+    "alerts": "NWS products in effect at the cursor time.",
+    "missions": "Areas the team has claimed or finished.",
+    "peers": "Teammates on the board right now.",
+    "notes": "Field notes pinned to the map."
+  },
+  "copy": {
+    "about": "A live map of Burmese python reports in South Florida, from sightings people report to iNaturalist and wildlife agencies, with an agent you can ask about them.",
+    "region": "South Florida",
+    "timezone": "America/New_York",
+    "legendTitle": "Burmese pythons reported in South Florida",
+    "title": "Everglades Ops",
+    "shortTitle": "Everglades",
+    "sightingsNote": "Sightings are reports, not abundance: more observers mean more reports.",
+    "scopeNote": "South Florida and the Keys only."
+  },
+  "helperQuestions": [
+    "Where were pythons reported in the last 7 days?",
+    "Which cells rank highest for a removal crew tonight, and why?",
+    "Did the cold snap change python activity?",
+    "Which feeds are stale right now?",
+    "Where does this hotspot score come from?",
+    "Why does land surface temperature matter for finding pythons?",
+    "Which night this week looks best for road surveys?",
+    "Show the hotspot map during the January 2026 cold snap."
+  ],
+  "agent": {
+    "persona": "You are the operations analyst for Everglades python removal crews. You answer from the stored sightings, readings, alerts, forecasts and hotspot scores of South Florida, cite every number, and state feed freshness.",
+    "scope": "Burmese python in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5). No other species is tracked here.",
+    "tools": [
+      "geocode",
+      "sightings",
+      "species_counts",
+      "conditions",
+      "alerts",
+      "hotspots",
+      "explain_cell",
+      "backtest",
+      "weather_forecast",
+      "feed_state",
+      "source_info",
+      "evidence",
+      "team_board",
+      "notes",
+      "set_view"
+    ],
+    "refusal": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys; it tracks no other species. Switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers."
+  },
+  "eval": {
+    "goldenSet": "python"
+  }
+}

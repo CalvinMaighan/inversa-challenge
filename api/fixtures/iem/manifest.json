@@ -1,0 +1,46 @@
+{
+  "recorded_at": "2026-10-01T07:01:03Z",
+  "note": "Iowa Environmental Mesonet HML forecast archive (third-party copy of the NWS river forecast products), 7 days per carp site, CSV. Each distinct issued[UTC] is one issuance; primary is stage (ft), secondary flow (kcfs).",
+  "files": [
+    {
+      "file": "SMML1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=SMML1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "KRZL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=KRZL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "BLRL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=BLRL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "MCGL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=MCGL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "BTRL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=BTRL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "AEXL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=AEXL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "MLUL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=MLUL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    },
+    {
+      "file": "BXAL1.csv",
+      "url": "https://mesonet.agron.iastate.edu/cgi-bin/request/hml.py?station=BXAL1&sts=2026-09-24T07:01Z&ets=2026-10-01T07:01Z&kind=forecasts&fmt=csv",
+      "content_type": "text/csv"
+    }
+  ]
+}

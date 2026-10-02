@@ -1,0 +1,66 @@
+<message xmlns="jabber:client" to="inversa@nwws-oi.weather.gov/inversa" type="groupchat" from="nwws@conference.nwws-oi.weather.gov/nwws-oi"><body>KMFL issues CFW valid 2026-09-30T12:00:00Z</body><html xmlns="http://jabber.org/protocol/xhtml-im"><body xmlns="http://www.w3.org/1999/xhtml">KMFL issues CFW valid 2026-09-30T12:00:00Z</body></html><x xmlns="nwws-oi" cccc="KMFL" ttaaii="WHUS42" issue="2026-09-30T12:00:00Z" awipsid="CFWMFL" id="11723.44102">
+
+
+000
+WHUS42 KMFL 301200
+CFWMFL
+
+Coastal Hazard Message
+National Weather Service Miami FL
+800 AM EDT Wed Sep 30 2026
+
+FLZ168-172-173-010600-
+/O.EXP.KMFL.CF.Y.0001.000000T0000Z-260930T1200Z/
+/O.CON.KMFL.CF.S.0004.000000T0000Z-261001T2100Z/
+Coastal Palm Beach County-Coastal Broward County-
+Coastal Miami Dade County-
+800 AM EDT Wed Sep 30 2026
+
+...COASTAL FLOOD STATEMENT REMAINS IN EFFECT THROUGH THURSDAY
+AFTERNOON...
+...COASTAL FLOOD ADVISORY WILL EXPIRE AT 8 AM EDT THIS MORNING...
+
+* WHAT...Isolated minor coastal flooding expected.
+
+* WHERE...Coastal Palm Beach County, Coastal Broward County and 
+  Coastal Miami Dade County.
+
+* WHEN...Through Thursday afternoon.
+
+* IMPACTS...Some water on low lying roads and property.
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Do not drive through flooded roadways.
+
+&amp;&amp;
+
+$$
+
+FLZ069-075-174-010600-
+/O.CON.KMFL.CF.S.0004.000000T0000Z-261001T1600Z/
+Coastal Collier County-Mainland Monroe-Far South Miami-
+Dade County-
+800 AM EDT Wed Sep 30 2026
+
+...COASTAL FLOOD STATEMENT REMAINS IN EFFECT THROUGH THURSDAY
+MORNING...
+
+* WHAT...Isolated minor coastal flooding.
+
+* WHERE...Coastal Collier County, Mainland Monroe and Far South 
+  Miami-Dade County.
+
+* WHEN...Through Thursday morning.
+
+* IMPACTS...Some water on low lying roads and property.
+
+
+PRECAUTIONARY/PREPAREDNESS ACTIONS...
+
+Do not drive through flooded roadways.
+
+&amp;&amp;
+
+$$
+</x></message>

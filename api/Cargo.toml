@@ -1,0 +1,51 @@
+[package]
+name = "inversa-api"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "inversa-api"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+async-graphql = { version = "7", default-features = false }
+async-graphql-axum = "7"
+async-trait = "0.1"
+aws-credential-types = { version = "1", default-features = false }
+aws-sigv4 = { version = "1", default-features = false, features = ["sign-http", "http1"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio", "ws"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+flate2 = "1"
+futures-util = "0.3"
+hex = "0.4"
+hmac = "0.12"
+# GOES NetCDF4 files are HDF5. Static build (cmake) so macOS dev and ubuntu CI need no system HDF5;
+# zlib for the deflate-chunked ABI variables. See deploy/aws/README.md.
+hdf5-metno = { version = "0.15", features = ["static"] }
+hdf5-metno-sys = { version = "0.12", features = ["static", "zlib"] }
+ndarray = "0.17"
+rayon = "1"
+# rustls so the binary has no OpenSSL dependency on the Hetzner box.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+# bundled = FTS5 + JSON1 compiled in.
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+# NWWS-OI XMPP client (T8). ring + webpki roots, matching reqwest's rustls (no aws-lc/cmake).
+tokio-xmpp = { version = "6", default-features = false, features = ["starttls", "ring", "webpki-roots"] }
+# AISStream.io websocket client (GE4); rustls with webpki roots, the ring provider installed by ingest::push::ais.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v7"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+# WebSocket client for the graphql-transport-ws end-to-end test; same version axum already pulls in.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }

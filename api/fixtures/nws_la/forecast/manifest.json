@@ -1,0 +1,22 @@
+{
+  "recorded_at": "2026-10-01T15:06:42Z",
+  "note": "NWS gridpoint forecasts for the 8 carp sites, two payloads per site from one office run: the 12-hour periods (`<lid>.json`, .../forecast: temperature, wind, probability of precipitation) and the raw grid (`<lid>.grid.json`, .../gridpoints/{office}/{x},{y}: quantitativePrecipitation in mm per 6 h window, windGust in km/h). The grid comes from /points, kept under ../points for evidence; the adapter reads it from spec/apps/carp.json. Both are versioned on properties.updateTime, which is per office run (LCH 12:46:24Z, LIX 10:37:49Z, SHV 14:20:50Z at this recording).",
+  "files": [
+    { "file": "SMML1.json", "url": "https://api.weather.gov/gridpoints/LCH/113,129/forecast", "content_type": "application/geo+json" },
+    { "file": "SMML1.grid.json", "url": "https://api.weather.gov/gridpoints/LCH/113,129", "content_type": "application/geo+json" },
+    { "file": "KRZL1.json", "url": "https://api.weather.gov/gridpoints/LCH/115,111/forecast", "content_type": "application/geo+json" },
+    { "file": "KRZL1.grid.json", "url": "https://api.weather.gov/gridpoints/LCH/115,111", "content_type": "application/geo+json" },
+    { "file": "BLRL1.json", "url": "https://api.weather.gov/gridpoints/LCH/118,98/forecast", "content_type": "application/geo+json" },
+    { "file": "BLRL1.grid.json", "url": "https://api.weather.gov/gridpoints/LCH/118,98", "content_type": "application/geo+json" },
+    { "file": "MCGL1.json", "url": "https://api.weather.gov/gridpoints/LCH/137,73/forecast", "content_type": "application/geo+json" },
+    { "file": "MCGL1.grid.json", "url": "https://api.weather.gov/gridpoints/LCH/137,73", "content_type": "application/geo+json" },
+    { "file": "BTRL1.json", "url": "https://api.weather.gov/gridpoints/LIX/24,108/forecast", "content_type": "application/geo+json" },
+    { "file": "BTRL1.grid.json", "url": "https://api.weather.gov/gridpoints/LIX/24,108", "content_type": "application/geo+json" },
+    { "file": "AEXL1.json", "url": "https://api.weather.gov/gridpoints/LCH/88,143/forecast", "content_type": "application/geo+json" },
+    { "file": "AEXL1.grid.json", "url": "https://api.weather.gov/gridpoints/LCH/88,143", "content_type": "application/geo+json" },
+    { "file": "MLUL1.json", "url": "https://api.weather.gov/gridpoints/SHV/134,68/forecast", "content_type": "application/geo+json" },
+    { "file": "MLUL1.grid.json", "url": "https://api.weather.gov/gridpoints/SHV/134,68", "content_type": "application/geo+json" },
+    { "file": "BXAL1.json", "url": "https://api.weather.gov/gridpoints/LIX/76,126/forecast", "content_type": "application/geo+json" },
+    { "file": "BXAL1.grid.json", "url": "https://api.weather.gov/gridpoints/LIX/76,126", "content_type": "application/geo+json" }
+  ]
+}

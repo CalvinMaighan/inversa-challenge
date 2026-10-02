@@ -1,0 +1,78 @@
+# App icons
+
+Each app has one icon, named by `icon` in its config (`spec/apps/*.json`). The app selector, the species chip,
+the legend, the evidence card and every sighting on the globe draw it. The path data lives in
+`apps/web/shared/app-icons.ts` (`APP_ICONS`, a 24 × 24 box, 2 px round-capped strokes). React renders it inline
+(`apps/web/client/hud/appselect/AppIcon.tsx`), and the globe strokes it once per colour onto a 32 px canvas
+(`apps/web/client/globe/marker-icons.ts`) that Cesium keeps as one texture-atlas region.
+
+| App | Icon | Source | Licence |
+|---|---|---|---|
+| Everglades Ops (`python`) | snake | drawn for Inversa | MIT (this repository's licence) |
+| Lionfish Watch (`lionfish`) | `fish` | Lucide v0.544.0 | ISC |
+| Carp Field Conditions (`carp`) | `fish` | Lucide v0.544.0 | ISC |
+
+An unknown icon id draws the fish (`appIconShape`). The fish is copied as path data from the Lucide repository at
+tag v0.544.0 (`icons/fish.svg`), checked against that release on 2026-10-01. Lucide has no snake, so the snake
+was drawn in the same box and stroke to sit beside it.
+
+## Lucide licence (ISC)
+
+```
+ISC License
+
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). All other
+copyright (c) for Lucide are held by Lucide Contributors 2022.
+
+Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby
+granted, provided that the above copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING
+ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL,
+DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
+WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE
+USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+## Colours
+
+A sighting marker draws the app's icon in its taxon's `color` from the app config (`colorOfTaxon` in
+`apps/web/client/globe/species.ts`): `#e4572e` for the Burmese python (`spec/apps/python.json`) and `#a06cd5`
+for the lionfish (`spec/apps/lionfish.json`). The carp app tracks conditions and has no taxa. The tint sits over
+a dark outline so a marker reads on satellite imagery in every theme.
+
+## Zoom strip scale icons (GE10)
+
+The zoom strip shows one icon per place scale instead of a word, from Lucide (ISC, same licence text as above). The path
+data is copied from `lucide-react` 1.23.0 (`dist/esm/icons/<id>.mjs`, checked 2026-10-01) into
+`apps/web/client/hud/zoom/scale-icons.tsx`:
+
+| Scale | Lucide id |
+|---|---|
+| World | `globe` |
+| Country | `flag` |
+| State or region | `map` |
+| County | `map-pinned` |
+| City | `building-2` |
+| Neighbourhood | `house` |
+| Street | `route` |
+
+Each icon keeps its scale's name as its accessible name and tooltip (for example "Zoom to city level"), so the words are
+still there for screen readers and on hover.
+
+## Carp fish marker (carp map and chip)
+
+The solid side-view fish on the carp map and chip is Material Design Icons "fish" (Pictogrammers Free License, Apache-2.0),
+path data copied from https://github.com/Templarian/MaterialDesign `svg/fish.svg`, checked 2026-10-01
+(`apps/web/client/carp/FishIcon.tsx`).
+
+## Fish apps: colour emoji (carp, lionfish)
+
+The carp and lionfish apps use colour emoji images from Noto Emoji (Google; Apache-2.0 for the images, SIL OFL 1.1 for the font),
+fetched as SVG through Iconify (https://icon-sets.iconify.design/noto/): `noto:tropical-fish` for carp, `noto:snake` for python and `noto:blowfish` for
+lionfish. The files are `apps/web/public/icons/noto-tropical-fish.svg` and `noto-blowfish.svg`, mapped in
+`apps/web/client/noto-icons.ts`; they replace the outline fish for those two apps in the app selector, the chips and the map
+markers. This supersedes the Material Design Icons fish entry above.
+
+The sighting card (the evidence drawer's species line) keeps the plain outline fish in the species colour; only the chips, the
+app selector and the map markers use the emoji.

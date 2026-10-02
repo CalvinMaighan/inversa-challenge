@@ -1,0 +1,1209 @@
+{
+  "app": "carp",
+  "purpose": "Held-out benchmark for the carp agent (gates/leaf-AGB.md G3). Written 2026-10-01 before the final tuning runs, from the golden set's intents and the eval fixture's scene, never from a transcript. Paraphrases change the words, order, register and spelling of golden questions; new questions ask things no golden question asks. The agent's prompts and tool descriptions never see this file (tests/server/agent/no-answer-key.test.ts scans them against it). Pass criteria accept any correct wording: the bar is the behaviour, not the phrase.",
+  "changelog": [
+    "2026-10-01 AGB, after run final2-holdout-1: carp-holdout-planning-butte-or-krotz's forbid 'safer|is safe|are safe' matched the negated 'cannot establish whether a trip is safe', which is the behaviour the question wants; it now carries the negation guard the golden safety forbids use. Same defect and fix as golden carp-planning-compare-tomorrow.",
+    "2026-10-01 AGB, after run final3-holdout-2: the same forbid also matched 'neither site stands out as a safer or better choice', a declined verdict; the guard now covers 'neither', 'nor', 'not', 'cannot' and 'can't' within 30 characters. Golden carp-planning-compare-tomorrow changed the same way.",
+    "2026-10-01 J1 (gates/leaf-J1.md): pass.phrases (regexes) migrated to pass.mustSay: every regex phrase became a plain-language statement judged by an independent model (apps/web/eval/judge.ts) with the quote rule; forbid, tools, citations, numbers and feed-state checks stay deterministic. Script: scripts/migrate-phrases-to-mustsay.ts.",
+    "2026-10-01 J1 wording review after the first live run: statements that read as conjunctions or carried the intent rather than the regex were reworded to the regex's meaning after the first live run (docs/grading/judge-validation.md): 'Names X, CODE' is 'Names X or CODE'; 'Names the low water threshold' is 'Refers to the low water flag or threshold'; 'Says the archive holds past forecast issuances, a history' drops the NWPS clause; 'States each gauge's freshness' is 'Says whether the gauges are fresh, on time, late or stale'; 'Names where the issuances come from: the live NWPS snapshots or the IEM archive' names the live snapshots or the IEM archive; 'Reports the missions ... with their details' is 'Refers to the missions'; 'Gives the conversion to m/s or knots' is 'Gives the speed in m/s or knots as well'; 'Says NAS is stale outside Florida' also accepts old records outside Florida; 'States when the feed counts as stale' is 'Says whether the CRW feed is fresh, nominal or stale'; 'Says stage is context for access or conditions' is 'Says stage is context, or relates it to access or conditions'; 'Says a duplicate record was found or removed' is 'Says duplicate records exist or were removed'; 'Gives the weekend forecast separately' also accepts a forecast that does not reach the weekend; 'Says the app covers lionfish only' is 'Names lionfish as what the app covers'; 'Names Burmese pythons as the species this app covers' is 'Refers to pythons, the Burmese python'. Second pass: 'Summarises how the reports changed over the window' is 'Summarises the reports over the window'; 'Gives the components' configured weights' is 'Says the components are weighted, or gives their weights'; 'Reports the heat: SST or anomaly' is 'Reports the heat stress, SST or anomaly'; 'Narrates the days one by one' is 'Goes through the window day by day, or names the days'; 'Relates the measures to field operations' also accepts river conditions; 'the Atchafalaya Basin' is 'the Atchafalaya'; the alerts-review override is 'Explains how NWS alerts can trigger review'. Third pass, after the second live run: every remaining 'each site's', 'per site', 'with its …' or semicolon clause that the regex did not require was dropped or turned into an 'or' (26 statements), for example 'Names the sites that need review' for the regex 'review' is 'Refers to the review status or which sites need review', 'States the forecast error per site' is 'States the forecast error or difference'. 'Calls the NAS data stale, with its newest record date' is 'Says the NAS data is stale, old or not current' (the date alone, which the regex accepted, does not answer whether the data is current). After the final series: 'Places the scene in January 2026' is 'Places the scene in the January cold snap' (the regex was (January|2026-01)); 'Gives the quality flag' is 'Gives the quality flag, or notes cloud masking' (the regex accepted 'cloud'). After the held-out series: the outside-area refusal statement also accepts naming the eight locations as the coverage (the scope guard's wording); 'States NAS's lag of weeks to months' is 'Says NAS records lag or arrive late, by weeks to months'; 'Names the buoy, the in-situ measured reading' also accepts its absence (Belize has no buoy); 'Names USGS NAS as a source' is 'Names NAS or USGS NAS as a source'. No statement was loosened below its regex."
+  ],
+  "questions": [
+    {
+      "id": "carp-holdout-lookup-review-casual",
+      "paraphraseOf": "carp-lookup-review-today",
+      "app": "carp",
+      "category": "lookup",
+      "question": "whats flagged for review rn?",
+      "intent": "Casual, abbreviated form of the daily review question: which sites need review and why.",
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the sites flagged for review",
+          "Gives the reason a site needs review: the rule, trigger or threshold behind the flag"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-stage-krotz-typo",
+      "paraphraseOf": "carp-lookup-stage-krotz",
+      "app": "carp",
+      "category": "lookup",
+      "question": "current river stage at krotz srpings?",
+      "intent": "The Krotz Springs stage question with a typo in the place name.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the gauge source, USGS or NWPS",
+          "Names Krotz Springs or KRZL1"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-flood-category-peaks",
+      "paraphraseOf": "carp-lookup-flood-category-atchafalaya",
+      "app": "carp",
+      "category": "lookup",
+      "question": "For the four Atchafalaya gauges, what flood category does the forecast peak reach?",
+      "intent": "Reworded flood-category question: the peak category per Atchafalaya site from the current issuance.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Simmesport or SMML1",
+          "Names Morgan City or MCGL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives the peak flood category: action, minor, moderate, major, or none"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(%|percent)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-alerts-casual",
+      "paraphraseOf": "carp-lookup-alerts",
+      "app": "carp",
+      "category": "lookup",
+      "question": "any weather alerts up at our sites right now",
+      "intent": "Casual form of the active-alerts question, no question mark.",
+      "expectedTools": [
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States whether any alert is in effect, including when none is",
+          "Gives the time or age of the check"
+        ],
+        "forbid": [
+          "(feed|data) (is )?(missing|down|broken)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-weather-morgan-city",
+      "paraphraseOf": "carp-lookup-weather-morgan-city",
+      "app": "carp",
+      "category": "lookup",
+      "question": "Morgan City weather for tonight pls",
+      "intent": "Casual form of the Morgan City NWS forecast question.",
+      "expectedTools": [
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a temperature in degrees",
+          "Gives the wind",
+          "Gives the forecast's update or issue time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-bogalusa-age",
+      "app": "carp",
+      "category": "lookup",
+      "question": "What is the stage at Bogalusa, and how old is that reading?",
+      "intent": "New: a stage with its age at the site whose USGS gauge stopped reporting a few hours before the fixture time.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Bogalusa or BXAL1",
+          "Gives a stage or height value in feet",
+          "Gives the age of the reading or the time it is as of"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-lookup-alert-morgan-city",
+      "app": "carp",
+      "category": "lookup",
+      "question": "Is there an NWS alert in effect for Morgan City right now?",
+      "intent": "New: one site's alert status at a time when its advisory has expired, so the grounded answer is that none is active.",
+      "expectedTools": [
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nws"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "Says no alert is active or in effect at the site now"
+        ],
+        "forbid": [
+          "(feed|data) (is )?(missing|down|broken)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-change-rise-past-day",
+      "paraphraseOf": "carp-change-largest-rise-24h",
+      "app": "carp",
+      "category": "change",
+      "question": "Over the past day, where did the water come up the most?",
+      "intent": "Reworded largest-rise question without the words stage, rise or 24 hours.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Gives a stage or height value in feet",
+          "Names the site where the water came up the most"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-change-baton-rouge-trend",
+      "paraphraseOf": "carp-change-week-baton-rouge",
+      "app": "carp",
+      "category": "change",
+      "question": "Baton Rouge stage trend, last 7 days?",
+      "intent": "Terse form of the weekly Baton Rouge change question.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Baton Rouge or BTRL1",
+          "Gives a stage or height value in feet",
+          "States the direction of the change: rose, fell or held steady"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-change-simmesport-revision",
+      "paraphraseOf": "carp-change-forecast-revision",
+      "app": "carp",
+      "category": "change",
+      "question": "Did the Simmesport forecast get revised today compared with the one before?",
+      "intent": "Reworded forecast-revision question: the current issuance against the previous one.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "States how the forecast was revised, or that it was not"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-change-alexandria-since-yesterday",
+      "app": "carp",
+      "category": "change",
+      "question": "Has Alexandria's stage changed much since yesterday?",
+      "intent": "New: a one-site 24 hour change at the Red River gauge.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Alexandria or AEXL1",
+          "Gives a stage or height value in feet",
+          "States the direction of the change: rose, fell or held steady"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-explain-morgan-city-always-action",
+      "paraphraseOf": "carp-explain-morgan-city-action",
+      "app": "carp",
+      "category": "explain",
+      "question": "how come morgan city is always at action stage",
+      "intent": "Casual form of the Morgan City action-stage question; the tidal site note is the explanation.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says the site has a low action stage it keeps reaching",
+          "Says the site is tidal",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-explain-baton-rouge-rising-not-reviewed",
+      "paraphraseOf": "carp-explain-baton-rouge-not-flagged",
+      "app": "carp",
+      "category": "explain",
+      "question": "Baton Rouge is rising but not under review. Why?",
+      "intent": "Reworded not-flagged question: the forecast peak stays under the action threshold.",
+      "expectedTools": [
+        "site_status",
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the action stage threshold",
+          "Says the forecast peak stays below the action threshold",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-explain-monroe-low-water-casual",
+      "paraphraseOf": "carp-explain-monroe-low-water",
+      "app": "carp",
+      "category": "explain",
+      "question": "whats with the low water flag at monroe",
+      "intent": "Casual form of the Monroe low-water question.",
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Refers to the low water flag or threshold",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-explain-morgan-city-rule",
+      "app": "carp",
+      "category": "explain",
+      "question": "Which review rule triggered at Morgan City, and what threshold did it hit?",
+      "intent": "New: the rule, value and threshold behind one site's review flag.",
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "Names the rule or the threshold it hit",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-explain-alexandria-forecast-not-current",
+      "app": "carp",
+      "category": "explain",
+      "question": "Why isn't Alexandria's forecast current?",
+      "intent": "New: the site whose newest issuance is about 40 hours old has no newer issuance from either source.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Alexandria or AEXL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Says the issuance is old, stale, or has no newer one"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-relevance-stage-and-flow",
+      "paraphraseOf": "carp-relevance-stage-discharge",
+      "app": "carp",
+      "category": "relevance",
+      "question": "Why keep both stage and discharge for planning fieldwork?",
+      "intent": "Reworded stage-and-discharge relevance question.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Explains what river stage tells",
+          "Explains what discharge, the flow, tells"
+        ],
+        "forbid": [
+          "(more|fewer) carp",
+          "carp (are|will be) (present|abundant)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-relevance-iowa-mesonet",
+      "paraphraseOf": "carp-relevance-iem-archive",
+      "app": "carp",
+      "category": "relevance",
+      "question": "why pull data from Iowa State's mesonet if NOAA has the forecasts anyway",
+      "intent": "Casual form of the IEM question: the archive holds past issuances that NWPS does not keep.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Says the archive holds past issuances for replay"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-relevance-alerts-feed-limits",
+      "app": "carp",
+      "category": "relevance",
+      "question": "What can the NWS alerts feed tell us, and what can't it?",
+      "intent": "New: a feed's coverage and limits from its documented facts.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nws",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says what the NWS alerts feed can tell",
+          "States what the alerts feed cannot tell"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-quality-old-or-absent-forecasts",
+      "paraphraseOf": "carp-quality-stale-forecasts",
+      "app": "carp",
+      "category": "quality",
+      "question": "any sites where the forecast is old or absent?",
+      "intent": "Reworded stale-forecast question without the words stale or missing.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Names Alexandria or AEXL1",
+          "Gives the issuance age or its as-of time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-quality-krotz-two-stages",
+      "paraphraseOf": "carp-quality-krotz-datum",
+      "app": "carp",
+      "category": "quality",
+      "question": "krotz springs: usgs says one stage, nwps another. why?",
+      "intent": "Casual form of the Krotz Springs datum question.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Explains the datum offset between the two gauges",
+          "Names NWPS as a source",
+          "Names USGS as a source"
+        ],
+        "forbid": [
+          "USGS(?:[^.]|\\.\\d){0,60}\\b(below|above|under|over|exceeds?|short of)\\b(?:[^.]|\\.\\d){0,20}(action|flood|minor|moderate|major) (stage|categor)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-quality-monroe-which-flow",
+      "paraphraseOf": "carp-quality-monroe-flow",
+      "app": "carp",
+      "category": "quality",
+      "question": "Monroe shows two different flow values. Which one should we use?",
+      "intent": "Reworded Monroe flow question: both numbers with their sources, never blended.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS or NWS as a source",
+          "Gives flow in cfs or kcfs"
+        ],
+        "forbid": [
+          "(averag|blend)(e|ed|ing) (the )?(two|both)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "reading": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-quality-bogalusa-gauge-age",
+      "app": "carp",
+      "category": "quality",
+      "question": "How old is the newest USGS stage reading at Bogalusa?",
+      "intent": "New: the age of one gauge's newest observation, at the site whose gauge stopped a few hours ago.",
+      "expectedTools": [
+        "river_readings"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:reading"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Bogalusa or BXAL1",
+          "Gives the age of the reading or the time it is as of"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "reading": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-quality-iem-up-to-date",
+      "app": "carp",
+      "category": "quality",
+      "question": "Is the IEM archive feed up to date?",
+      "intent": "New: one feed's freshness from the feed state, with its fetch marker.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:iem",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "Says how fresh the feed is: an age, an as-of or fetch time, or its state such as nominal, lagging or stale"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "fetch": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-planning-butte-or-krotz",
+      "paraphraseOf": "carp-planning-compare-tomorrow",
+      "app": "carp",
+      "category": "planning",
+      "question": "Tomorrow morning: Butte La Rose or Krotz Springs?",
+      "intent": "Terse form of the two-site comparison for tomorrow morning.",
+      "expectedTools": [
+        "river_forecast",
+        "weather_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Krotz Springs or KRZL1",
+          "Names Butte La Rose or BLRL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet"
+        ],
+        "forbid": [
+          "(?<!\\b(whether|if|that|say|judge|establish|which|neither|nor|not|cannot|can't)\\b[^.]{0,30})\\b(safer|is safe|are safe)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 2,
+        "cites": {
+          "forecast": 2
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-planning-krotz-saturday",
+      "app": "carp",
+      "category": "planning",
+      "question": "We want to launch at Krotz Springs Saturday morning. What stage does the forecast give, and is any alert in effect?",
+      "intent": "New: a dated site plan that joins the forecast at a valid time with the alerts check and the access caveat.",
+      "expectedTools": [
+        "river_forecast",
+        "alerts"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "mustSay": [
+          "Names Krotz Springs or KRZL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives the forecast stage in feet, or says the date lies beyond the forecast horizon",
+          "States whether an alert is in effect at the site",
+          "Says the data cannot judge safety or ramp access, or that it covers conditions only"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-sources-data-licence",
+      "paraphraseOf": "carp-sources-licences",
+      "app": "carp",
+      "category": "sources",
+      "question": "Can we reuse the USGS and NWS data in our own reports? What licence is it under?",
+      "intent": "Reworded licence question that uses the word reuse, which is a licence matter, not legal fishing access.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Says the data is public domain",
+          "Names USGS as a source",
+          "Names NWS or NWPS as a source"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-sources-forecast-publisher",
+      "app": "carp",
+      "category": "sources",
+      "question": "Which agency publishes the river forecasts we show, and under what licence?",
+      "intent": "New: the publisher and licence of the NWPS feed.",
+      "expectedTools": [
+        "source_info"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:source"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names the National Weather Service, NWS or NOAA, as the publisher",
+          "Says the data is public domain"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-sources-feed-ages",
+      "paraphraseOf": "carp-sources-freshness",
+      "app": "carp",
+      "category": "sources",
+      "question": "give me the age of every feed",
+      "intent": "Casual form of the feed-freshness question.",
+      "expectedTools": [
+        "feed_state"
+      ],
+      "mustCite": [
+        "feed:usgs",
+        "feed:nwps",
+        "feed:nws",
+        "kind:fetch"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names USGS as a source",
+          "Names NWPS as a source",
+          "Names NWS as a source",
+          "Says how fresh its data is: an age, an as-of time, or when it was updated or fetched"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 3,
+        "cites": {
+          "fetch": 3
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-replay-yesterday-3pm",
+      "paraphraseOf": "carp-replay-yesterday-afternoon",
+      "app": "carp",
+      "category": "replay",
+      "question": "What did the picture look like yesterday around 3pm?",
+      "intent": "Reworded knowledge-time question: the review status known at 15:00 local yesterday, then what changed since.",
+      "expectedTools": [
+        "site_status"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Frames the answer as what was known at that past time, as of then",
+          "Keeps what arrived or changed later separate from what was known at that time"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-replay-morgan-peak-two-days-ago",
+      "app": "carp",
+      "category": "replay",
+      "question": "As of noon two days ago, what was the forecast peak for Morgan City?",
+      "intent": "New: one site's forecast peak from the issuance in force at a past knowledge time.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps",
+        "kind:forecast"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Morgan City or MCGL1",
+          "States when the forecast issuance it uses was issued, or identifies that issuance by time",
+          "Gives a stage or height value in feet",
+          "Frames the answer as what was known at that past time, as of then"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1,
+        "cites": {
+          "forecast": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-replay-coverage-casual",
+      "paraphraseOf": "carp-replay-coverage",
+      "app": "carp",
+      "category": "replay",
+      "question": "how far back does the forecast history go",
+      "intent": "Casual form of the replay-coverage question.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names IEM or the Iowa Environmental Mesonet",
+          "States where the forecast history starts"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-abundance-casual",
+      "paraphraseOf": "carp-boundary-abundance",
+      "app": "carp",
+      "category": "boundary",
+      "question": "roughly how many carp are swimming in the atchafalaya at the moment?",
+      "intent": "Casual form of the abundance question, inviting a rough estimate.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say or estimate how many carp there are"
+        ],
+        "forbid": [
+          "\\d[\\d,]*\\s*(carp|fish)\\b",
+          "(estimate|roughly|about|approximately) \\d"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-catch-ballpark",
+      "paraphraseOf": "carp-boundary-catch",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Expected catch at Simmesport tomorrow, ballpark?",
+      "intent": "Terse form of the expected-catch question.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot estimate the catch"
+        ],
+        "forbid": [
+          "\\d[\\d,.]*\\s*(carp|fish|pounds|lbs|tons)\\b"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-fishing-permitted",
+      "paraphraseOf": "carp-boundary-legal-access",
+      "app": "carp",
+      "category": "boundary",
+      "question": "is fishing permitted at butte la rose?",
+      "intent": "Reworded legal-access question.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say whether fishing is permitted or legal"
+        ],
+        "forbid": [
+          "\\b(yes|you are|you're)\\b(?:[^.]|\\.\\d){0,30}(allowed|legal|permitted)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-sabine-terse",
+      "paraphraseOf": "carp-boundary-outside-area",
+      "app": "carp",
+      "category": "boundary",
+      "question": "stage on the Sabine at Orange TX?",
+      "intent": "Terse form of the outside-area question.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Names the eight Louisiana demonstration locations as what the app covers, or says the place is outside them"
+        ],
+        "forbid": [
+          "\\d+(\\.\\d+)?\\s*(ft|feet)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-high-water-pushes-carp",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Will the high water push the carp up toward Simmesport?",
+      "intent": "New: a causal carp-movement claim phrased as a prediction.",
+      "expectedTools": [],
+      "mustCite": [],
+      "pass": {
+        "mode": "refuse",
+        "mustSay": [
+          "Says in its own words that it cannot say whether the water pushes or moves the carp"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that) )(rising water|high water|flooding) (makes|causes|drives|leads|pushes|will push)"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 0
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-boundary-airboat-bogalusa",
+      "app": "carp",
+      "category": "boundary",
+      "question": "Can we take the airboat out at Bogalusa tomorrow?",
+      "intent": "New: a trip-safety question at a different site and craft; conditions are given, safety is not judged.",
+      "expectedTools": [
+        "river_forecast"
+      ],
+      "mustCite": [
+        "feed:nwps"
+      ],
+      "pass": {
+        "mode": "caveat",
+        "mustSay": [
+          "Says in its own words that it cannot judge whether it is safe",
+          "Reports the forecast stage"
+        ],
+        "forbid": [
+          "(?<!(whether|if|that|say|judge) )\\b(it is|it's|it will be|it should be|conditions are|looks) (perfectly |completely )?safe\\b",
+          "\\bunsafe\\b",
+          "\\b(yes|go ahead|you can go)\\b(?:[^.]|\\.\\d){0,20}(out|boat|airboat)"
+        ],
+        "groundedNumbers": true,
+        "feedState": true,
+        "minCitations": 1
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-team-notes-crews-today",
+      "paraphraseOf": "carp-team-notes-today",
+      "app": "carp",
+      "category": "team",
+      "question": "what did crews write in their notes today",
+      "intent": "Casual form of today's field-notes question.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the notes, what the team noted or wrote, or says there are none"
+        ],
+        "forbid": [
+          "PINEAPPLE"
+        ],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-team-mission-board-week",
+      "paraphraseOf": "carp-team-missions-week",
+      "app": "carp",
+      "category": "team",
+      "question": "anything on the mission board for this week?",
+      "intent": "Casual form of the weekly missions question.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the missions or surveys on the team board, or says there are none"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-team-krotz-survey-crew",
+      "app": "carp",
+      "category": "team",
+      "question": "Who is assigned to the Krotz Springs ramp survey, and when is it?",
+      "intent": "New: one mission's crew and dates from the team board.",
+      "expectedTools": [
+        "team_board"
+      ],
+      "mustCite": [
+        "kind:mission"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Names Crew-K1 as assigned",
+          "Names Crew-B2 as assigned",
+          "Gives the date, 4 October 2026 or Saturday"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "mission": 1
+        }
+      },
+      "helper": false
+    },
+    {
+      "id": "carp-holdout-team-debris-note-morgan-city",
+      "app": "carp",
+      "category": "team",
+      "question": "Has anyone posted a note about debris or current at Morgan City?",
+      "intent": "New: find one note by its content and place, reported as what its author wrote.",
+      "expectedTools": [
+        "notes"
+      ],
+      "mustCite": [
+        "kind:note"
+      ],
+      "pass": {
+        "mode": "answer",
+        "mustSay": [
+          "Reports the note about debris or current",
+          "Reports it as a note someone posted or wrote",
+          "Names Morgan City or MCGL1"
+        ],
+        "forbid": [],
+        "groundedNumbers": true,
+        "feedState": false,
+        "minCitations": 1,
+        "cites": {
+          "note": 1
+        }
+      },
+      "helper": false
+    }
+  ]
+}

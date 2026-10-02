@@ -1,0 +1,178 @@
+/**
+ * Golden questions for the live agent eval, asked against the fixture GraphQL
+ * stub (eval/stub-server.ts). Each lists the tools a good analyst must call,
+ * statements the answer must make (`mustSay`, judged semantically by eval/judge.ts),
+ * forbidden patterns, and how many verified citations it needs.
+ */
+
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { supportedQuestions, type QuestionFile } from "@/shared/apps/questions";
+
+export type Golden = {
+  id: string;
+  question: string;
+  /** One of the 5 data-quality questions. */
+  quality: boolean;
+  /** Question category (spec/apps/questions/*.json); python's hand-written set has none. */
+  category?: string;
+  /** answer, caveat (answer plus a stated limit) or refuse. */
+  mode?: "answer" | "caveat" | "refuse";
+  /** `feed:<source>` and `kind:<evidence kind>` the citations must cover. */
+  mustCite?: string[];
+  /** Injected into the view: `selectedSite` (an NWPS lid), `asOf` (RFC 3339), `replay`. */
+  context?: Record<string, string>;
+  /** Plain-language statements the answer must make, judged semantically (eval/judge.ts) with the quote rule. */
+  mustSay: string[];
+  expect: {
+    tools: string[];
+    forbid?: RegExp[];
+    minCitations: number;
+    /** Citations of these evidence kinds the answer needs, e.g. `{ sighting: 2 }`: fetch-run citations alone do not answer a count. */
+    cites?: Record<string, number>;
+    view?: boolean;
+    /** Every number in the answer must trace to a tool output (default true for file-loaded sets). */
+    groundedNumbers?: boolean;
+    /** The answer must say how fresh its data is. */
+    feedState?: boolean;
+  };
+};
+
+export const GOLDEN: Golden[] = [
+  {
+    id: "python-crews-tonight",
+    question: "Where should python crews go tonight?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["hotspots", "explain_cell", "conditions"], minCitations: 3 },
+  },
+  {
+    id: "biscayne-dive-conditions",
+    question: "What are dive conditions at Biscayne for lionfish removal right now?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["geocode", "conditions", "set_view"], minCitations: 3, view: true },
+  },
+  {
+    id: "florida-bay-alerts",
+    question: "Any NWS alerts in effect for Florida Bay right now?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["geocode", "alerts"], minCitations: 1, cites: { alert: 1 } },
+  },
+  {
+    id: "python-backtest",
+    question: "How well have the python hotspot scores held up over the last two weeks?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["backtest"], minCitations: 1, cites: { backtest: 1 } },
+  },
+  {
+    id: "explain-top-python-cell",
+    question: "Why does the top python cell score so high tonight?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["hotspots", "explain_cell"], minCitations: 1 },
+  },
+  {
+    id: "lionfish-key-largo",
+    question: "Where should lionfish divers work near Key Largo, and is the sea state OK?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["geocode", "hotspots", "conditions"], minCitations: 3 },
+  },
+  {
+    id: "homestead-species-counts",
+    question: "What invasive animals were seen near Homestead this week?",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["geocode", "species_counts"], minCitations: 1 },
+  },
+  {
+    id: "flamingo-view",
+    question: "Take me to Flamingo.",
+    quality: false,
+    mustSay: [],
+    expect: { tools: ["geocode", "set_view"], minCitations: 0, view: true },
+  },
+  {
+    id: "quality-stale-feeds",
+    question: "Which data feeds are stale or down right now?",
+    quality: true,
+    mustSay: [],
+    expect: { tools: ["feed_state"], minCitations: 3, cites: { fetch: 3 } },
+  },
+  {
+    id: "quality-conflict-biscayne-sst",
+    question: "Satellite says Biscayne water is warm but the buoy disagrees. Which is right?",
+    quality: true,
+    mustSay: [],
+    expect: { tools: ["geocode", "conditions"], minCitations: 2 },
+  },
+  {
+    id: "quality-duplicates-shark-valley",
+    question: "How many distinct pythons were reported around Shark Valley this week?",
+    quality: true,
+    // Duplicate and late in one: the NAS copy of an iNaturalist python arrived 2.2 days after the sighting.
+    mustSay: [],
+    expect: { tools: ["geocode", "sightings"], minCitations: 2, cites: { sighting: 2 } },
+  },
+  {
+    id: "quality-missing-lst",
+    question: "What is the land surface temperature at Shark Valley right now?",
+    quality: true,
+    mustSay: [],
+    expect: { tools: ["geocode", "conditions"], minCitations: 2 },
+  },
+];
+
+export type { QuestionFile };
+
+/** A question file as goldens: `pass` regexes compiled case-insensitively, `view` meaning a view event is required. */
+export function goldenFromFile(file: QuestionFile): Golden[] {
+  return file.questions.map((q) => ({
+    id: q.id,
+    question: q.question,
+    quality: q.category === "quality",
+    category: q.category,
+    mode: q.pass.mode,
+    mustCite: q.mustCite,
+    context: q.context,
+    mustSay: q.pass.mustSay ?? [],
+    expect: {
+      tools: q.expectedTools,
+      forbid: q.pass.forbid.map((p) => new RegExp(p, "i")),
+      minCitations: q.pass.minCitations,
+      cites: q.pass.cites,
+      view: Boolean(q.view?.map) && q.expectedTools.includes("set_view"),
+      groundedNumbers: q.pass.groundedNumbers,
+      feedState: q.pass.feedState,
+    },
+  }));
+}
+
+/**
+ * Golden sets by id (an app's `eval.goldenSet`, PLAN.md C-A3): each app's question file (the source of truth for
+ * ids, categories, tools and pass criteria). The hand-written `GOLDEN` above is python's legacy set, kept so the
+ * question checker can verify every legacy case was mapped (`py-legacy-<id>`).
+ */
+export const GOLDEN_SETS: Readonly<Record<string, readonly Golden[]>> = {
+  python: goldenFromFile({ app: "python", questions: supportedQuestions("python") }),
+  lionfish: goldenFromFile({ app: "lionfish", questions: supportedQuestions("lionfish") }),
+  carp: goldenFromFile({ app: "carp", questions: supportedQuestions("carp") }),
+};
+
+/**
+ * An app's held-out set (`spec/apps/questions/<app>.holdout.json`): paraphrases and new questions the prompts never
+ * saw, in the question-file schema plus a `changelog`. Read at run time, never bundled, so it stays out of every
+ * prompt and tool description.
+ */
+export function holdoutSet(app: string): Golden[] {
+  const path = resolve(import.meta.dir, `../../../spec/apps/questions/${app}.holdout.json`);
+  if (!existsSync(path)) return [];
+  return goldenFromFile(JSON.parse(readFileSync(path, "utf8")) as QuestionFile);
+}
+
+/** The ten question categories, in the order the eval prints them. */
+export const CATEGORIES = ["lookup", "change", "explain", "relevance", "quality", "planning", "sources", "replay", "boundary", "team"] as const;

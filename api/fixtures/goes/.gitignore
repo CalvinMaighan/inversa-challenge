@@ -1,0 +1,2 @@
+# The SSTF full-disk file is ~26 MB; fetch.sh downloads it on demand.
+OR_ABI-L2-SSTF-*.nc

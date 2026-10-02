@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-10-01T13:40:00Z",
+  "files": [
+    {
+      "file": "modified-p1.json",
+      "url": "https://api.gbif.org/v1/occurrence/search?decimalLatitude=24.3,27.5&decimalLongitude=-83.2,-79.8&taxonKey=4820533&occurrenceStatus=PRESENT&hasCoordinate=true&hasGeospatialIssue=false&modified=2026-09-01,*&limit=20&offset=0"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "name": "message-thread",
+  "ops": [
+    {
+      "id": "op-0101",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm1",
+      "field": "body",
+      "value": { "body": "on my way to the canal gate", "to": "b", "thread": "dm:a~b" },
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0102",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm2",
+      "field": "body",
+      "value": { "body": "copy, meet you there", "to": "a", "thread": "dm:a~b" },
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0103",
+      "hlc": "1700000000150:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "team1",
+      "field": "body",
+      "value": "team: heading out",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0104",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "message",
+      "entityId": "dm1",
+      "field": "body",
+      "value": { "body": "edited later, ignored", "to": "b", "thread": "dm:a~b" },
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {},
+    "messages": [
+      { "id": "dm1", "body": "on my way to the canal gate", "hlc": "1700000000100:0:a", "to": "b", "thread": "dm:a~b" },
+      { "id": "team1", "body": "team: heading out", "hlc": "1700000000150:0:a" },
+      { "id": "dm2", "body": "copy, meet you there", "hlc": "1700000000200:0:b", "to": "a", "thread": "dm:a~b" }
+    ],
+    "removals": {}
+  }
+}

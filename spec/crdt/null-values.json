@@ -1,0 +1,57 @@
+{
+  "name": "null-values",
+  "ops": [
+    {
+      "id": "op-0060",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Cull",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0061",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "lead",
+      "value": "Ana",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0062",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "lead",
+      "value": null,
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0063",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "due",
+      "value": null,
+      "nodeId": "a"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m1": {
+        "title": "Cull",
+        "lead": null,
+        "due": null
+      }
+    },
+    "notes": {},
+    "messages": [],
+    "removals": {}
+  }
+}

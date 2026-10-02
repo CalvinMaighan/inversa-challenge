@@ -1,0 +1,476 @@
+@property --tilt {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --lift {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --glow {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #e8e4dc;
+  --ink: #1c1917;
+  --muted: #57534e;
+  --panel: #f5f2eb;
+  --column: #ddd6c8;
+  --card: #fffcf5;
+  --line: #a8a29e;
+  --accent: #0f766e;
+  --accent-ink: #ecfdf5;
+  --shadow: 0 1px 0 rgb(28 25 23 / 8%);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938, 1.017, 1.077, 1.057, 0.996, 1);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--ink);
+  transition:
+    background-color 0.5s var(--ease-out),
+    color 0.5s var(--ease-out);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1917;
+  --ink: #f5f5f4;
+  --muted: #a8a29e;
+  --panel: #292524;
+  --column: #44403c;
+  --card: #35302c;
+  --line: #57534e;
+  --accent: #2dd4bf;
+  --accent-ink: #042f2e;
+  --shadow: 0 1px 0 rgb(0 0 0 / 35%);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.45s;
+  animation-timing-function: var(--ease-out);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      1200px 500px at 10% -10%,
+      color-mix(in oklab, var(--accent) 22%, transparent),
+      transparent
+    ),
+    radial-gradient(
+      900px 420px at 90% 0%,
+      color-mix(in oklab, var(--accent) 10%, transparent),
+      transparent
+    ),
+    var(--bg);
+  transition: background 0.5s var(--ease-out);
+}
+
+:root.is-dragging body,
+:root.is-dragging {
+  cursor: grabbing;
+}
+
+:root.is-dragging .card:not(.dragging) {
+  opacity: 0.72;
+  filter: saturate(0.85);
+  transition:
+    opacity 180ms var(--ease-out),
+    filter 180ms var(--ease-out),
+    transform 180ms var(--ease-out);
+}
+
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  letter-spacing: -0.03em;
+}
+
+.lede {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  max-width: 36rem;
+  transition: color 0.4s var(--ease-out);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+button,
+.btn {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  border-radius: 0.35rem;
+  transition:
+    transform 160ms var(--ease-out),
+    background-color 220ms var(--ease-out),
+    border-color 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out),
+    filter 160ms var(--ease-out);
+}
+
+button:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
+
+.column {
+  --glow: 0;
+  interpolate-size: allow-keywords;
+  background: color-mix(in oklab, var(--column) 92%, var(--panel));
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  padding: 0.65rem;
+  box-shadow:
+    var(--shadow),
+    0 0 0 calc(var(--glow) * 2px) color-mix(in oklab, var(--accent) 35%, transparent);
+  transition:
+    transform 220ms var(--ease-out),
+    background-color 280ms var(--ease-out),
+    border-color 280ms var(--ease-out),
+    box-shadow 280ms var(--ease-out),
+    --glow 280ms var(--ease-out);
+}
+
+/* Chromium: animate height 0 → auto on ::details-content (FF/Safari may snap). */
+.column::details-content {
+  height: 0;
+  overflow: clip;
+  padding-top: 6px;
+  transition:
+    height 0.28s var(--ease-out),
+    content-visibility 0.28s allow-discrete;
+}
+
+.column[open]::details-content {
+  height: auto;
+}
+
+.column:nth-child(1) {
+  transition-delay: 0ms, 0ms, 0ms, 0ms, 0ms;
+}
+
+.column:nth-child(2) {
+  transition-delay: 40ms, 40ms, 40ms, 40ms, 40ms;
+}
+
+.column:nth-child(3) {
+  transition-delay: 80ms, 80ms, 80ms, 80ms, 80ms;
+}
+
+.column.drag-over {
+  --glow: 1;
+  background: color-mix(in oklab, var(--column), var(--accent) 16%);
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--line));
+  transform: scale(1.015);
+}
+
+.column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1rem 0.15rem 0.55rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.column-head::-webkit-details-marker,
+.column-head::marker {
+  display: none;
+  content: "";
+}
+
+.column-head::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.28s var(--ease-out);
+  flex-shrink: 0;
+}
+
+.column[open] > .column-head::after {
+  transform: rotate(-135deg);
+  translate: 0 0.15rem;
+}
+
+.column-head h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.count {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s var(--ease-out);
+}
+
+.cards {
+  interpolate-size: allow-keywords;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+
+/*
+ * Idle empty column: card-sized slot with no paint (keeps layout / drop target).
+ * Not used while a .dragging ghost occupies the list.
+ */
+.cards:not(:has(.card))::before {
+  content: "";
+  display: block;
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  /* intentionally no background, border, or shadow */
+}
+
+.card {
+  --tilt: 0deg;
+  --lift: 0px;
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.75rem;
+  cursor: grab;
+  user-select: none;
+  transform-origin: center center;
+  transform: translateY(var(--lift)) rotate(var(--tilt)) scale(1);
+  box-shadow:
+    var(--shadow),
+    0 8px 20px rgb(0 0 0 / 0%);
+  opacity: 1;
+  transition:
+    transform 280ms var(--ease-out),
+    opacity 240ms var(--ease-out),
+    box-shadow 240ms var(--ease-out),
+    background-color 400ms var(--ease-out),
+    border-color 400ms var(--ease-out),
+    --tilt 180ms var(--ease-out),
+    --lift 180ms var(--ease-out),
+    display 280ms allow-discrete,
+    overlay 280ms allow-discrete;
+}
+
+/* Soft settle only for newly mounted each-items (class set in bindEach) */
+@starting-style {
+  .each-enter {
+    opacity: 0.2;
+    transform: translateY(8px) rotate(-2deg) scale(0.97);
+  }
+}
+
+.card:hover {
+  --lift: -2px;
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--line));
+  box-shadow:
+    var(--shadow),
+    0 10px 22px color-mix(in oklab, var(--ink) 8%, transparent);
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+/*
+ * Ghost: picked-up card’s slot (always, including last card in a column).
+ * Keep full size so HTML5 DnD isn’t cancelled.
+ */
+.card.dragging {
+  cursor: grabbing;
+  color: transparent;
+  background: color-mix(in oklab, var(--column) 35%, transparent);
+  border: 1.5px dashed color-mix(in oklab, var(--accent) 50%, var(--line));
+  box-shadow: none;
+  transform: none !important;
+  opacity: 1;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 80ms ease;
+}
+
+.card.dragging > * {
+  visibility: hidden;
+}
+
+/* Live pointer-following clone (not setDragImage — that drops CSS rotate) */
+.card.drag-ghost {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--card), var(--accent) 8%);
+  border: 1px solid color-mix(in oklab, var(--accent) 50%, var(--line));
+  border-radius: 0.5rem;
+  padding: 0.7rem 0.75rem;
+  box-shadow:
+    0 18px 40px color-mix(in oklab, var(--ink) 22%, transparent),
+    0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
+  cursor: grabbing;
+  transition: none !important;
+  will-change: transform;
+}
+
+.card.drag-ghost > * {
+  visibility: visible;
+  color: inherit;
+}
+
+.card.drag-ghost::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--accent) 18%, transparent),
+    transparent 55%
+  );
+  opacity: 0.85;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.add {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.cards:has(.card:not(.dragging)) + .add {
+  margin-top: 0.65rem;
+}
+
+.add input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--panel);
+  color: var(--ink);
+  transition:
+    border-color 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out),
+    background-color 300ms var(--ease-out);
+}
+
+.add input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+.footnote {
+  margin-top: 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+code {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.88em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  body,
+  .column,
+  .column::details-content,
+  .column-head::after,
+  .card,
+  button,
+  .add input,
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  .card,
+  .card.dragging,
+  .card.drag-ghost,
+  .card:hover,
+  .column.drag-over {
+    transform: none;
+  }
+
+  @starting-style {
+    .each-enter {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}

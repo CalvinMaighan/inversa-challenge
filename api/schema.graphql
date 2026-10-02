@@ -1,0 +1,722 @@
+"""RFC 3339 timestamp."""
+scalar Time
+"""Arbitrary JSON value."""
+scalar JSON
+
+input BBox {
+  west: Float!
+  south: Float!
+  east: Float!
+  north: Float!
+}
+
+"""How a feed reaches us: PUSH (SQS, XMPP), POLL, or WEBHOOK (polled as a backstop, woken by an unsigned provider call)."""
+enum FeedMode { PUSH POLL WEBHOOK }
+enum FeedHealth { NOMINAL LAGGING STALE DOWN }
+enum Quality { RESEARCH NEEDS_ID CASUAL CURATED }
+enum Param { LST_C AIR_C WATER_C SST_C RAIN_MM STAGE_M WAVE_M WIND_MS FIRE_FRP SST SST_ANOMALY DHW BAA WAVE_PERIOD_S CURRENT_MS CURRENT_DIR_DEG DISCHARGE_CFS POP_PCT WIND_GUST_MS }
+enum ReadingOrigin { MEASURED SATELLITE MODELED }
+enum ReadingFlag { OK CLOUD BAD_DQF MISSING }
+
+type FeedState {
+  source: String!
+  mode: FeedMode!
+  state: FeedHealth!
+  newestObservedAt: Time
+  lastFetchAt: Time
+  """`fetch_runs.id` of the latest run; cite it as `fetch:<id>`."""
+  lastFetchRunId: ID
+  lagSeconds: Int
+  note: String
+}
+
+"""One feed of the app (`sources`, `sourceInfo`; cite as `source:<feed>`): publisher facts and how it runs now."""
+type SourceInfo {
+  feed: ID!
+  name: String!
+  publisher: String!
+  mode: FeedMode!
+  """A provider call to `/v1/{app}/ingest/nudge/{feed}/{token}` wakes it."""
+  nudge: Boolean!
+  """The feed's data cadence (what feed state measures lag against)."""
+  cadenceSeconds: Int!
+  """Seconds between fetches of the running poll loop; null for push or stopped feeds."""
+  pollSeconds: Int
+  cadence: String!
+  maxLatencySeconds: Int!
+  expectedLatency: String!
+  """Median fetch-to-commit time over the last 20 fetch runs."""
+  observedFetchSeconds: Float
+  """Now minus the newest observation the feed delivered."""
+  observedLagSeconds: Int
+  licence: String!
+  attribution: String!
+  doi: String
+  rateLimit: String!
+  apiUrl: String!
+  pageUrl: String!
+  coverage: String!
+  limits: [String!]!
+  """Poll feeds: the push search that came up empty."""
+  whyPoll: String
+  lastFetchAt: Time
+  lastFetchStatus: String
+  lastFetchRunId: ID
+  state: FeedHealth
+  note: String
+}
+
+type Taxon {
+  id: ID!
+  scientificName: String!
+  commonName: String!
+  focus: Boolean!
+  """iNaturalist taxon id; null for taxa only GBIF or NAS have reported."""
+  inatTaxonId: ID
+  """The taxon's page at iNaturalist, for a new-tab link."""
+  pageUrl: String
+}
+
+"""Distinct sightings of the app's species in a window."""
+type SpeciesCount {
+  taxon: Taxon!
+  count: Int!
+  """The newest sighting counted, citable as `sighting:<id>`."""
+  latestSightingId: ID
+}
+
+type Sighting {
+  id: ID!
+  source: String!
+  extId: String!
+  taxon: Taxon!
+  lat: Float!
+  lon: Float!
+  accuracyM: Float
+  observedAt: Time!
+  quality: Quality!
+  photoUrl: String
+  canonicalId: ID
+  conflict: Boolean!
+  """
+  When the record was first stored. `ingestedAt - observedAt` is its ingest lag; over 24 h
+  the record is late (frame flag 4).
+  """
+  ingestedAt: Time!
+}
+
+type Station {
+  id: ID!
+  source: String!
+  name: String!
+  lat: Float!
+  lon: Float!
+  kind: String!
+}
+
+type Reading {
+  station: Station!
+  param: Param!
+  value: Float
+  flag: ReadingFlag!
+  observedAt: Time!
+  origin: ReadingOrigin!
+}
+
+type Alert {
+  id: ID!
+  event: String!
+  severity: String!
+  headline: String
+  areaGeojson: JSON
+  onset: Time
+  expires: Time
+}
+
+type FrameChunk {
+  from: Time!
+  to: Time!
+  stepMinutes: Int!
+  frameCount: Int!
+  """Base64 of EVF2 (PLAN.md C4), at most 24 frames. Bulk frames: GET /v1/frames."""
+  data: String!
+}
+
+# ---------------------------------------------------------------------------------------------
+# Survey priority components (L5, PLAN.md P3). A component app (Lionfish Watch: `score.components`
+# recentReports, idQuality, heatStress, completeness) returns each component separately in [0, 1]
+# with its own state and inputs; `rankScore` is a configurable weighted mean of the first three
+# that only orders cells. There is no risk, probability or percent field anywhere here.
+# ---------------------------------------------------------------------------------------------
+
+"""UNKNOWN and STALE carry a null value: unknown is not zero."""
+enum ComponentState { OK UNKNOWN STALE }
+"""What a frame at `at` knew: SUBMITTED (default; iNat created_at, else ingest time) or OBSERVED."""
+enum HotspotBasis { SUBMITTED OBSERVED }
+
+"""Per-query rank weight overrides; each finite and >= 0, not all 0. Missing ones keep the config."""
+input HotspotWeightsInput {
+  recentReports: Float
+  idQuality: Float
+  heatStress: Float
+}
+
+"""The rank weights in force. completeness never has one."""
+type HotspotWeights {
+  recentReports: Float!
+  idQuality: Float!
+  heatStress: Float!
+}
+
+"""One input of a component: a C14 record id with its dates and how it counted."""
+type HotspotEvidence {
+  id: ID!
+  kind: String!
+  observedAt: Time
+  submittedAt: Time
+  ingestedAt: Time
+  """Weight in the component; null when the record did not count (duplicate, out of window)."""
+  weight: Float
+  detail: String!
+  """Photo (sightings) or product DOI (CRW)."""
+  url: String
+}
+
+"""One of the four priority components of a cell, in [0, 1] with its own state and inputs."""
+type HotspotComponent {
+  id: ID!
+  """Null when the state is UNKNOWN or STALE."""
+  value: Float
+  state: ComponentState!
+  """Weight in rankScore (0 for completeness, which never ranks)."""
+  weight: Float!
+  rationale: String!
+  """C14 ids of the records that counted (sighting:<id>, reading:<station>:<param>:<ms>:satellite), or notes."""
+  inputs: [String!]!
+  """Every record in reach with dates and weights; filled by explainCell, empty in hotspots."""
+  evidence: [HotspotEvidence!]!
+}
+
+type HotspotComponents {
+  recentReports: HotspotComponent!
+  idQuality: HotspotComponent!
+  heatStress: HotspotComponent!
+  completeness: HotspotComponent!
+}
+
+"""NOAA Coral Reef Watch values at the cell's 5 km pixel. DHW (accumulated) and BAA (current alert level) can disagree and are both shown."""
+type HeatStress {
+  """Degree heating weeks, °C-weeks."""
+  dhw: Float
+  """Bleaching alert area level 0-4."""
+  baa: Float
+  sst: Float
+  anomaly: Float
+  """Product day (12:00Z)."""
+  observedAt: Time!
+  ingestedAt: Time!
+  """stations.id of the pixel; cite reading:<station>:<param>:<observedAt ms>:satellite."""
+  station: ID!
+  credit: String!
+}
+
+"""Field conditions over the next 72 h from the nearest Open-Meteo Marine point (newest run issued by `at`). Planning context; never part of rankScore."""
+type FieldWindow {
+  state: ComponentState!
+  issuedAt: Time
+  waveMaxM: Float
+  waveMinM: Float
+  """Forecast hours with waves under 1.2 m."""
+  calmHours: Int
+  horizonHours: Int!
+  currentMaxMs: Float
+  station: ID!
+}
+
+type HotspotCell {
+  cell: ID!
+  lat: Float!
+  lon: Float!
+  """density × activity × access (python), or rankScore for a component app."""
+  score: Float!
+  """Component apps only; null for python."""
+  regionId: ID
+  """Weighted mean of recentReports, idQuality and heatStress: orders cells, nothing more. recentReports is normalised per region, so pass `region` to rank within one."""
+  rankScore: Float
+  """Too few recent independent reports (or configured thin): low confidence."""
+  thin: Boolean
+  components: HotspotComponents
+  heat: HeatStress
+  fieldWindow: FieldWindow
+}
+
+type HotspotGrid {
+  species: ID!
+  at: Time!
+  cells: [HotspotCell!]!
+  """Component apps only."""
+  weights: HotspotWeights
+  basis: HotspotBasis
+}
+
+type HotspotTerm {
+  name: String!
+  value: Float!
+  rationale: String!
+}
+
+type HotspotExplain {
+  cell: ID!
+  species: ID!
+  at: Time!
+  score: Float!
+  """Python's multiplicative terms; empty for a component app."""
+  terms: [HotspotTerm!]!
+  """Component apps only: every component with its records, the CRW values, the field window."""
+  regionId: ID
+  rankScore: Float
+  thin: Boolean
+  components: HotspotComponents
+  heat: HeatStress
+  fieldWindow: FieldWindow
+  weights: HotspotWeights
+  basis: HotspotBasis
+  """Honesty caveats the answer must carry (sightings are not abundance; heat stress is context; no causal claim)."""
+  caveats: [String!]!
+  credit: String
+}
+
+type BacktestDay {
+  day: Time!
+  sightings: Int!
+  hits: Int!
+}
+
+type Backtest {
+  species: ID!
+  days: Int!
+  hitRate: Float!
+  baseline: Float!
+  perDay: [BacktestDay!]!
+  """Days after each evaluation day in which a report counts (1 for python, 7 for lionfish)."""
+  horizonDays: Int!
+  evaluated: Int!
+  hits: Int!
+  """Regions with too little data to score (thin): reported, not scored."""
+  insufficientRegions: [ID!]!
+  note: String
+}
+
+"""One AIS fix (GE4). sog in knots, cog and heading in degrees true; null when not available."""
+type VesselPoint {
+  at: Time!
+  lat: Float!
+  lon: Float!
+  sog: Float
+  cog: Float
+  heading: Float
+}
+
+"""A vessel and its fixes in the window, oldest first (GE4). Evidence id vessel:<mmsi>."""
+type VesselTrack {
+  mmsi: ID!
+  name: String
+  """cargo, tanker, passenger, fishing, tug, pleasure, highspeed, service, other or unknown"""
+  type: String!
+  points: [VesselPoint!]!
+}
+
+type EvidenceLink {
+  id: ID!
+  relation: String!
+  source: String!
+}
+
+type Evidence {
+  id: ID!
+  kind: String!
+  record: JSON!
+  raw: JSON
+  rawKey: String
+  sourceUrl: String
+  """Publisher web page for this record, for a new-tab link (PLAN.md C19). Null when none exists."""
+  sourcePageUrl: String
+  fetchedAt: Time
+  ingestLagSeconds: Int
+  feed: FeedState
+  links: [EvidenceLink!]!
+}
+
+type Op {
+  seq: Int!
+  id: ID!
+  hlc: String!
+  boardId: ID!
+  entity: String!
+  entityId: ID!
+  field: String!
+  value: JSON
+  nodeId: String!
+}
+
+input OpInput {
+  id: ID!
+  hlc: String!
+  entity: String!
+  entityId: ID!
+  field: String!
+  value: JSON
+  nodeId: String!
+}
+
+type ApplyResult {
+  applied: Int!
+  duplicates: Int!
+  lastSeq: Int!
+}
+
+type Mission {
+  id: ID!
+  fields: JSON!
+}
+
+type Message {
+  id: ID!
+  body: String!
+  hlc: String!
+  nodeId: String!
+  to: String
+  thread: String
+}
+
+type Board {
+  id: ID!
+  lastSeq: Int!
+  missions: [Mission!]!
+  notes: [Mission!]!
+  messages: [Message!]!
+  removals: JSON!
+}
+
+type FrameRange {
+  from: Time!
+  to: Time!
+}
+
+# ---------------------------------------------------------------------------------------------
+# Forecast store (C3): `forecasts`, `forecastVerify`, `siteStatusAt`. Conditions apps only; a
+# species app answers with error code NOT_CONDITIONS_APP. Sites are NWPS ids of configured
+# locations (`locations[].nwps`); an unknown one is UNKNOWN_SITE. Stage is NWPS feet, flow kcfs.
+# ---------------------------------------------------------------------------------------------
+
+"""NWPS flood category, from NWPS stage thresholds only ("at or above")."""
+enum FloodCategory { NONE ACTION MINOR MODERATE MAJOR }
+"""
+NWPS_LIVE rows were captured by this process (as-of views gate them by ingestion time);
+IEM_ARCHIVE rows were backfilled from the Iowa Environmental Mesonet HML archive (gated by
+issuance time only); NWS_GRIDPOINT rows come from api.weather.gov.
+"""
+enum ForecastSource { NWPS_LIVE IEM_ARCHIVE NWS_GRIDPOINT }
+"""
+Age band at the as-of time. Observations: FRESH <= 2 h, AGING <= 6 h, else STALE.
+Forecasts: FRESH <= 24 h since issuance, AGING <= 36 h, else STALE. MISSING: nothing known.
+"""
+enum Freshness { FRESH AGING STALE MISSING }
+
+type FloodThresholds {
+  actionFt: Float
+  minorFt: Float
+  moderateFt: Float
+  majorFt: Float
+  """NWPS low-water threshold (`lowThreshold`), feet; not a flood category."""
+  lowFt: Float
+}
+
+type ForecastPoint {
+  validAt: Time!
+  stageFt: Float
+  flowKcfs: Float
+  """Null when the stage or the site's thresholds were unknown when stored."""
+  category: FloodCategory
+}
+
+"""One forecast issuance as stored. Cite as `forecast:<id>`."""
+type ForecastSnapshot {
+  id: ID!
+  site: ID!
+  """`stageflow` (NWPS API), `hml` (IEM archive), ..."""
+  product: String!
+  issuedAt: Time!
+  ingestedAt: Time!
+  source: ForecastSource!
+  payloadHash: String!
+  """0 for the first payload of an issuance; a changed payload with the same issuedAt is 1, 2, ... (all kept)."""
+  revision: Int!
+  validFrom: Time
+  validTo: Time
+  horizonEnd: Time
+  peakStageFt: Float
+  peakAt: Time
+  peakCategory: FloodCategory
+  points: [ForecastPoint!]!
+}
+
+"""What was known about a site's forecast at `asOf`."""
+type ForecastView {
+  site: ID!
+  asOf: Time!
+  """The forecast in force at asOf: greatest issuance at or before asOf that was captured (live) or public (archive) by then."""
+  snapshot: ForecastSnapshot
+  """River issuances known at asOf, newest first, at most `history`."""
+  history: [ForecastSnapshot!]!
+  """The newest NWS gridpoint weather run known at asOf (product gridpoint, no stage points): issuedAt is the office's updateTime, ingestedAt our fetch. Null when none."""
+  weatherRun: ForecastSnapshot
+  """The first asOf with a forecast: when the earliest stored snapshot became knowable (archive rows at issuance, live rows when captured)."""
+  replayCoverageStart: Time
+  """First live capture by this process; before it every forecast is an archive copy."""
+  liveCoverageStart: Time
+  snapshotCount: Int!
+}
+
+"""An observed NWPS value (stage on the NWPS datum, the one the flood categories use)."""
+type SiteObservation {
+  observedAt: Time!
+  ingestedAt: Time!
+  source: ForecastSource!
+  stageFt: Float
+  flowKcfs: Float
+}
+
+type SiteConflict {
+  """gauge_vs_forecast, stale_forecast, stale_observation or no_thresholds."""
+  kind: String!
+  detail: String!
+  forecastFt: Float
+  observedFt: Float
+  """observed - forecast, feet."""
+  differenceFt: Float
+}
+
+type SiteStatus {
+  site: ID!
+  asOf: Time!
+  """Newest NWPS observation knowable at asOf."""
+  observation: SiteObservation
+  stageFt: Float
+  """Category of the observed stage against the NWPS thresholds known at asOf."""
+  category: FloodCategory
+  thresholds: FloodThresholds
+  observationFreshness: Freshness!
+  forecastFreshness: Freshness!
+  forecast: ForecastSnapshot
+  """The forecast point valid nearest asOf (within 30 min), the one the gauge is compared to."""
+  forecastNow: ForecastPoint
+  conflicts: [SiteConflict!]!
+  """NWS alert versions first seen at or before asOf and not ended by then."""
+  activeAlerts: Int!
+  """Newest successful alert poll known at asOf (empty polls count): what activeAlerts = 0 was checked against."""
+  alertsCheckedAt: Time
+  """`fetch_runs.id` of that poll; cite as `fetch:<id>`."""
+  alertsCheckRunId: ID
+  """The alert poll is recent enough (15 min) to vouch for activeAlerts = 0."""
+  alertsCheckCurrent: Boolean!
+  """NWPS low_threshold state: observed stage at or below the low-water threshold; null without one."""
+  lowWater: Boolean
+}
+
+"""One forecast point against the observation nearest its valid time (within 30 min)."""
+type ForecastVerifyPoint {
+  validAt: Time!
+  forecastFt: Float
+  forecastCategory: FloodCategory
+  observedAt: Time
+  observedFt: Float
+  observedCategory: FloodCategory
+  """forecast - observed, feet. Null when either side is missing; never interpolated."""
+  errorFt: Float
+  missing: Boolean!
+}
+
+type ForecastVerification {
+  site: ID!
+  issuedAt: Time!
+  snapshot: ForecastSnapshot!
+  points: [ForecastVerifyPoint!]!
+  paired: Int!
+  missing: Int!
+  """Mean of forecast - observed over paired points; positive = forecast ran high."""
+  biasFt: Float
+  meanAbsErrorFt: Float
+  maxAbsErrorFt: Float
+  peakForecastFt: Float
+  peakForecastCategory: FloodCategory
+  """Highest observed stage inside the forecast's valid window."""
+  peakObservedFt: Float
+  peakObservedCategory: FloodCategory
+  """The observed peak reached the same category as the forecast peak. Null when either side is unknown."""
+  peakCategoryHit: Boolean
+}
+
+# ---------------------------------------------------------------------------------------------
+# Needs review (C5): `siteReview`, `reviewHistory`, `reviewBoard`. Conditions apps only
+# (NOT_CONDITIONS_APP otherwise). Evaluated strictly from the data known at asOf (C3 as-of
+# queries). Conditions only: nothing here estimates carp abundance, catch, access or trip safety.
+# ---------------------------------------------------------------------------------------------
+
+"""
+REVIEW: a review rule fired (stage_rise, forecast_category, active_alert, rapid_change_forecast
+or source_conflict). OK: none fired and observation, 24 h baseline, forecast and thresholds are
+current. CANNOT_ASSESS: an input is missing or stale, so OK would be a guess.
+"""
+enum ReviewStatus { REVIEW OK CANNOT_ASSESS }
+enum ReviewSeverity { HIGH MEDIUM INFO }
+"""FIRED: the rule applies. CLEAR: checked, does not apply. UNKNOWN: could not be checked."""
+enum ReviewOutcome { FIRED CLEAR UNKNOWN }
+
+type ReviewReason {
+  """stage_rise, forecast_category, active_alert, rapid_change_forecast, stale_input, missing_input or source_conflict."""
+  rule: String!
+  outcome: ReviewOutcome!
+  severity: ReviewSeverity!
+  """Measured value: 24 h rise (ft), forecast peak (ft), forecast 24 h rise (ft), age (h), stage difference (ft) or flow ratio."""
+  value: Float
+  """Non-numeric value: category reached, alert event, which input is missing or stale, which conflict."""
+  valueText: String
+  threshold: Float
+  """ft, ft/24 h, h or ratio."""
+  unit: String
+  """nwps-live, iem-archive, nws, nwps, or two joined with + for a conflict."""
+  source: String!
+  """Observation time, forecast valid time of the peak, or when the alert was first seen."""
+  observedAt: Time
+  """Forecast issuance or alert onset."""
+  issuedAt: Time
+  link: String
+  """reading:<lid>:stage_m:<ms>:measured, forecast:<lid>:<issued ms>, alert:<NWS id>."""
+  evidenceIds: [ID!]!
+  """One plain line."""
+  explanation: String!
+}
+
+type SiteReview {
+  """NWPS id."""
+  site: ID!
+  """Config location id."""
+  location: ID!
+  name: String!
+  asOf: Time!
+  status: ReviewStatus!
+  summary: String!
+  """Fired reasons, most severe first."""
+  reasons: [ReviewReason!]!
+  """Every rule's evaluation (fired, clear or unknown), in rule order."""
+  checks: [ReviewReason!]!
+  """Newest NWPS observed stage (the datum the flood categories use)."""
+  stageFt: Float
+  observedAt: Time
+  """NWPS stage change over 24 h; null when stale or no baseline."""
+  change24hFt: Float
+  """NWPS observed stage against the NWPS thresholds known at asOf."""
+  categoryNow: FloodCategory
+  """Forecast peak within the horizon."""
+  peakStageFt: Float
+  peakAt: Time
+  categoryPeak: FloodCategory
+  forecastIssuedAt: Time
+  forecastSource: ForecastSource
+  observationFreshness: Freshness!
+  forecastFreshness: Freshness!
+  activeAlerts: Int!
+  """Newest USGS stage, display only: its datum can differ from NWPS (KRZL1 -2.45 ft), so it is never compared with flood thresholds."""
+  usgsStageFt: Float
+  usgsObservedAt: Time
+  """Newest USGS discharge, cfs (shown next to NWPS flow in kcfs, never blended)."""
+  usgsFlowCfs: Float
+  usgsFlowAt: Time
+  """Tidal site: larger noise floors for stage rise and forecast rise."""
+  tidal: Boolean!
+  """NWPS low_threshold state: observed stage at or below the gauge's low-water threshold."""
+  lowWater: Boolean
+  lowThresholdFt: Float
+  """Newest successful alert poll known at asOf (see SiteStatus.alertsCheckedAt)."""
+  alertsCheckedAt: Time
+  alertsCheckRunId: ID
+  alertsCheckCurrent: Boolean!
+}
+
+type ReviewBoard {
+  asOf: Time!
+  review: Int!
+  ok: Int!
+  cannotAssess: Int!
+  """REVIEW first (most severe first), then CANNOT_ASSESS, then OK."""
+  sites: [SiteReview!]!
+}
+
+type ReviewTransition {
+  at: Time!
+  from: ReviewStatus!
+  to: ReviewStatus!
+  """Fired reasons right after the flip."""
+  reasons: [ReviewReason!]!
+  """Rules that fired before the flip and no longer do."""
+  cleared: [String!]!
+}
+
+type ReviewHistory {
+  site: ID!
+  from: Time!
+  to: Time!
+  """The review at `from`."""
+  initial: SiteReview!
+  transitions: [ReviewTransition!]!
+  """Instants evaluated: `from` plus every time an input could change in the window."""
+  evaluations: Int!
+}
+
+type Query {
+  feeds: [FeedState!]!
+  """AIS vessel tracks (GE4, carp and lionfish): vessels with a fix in bbox during from..to (at most 7 days), most recently seen first; types filters on VesselTrack.type; limit default 300, max 1000."""
+  vessels(bbox: BBox!, from: Time!, to: Time!, types: [String!], limit: Int): [VesselTrack!]!
+  """Every feed of the app: licence, credit, cadence, latency, rate limit, why it is polled, last fetch and state."""
+  sources: [SourceInfo!]!
+  """One feed by source id; null for a feed the app does not run."""
+  sourceInfo(feed: ID!): SourceInfo
+  sightings(bbox: BBox!, from: Time!, to: Time!, taxa: [ID!], quality: [Quality!]): [Sighting!]!
+  """Taxa by id (or focus species name) and/or by a name fragment; at most 500."""
+  taxa(ids: [ID!], q: String): [Taxon!]!
+  """Distinct sightings of the app's species in a window (other taxa are not counted); `top` defaults to 50."""
+  speciesCounts(bbox: BBox!, from: Time!, to: Time!, top: Int): [SpeciesCount!]!
+  readings(bbox: BBox!, from: Time!, to: Time!, params: [Param!]): [Reading!]!
+  alerts(bbox: BBox!, at: Time!): [Alert!]!
+  frames(from: Time!, to: Time!, stepMinutes: Int!): FrameChunk!
+  """Top cells by score. Component apps: `region` limits to one region id, `weights` overrides the rank weights, `basis` picks what the frame knew (default SUBMITTED)."""
+  hotspots(species: ID!, at: Time!, bbox: BBox!, top: Int, region: ID, weights: HotspotWeightsInput, basis: HotspotBasis): HotspotGrid!
+  explainCell(cell: ID!, species: ID!, at: Time!, weights: HotspotWeightsInput, basis: HotspotBasis): HotspotExplain!
+  backtest(species: ID!, days: Int!): Backtest!
+  evidence(id: ID!): Evidence!
+  board(id: ID!): Board!
+  opsSince(boardId: ID!, seq: Int!): [Op!]!
+  """The forecast known at asOf (default now) for a site, with the last `history` issuances known then (default 1, at most 60). Conditions apps only."""
+  forecasts(site: ID!, asOf: Time, history: Int): ForecastView!
+  """The issuance at issuedAt (newest revision) scored against the NWPS observations stored since. Conditions apps only."""
+  forecastVerify(site: ID!, issuedAt: Time!): ForecastVerification!
+  """What was known about a site at asOf; conflictFt (default 1) is the gauge-vs-forecast difference that counts as a conflict. Conditions apps only."""
+  siteStatusAt(site: ID!, asOf: Time!, conflictFt: Float): SiteStatus!
+  """Needs-review status of a site (NWPS id or location id) from the data known at asOf (default now). Conditions apps only."""
+  siteReview(site: ID!, asOf: Time): SiteReview!
+  """Status flips of a site in from..to (default the 7 days before to; to defaults to now; at most 31 days). Conditions apps only."""
+  reviewHistory(site: ID!, from: Time, to: Time): ReviewHistory!
+  """Every configured site's review at asOf (default now), REVIEW first, with counts. Conditions apps only."""
+  reviewBoard(asOf: Time): ReviewBoard!
+}
+
+type Mutation {
+  applyOps(boardId: ID!, ops: [OpInput!]!): ApplyResult!
+}
+
+type Subscription {
+  feeds: FeedState!
+  framesUpdated: FrameRange!
+  ops(boardId: ID!, afterSeq: Int!): Op!
+}

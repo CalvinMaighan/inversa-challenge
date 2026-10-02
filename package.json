@@ -1,0 +1,35 @@
+{
+  "name": "inversa-challenge",
+  "private": true,
+  "engines": {
+    "bun": ">=1.3"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "overrides": {
+    "postcss": "^8.5.28",
+    "esbuild": "^0.28.2"
+  },
+  "scripts": {
+    "dev": "bun scripts/dev.ts",
+    "env": "doppler secrets download --no-file --format env --project inversa --config ${INVERSA_DOPPLER_CONFIG:-dev} > .env && chmod 600 .env && echo \"wrote .env ($(grep -c '=' .env) secrets, git-ignored)\"",
+    "dev:kill": "pkill -f 'bun scripts/dev.ts'; for p in ${INVERSA_WEB_PORT:-3050} ${INVERSA_API_PORT:-4041} ${INVERSA_SIGNAL_PORT:-8799}; do lsof -ti tcp:$p -sTCP:LISTEN | xargs kill 2>/dev/null; done; true",
+    "api:kill": "lsof -ti tcp:${INVERSA_API_PORT:-4041} -sTCP:LISTEN | xargs kill 2>/dev/null; true",
+    "dev:web":"bun run --cwd apps/web dev",
+    "api": "INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} sh -c 'if command -v doppler >/dev/null 2>&1 && [ \"$INVERSA_DOPPLER\" != off ]; then exec doppler run --project inversa --config ${INVERSA_DOPPLER_CONFIG:-dev} -- cargo run -q --release --manifest-path api/Cargo.toml; elif [ -f .env ]; then echo \"doppler not used; loading .env\"; set -a; . ./.env; set +a; exec cargo run -q --release --manifest-path api/Cargo.toml; else exec cargo run -q --release --manifest-path api/Cargo.toml; fi'",
+    "data": "for a in carp lionfish python; do INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run -q --release --manifest-path api/Cargo.toml -- backfill --app $a --days ${DAYS:-30} || exit 1; done && INVERSA_DATA_DIR=${INVERSA_DATA_DIR:-./data} cargo run -q --release --manifest-path api/Cargo.toml -- backfill --app python --scene cold-snap-2026-02-01",
+    "build": "bun run --cwd apps/web build && cargo build --release --manifest-path api/Cargo.toml",
+    "lint": "bun run --cwd apps/web lint",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun run --filter '*' test",
+    "test:live": "bun run --cwd apps/web test:live",
+    "test:api": "cargo test --manifest-path api/Cargo.toml",
+    "eval": "bun run --cwd apps/web eval",
+    "check:questions": "bun scripts/check-questions.ts",
+    "grade": "bun scripts/grade.ts",
+    "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK",
+    "check:ci": "bun run lint && bun run typecheck && echo CHECK-CI-OK"
+  }
+}

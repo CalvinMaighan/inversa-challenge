@@ -1,0 +1,17 @@
+{
+  "name": "signal-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bunx wrangler@4.145.0 dev --local --env dev --port 8799",
+    "deploy": "bunx wrangler@4.145.0 deploy",
+    "test": "env -u CLAUDECODE -u AGENT -u REPL_ID bun test test",
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "bun scripts/e2e.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "6.0.2"
+  }
+}

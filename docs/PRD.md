@@ -4,7 +4,9 @@ Inversa take-home. Status: v3, 2026-09-30. It supersedes v2: the backend moves t
 
 Research and decisions: [research.md](research.md).
 
-- **Deploy target:** https://inversa.calvinmaighan.dev
+**Status at D1 (2026-10-01).** This PRD now specifies the python app, Everglades Ops, one of three apps on one engine; the carp and lionfish apps are specified in [APPS.md](APPS.md) and [LIONFISH_WATCH.md](LIONFISH_WATCH.md), and the system-level picture is in the [README](../README.md). Superseded below: the agent model is `openai/gpt-6-luna` on OpenRouter through cordis, not DeepSeek (§10); every API route carries the app (`/v1/{app}/graphql`, `/v1/{app}/frames`), not `/v1/graphql` (§9); each app has its own `observations.db` and `team.db` under `<data dir>/<app>/` (§7). Design alternatives and scaling are maintained in [design-alternatives.md](design-alternatives.md) and [scaling.md](scaling.md); §17 is kept as written.
+
+- **Deploy target:** https://inversa.bigvalue.lol
 - **Deadline:** 72 h. Sized as about 2 weeks (10 working days) for one senior developer; agent tooling (Claude, Cursor) runs the work in parallel.
 
 ## 1. Problem
@@ -22,22 +24,23 @@ The brief does not prescribe how ingest works (push or poll). It asks only for "
 
 ### The question
 
-**"Where are invasive species active across South Florida right now, and where should removal crews go next?"**
+**"Where are Burmese pythons active and where should removal crews go next?"**
+
+Scope since K1 (R14): this PRD is the python app, Everglades Ops, one of three apps on one engine ([APPS.md](APPS.md)). It tracks the Burmese python only. Lionfish Watch and carp are their own apps; every other species, and the background layer of all introduced species, was removed.
 
 Why this question, for Inversa:
 
-- **It is their work.** Inversa runs FWC's python contractor program (PATRIC) in the Everglades: 235 removals in July 2024, 748 in July 2025. It also runs lionfish programs in Florida and the Caribbean.
+- **It is their work.** FWC "partnered with Miami-based company Inversa" to triple python removals in two years; 1,022 pythons were removed in May to July 2025 against 343 in the same months of 2024, and 748 in July 2025 alone ([FWC release, 2025-10-21](https://myfwc.com/news/all-news/gov-python-removal-1025/), read 2026-10-01). That Inversa administers PATRIC is unverified. Inversa also runs lionfish programs in Mexico, Colombia, Belize and Florida ([case page](https://inversa.com/case/lionfish-management-program), read 2026-10-01).
 - **It mirrors their product.** Origin is an AI command center built around the loop *hotspot → mission → mission in progress → ROI*.
-- **It needs several feeds.** Four priority invaders share one map across land and sea: Burmese python, Argentine tegu, green iguana and lionfish.
-  - Sightings say where animals were.
-  - Conditions (land surface and air temperature, water stage, sea state) say where they are likely active and whether crews can work.
-  - Official alerts change both overnight: a cold snap stuns iguanas and kills pythons.
+- **It needs several feeds.**
+  - Sightings say where pythons were.
+  - Conditions (land surface and air temperature, water stage) say where they are likely active and whether crews can work.
+  - Official alerts change both overnight: a cold snap suppresses python activity and can kill pythons.
 
 ### Region and species
 
-- **Bbox:** 24.3°N–27.5°N, 83.2°W–79.8°W.
-- **Focus taxa:** *Python bivittatus*, *Salvator merianae*, *Iguana iguana*, *Pterois volitans/miles*.
-- **Background layer:** all iNaturalist observations flagged `introduced=true`.
+- **Bbox:** 24.3°N–27.5°N, 83.2°W–79.8°W (South Florida and the Keys).
+- **Taxon:** *Python bivittatus* only (iNat 238252, GBIF 4820533, NAS genus *Python*, Burmese python records kept).
 
 ## 2. Data feeds
 
@@ -56,7 +59,7 @@ Why this question, for Inversa:
 **Push notes:**
 - The NODD SNS topic accepts only SQS and Lambda subscribers. An SNS payload filter on `Records.s3.object.key` prefix keeps just our four products, well inside the SQS free tier. Axum long-polls the queue, fetches the NetCDF object from the public `noaa-goes19` bucket, and reads only the bbox window.
 - The NWWS-OI request goes to `NWWS.Issue@noaa.gov` on day 1. Approval can take up to 10 days, and the NWS alerts API poll covers the gap.
-- The generic signed webhook endpoint (`/v1/ingest/hook/:source`) takes anything else that can push. Firecrawl monitors watching FWC program pages are a stretch goal.
+- The signed webhook endpoint (`POST /v1/{app}/ingest/hook/{source}`) takes the raw provider body for any poll adapter the app runs. There is no generic `web` source; the Firecrawl monitors of FWC pages it was meant for were dropped in K1.
 
 **Quality cases built in:**
 - The same animal can appear in iNat, then GBIF, then NAS, weeks apart.
@@ -249,15 +252,10 @@ For each 0.01° cell and frame *t*:
 score = density(t) × activity(species, conditions(t)) × access(species, conditions(t))
 ```
 
-- **density:** kernel-weighted recent sightings, with a half-life per species (python 21 d, iguana 14 d, tegu 14 d, lionfish 60 d). NAS/GBIF history counts at 0.2 weight as a prior.
-- **activity:** a rule table per species in `rules.rs`, each rule citing its rationale.
-  - Python: warm-night LST/air temp window.
-  - Iguana: cold stun below 10 °C air temp, which marks an easy-capture window.
-  - Tegu: seasonal drop Oct–Feb.
-  - Lionfish: year-round.
-- **access:** whether crews can work there.
-  - Lionfish: wave < 1.2 m and wind < 8 m/s.
-  - Python: levee access helped by lower stage.
+- **density:** kernel-weighted recent python sightings with a 21-day half-life. NAS/GBIF history counts at 0.2 weight as a prior.
+- **activity:** the python rule set (`"rules": "python"` in `spec/apps/python.json`, implemented in `rules.rs`), each rule citing its rationale.
+  - `python_warm_temperature`: air or land-surface temperature 21–32 °C boosts activity ×1.5; below 15 °C it drops to ×0.3.
+- **access:** whether crews can work there. `python_levee_stage`: levee access is helped by lower stage.
 - **Explain:** `explainCell` returns each term's contribution, for the UI and the agent.
 - **Backtest:** for each day D, score using data before D. Report the share of D's sightings that fell in the top 10 % of cells, against the 10 % baseline. The result is shown as measured, even if weak.
 
@@ -367,7 +365,7 @@ The voice path is ported from deedee `client/voice/*`, `server/voice/*` and `sha
   - Cesium World Terrain.
   - A keyless Esri/OSM fallback, switched automatically near the Community quota (1,000 root tiles and 1,000 imagery sessions a month).
 - **Layer contract:** each layer implements `init / enable / disable / update(frame) / stats`.
-  - Layers: sightings (`PointPrimitiveCollection` plus a billboard for each focus species), hotspot heatmap (a canvas texture from the SAB grid on a ground rectangle), LST/SST raster, stations, alerts, missions, and peer cursors.
+  - Layers: sightings (`PointPrimitiveCollection` plus a billboard for the python), hotspot heatmap (a canvas texture from the SAB grid on a ground rectangle), LST/SST raster, stations, alerts, missions, and peer cursors.
   - Primitives only, not Entities.
 - **Render governor:** `requestRenderMode` when idle.
 - **Clock:** the Cesium clock follows the `TIME` key.
@@ -377,7 +375,7 @@ The voice path is ported from deedee `client/voice/*`, `server/voice/*` and `sha
 ### Theme and state
 
 - **Theme:** `active-theme` with `light`, `dark` and `tactical` modes. Palettes are ported from big-value `client/themes/tokens.ts`, and a pre-paint `data-theme` bootstrap avoids flash.
-- **State:** `@calvinjs/active-state` keys: `TIME`, `VIEW`, `LAYERS`, `SELECTION`, `FEEDS`, `MISSIONS`, `PEERS`, `ME`, `AGENT_CARD` (orb/card, open, position), `AGENT_CHAT`, `VOICE`. The key pattern follows deedee `SHELL_CHAT.ts`.
+- **State:** `@calvinjs/active-state` keys: `TIME`, `VIEW`, `LAYERS`, `SELECTION`, `FEEDS`, `MISSIONS`, `PEERS`, `ME`, `AGENT_CARD` (the chat column: tab, phone sheet height, unread dots; the orb it was named for was replaced by the column in T40), `AGENT_CHAT`, `VOICE`. The key pattern follows deedee `SHELL_CHAT.ts`.
 
 ### New tech 1: threaded active-state (`packages/active-state`, `./threads`)
 
@@ -455,7 +453,7 @@ Transferring data channels works in Chrome/Edge 130+ and Safari 15+. On Firefox,
 
 ## 14. Deployment and cost
 
-- **Hetzner CX22-class VM** (Ubuntu 24.04, about €5/mo), with Caddy for `inversa.calvinmaighan.dev`:
+- **Hetzner CX22-class VM** (Ubuntu 24.04, about €5/mo), with Caddy for `inversa.bigvalue.lol`:
   - `/v1/*` and `/health` go to Axum (`127.0.0.1:4041`), including WebSocket upgrades.
   - Everything else goes to Next (`127.0.0.1:3050`).
   - COOP/COEP are set on every response.
@@ -487,7 +485,7 @@ Transferring data channels works in Chrome/Edge 130+ and Safari 15+. On Firefox,
 
 If time runs short, cut in this order:
 
-1. Firecrawl hook source.
+1. ~~Firecrawl hook source.~~ Dropped in K1 (R14); the `web` hook source is gone.
 2. NWWS-OI (the poll stays).
 3. The Firefox rtc relay.
 4. Multi-tab leader election.
@@ -514,7 +512,7 @@ Days 1–7 and 10 cover the brief and are non-negotiable.
 
 ## 17. Scaling story (for the interview)
 
-- **More regions or species:** each is config (bbox, taxa, rules) plus adapters. Lionfish across the Caribbean (Belize, Colombia, Mexico) and carp in the Mississippi basin fit the same pipeline.
+- **More regions or species:** each species is one app config (bbox, taxon, rules, feeds) plus adapters. Lionfish Watch (four Caribbean areas) and carp (Louisiana) already run this way.
 - **More data:**
   - Monthly partitions as attached SQLite files, or analytics in ClickHouse.
   - Frames become immutable R2 chunks behind a CDN.

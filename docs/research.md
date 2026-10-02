@@ -5,9 +5,9 @@ Date: 2026-09-30. Sources are listed at the end. Raw scrapes are in `.firecrawl/
 ## 1. Who Inversa is
 
 - **Business:** invasive species management. The company describes itself as "the largest diversified invasive species management company in the United States" (Florida Python Challenge sponsor page). It was founded in 2020 and is based in Miami.
-- **Model:** it removes invasive animals and turns the biomass into revenue (Inversa Leathers: python, lionfish, iguana, and "Silverfin", its invasive carp material). The economics pay for the removal.
+- **Model:** it removes invasive animals and turns the biomass into revenue (Inversa Leathers: python, lionfish and other invasive leathers, and "Silverfin", its invasive carp material). The economics pay for the removal.
 - **Programs:**
-  - **Burmese python, Florida Everglades.** Inversa administers FWC's PATRIC contractor program. Removals went from 235 in July 2024 to 748 in July 2025, backed by $2M in state funding (FWC release, 2025-10-21).
+  - **Burmese python, Florida Everglades.** Inversa administers FWC's PATRIC contractor program. Removals went from 235 in July 2024 to 748 in July 2025, backed by $2M in state funding (FWC release, 2025-10-21). *Corrected 2026-10-01, see §9: the release says FWC "partnered with" Inversa and gives 1,022 removals in May to July 2025 against 343 in the same months of 2024, 748 in July 2025; "administers" and "235 in July 2024" are unverified.*
   - **Lionfish, Caribbean.** Mexico (Banco Chinchorro MPA), Belize, Colombia and Florida, with NOAA, ORRAA and Conservation International. Results: 40k+ fish removed, $2.1M deployed, 267 fishers employed.
   - **Invasive carp, Mississippi.** A Mississippi fisheries manager is quoted on the lionfish case page.
 - **Origin, their product:** "environmental intelligence for invasive species management", described as an AI command center. Features named on the site:
@@ -36,8 +36,8 @@ Date: 2026-09-30. Sources are listed at the end. Raw scrapes are in `.firecrawl/
 | Open-Meteo (forecast, archive, marine) | Keyless; air temp, rain, SST, wave height | Hourly | Activity and field conditions |
 | NOAA NDBC + Tides & Currents | Buoy water temp every 10 min to 1 h; water level every 6 min | Yes | Marine conditions, lionfish dive windows |
 | USGS Water Data | Everglades/South Florida gage height, stage and water temp | 15 min | Habitat (water level concentrates prey and snakes) |
-| NWS alerts | Freeze, cold, heat and flood alerts | Minutes | Official conditions (cold snaps stun iguanas and kill pythons) |
-| NASA FIRMS | Fires and prescribed burns in the Everglades | ~3 h | Optional: burns flush wildlife |
+| NWS alerts | Freeze, cold, heat and flood alerts | Minutes | Official conditions (cold snaps suppress and kill pythons) |
+| ~~NASA FIRMS~~ | ~~Fires and prescribed burns in the Everglades~~ | ~~~3 h~~ | Dropped in K1 (R14): GOES-19 FDCC covers fire for python |
 
 The mix of live, curated and lagged sources gives the brief's "stale / missing / conflicting" story naturally:
 
@@ -79,9 +79,10 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 > "Where are invasive species active across South Florida right now, and where should removal crews go next?"
 
 - **Species:**
-  - Burmese python, Argentine tegu and green iguana on land.
-  - Lionfish in Biscayne Bay and the Keys.
-  - One map region covers land and sea.
+  - Burmese python on land (Everglades Ops).
+  - Lionfish in Biscayne Bay and the Keys (Lionfish Watch, its own app).
+  - Invasive carp on the Louisiana rivers (Carp Field Conditions, conditions only, no sightings).
+  - Since K1 (R14) these three apps are the whole scope; no other species is planned.
 - **Feeds:**
   - iNaturalist (live sightings)
   - USGS NAS (curated history)
@@ -93,7 +94,7 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 - **Hero features:**
   - An explainable hotspot heatmap: sighting density × condition rules (temperature window, time of night, water level, sea state), labeled as a heuristic.
   - A "Mission" card: hotspot, conditions, evidence, then pin to the team board.
-  - Replay a cold snap and watch iguana reports and python activity respond.
+  - Replay a cold snap: the NWS cold warnings, the air temperature and the python activity term respond.
 - **Why:** it mirrors Origin's loop, uses their real programs and geography, and is dense enough for a good timeline.
 - **Risk:** "prediction" invites scrutiny. Mitigate with transparent rules plus a backtest panel (would yesterday's heatmap have caught today's sightings?).
 
@@ -125,10 +126,10 @@ COEP: set `Cross-Origin-Embedder-Policy: credentialless` rather than `require-co
 ## 5. Constraints from the user (2026-09-30)
 
 - **Deadline:** 72 h. The PRD is sized for about 2 weeks of one senior developer. Agent tooling (Claude, Cursor) does the parallel work.
-- **Domain:** `inversa.calvinmaighan.dev`.
+- **Domain:** `inversa.bigvalue.lol`.
 - **active-state fork:** git subtree in this repo.
 - **Low runtime budget.**
-  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.calvinmaighan.dev/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).
+  - **Ingestion via webhooks.** None of these feeds push, so we become the emitter. Cloudflare Worker Cron Triggers poll each feed, write raw payloads to R2, and POST an HMAC-signed webhook to `inversa.bigvalue.lol/api/ingest/:source`. That is free-tier friendly, and the Hetzner box stays a small CX22-class VM. ~~Firecrawl monitors with webhooks are an option for sources with no API (FWC news, program pages).~~ Dropped in K1 (R14): no app needs them.
   - **Runtime LLM.** A cheap model runs the tool loop, with prompt caching on system and tool definitions, a daily spend cap (God's Eye View uses $5), and answer caching keyed by question + data version. A stronger model is used only for final synthesis when needed. Current pricing and model IDs need confirming via the `claude-api` skill before building.
 
 ## 6. Decisions (2026-09-30)
@@ -150,8 +151,8 @@ The brief doesn't prescribe push or poll ingest. What exists for this domain:
 |---|---|---|---|
 | GOES-19 via NOAA NODD on AWS | SNS topic `arn:aws:sns:us-east-1:123901341784:NewGOES19Object` | LST, SST, fire and cloud mask over the Everglades, every 5–60 min | Only SQS or Lambda subscribers, so we need an AWS account (free tier) with an SQS queue and a payload filter on the key prefix. NetCDF4 decode. |
 | NWS via NWWS-OI | XMPP | Every NWS product within seconds | Account by email to `NWWS.Issue@noaa.gov`, which can take 10+ days. NWS API poll until then. |
-| aisstream.io | WebSocket | Vessel traffic | Weak fit. Skipped. |
-| Firecrawl monitors | Webhook | Web pages with no API (FWC program pages) | Stretch goal |
+| ~~aisstream.io~~ | ~~WebSocket~~ | ~~Vessel traffic~~ | Dropped in K1 (R14): vessel traffic serves no app |
+| ~~Firecrawl monitors~~ | ~~Webhook~~ | ~~Web pages with no API (FWC program pages)~~ | Dropped in K1 (R14): no app needs them |
 | iNaturalist, GBIF, USGS NAS, USGS Water, NDBC, CO-OPS, Open-Meteo | none | Core data | Polled by Axum tokio tasks under a rate governor |
 
 ## 8. Reuse from deedee and big-value (2026-09-30)
@@ -185,3 +186,16 @@ The brief doesn't prescribe push or poll ingest. What exists for this domain:
 - [Google Map Tiles API usage and billing](https://developers.google.com/maps/documentation/tile/usage-and-billing)
 - [NOAA GOES on AWS open data registry](https://registry.opendata.aws/noaa-goes/)
 - [NWWS-OI request](https://www.weather.gov/nwws/nwws_oi_request)
+
+## 9. Decisions and corrections after the pivot (2026-10-01, leaf D1)
+
+History above is kept as written; this section records what changed.
+
+1. **Three apps on one engine.** The single South Florida question became three apps chosen by an app selector: carp (Louisiana river conditions, default), Lionfish Watch (four Caribbean areas) and Everglades Ops (Burmese python only). Options B and C in §4 became apps of their own; option D stayed dropped. Specs: `docs/APPS.md`, `docs/LIONFISH_WATCH.md`.
+2. **Carp is conditions only.** Carp barely appear in iNaturalist (§4 C's risk held), so the carp app answers about the river at candidate locations and refuses abundance, catch, access and safety. L'CARP facts verified with URLs in `docs/evidence/carp-data-proof.md` G6.
+3. **Lionfish keeps all four areas**, labelling Belize and Colombia as thin rather than adding feeds to rescue them (`docs/evidence/data-proof.md`).
+4. **Only three species exist** (K1, R14): tegu, iguana, the background of all introduced species, FIRMS, aisstream and Firecrawl monitors are removed, not hidden.
+5. **Ingest is push-first in the Rust scheduler**, not Cloudflare Cron Workers (§5): the free plan's 5 cron triggers and 10 ms CPU do not fit GOES decode or long-lived SQS and XMPP connections. Every poll is justified in `docs/ingest-modes.md`.
+6. **The agent runs GPT-6 Luna on OpenRouter**, not DeepSeek on Fireworks (§8): the deployed harness is cordis with `openai/gpt-6-luna`, and there is no mock model.
+7. **COEP is `require-corp`, not `credentialless`** (§3): Safari has no `credentialless`; third-party media goes through `/v1/{app}/media`.
+8. **Corrections to §1**, checked against [the FWC release of 2025-10-21](https://myfwc.com/news/all-news/gov-python-removal-1025/) on 2026-10-01: FWC "partnered with Miami-based company Inversa" to triple python removals in two years; 1,022 pythons were removed in May to July 2025 against 343 in the same period of 2024, and 748 in July 2025 alone. That Inversa *administers* PATRIC, and "235 in July 2024", are not in the release and are unverified (the News From The States article answered 403). The lionfish program locations (Mexico, Colombia, Belize, Florida) and partners (NOAA, ORRAA, Conservation International) were re-read on [the case page](https://inversa.com/case/lionfish-management-program) the same day.

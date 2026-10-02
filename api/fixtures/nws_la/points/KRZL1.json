@@ -1,0 +1,112 @@
+{
+    "@context": [
+        "https://geojson.org/geojson-ld/geojson-context.jsonld",
+        {
+            "@version": "1.1",
+            "wx": "https://api.weather.gov/ontology#",
+            "s": "https://schema.org/",
+            "geo": "http://www.opengis.net/ont/geosparql#",
+            "unit": "http://codes.wmo.int/common/unit/",
+            "@vocab": "https://api.weather.gov/ontology#",
+            "geometry": {
+                "@id": "s:GeoCoordinates",
+                "@type": "geo:wktLiteral"
+            },
+            "city": "s:addressLocality",
+            "state": "s:addressRegion",
+            "distance": {
+                "@id": "s:Distance",
+                "@type": "s:QuantitativeValue"
+            },
+            "bearing": {
+                "@type": "s:QuantitativeValue"
+            },
+            "value": {
+                "@id": "s:value"
+            },
+            "unitCode": {
+                "@id": "s:unitCode",
+                "@type": "@id"
+            },
+            "forecastOffice": {
+                "@type": "@id"
+            },
+            "forecastGridData": {
+                "@type": "@id"
+            },
+            "publicZone": {
+                "@type": "@id"
+            },
+            "county": {
+                "@type": "@id"
+            }
+        }
+    ],
+    "id": "https://api.weather.gov/points/30.5689,-91.7614",
+    "type": "Feature",
+    "geometry": {
+        "type": "Point",
+        "coordinates": [
+            -91.7614,
+            30.5689
+        ]
+    },
+    "properties": {
+        "@id": "https://api.weather.gov/points/30.5689,-91.7614",
+        "@type": "wx:Point",
+        "cwa": "LCH",
+        "type": "land",
+        "forecastOffice": "https://api.weather.gov/offices/LCH",
+        "gridId": "LCH",
+        "gridX": 115,
+        "gridY": 111,
+        "forecast": "https://api.weather.gov/gridpoints/LCH/115,111/forecast",
+        "forecastHourly": "https://api.weather.gov/gridpoints/LCH/115,111/forecast/hourly",
+        "forecastGridData": "https://api.weather.gov/gridpoints/LCH/115,111",
+        "observationStations": "https://api.weather.gov/gridpoints/LCH/115,111/stations",
+        "relativeLocation": {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    -91.7548758,
+                    30.5294003
+                ]
+            },
+            "properties": {
+                "city": "Krotz Springs",
+                "state": "LA",
+                "distance": {
+                    "unitCode": "wmoUnit:m",
+                    "value": 2451.1173764461
+                },
+                "bearing": {
+                    "unitCode": "wmoUnit:degree_(angle)",
+                    "value": 351
+                }
+            }
+        },
+        "forecastZone": "https://api.weather.gov/zones/forecast/LAZ033",
+        "county": "https://api.weather.gov/zones/county/LAC097",
+        "fireWeatherZone": "https://api.weather.gov/zones/fire/LAZ033",
+        "timeZone": "America/Chicago",
+        "radarStation": "KHDC",
+        "astronomicalData": {
+            "sunrise": "2026-10-01T07:00:42-05:00",
+            "sunset": "2026-10-01T18:52:31-05:00",
+            "transit": "2026-10-01T12:56:36-05:00",
+            "civilTwilightBegin": "2026-10-01T06:36:46-05:00",
+            "civilTwilightEnd": "2026-10-01T19:16:27-05:00",
+            "nauticalTwilightBegin": "2026-10-01T06:08:52-05:00",
+            "nauticalTwilightEnd": "2026-10-01T19:44:20-05:00",
+            "astronomicalTwilightBegin": "2026-10-01T05:40:53-05:00",
+            "astronomicalTwilightEnd": "2026-10-01T20:12:20-05:00"
+        },
+        "nwr": {
+            "transmitter": "WXK80",
+            "sameCode": "022097",
+            "areaBroadcast": "https://api.weather.gov/radio/WXK80/broadcast",
+            "pointBroadcast": "https://api.weather.gov/points/30.5689,-91.7614/radio"
+        }
+    }
+}

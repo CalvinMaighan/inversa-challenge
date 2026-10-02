@@ -1,0 +1,28 @@
+# Gates: GRA make every graded e2e check emit its per-app line (opus)
+
+Why: `bun run grade --fast --no-write` currently shows many criteria PENDING because scripts the rubric names do not exist (`e2e:feeds`, `e2e:replay`, `e2e:evidence`) or do not accept `--app <id>` / do not print the app-tagged result line (`AXE app=`, `KEYBOARD-OK app=`, `LAYOUT app=`, `MOBILE app=`, `SCRUB app=`, `EXTERNAL-LINKS app=`, `QUALITY app=`, `PANELS app=`, `FIRSTLOAD app=`, `AGENT app=`, `PERF app=`). The exact line formats, thresholds and regexes are in `docs/grading/rubric.json` (read each check's `run`, `requires` and `expect`) and `docs/grading/rubric.md` section "What each later leaf must emit". Do the work so that the checks are real, not vacuous: each script must actually exercise the app named by `--app` (carp, lionfish, python) on a real stack, and the printed numbers must be measured. Never print `ok` for something you did not check. Where an existing script is app-specific (`e2e:carp`, `e2e:lionfish`), the generic script may call shared helpers but must test the generic behaviour for that app.
+
+Owns: `apps/web/e2e/**` (new `feeds.ts`, `replay.ts`, `evidence.ts`; edits to a11y, layout, scrub, links, quality, panels, firstload, agent, perf for `--app`), `apps/web/package.json` script lines, `docs/grading/rubric.{json,md}` ONLY to fix a check that cannot match what a real script legitimately prints (log each such edit and why; never loosen a threshold), mirrored tests. Do not edit UI code (GRB does), agent code or the eval. If a UI defect makes a check fail, record it in your report for GRB instead of fixing it. Work in the worktree the driver created for you (`cd`/`git -C` only there), commit there, never push. macOS has no `timeout`. Do not edit apps/web while an e2e against `next dev` is running. Use `E2E_SKIP_BUILD=1` after the first build.
+
+- [ ] G1: new scripts exist and print the rubric's lines for each app: `e2e:feeds -- --app <id>` prints `FEEDS app=<id> fetched=<n> failed=<n> records=<n>` after a live poll window on a fresh data dir with sources on (real network; fetched >= 3 distinct sources, failed = 0 for the sources that need no credentials; feeds needing absent credentials are reported as `skipped=<n>` not failed); `e2e:replay -- --app <id>` prints `REPLAY app=<id> play=ok step=ok asof=ok frames=<n> errors=<n>` (plays the timeline, steps, and checks an as-of past time changes the data; for carp the "what we knew" swap, for lionfish the known-at priority); `e2e:evidence -- --app <id>` prints `EVIDENCE app=<id> citation=ok drawer=ok raw=ok source_link=ok new_tab=ok sources=<n>` (an agent answer citation opens the drawer, raw payload is viewable, the publisher link opens in a new tab with noopener)
+  CHECK: cd apps/web && for a in carp lionfish python; do bun run e2e:replay -- --app $a 2>&1 | grep "^REPLAY "; done
+  EXPECT: /REPLAY app=carp play=ok step=ok asof=ok frames=\d+ errors=0[\s\S]*REPLAY app=lionfish play=ok step=ok asof=ok frames=\d+ errors=0[\s\S]*REPLAY app=python play=ok step=ok asof=ok frames=\d+ errors=0/
+  EVIDENCE: pending
+
+- [ ] G2: the same for feeds and evidence across all three apps (quote the 3 + 3 lines; `e2e:evidence` needs the live agent via Doppler for the citation step, or uses a recorded agent answer fixture clearly named as such)
+  CHECK: cd apps/web && for a in carp lionfish python; do bun run e2e:feeds -- --app $a 2>&1 | grep "^FEEDS "; bun run e2e:evidence -- --app $a 2>&1 | grep "^EVIDENCE "; done
+  EXPECT: /FEEDS app=carp fetched=([3-9]|\d\d+) failed=0[\s\S]*EVIDENCE app=carp citation=ok drawer=ok raw=ok source_link=ok new_tab=ok sources=([3-9]|\d\d+)[\s\S]*FEEDS app=lionfish[\s\S]*EVIDENCE app=lionfish[\s\S]*FEEDS app=python[\s\S]*EVIDENCE app=python/
+  EVIDENCE: pending
+
+- [ ] G3: existing scripts take `--app` and print the tagged lines: `e2e:a11y` (`AXE app=<id> serious=0 critical=0 scans=<n>` and `KEYBOARD-OK app=<id>`), `e2e:layout` (`LAYOUT app=<id> ... legend=ok tooltip=ok ... mobile=ok` and `MOBILE app=<id> overflow=<n> hscroll=<n>`), `e2e:scrub` (`SCRUB app=<id> median=<ms> p95=<ms> requests=<n> frames=<n>`), `e2e:links` (`EXTERNAL-LINKS app=<id> total=<n> new_tab=<n> unsafe=<n>`), `e2e:quality` (`QUALITY app=<id> cases=<n> stale=ok missing=ok conflict=ok shots=<n>`), `e2e:panels` (`PANELS app=<id> table=<n> series=<n> ... drawer=1`), `e2e:firstload` (`FIRSTLOAD app=<id> records=<n> errors=<n>`), `e2e:agent` (`AGENT app=<id> flow=ok tools=<n> citation=ok`), `e2e:perf` (`PERF app=<id> first_token_p50_ms=<n> n=<n> cached_query_ms=<n>`); the rubric's `requires` strings find these emit lines in the source (the grader greps scripts for them)
+  CHECK: bun scripts/grade.ts --fast --no-write 2>&1 | grep -cE "missing script|does not emit"
+  EXPECT: /^\s*0\s*$/m
+  EVIDENCE: pending
+
+- [ ] G4: run every script once per app on a clean build and paste the lines; real failures found (a check that fails because the app is wrong, not the script) are listed in the report with file and observed value for GRB or the driver; scripts that need the live model use Doppler and cost is stated; flaky behaviour (`e2e:dm`, `e2e:notes` flaked earlier) is reproduced 3 times and fixed if it is the script's fault
+  EVIDENCE: pending
+
+- [ ] G5: web tests, typecheck, lint clean; `bun scripts/grade.ts --validate` and `bun test scripts/grade.test.ts` pass (state counts)
+  CHECK: bun run --cwd apps/web test 2>&1 | grep -E "^ *[0-9]+ fail" && bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && bun scripts/grade.ts --validate 2>&1 | tail -1
+  EXPECT: /^ *0 fail[\s\S]*RUBRIC criteria=\d+ weight=100 ok/m
+  EVIDENCE: pending

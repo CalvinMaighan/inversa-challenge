@@ -1,0 +1,75 @@
+{
+  "name": "tombstone-delete",
+  "ops": [
+    {
+      "id": "op-0009",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Python trapline",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0010",
+      "hlc": "1700000000300:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "_deleted",
+      "value": true,
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0011",
+      "hlc": "1700000000400:0:b",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m1",
+      "field": "title",
+      "value": "Python trapline (b edit)",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0012",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "mission",
+      "entityId": "m2",
+      "field": "title",
+      "value": "Python survey",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0013",
+      "hlc": "1700000000100:0:b",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "gone",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0014",
+      "hlc": "1700000000101:0:b",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "_deleted",
+      "value": true,
+      "nodeId": "b"
+    }
+  ],
+  "expected": {
+    "missions": {
+      "m2": {
+        "title": "Python survey"
+      }
+    },
+    "notes": {},
+    "messages": [],
+    "removals": {}
+  }
+}

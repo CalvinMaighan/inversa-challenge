@@ -1,0 +1,31 @@
+{
+  "name": "note-field-create-edit",
+  "ops": [
+    { "id": "op-0101", "hlc": "1700000000100:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Two pythons by the canal gate", "nodeId": "a" },
+    { "id": "op-0102", "hlc": "1700000000100:1:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lat", "value": 25.4687, "nodeId": "a" },
+    { "id": "op-0103", "hlc": "1700000000100:2:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "lon", "value": -80.4776, "nodeId": "a" },
+    { "id": "op-0104", "hlc": "1700000000100:3:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "species", "value": "python", "nodeId": "a" },
+    { "id": "op-0105", "hlc": "1700000000100:4:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdBy", "value": "a", "nodeId": "a" },
+    { "id": "op-0106", "hlc": "1700000000100:5:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "callsign", "value": "Ranger-A", "nodeId": "a" },
+    { "id": "op-0107", "hlc": "1700000000100:6:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "createdAt", "value": "2026-09-30T12:00:00.000Z", "nodeId": "a" },
+    { "id": "op-0108", "hlc": "1700000000200:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Three pythons by the canal gate", "nodeId": "a" },
+    { "id": "op-0109", "hlc": "1700000000150:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Two pythons by the canal gate, one juvenile", "nodeId": "a" },
+    { "id": "op-0108", "hlc": "1700000000200:0:a", "boardId": "everglades", "entity": "note", "entityId": "fn1", "field": "text", "value": "Three pythons by the canal gate", "nodeId": "a" }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {
+      "fn1": {
+        "text": "Three pythons by the canal gate",
+        "lat": 25.4687,
+        "lon": -80.4776,
+        "species": "python",
+        "createdBy": "a",
+        "callsign": "Ranger-A",
+        "createdAt": "2026-09-30T12:00:00.000Z"
+      }
+    },
+    "messages": [],
+    "removals": {}
+  }
+}

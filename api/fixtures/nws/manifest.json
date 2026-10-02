@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-09-30T20:30:15Z",
+  "files": [
+    {
+      "file": "alerts_active_fl_am_gm.json",
+      "url": "https://api.weather.gov/alerts/active?area=FL,AM,GM",
+      "content_type": "application/geo+json"
+    }
+  ]
+}

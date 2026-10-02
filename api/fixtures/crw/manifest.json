@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-10-01T06:30:00Z",
+  "note": "One box per lionfish region around its evidence reef cell (docs/evidence/data-proof.md), product days 2026-09-28 and 2026-09-29 (12:00Z stamps), CRW_SST, CRW_SSTANOMALY, CRW_DHW, CRW_BAA and CRW_DHW_mask (0 water, 1 land, 2 missing, 4 ice). The adapter requests whole region boxes; these are the same query on a smaller box. Each <region>.url holds the exact request.",
+  "files": [
+    { "file": "last.json", "url": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json?time%5B(last)%5D" },
+    { "file": "fl-keys.json", "urlFile": "fl-keys.url", "cells": 64, "land": 2, "reefCell": [24.525, -81.375] },
+    { "file": "mx-caribbean.json", "urlFile": "mx-caribbean.url", "cells": 104, "land": 27, "reefCell": [18.575, -87.325] },
+    { "file": "belize.json", "urlFile": "belize.url", "cells": 96, "land": 7, "reefCell": [16.775, -87.825] },
+    { "file": "co-caribbean.json", "urlFile": "co-caribbean.url", "cells": 24, "land": 0, "reefCell": [12.525, -81.625] }
+  ]
+}

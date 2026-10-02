@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-10-01T06:58:36Z",
+  "note": "Lionfish Watch (L4): the focus query per area, updated_since 90 days back, then the iNat originals of the GBIF iNat-dataset copies those pages do not hold (by id). Real responses, trimmed to the fields inat::normalize reads.",
+  "files": [
+    {
+      "file": "lionfish-fl-keys.json",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=47284&order_by=updated_at&order=asc&updated_since=2026-07-03T00%3A00%3A00Z&per_page=200&page=1"
+    },
+    {
+      "file": "lionfish-mx-caribbean.json",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=18.3&swlng=-87.9&nelat=21.7&nelng=-86.6&taxon_id=47284&order_by=updated_at&order=asc&updated_since=2026-07-03T00%3A00%3A00Z&per_page=200&page=1"
+    },
+    {
+      "file": "lionfish-belize.json",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=16.0&swlng=-88.5&nelat=18.2&nelng=-87.3&taxon_id=47284&order_by=updated_at&order=asc&updated_since=2026-07-03T00%3A00%3A00Z&per_page=200&page=1"
+    },
+    {
+      "file": "lionfish-co-caribbean.json",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=9.7&swlng=-81.8&nelat=13.5&nelng=-74.0&taxon_id=47284&order_by=updated_at&order=asc&updated_since=2026-07-03T00%3A00%3A00Z&per_page=200&page=1"
+    },
+    {
+      "file": "lionfish-mirrors.json",
+      "url": "https://api.inaturalist.org/v1/observations?id=319289585,319436282,320978776,321649276,322799983,324429103,324443949,325392953,325808591,326237226,326552021,326894358,327084216,327168993,327591929,327987612,328275288,330585387,330918460,331483941,331862112,331989183,332342848,332362554,332534521,332775177,334089308,334151254,334299978,334702816,335128080,335304866,335491817,335951135,335975309,336044957,336049293,336400056,336978768,337202290,338498980,338565143,339170966,339909705,340079069,340093721,340213842,340700937,343149767,343208340,343244794,343244795,343244797,343244799,343266576,343509111,343663879,343793976,344067314,344366153,344525133,344549166,345464653,345528326,346076819,346076863,346076866,346137060,346141658,346819767,351194495,351318734,354897570,358342735,358985349,361799577,363163652,363360607,364679489,365752468,365882832,367158577,367937678,369596991,374570855,375356190,377207479&order_by=id&order=asc&per_page=200"
+    }
+  ]
+}

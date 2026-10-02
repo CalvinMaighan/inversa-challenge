@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-10-01T07:01:03Z",
+  "note": "alerts/active?area=LA as recorded; Louisiana was quiet, so this is the no-active-alerts case (a recorded check, not silence).",
+  "files": [
+    {
+      "file": "active_la.json",
+      "url": "https://api.weather.gov/alerts/active?area=LA",
+      "content_type": "application/geo+json"
+    }
+  ]
+}

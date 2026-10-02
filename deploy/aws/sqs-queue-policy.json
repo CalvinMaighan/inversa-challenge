@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowNoddGoes19Topic",
+      "Effect": "Allow",
+      "Principal": { "Service": "sns.amazonaws.com" },
+      "Action": "sqs:SendMessage",
+      "Resource": "arn:aws:sqs:us-east-1:YOUR_ACCOUNT_ID:goes19-nodd",
+      "Condition": {
+        "ArnEquals": { "aws:SourceArn": "arn:aws:sns:us-east-1:123901341784:NewGOES19Object" }
+      }
+    }
+  ]
+}

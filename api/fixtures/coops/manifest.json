@@ -1,0 +1,21 @@
+{
+  "recorded_at": "2026-09-30T20:33:20Z",
+  "files": [
+    {
+      "file": "8723214.water_level.json",
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_level&application=inversa-challenge&station=8723214&range=1&datum=MLLW&time_zone=gmt&units=metric&format=json"
+    },
+    {
+      "file": "8723214.water_temperature.json",
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=inversa-challenge&station=8723214&range=1&time_zone=gmt&units=metric&format=json"
+    },
+    {
+      "file": "8724580.water_level.json",
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_level&application=inversa-challenge&station=8724580&range=1&datum=MLLW&time_zone=gmt&units=metric&format=json"
+    },
+    {
+      "file": "8725114.water_temperature.json",
+      "url": "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?product=water_temperature&application=inversa-challenge&station=8725114&range=1&time_zone=gmt&units=metric&format=json"
+    }
+  ]
+}

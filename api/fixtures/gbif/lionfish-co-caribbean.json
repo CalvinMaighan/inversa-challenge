@@ -1,0 +1,32 @@
+{
+  "offset": 0,
+  "limit": 300,
+  "endOfRecords": true,
+  "count": 1,
+  "results": [
+    {
+      "key": 6480967707,
+      "datasetKey": "50c9509d-22c7-4a22-a47d-8c48425ef4a7",
+      "catalogNumber": "389133921",
+      "occurrenceID": "https://www.inaturalist.org/observations/389133921",
+      "decimalLatitude": 10.320903,
+      "decimalLongitude": -75.580624,
+      "coordinateUncertaintyInMeters": 525.0,
+      "eventDate": "2026-08-06T00:00",
+      "occurrenceStatus": "PRESENT",
+      "speciesKey": 2334438,
+      "genusKey": 2334432,
+      "species": "Pterois volitans",
+      "scientificName": "Pterois volitans (Linnaeus, 1758)",
+      "vernacularName": null,
+      "countryCode": "CO",
+      "institutionCode": "iNaturalist",
+      "media": [
+        {
+          "type": "StillImage",
+          "identifier": "https://inaturalist-open-data.s3.amazonaws.com/photos/712753650/original.jpg"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+# inversa.bigvalue.lol on the Hetzner box. Caddy terminates TLS with its own
+# Let's Encrypt cert (HTTP-01 / TLS-ALPN-01), so DNS must point straight at the VM or
+# through a proxy that passes those challenges.
+#
+# Axum (127.0.0.1:4041) owns /v1/* and /health, including graphql-transport-ws
+# upgrades for subscriptions. /signal/* goes to the board's signal Worker on Cloudflare
+# (prefix stripped), so the page talks to one origin (release.yml builds the client with
+# NEXT_PUBLIC_SIGNAL_URL=/signal). Next (127.0.0.1:3050) owns everything else, /api/health included.
+#
+# SIGNAL_WORKER_URL (the Worker's https://<name>.<account>.workers.dev origin) comes from
+# /etc/inversa/caddy.env, which remote-unpack.sh writes from the Doppler env and the caddy unit
+# reads through the inversa.conf drop-in. Unset, /signal/* answers 502 and the board falls back
+# to syncing through the API; /api/health reports the Worker down.
+# Caddy's reverse_proxy handles Connection: Upgrade on its own; nothing extra is needed
+# for WebSockets beyond keeping them open across config reloads (stream_close_delay).
+
+inversa.bigvalue.lol {
+	encode zstd gzip
+
+	header {
+		# Cross-origin isolation for SharedArrayBuffer (PRD section 12). Safari has no
+		# COEP credentialless, so require-corp; every subresource must be same-origin.
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Embedder-Policy require-corp
+		Cross-Origin-Resource-Policy same-origin
+
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		# The directives that cannot break the app: no framing, no plugins, no <base> or form retargeting.
+		# script-src / connect-src are not pinned yet (Next's inline bootstrap scripts need nonces, and the
+		# imagery ladder spans ion, Google, Bing, Esri and OSM hosts); see docs/security.md.
+		Content-Security-Policy "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+		Referrer-Policy strict-origin-when-cross-origin
+		# Microphone is for the voice session; nothing else is requested by the app.
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+		-Server
+		-X-Powered-By
+
+		# Apply after the upstream response so these values win over anything it sent.
+		defer
+	}
+
+	# Access log to stderr, so journald holds and rotates it (journalctl -u caddy). The nudge
+	# token is a path segment (/v1/<app>/ingest/nudge/<source>/<token>), so it is masked before
+	# the line is written; nothing else in a URL is a secret.
+	log {
+		format filter {
+			request>uri regexp "^(/v1/[^/]+/ingest/nudge/[^/]+/)[^/?]+" "${1}REDACTED"
+			wrap json
+		}
+	}
+
+	@api path /v1/* /health
+	handle @api {
+		reverse_proxy 127.0.0.1:4041 {
+			# Stream subscriptions and chunked responses without buffering.
+			flush_interval -1
+			# A deploy reloads Caddy; give open sockets time to finish instead of cutting them.
+			stream_close_delay 5m
+		}
+	}
+
+	handle_path /signal/* {
+		reverse_proxy {$SIGNAL_WORKER_URL:https://signal-worker-url-not-set.invalid} {
+			# workers.dev routes by Host; the Worker checks Origin, which passes through unchanged.
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:3050 {
+			# Agent NDJSON and voice streams go through Next; flush every write.
+			flush_interval -1
+			stream_close_delay 5m
+		}
+	}
+}

@@ -1,0 +1,76 @@
+{
+  "scene": "rise-2026-05",
+  "description": "SYNTHETIC replay scene for the needs-review engine (gates/leaf-C5.md G4), not observed data. One Atchafalaya site (SMML1, real NWPS thresholds) starts quiet; the next day's NWPS issuance crests above minor stage within 72 h; a Flood Warning appears overnight. Stage rises 0.48 ft/24 h observed and at most 1.76 ft/24 h forecast, under both rise thresholds, so the only reasons are the forecast category and the alert.",
+  "site": {
+    "lid": "SMML1",
+    "location": "atchafalaya-simmesport",
+    "name": "Atchafalaya River at Simmesport (demonstration location)",
+    "usgs": "07381490"
+  },
+  "thresholds": { "ingestedAt": "2026-05-01T00:00:00Z", "actionFt": 35, "minorFt": 40, "moderateFt": 44, "majorFt": 50 },
+  "observations": {
+    "source": "nwps-live",
+    "from": "2026-05-08T00:00:00Z",
+    "hours": 96,
+    "startFt": 33.48,
+    "ftPerHour": 0.02,
+    "lagMinutes": 55
+  },
+  "forecasts": [
+    {
+      "source": "nwps-live",
+      "payloadHash": "scene-f0",
+      "issuedAt": "2026-05-09T15:00:00Z",
+      "ingestedAt": "2026-05-09T15:50:00Z",
+      "validFrom": "2026-05-09T18:00:00Z",
+      "stepHours": 6,
+      "points": 40,
+      "startFt": 34.32,
+      "riseFtPerStep": 0.12,
+      "risingSteps": 4
+    },
+    {
+      "source": "nwps-live",
+      "payloadHash": "scene-f1",
+      "issuedAt": "2026-05-10T15:00:00Z",
+      "ingestedAt": "2026-05-10T15:45:00Z",
+      "validFrom": "2026-05-10T18:00:00Z",
+      "stepHours": 6,
+      "points": 40,
+      "startFt": 34.80,
+      "riseFtPerStep": 0.44,
+      "risingSteps": 20
+    }
+  ],
+  "alertPolls": [
+    { "seenAt": "2026-05-10T12:00:00Z", "alerts": [] },
+    {
+      "seenAt": "2026-05-11T03:00:00Z",
+      "alerts": [
+        {
+          "extId": "urn:oid:2.49.0.1.840.0.scene-rise-2026-05.1",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning for the Atchafalaya River at Simmesport (synthetic scene)",
+          "onset": "2026-05-11T03:00:00Z",
+          "expires": "2026-05-14T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "seenAt": "2026-05-11T05:00:00Z",
+      "alerts": [
+        {
+          "extId": "urn:oid:2.49.0.1.840.0.scene-rise-2026-05.1",
+          "event": "Flood Warning",
+          "severity": "Severe",
+          "headline": "Flood Warning for the Atchafalaya River at Simmesport (synthetic scene)",
+          "onset": "2026-05-11T03:00:00Z",
+          "expires": "2026-05-14T00:00:00Z"
+        }
+      ]
+    }
+  ],
+  "checkpoints": { "t1": "2026-05-09T18:00:00Z", "t2": "2026-05-10T18:00:00Z", "t3": "2026-05-11T06:00:00Z" },
+  "expect": { "t1": "ok", "t2": "review:forecast_category", "t3": "review:forecast_category,active_alert" }
+}

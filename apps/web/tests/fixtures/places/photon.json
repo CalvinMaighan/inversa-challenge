@@ -1,0 +1,20 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "osm_type": "N", "osm_id": 154353700, "osm_key": "place", "osm_value": "locality", "type": "locality", "name": "Flamingo", "county": "Monroe County", "state": "Florida", "country": "United States", "countrycode": "US" },
+      "geometry": { "type": "Point", "coordinates": [-80.9252637, 25.1418871] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "osm_type": "W", "osm_id": 40961744, "osm_key": "natural", "osm_value": "bay", "type": "other", "name": "Florida Bay", "state": "Florida", "country": "United States", "countrycode": "US", "extent": [-81.1, 25.25, -80.35, 24.85] },
+      "geometry": { "type": "Point", "coordinates": [-80.75, 25.05] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "osm_type": "N", "osm_id": 1, "name": "" },
+      "geometry": { "type": "Point", "coordinates": [-80.1, 25.7] }
+    }
+  ]
+}

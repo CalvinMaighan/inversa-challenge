@@ -1,0 +1,106 @@
+{
+  "name": "note-multi-field",
+  "ops": [
+    {
+      "id": "op-0053",
+      "hlc": "1700000000100:0:a",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "Saw two pythons near L-31N",
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0054",
+      "hlc": "1700000000100:0:b",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "pin",
+      "value": {
+        "lon": -80.52,
+        "lat": 25.41
+      },
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0055",
+      "hlc": "1700000000200:0:b",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "body",
+      "value": "Saw three pythons near L-31N",
+      "nodeId": "b"
+    },
+    {
+      "id": "op-0056",
+      "hlc": "1700000000150:0:a",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "tags",
+      "value": [
+        "python",
+        "canal"
+      ],
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0057",
+      "hlc": "1700000000120:0:a",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n1",
+      "field": "pin",
+      "value": {
+        "lon": -80.5,
+        "lat": 25.4
+      },
+      "nodeId": "a"
+    },
+    {
+      "id": "op-0058",
+      "hlc": "1700000000100:0:c",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n2",
+      "field": "body",
+      "value": "Empty",
+      "nodeId": "c"
+    },
+    {
+      "id": "op-0059",
+      "hlc": "1700000000100:0:c",
+      "boardId": "b1",
+      "entity": "note",
+      "entityId": "n2",
+      "field": "priority",
+      "value": 3,
+      "nodeId": "c"
+    }
+  ],
+  "expected": {
+    "missions": {},
+    "notes": {
+      "n1": {
+        "body": "Saw three pythons near L-31N",
+        "pin": {
+          "lon": -80.5,
+          "lat": 25.4
+        },
+        "tags": [
+          "python",
+          "canal"
+        ]
+      },
+      "n2": {
+        "body": "Empty",
+        "priority": 3
+      }
+    },
+    "messages": [],
+    "removals": {}
+  }
+}

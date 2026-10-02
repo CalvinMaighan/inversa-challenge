@@ -1,0 +1,116 @@
+{
+  "id": "carp",
+  "name": "Carp Field Conditions",
+  "icon": "carp",
+  "tagline": "River and weather conditions around candidate carp-removal locations, Louisiana",
+  "question": "How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today?",
+  "kind": "conditions",
+  "taxa": [],
+  "regions": [
+    {
+      "id": "louisiana",
+      "name": "Louisiana rivers",
+      "bbox": [-94.0, 28.9, -88.8, 32.9],
+      "cellDeg": 0.01,
+      "camera": { "lat": 31.1, "lon": -91.1, "heightM": 650000 }
+    }
+  ],
+  "locations": [
+    { "id": "atchafalaya-simmesport", "name": "Atchafalaya River at Simmesport", "lat": 30.9825, "lon": -91.7983, "usgs": "07381490", "nwps": "SMML1", "nws": "LCH", "nwsGrid": { "office": "LCH", "x": 113, "y": 129 }, "nwsZones": ["LAZ029", "LAC009"], "note": "Atchafalaya head, below the Old River outflow (L'CARP basin)." },
+    { "id": "atchafalaya-krotz-springs", "name": "Atchafalaya River at Krotz Springs", "lat": 30.5689, "lon": -91.7614, "usgs": "07381500", "nwps": "KRZL1", "nws": "LCH", "nwsGrid": { "office": "LCH", "x": 115, "y": 111 }, "nwsZones": ["LAZ033", "LAC097"], "note": "Upper basin. USGS stage sits on a different datum (about 2.45 ft below NWPS); categories use NWPS stage only. No USGS discharge." },
+    { "id": "atchafalaya-butte-la-rose", "name": "Atchafalaya River above Butte La Rose", "lat": 30.2814, "lon": -91.6867, "usgs": "07381515", "nwps": "BLRL1", "nws": "LCH", "nwsGrid": { "office": "LCH", "x": 118, "y": 98 }, "nwsZones": ["LAZ045", "LAC099"], "note": "Mid basin. No USGS discharge." },
+    { "id": "atchafalaya-morgan-city", "name": "Atchafalaya River at Morgan City", "lat": 29.6964, "lon": -91.2108, "usgs": "07381600", "nwps": "MCGL1", "nws": "LCH", "nwsGrid": { "office": "LCH", "x": 137, "y": 73 }, "nwsZones": ["LAZ254", "LAC101"], "note": "Lower basin, tidal: use 24 h means for flow and change. Action stage is 4 ft and often reached." },
+    { "id": "mississippi-baton-rouge", "name": "Mississippi River at Baton Rouge", "lat": 30.4292, "lon": -91.2069, "usgs": "07374000", "nwps": "BTRL1", "nws": "LIX", "nwsGrid": { "office": "LIX", "x": 24, "y": 108 }, "nwsZones": ["LAZ047", "LAC121"], "note": "Feeder river named in the brief." },
+    { "id": "red-river-alexandria", "name": "Red River at Alexandria", "lat": 31.3089, "lon": -92.4392, "usgs": "07355500", "nwps": "AEXL1", "nws": "LCH", "nwsGrid": { "office": "LCH", "x": 88, "y": 143 }, "nwsZones": ["LAZ028", "LAC079"], "note": "No USGS discharge; NWPS flow is an NWS estimate." },
+    { "id": "ouachita-monroe", "name": "Ouachita River at Monroe", "lat": 32.5003, "lon": -92.1197, "usgs": "07367005", "nwps": "MLUL1", "nws": "SHV", "nwsGrid": { "office": "SHV", "x": 134, "y": 68 }, "nwsZones": ["LAZ014", "LAC073"], "note": "NWPS flow and USGS discharge disagree 5 to 7 times here; every flow number is labelled with its source." },
+    { "id": "pearl-bogalusa", "name": "Pearl River near Bogalusa", "lat": 30.7931, "lon": -89.8208, "usgs": "02489500", "nwps": "BXAL1", "nws": "LIX", "nwsGrid": { "office": "LIX", "x": 76, "y": 126 }, "nwsZones": ["LAZ039", "LAC117"], "note": "Neighbour river named in the brief." }
+  ],
+  "cameraPresets": [
+    { "id": "all-sites", "name": "All sites", "lat": 31.1, "lon": -91.1, "zoom": 7.5 },
+    { "id": "atchafalaya", "name": "Atchafalaya Basin (L'CARP)", "lat": 30.35, "lon": -91.55, "zoom": 8.5, "locations": ["atchafalaya-simmesport", "atchafalaya-krotz-springs", "atchafalaya-butte-la-rose", "atchafalaya-morgan-city"] }
+  ],
+  "feeds": [
+    { "source": "usgs", "mode": "poll", "name": "USGS Water Data (OGC API, continuous)", "homepage": "https://api.waterdata.usgs.gov/docs/ogcapi/", "params": { "api": "ogc", "parameters": ["00065", "00060"] } },
+    { "source": "nwps", "mode": "poll", "name": "NOAA National Water Prediction Service", "homepage": "https://water.noaa.gov", "params": { "fastWindowUtc": [12, 18] } },
+    { "source": "nws-alerts", "mode": "poll", "name": "NWS alerts API (Louisiana)", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": { "area": "LA", "offices": ["KLIX", "KSHV", "KLCH", "KJAN"], "senders": ["NWS New Orleans LA", "NWS Shreveport LA", "NWS Lake Charles LA", "NWS Jackson MS"], "sameCodes": [] } },
+    { "source": "nws-forecast", "mode": "poll", "name": "NWS gridpoint forecast", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": {} },
+    { "source": "iem", "mode": "poll", "name": "IEM HML river forecast archive (Iowa State)", "homepage": "https://mesonet.agron.iastate.edu/request/hml.php", "params": { "days": 30 } },
+    { "source": "nwws", "mode": "push", "params": { "offices": ["KLCH", "KLIX", "KSHV"] } },
+    { "source": "aisstream", "mode": "push", "name": "AISStream.io vessel positions", "homepage": "https://aisstream.io", "params": {} }
+  ],
+  "score": {
+    "label": "Needs review (reasons listed per location; not a risk score)",
+    "components": [
+      { "id": "stageChange", "label": "Stage change (24 h)", "weight": 1, "description": "Observed stage rise or fall over the last day." },
+      { "id": "forecastDrift", "label": "Forecast drift", "weight": 1, "description": "How the latest NWPS forecast differs from the one issued a day earlier." },
+      { "id": "alerts", "label": "Active NWS alerts", "weight": 1, "description": "Flood and weather products in effect at the location." },
+      { "id": "freshness", "label": "Data freshness", "weight": 1, "description": "Age of the newest observation and forecast issuance." }
+    ]
+  },
+  "windows": { "defaultHours": 72, "optionsHours": [24, 72, 168] },
+  "layers": [
+    { "id": "locations", "label": "Locations", "defaultOn": true },
+    { "id": "alerts", "label": "NWS alerts", "defaultOn": true },
+    { "id": "stations", "label": "Gauge readings", "defaultOn": false },
+    { "id": "missions", "label": "Team missions", "defaultOn": true },
+    { "id": "peers", "label": "Teammates", "defaultOn": true },
+    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "sst-map", "label": "Sea surface temperature map", "defaultOn": false, "description": "How warm the Gulf was, satellite picture, one per day." },
+    { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
+    { "id": "clouds", "label": "Clouds", "defaultOn": false, "description": "Cloud cover from the weather satellite." },
+    { "id": "lightning", "label": "Lightning", "defaultOn": false, "description": "Where lightning struck in the last 15 minutes." },
+    { "id": "cyclones", "label": "Hurricanes and tropical storms", "defaultOn": false, "description": "Active storms, their track and forecast cone." }
+  ],
+  "legend": {
+    "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP is reported as active in the Atchafalaya Basin (LDWF).",
+    "sst-map": "NASA GIBS MUR sea surface temperature, daily; the newest picture is the day before.",
+    "radar": "NOAA nowCOAST MRMS base reflectivity, about every 4 minutes, contiguous US only.",
+    "clouds": "NOAA nowCOAST GOES-19/18 longwave infrared, every 5 minutes.",
+    "lightning": "NOAA nowCOAST 15-minute lightning strike density, about 8 km cells.",
+    "cyclones": "NHC and CPHC advisories: positions, past track, forecast track and cone.",
+    "alerts": "NWS products in effect at the cursor time; \"no active alerts\" shows the time of the last check.",
+    "stations": "Observed stage and discharge (USGS, cfs) with NWPS forecast issuance times. Flood categories use NWPS stage; flow is always labelled with its source.",
+    "missions": "Areas the team has claimed or finished.",
+    "peers": "Teammates on the board right now.",
+    "notes": "Field notes pinned to the map."
+  },
+  "copy": {
+    "about": "River stage, flow forecasts and weather alerts at Louisiana demonstration locations, with what was known at each moment. It cannot tell carp abundance, catch, access or trip safety.",
+    "region": "Louisiana demonstration locations",
+    "timezone": "America/Chicago",
+    "legendTitle": "River gauges, forecasts and alerts",
+    "title": "Carp Field Conditions",
+    "shortTitle": "Carp",
+    "scopeNote": "Louisiana river locations (demonstration set, Atchafalaya Basin first).",
+    "boundaryNote": "These feeds cannot establish carp abundance, expected catch, legal access or trip safety."
+  },
+  "helperQuestions": [
+    "Which location had the largest 24 h stage rise?",
+    "Compare two locations for tomorrow morning.",
+    "Why did this location start needing review?",
+    "What did we know yesterday afternoon?",
+    "Which locations have stale forecasts?",
+    "Which locations need operational review today?",
+    "What is the flood category forecast for the Atchafalaya sites?",
+    "Why do we track both river stage and discharge for carp fieldwork planning?"
+  ],
+  "agent": {
+    "persona": "You are the field-conditions analyst for carp removal operations in Louisiana (L'CARP, run by Inversa, reported active in the Atchafalaya Basin for silver, grass, bighead and black carp). You report observed and forecast river conditions per demonstration location and which of them should be flagged for review, keep observation, issuance, valid and ingestion times apart, label every number with its source and unit, answer 'what was known at time T' from the data known then, and never claim carp abundance, catch, legal access or trip safety.",
+    "scope": "River stage, discharge, NWPS forecasts and flood categories, NWS weather forecasts and alerts, review status and the team board at the eight Louisiana demonstration locations (Atchafalaya at Simmesport, Krotz Springs, Butte La Rose and Morgan City; Mississippi at Baton Rouge; Red at Alexandria; Ouachita at Monroe; Pearl near Bogalusa), live or as of a past time.",
+    "tools": ["site_status", "river_readings", "river_forecast", "forecast_verify", "review_history", "weather_forecast", "alerts", "feed_state", "source_info", "evidence", "notes", "team_board", "set_view", "vessels", "toggle_layer", "set_look"],
+    "refusal": "Carp Field Conditions covers river and weather conditions at the eight Louisiana demonstration locations only (L'CARP targets silver, grass, bighead and black carp in the Atchafalaya Basin). It cannot estimate carp abundance, expected catch, legal access or trip safety, and it has no data for other rivers, regions or species (Burmese pythons are the Python app's, in the Everglades)."
+  },
+  "eval": { "goldenSet": "carp" },
+  "review": {
+    "stageRiseFt": 2.0,
+    "tidalSites": ["MCGL1"],
+    "tidalStageRiseFt": 3.0,
+    "forecastHorizonHours": 72,
+    "rapidRiseFtPer24h": 2.0,
+    "tidalRapidRiseFtPer24h": 3.0,
+    "staleObservationHours": 6,
+    "staleForecastHours": 36,
+    "conflictFt": 1.0,
+    "flowConflictRatio": 1.5
+  }
+}

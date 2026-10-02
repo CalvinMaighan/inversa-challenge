@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-09-30T20:33:05Z",
+  "files": [
+    {
+      "file": "iv.json",
+      "url": "https://waterservices.usgs.gov/nwis/iv/?format=json&bBox=-81.5,25.0,-80.2,26.5&parameterCd=00065,62614,62615,00010&siteStatus=active&period=PT180M"
+    }
+  ]
+}

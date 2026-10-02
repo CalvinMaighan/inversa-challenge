@@ -1,0 +1,14 @@
+{
+  "Records": {
+    "s3": {
+      "object": {
+        "key": [
+          { "prefix": "ABI-L2-LSTC/" },
+          { "prefix": "ABI-L2-SSTF/" },
+          { "prefix": "ABI-L2-FDCC/" },
+          { "prefix": "ABI-L2-ACMC/" }
+        ]
+      }
+    }
+  }
+}

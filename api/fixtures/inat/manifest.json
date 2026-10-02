@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-10-01T13:40:00Z",
+  "files": [
+    {
+      "file": "focus-p1.json",
+      "url": "https://api.inaturalist.org/v1/observations?swlat=24.3&swlng=-83.2&nelat=27.5&nelng=-79.8&taxon_id=238252&order_by=updated_at&order=asc&updated_since=2026-09-09T12:30:00Z&per_page=12"
+    },
+    {
+      "file": "idflip-p1.json",
+      "url": "https://api.inaturalist.org/v1/observations?id=259939110"
+    }
+  ]
+}
