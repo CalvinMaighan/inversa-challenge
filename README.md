@@ -73,12 +73,12 @@ First-time setup, once ([docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) has the step 
 2. Cloudflare DNS `inversa.bigvalue.lol` → VM IP, proxied, SSL mode Full (strict).
 3. Doppler `inversa/prd` with the keys above plus R2 credentials; a Doppler service token on the VM; GitHub secrets for the deploy SSH key and host.
 4. R2 buckets `inversa-litestream` and `inversa-raw`.
-5. Backfill on the server (use `tmux`; each takes a while):
+5. Backfill on the server, once per app (use `tmux`; each takes a while):
 
    ```sh
-   inversa-api backfill --app python --days 730
-   inversa-api backfill --app carp --days 730
-   inversa-api backfill --app lionfish --days 730
+   for a in python carp lionfish; do
+     sudo -u inversa bash -c "set -a; . /etc/inversa/env; set +a; INVERSA_DATA_DIR=/var/lib/inversa /opt/inversa/api/inversa-api backfill --app $a --days 730"
+   done
    ```
 
 Check: `curl https://inversa.bigvalue.lol/api/health` returns 200 (`degraded` only names a missing optional key).
