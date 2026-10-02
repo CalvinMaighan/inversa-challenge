@@ -29,6 +29,7 @@
     "eval": "bun run --cwd apps/web eval",
     "check:questions": "bun scripts/check-questions.ts",
     "grade": "bun scripts/grade.ts",
-    "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK"
+    "check": "bun run lint && bun run typecheck && bun run test && bun run test:api && echo CHECK-OK",
+    "check:ci": "bun run lint && bun run typecheck && echo CHECK-CI-OK"
   }
 }
