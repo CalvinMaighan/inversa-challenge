@@ -116,11 +116,25 @@ export default function CarpHud({ app }: { app: AppConfig }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A location is always selected, so the stage timeline has something to draw: the first site of the app's short list,
+  // unless a link or the agent chose one. The default stays quiet: no camera flight and no briefing until the user picks.
+  const [auto, setAuto] = useState<string | null>(() => (carp.site === undefined && sites.length > 0 ? sites[0]!.lid : null));
+  useEffect(() => {
+    if (auto !== null) selectSite(auto);
+    // Once per mount (an app switch remounts); a site chosen later is the user's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const quiet = auto !== null && carp.site === auto;
+  const choose = (lid: string | null) => {
+    setAuto(null);
+    selectSite(lid);
+  };
+
   // A newly selected site (board, marker, agent, link): fly there.
   useEffect(() => {
-    if (!site) return;
+    if (!site || quiet) return;
     getGlobe()?.flyTo({ lat: site.lat, lon: site.lon, altitudeM: SITE_ALTITUDE_M, heading: 0, pitch: -90, durationS: 1.2 });
-  }, [site]);
+  }, [site, quiet]);
 
   // Replay: advance the as-of time an hour per tick; at now, back to live.
   useEffect(() => {
@@ -245,7 +259,7 @@ export default function CarpHud({ app }: { app: AppConfig }) {
 
   return (
     <>
-      <SiteMarkers sites={sites} reviews={board.reviews} selected={carp.site} onSelect={(lid) => selectSite(lid)} />
+      <SiteMarkers sites={sites} reviews={board.reviews} selected={carp.site} onSelect={(lid) => choose(lid)} />
       <Board
         open={showBoard}
         onOpen={() => setBoardOpen(true)}
@@ -262,11 +276,11 @@ export default function CarpHud({ app }: { app: AppConfig }) {
         activePreset={preset}
         onPreset={flyPreset}
         onSelect={(lid) => {
-          selectSite(lid);
+          choose(lid);
           if (mobile) setBoardOpen(false);
         }}
       />
-      <SiteDrawer evidence={evidence} onClose={() => selectSite(null)} />
+      <SiteDrawer evidence={quiet ? null : evidence} onClose={() => choose(null)} />
       <CarpTimeline
         chart={chart}
         siteName={site?.name ?? null}
