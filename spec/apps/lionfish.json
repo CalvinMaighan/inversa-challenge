@@ -85,7 +85,7 @@
     { "id": "sightings", "label": "Lionfish reports", "defaultOn": true },
     { "id": "hotspots", "label": "Survey priority", "defaultOn": true },
     { "id": "sst", "label": "Sea surface temperature (GOES-19)", "defaultOn": false },
-    { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": true },
+    { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": false },
     { "id": "marine", "label": "Waves and currents (Open-Meteo)", "defaultOn": false },
     { "id": "stations", "label": "Buoys and tide stations (Florida)", "defaultOn": false },
     { "id": "missions", "label": "Team missions", "defaultOn": true },

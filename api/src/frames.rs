@@ -42,10 +42,11 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use axum::extract::Query;
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -83,6 +84,8 @@ pub const FINE_STEP_MIN: u32 = 15;
 pub const FINE_WINDOW_MS: i64 = DAY_MS;
 /// PLAN.md C15: 30-day window.
 pub const WINDOW_MS: i64 = 30 * DAY_MS;
+/// Stored frames kept and warmed: the longest period the timeline offers (two years) and a day.
+pub const KEEP_MS: i64 = 731 * DAY_MS;
 /// 31 days of hourly frames; the REST cap. GraphQL `frames` caps itself at 24.
 pub const MAX_CHUNK_FRAMES: usize = 744;
 pub const CONTENT_TYPE: &str = "application/x-evf";
@@ -513,6 +516,7 @@ pub async fn rebuild(db: &Db, app: &App, from_ms: i64, to_ms: i64) -> anyhow::Re
         persist(db, packed).await?;
         batch_start = batch_end;
     }
+    invalidate_chunks(app.id(), from, to);
     Ok((from, to))
 }
 
@@ -541,7 +545,7 @@ pub fn routes() -> Router<AppRegistry> {
     Router::new().route("/frames", get(bulk))
 }
 
-async fn bulk(state: AppState, Query(q): Query<FramesQuery>) -> Response {
+async fn bulk(state: AppState, headers: HeaderMap, Query(q): Query<FramesQuery>) -> Response {
     if !state.app.is_species() {
         return crate::app::json_error(
             StatusCode::NOT_FOUND,
@@ -558,26 +562,99 @@ async fn bulk(state: AppState, Query(q): Query<FramesQuery>) -> Response {
     if let Err(e) = chunk_times(from, to, step) {
         return (StatusCode::BAD_REQUEST, e.to_string()).into_response();
     }
-    let bytes = match chunk(&state.obs, &state.app, from, to, step).await {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::warn!(app = state.app.id(), "frames chunk failed: {e:#}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, "frames unavailable").into_response();
+    // The same chunk is asked for by every visitor: built and gzipped once, kept until a rebuild touches its range.
+    let key = (state.app.id().to_string(), align(from, step as i64 * 60_000), align(to, step as i64 * 60_000), step);
+    let hit = if step == STEP_MIN { chunk_cache().lock().expect("chunk cache").get(&key).cloned() } else { None };
+    let entry = match hit {
+        Some(e) => e,
+        None => {
+            let bytes = match chunk(&state.obs, &state.app, from, to, step).await {
+                Ok(b) => b,
+                Err(e) => {
+                    tracing::warn!(app = state.app.id(), "frames chunk failed: {e:#}");
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "frames unavailable").into_response();
+                }
+            };
+            let gz = match tokio::task::spawn_blocking(move || gzip(&bytes)).await {
+                Ok(b) => b,
+                Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+            };
+            let entry = Cached { etag: etag_of(&gz), gz: Arc::new(gz) };
+            if step == STEP_MIN {
+                let mut cache = chunk_cache().lock().expect("chunk cache");
+                if cache.values().map(|e| e.gz.len()).sum::<usize>() > CHUNK_CACHE_BYTES {
+                    cache.clear();
+                }
+                cache.insert(key, entry.clone());
+            }
+            entry
         }
     };
-    let body = match tokio::task::spawn_blocking(move || gzip(&bytes)).await {
-        Ok(b) => b,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    };
-    (
-        [
-            (header::CONTENT_TYPE, CONTENT_TYPE),
-            (header::CONTENT_ENCODING, "gzip"),
-            (header::CACHE_CONTROL, "private, max-age=60"),
-        ],
-        body,
-    )
-        .into_response()
+    let cache_control = (header::CACHE_CONTROL, "private, max-age=60");
+    if headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) == Some(entry.etag.as_str()) {
+        return (StatusCode::NOT_MODIFIED, [(header::ETAG, entry.etag.clone())], [cache_control]).into_response();
+    }
+    ([(header::CONTENT_TYPE, CONTENT_TYPE), (header::CONTENT_ENCODING, "gzip"), (header::ETAG, entry.etag.as_str())], [cache_control], entry.gz.as_ref().clone()).into_response()
+}
+
+/// Memory the built chunks may hold before the cache starts over.
+const CHUNK_CACHE_BYTES: usize = 96 * 1024 * 1024;
+
+#[derive(Clone)]
+struct Cached {
+    gz: Arc<Vec<u8>>,
+    etag: String,
+}
+
+type ChunkKey = (String, i64, i64, u32);
+
+fn chunk_cache() -> &'static Mutex<HashMap<ChunkKey, Cached>> {
+    static CACHE: OnceLock<Mutex<HashMap<ChunkKey, Cached>>> = OnceLock::new();
+    CACHE.get_or_init(Mutex::default)
+}
+
+/// Forget the built chunks of `app` that overlap `[from, to]`: their frames were just rebuilt.
+fn invalidate_chunks(app: &str, from: i64, to: i64) {
+    chunk_cache().lock().expect("chunk cache").retain(|(a, f, t, _), _| !(a == app && *f <= to && *t >= from));
+}
+
+/// A strong validator for a gzipped chunk: FNV-1a of its bytes and their count.
+fn etag_of(bytes: &[u8]) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in bytes {
+        h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+    }
+    format!("\"{h:016x}-{}\"", bytes.len())
+}
+
+/// Build every missing hourly frame of the last two years in the background, newest month first, so a visitor's
+/// first long period is read from SQLite instead of built on the request. A restart resumes where it stopped.
+fn spawn_warm(state: AppState) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(45)).await;
+        let end = align(now_ms(), STEP_MS);
+        let floor = end - KEEP_MS;
+        let mut seg_end = end;
+        while seg_end > floor {
+            let seg_start = (seg_end - 30 * DAY_MS + STEP_MS).max(floor);
+            let want = (seg_end - seg_start) / STEP_MS + 1;
+            let have: i64 = state
+                .obs
+                .read(move |c| c.query_row("select count(*) from frames where frame_at >= ?1 and frame_at <= ?2", rusqlite::params![seg_start, seg_end], |r| r.get(0)))
+                .await
+                .unwrap_or(want);
+            if have < want {
+                let started = std::time::Instant::now();
+                match rebuild(&state.obs, &state.app, seg_start, seg_end).await {
+                    Ok(_) => tracing::info!(app = state.app.id(), "frames warmed {}..{} in {:?}", seg_start, seg_end, started.elapsed()),
+                    Err(e) => tracing::warn!(app = state.app.id(), "frame warm failed: {e:#}"),
+                }
+                // Leave the cores to the visitors between months.
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
+            seg_end = seg_start - STEP_MS;
+        }
+    });
 }
 
 fn merge(pending: Option<(i64, i64)>, from: i64, to: i64) -> (i64, i64) {
@@ -597,6 +674,7 @@ pub fn spawn_builder_with(state: AppState, debounce_for: Duration) {
         tracing::info!(app = state.app.id(), "no frame builder: conditions app");
         return;
     }
+    spawn_warm(state.clone());
     tokio::spawn(async move {
         let mut rx = state.hub.subscribe();
         let mut pending: Option<(i64, i64)> = None;
@@ -636,7 +714,7 @@ pub fn spawn_builder_with(state: AppState, debounce_for: Duration) {
                         }
                         Err(e) => tracing::warn!(app = state.app.id(), "frame rebuild failed: {e:#}"),
                     }
-                    if let Err(e) = prune(&state.obs, now - WINDOW_MS - DAY_MS).await {
+                    if let Err(e) = prune(&state.obs, now - KEEP_MS).await {
                         tracing::warn!(app = state.app.id(), "frame prune failed: {e:#}");
                     }
                 }

@@ -123,7 +123,7 @@ export const SectionTitle = styled.h3`
 `;
 
 /** Inline SVG icons: strokes in currentColor, 16 px box. */
-export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" | "layers" | "help" | "info" | "theme" }) {
+export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "live" | "push" | "poll" | "close" | "focus" | "chevron" | "external" | "layers" | "help" | "info" | "theme" | "bell" }) {
   const paths: Record<typeof name, ReactNode> = {
     play: <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none" />,
     pause: (
@@ -154,6 +154,7 @@ export function Icon({ name }: { name: "play" | "pause" | "prev" | "next" | "liv
         <circle cx="8" cy="4.9" r="0.45" fill="currentColor" />
       </>
     ),
+    bell: <path d="M3.5 11.5h9l-1.2-1.7V7a3.3 3.3 0 0 0-6.6 0v2.8zM6.7 13.5a1.4 1.4 0 0 0 2.6 0" />,
     theme: (
       <>
         <circle cx="8" cy="8" r="6.2" />

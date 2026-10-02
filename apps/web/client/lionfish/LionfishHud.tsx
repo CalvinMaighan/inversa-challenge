@@ -7,24 +7,21 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import { DEFAULT_RANGE_DAYS, RANGE_DAYS } from "client/state/range";
 import { TIME, type TimeState } from "client/state/time";
 
-import { getGlobe } from "client/globe/api";
 import { fitGlobeInPane, fitInPane } from "client/globe/fit";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
-import { GUTTER_PX } from "client/hud/shell/geometry";
 import { useStageLayout } from "client/hud/shell/StageShell";
-import { LAYERS, setLayerVisible, type LayersState } from "client/state/layers";
+import { LAYERS, type LayersState } from "client/state/layers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
-import { copyText, LAYER_IDS, type AppConfig } from "shared/apps";
+import { copyText, type AppConfig } from "shared/apps";
 
-import { areaCells, areaHeat, areasOf, buoyVsSatellite, frameAreas, cellEvidenceId, countReports, isCopy, lagStats, parseCellEvidenceId, snapshotAt, utcText, windowReports, type PriorityCell, type Report } from "./model";
+import { areaCells, areasOf, frameAreas, cellEvidenceId, countReports, parseCellEvidenceId, snapshotAt, utcText, windowReports, type PriorityCell, } from "./model";
 import OceanHelp from "./OceanHelp";
 import Overlay from "./Overlay";
 import PriorityCard from "./PriorityCard";
 import { bannerDismissed, dismissBanner, resetView, setSummary, setView, useView, type HelpTopic } from "./store";
-import SurveyPanel, { type AreaRow } from "./SurveyPanel";
 import { TOP_CELLS, useCursor, useExplain, useLionfishData } from "./use-lionfish";
 
 const Banner = styled(Surface)`
@@ -112,10 +109,8 @@ const AsOf = styled(Surface)`
   }
 `;
 
-const PANEL_WIDTH = 340;
 /** Room inside the free rect for a report dot or a ranked square at an area's edge. */
 const AREA_INSET_PX = 22;
-const [SIGHTINGS, HOTSPOTS] = LAYER_IDS;
 
 /**
  * Lionfish Watch HUD (leaf UL): area chips, layer toggles, the honesty banner, reports, reef heat, ranked survey
@@ -174,23 +169,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const q = useMemo(() => ({ basis: view.basis, atMs, days: view.days, fromMs, lateOnly: view.lateOnly }), [view.basis, atMs, view.days, fromMs, view.lateOnly]);
   const drawn = useMemo(() => windowReports(reports, { ...q, areaId: view.area }), [reports, q, view.area]);
   const total = useMemo(() => countReports(reports, { ...q, areaId: view.area }), [reports, q, view.area]);
-  const lag = useMemo(() => (data.reports ? lagStats(reports) : null), [data.reports, reports]);
-  const areaRows: AreaRow[] = useMemo(
-    () =>
-      data.areas.map((a) => {
-        const mine = reports.filter((r: Report) => r.areaId === a.id && !isCopy(r) && r.observedMs <= atMs);
-        return {
-          id: a.id,
-          name: a.name,
-          thin: a.thin,
-          count: countReports(reports, { ...q, areaId: a.id }),
-          newestObservedMs: mine.length ? Math.max(...mine.map((r) => r.observedMs)) : null,
-          heat: areaHeat(data.heat ?? [], a.id, atMs),
-        };
-      }),
-    [data.areas, data.heat, reports, q, atMs],
-  );
-
   useEffect(() => setSummary({ independent: data.reports ? total.independent : null, days: view.days, basis: view.basis }), [data.reports, total.independent, view.days, view.basis]);
 
   // Survey priority at the cursor: the live snapshot, or the newest daily one at or before it.
@@ -199,23 +177,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
     () => data.areas.filter((a) => !view.area || a.id === view.area).flatMap((a) => areaCells(snapshot, a.id, TOP_CELLS).map((cell, i) => ({ cell, rank: i + 1 }))),
     [data.areas, view.area, snapshot],
   );
-  const listCells = useMemo(() => (view.area ? mapCells : data.areas.flatMap((a) => areaCells(snapshot, a.id, 2).map((cell, i) => ({ cell, rank: i + 1 })))), [view.area, mapCells, data.areas, snapshot]);
-
-  const florida = data.areas[0]?.id;
-  const sstPair = useMemo(() => buoyVsSatellite(data.buoys ?? [], (data.heat ?? []).filter((px) => px.areaId === florida), atMs), [data.buoys, data.heat, florida, atMs]);
-
-  const flyTo = useCallback(
-    (id: string | null) => {
-      setView({ area: id });
-      const a = data.areas.find((x) => x.id === id);
-      // The area's box where the user sees it (clear of the cards, inside the stage circle); its configured camera
-      // before the pane is laid out.
-      if (a) getGlobe()?.flyTo({ ...(fitInPane(a.bbox, AREA_INSET_PX) ?? { lat: a.camera.lat, lon: a.camera.lon, altitudeM: a.camera.heightM, heading: 0, pitch: -90 }), durationS: 1.2 });
-      if (mobile) setView({ panelOpen: false });
-    },
-    [data.areas, mobile],
-  );
-
   const openCell = useCallback(
     (c: PriorityCell) => {
       const t = snapshot?.atMs ?? atMs;
@@ -226,14 +187,9 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   );
 
   const explain = useExplain(species, picked?.cell ?? null, picked?.atMs ?? null);
-  const pickedRank = picked ? (mapCells.find((m) => m.cell.cell === picked.cell)?.rank ?? listCells.find((m) => m.cell.cell === picked.cell)?.rank ?? null) : null;
+  const pickedRank = picked ? (mapCells.find((m) => m.cell.cell === picked.cell)?.rank ?? null) : null;
   const pickedArea = picked ? (data.areas.find((a) => picked.cell.startsWith(`${a.id}:`))?.name ?? "") : "";
 
-  const panelOpen = view.panelOpen ?? !mobile;
-  // Room the banner and the as-of chip keep for the open survey panel: on the left of the docked layout, on the
-  // right of the stage layout, where the panel opens in the right card region (client/hud/Panel.tsx, GE7).
-  const panelRoom = panelOpen && !mobile ? `${PANEL_WIDTH + GUTTER_PX}px` : "0px";
-  const panelVars = { [stage ? "--lf-panel-r" : "--lf-panel-l"]: panelRoom } as Record<string, string>;
   const onHelp = (t: HelpTopic | "all") => setView({ help: t });
   // The ranked survey cells (numbered squares) are not drawn on the map: reports are dots, like carp and python.
   const show = { reports: visible.sightings !== false, heat: view.heat, priority: false, field: view.field && live };
@@ -244,7 +200,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
       data-ready={data.reports && data.heat && data.feeds && snapshot ? "1" : "0"}
       data-replay-ready={data.replayReady ? "1" : "0"}
       data-live={live ? "1" : "0"}
-      style={{ display: "contents", ...panelVars }}
+      style={{ display: "contents" }}
     >
       <Overlay
         areas={data.areas}
@@ -267,7 +223,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
           data-testid="lionfish-banner"
           data-hud-obstacle=""
           data-expanded={bannerFull ? "true" : "false"}
-          style={{ ...panelVars }}
         >
           {bannerFull ? (
             <ul id="lionfish-banner-notes">
@@ -301,40 +256,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
           </IconButton>
         </Banner>
       ) : null}
-      <SurveyPanel
-        app={app}
-        open={panelOpen}
-        onOpen={() => setView({ panelOpen: true })}
-        onClose={() => setView({ panelOpen: false })}
-        areas={areaRows}
-        area={view.area}
-        onArea={flyTo}
-        layers={{ reports: show.reports, heat: view.heat, priority: show.priority, field: view.field }}
-        onLayer={(id, on) => {
-          if (id === "reports") setLayerVisible(SIGHTINGS, on);
-          else if (id === "priority") setLayerVisible(HOTSPOTS, on);
-          else setView({ [id]: on });
-        }}
-        basis={view.basis}
-        onBasis={(basis) => setView({ basis })}
-        days={view.days}
-        onDays={(days) => setView({ days })}
-        lateOnly={view.lateOnly}
-        onLateOnly={(lateOnly) => setView({ lateOnly })}
-        total={total}
-        lag={lag}
-        submittedSource={data.reports?.submittedSource ?? null}
-        cells={listCells}
-        priorityAtMs={snapshot?.atMs ?? null}
-        replayReady={data.replayReady}
-        selectedCell={picked?.cell ?? null}
-        onCell={openCell}
-        feeds={data.feeds}
-        sstPair={sstPair}
-        onHelp={onHelp}
-        loading={!data.reports}
-        errors={data.errors}
-      />
       <PriorityCard
         app={app}
         open={picked !== null}

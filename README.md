@@ -16,12 +16,13 @@ A CesiumJS globe over live public feeds, with a field agent you can ask about wh
 
 ## Using it
 
-- **Period** (top left, next to the species chips): 30 days, 90 days, 180 days, 1 year (default), 2 years. Dots, counts and the timeline all follow it.
+- **Period** (top left, next to the species chips): 30 days, 90 days, 180 days, 1 year, 2 years (default). Dots, counts and the timeline all follow it.
 - **Species chips**: click to show or hide a species. The number is the count in the period.
 - **Place chip** (bottom left, above the timeline): the area in focus.
 - **Dots**: hover for details, click to select (pulses) and open the sighting panel on the right.
 - **Timeline** (bottom): reports per day as spikes, drag to replay; LIVE jumps back to now.
-- **Layers** (bottom right): sightings, reef heat map (lionfish; pick DHW, bleaching alert, hotspot or SST), radar, clouds, lightning, storms, sea temperature.
+- **Layers** (bottom right): sightings, reef heat map (lionfish, off by default, drawn at 35% opacity; pick heat stress, alert level, hotspot or sea temperature), radar, clouds, lightning, storms, sea temperature.
+- **Live data** (bell, top right): the newest record from each live feed with its age, freshest first. A dot shows when something new arrives.
 - **Look** (eye, top right): visual modes and the map window (shape, size, soft edge).
 - **Developer** (`<>`, top right): tab **Feeds** shows every data source and its health; tab **API Keys** shows which keys are set and lets you paste missing ones.
 - **Agent** (left column): ask about what is on the map; answers cite their sources and can move the globe.
@@ -33,7 +34,7 @@ Needs bun, cargo (Rust 1.96+), and CMake plus a C toolchain (the API builds HDF5
 ```sh
 bun install
 bun run env      # optional: pull keys from Doppler (inversa/dev) into a git-ignored .env
-bun run data     # backfill all three apps from the live APIs (DAYS=30 by default; DAYS=365 for a year)
+bun run data     # backfill all three apps from the live APIs (DAYS=30 by default; DAYS=730 for the two years the map shows)
 bun run dev      # Axum API on :4041, Next on http://localhost:3050
 ```
 
@@ -81,6 +82,8 @@ First-time setup, once ([docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) has the step 
    done
    ```
 
+Everything the map reads is stored in SQLite and cached, so visitors never wait on a public API: carp sightings live in the carp database (refreshed every 30 minutes by the API, filled once by the backfill), frames are built once and kept two years (the API warms missing months in the background after a start), and reef heat pictures and weather overlays are fetched once by the server and shared.
+
 Check: `curl https://inversa.bigvalue.lol/api/health` returns 200 (`degraded` only names a missing optional key).
 
 ## Architecture
@@ -90,7 +93,7 @@ Browser: CesiumJS globe, HUD, timeline, workers (active-state over SharedArrayBu
    | /v1/{app}/graphql, /v1/{app}/frames          | /api/agent/stream
    v                                               v
 Axum API (Rust)                                Next.js on Bun
-  per app: pollers, backfill CLI,                UI, agent, /api/carp/sightings
+  per app: pollers, backfill CLI, carp sightings,            UI, agent
   SQLite writer + read pool, frames
 Litestream: SQLite files → R2
 ```

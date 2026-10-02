@@ -1,4 +1,4 @@
-/** One Asian carp sighting as `/api/carp/sightings` returns it (iNaturalist, GBIF or USGS NAS). */
+/** One Asian carp sighting as `/v1/carp/sightings` returns it (iNaturalist, GBIF or USGS NAS). */
 export type CarpSighting = {
   id: string;
   source: "inat" | "gbif" | "nas";

@@ -1,12 +1,12 @@
 /**
  * Reef heat maps: NOAA Coral Reef Watch's 5 km daily products as finished pictures from the PacIOOS ERDDAP
- * (`dhw_5km` `transparentPng`), one per area, drawn on the globe overlay. The server colours them (palette and range
+ * (`dhw_5km` `transparentPng`), one per area, drawn on the globe overlay. ERDDAP colours them (palette and range
  * are ours), draws only the area asked for and takes the product day, so there are no readings to page through
- * and nothing to store. CORS is open (`Access-Control-Allow-Origin: *`), so the pictures load under the page's COEP.
+ * and nothing to store. They come through our own `/api/reef/heat.png`, which asks ERDDAP once and serves every visitor.
  */
 import type { Area } from "./model";
 
-const ERDDAP_PNG = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.transparentPng";
+const HEAT_PNG = "/api/reef/heat.png";
 const DAY_MS = 86_400_000;
 /** The newest product day is about two days behind the wall clock; asking for a later one fails. */
 const PRODUCT_LAG_MS = 2 * DAY_MS;
@@ -109,10 +109,8 @@ export function reefUrl(area: Pick<Area, "bbox">, mode: ReefMode, atMs: number, 
   const time = productMs > nowMs - PRODUCT_LAG_MS ? "last" : new Date(productMs).toISOString().replace(".000Z", "Z");
   const cols = Math.min(MAX_PX, Math.max(32, Math.round(((east - west) / CELL_DEG) * PX_PER_CELL)));
   const rows = Math.min(MAX_PX, Math.max(32, Math.round(((north - south) / CELL_DEG) * PX_PER_CELL)));
-  // Latitude runs north to south on the grid, longitude west to east.
-  const box = `%5B(${time})%5D%5B(${north}):(${south})%5D%5B(${west}):(${east})%5D`;
-  const bar = `Rainbow%7C${s.discrete ? "D" : "C"}%7CLinear%7C${s.min}%7C${s.max}%7C${s.discrete ? 5 : ""}`;
-  return `${ERDDAP_PNG}?${s.variable}${box}&.draw=surface&.colorBar=${bar}&.land=off&.size=${cols}%7C${rows}`;
+  const q = new URLSearchParams({ v: s.variable, time, west: String(west), east: String(east), south: String(south), north: String(north), min: String(s.min), max: String(s.max), d: s.discrete ? "1" : "0", cols: String(cols), rows: String(rows) });
+  return `${HEAT_PNG}?${q.toString()}`;
 }
 
 type Entry = { img: HTMLImageElement; ready: boolean; failed: boolean };

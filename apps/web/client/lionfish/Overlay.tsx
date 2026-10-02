@@ -240,7 +240,7 @@ export default function Overlay(p: OverlayProps) {
             if (!img || !nw || !se) continue;
             ctx.save();
             ctx.imageSmoothingEnabled = false;
-            ctx.globalAlpha = 0.8;
+            ctx.globalAlpha = 0.35;
             ctx.drawImage(img, Math.min(nw.x, se.x), Math.min(nw.y, se.y), Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
             ctx.restore();
             maps += 1;

@@ -29,7 +29,7 @@ import { keepInView } from "./fit";
 import { frameForTime } from "./frame-index";
 import { createRenderGovernor, type GovernorDiagnostics } from "./governor";
 import { installImagery, type ImageryState } from "./imagery";
-import { GOOGLE_3D_ZONES } from "./ladder";
+import { AREA_3D_MAX_ALTITUDE_M, GOOGLE_3D_ZONES } from "./ladder";
 import { installLook, type LookDiagnostics } from "./look/install";
 import { createLayers, type GlobeLayer, type GlobeViewer, type LayerContext, type LayerStats } from "./layers";
 import { layerClock } from "./layers/clock";
@@ -256,6 +256,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement, lightbo
     ionToken: browserKey("cesium-ion"),
     googleKey: browserKey("google-maps"),
     zones: () => GOOGLE_3D_ZONES[activeAppId()],
+    maxAltitudeM: () => AREA_3D_MAX_ALTITUDE_M[activeAppId()],
     quotaStore: browserQuotaStore(),
     requestRender: () => governor.request(),
     onChange: (s) => {
@@ -271,7 +272,7 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement, lightbo
   disposers.push(() => look.destroy());
 
   // ---- zoom (GE8): wheel, double click, pinch, steps, limits per imagery, ground guard -------------------------
-  const zoom = installZoom(widget, { governor, imagery: () => imagery.state(), zones: () => GOOGLE_3D_ZONES[activeAppId()], reducedMotion: prefersReducedMotion, container });
+  const zoom = installZoom(widget, { governor, imagery: () => imagery.state(), zones: () => GOOGLE_3D_ZONES[activeAppId()], maxAltitudeM: () => AREA_3D_MAX_ALTITUDE_M[activeAppId()], reducedMotion: prefersReducedMotion, container });
   registerZoom(zoom);
   disposers.push(() => {
     registerZoom(null);

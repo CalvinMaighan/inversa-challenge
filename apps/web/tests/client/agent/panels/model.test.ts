@@ -269,7 +269,7 @@ describe("data panels", () => {
     expect(moved.at).toBe("2025-01-15T02:00:00.000Z");
     expect(Date.parse(moved.from)).toBeLessThanOrEqual(Date.parse(moved.at));
     expect(Date.parse(moved.to)).toBeGreaterThanOrEqual(Date.parse(moved.at));
-    expect(Date.parse(moved.to) - Date.parse(moved.from)).toBe(365 * 24 * H);
+    expect(Date.parse(moved.to) - Date.parse(moved.from)).toBe(730 * 24 * H);
     // A future instant (a forecast) clamps to now.
     expect(timeForInstant(time, now + 5 * H, now)).toBeNull();
   });

@@ -66,6 +66,9 @@ export type EngineOptions = {
   setTimer?: (fn: () => void, ms: number) => unknown;
 };
 
+/** Chunk requests in flight at once. */
+const FETCH_LANES = 4;
+
 const OPS_FIELDS = "seq id hlc boardId entity entityId field value nodeId";
 const OPS_SINCE = `query OpsSince($boardId: ID!, $seq: Int!) { opsSince(boardId: $boardId, seq: $seq) { ${OPS_FIELDS} } }`;
 const OPS_SUBSCRIPTION = `subscription Ops($boardId: ID!, $afterSeq: Int!) { ops(boardId: $boardId, afterSeq: $afterSeq) { ${OPS_FIELDS} } }`;
@@ -354,14 +357,20 @@ export class DbEngine {
   private async fetchChunks(axis: FrameAxis, chunks: ChunkRequest[]): Promise<{ fetched: number; failed: number }> {
     let fetched = 0;
     let failed = 0;
-    for (const c of chunks) {
-      try {
-        fetched += await this.fetchChunk(axis, c);
-      } catch (err) {
-        failed += 1;
-        console.warn("[threads/db] frames chunk failed", chunkUrl(this.o.framesUrl, c), err);
+    // Newest first, a few at a time: the recent days a visitor looks at first arrive first, and two years of chunks
+    // do not queue one behind another.
+    const queue = [...chunks].reverse();
+    const lane = async () => {
+      for (let c = queue.shift(); c; c = queue.shift()) {
+        try {
+          fetched += await this.fetchChunk(axis, c);
+        } catch (err) {
+          failed += 1;
+          console.warn("[threads/db] frames chunk failed", chunkUrl(this.o.framesUrl, c), err);
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(FETCH_LANES, queue.length) }, lane));
     return { fetched, failed };
   }
 

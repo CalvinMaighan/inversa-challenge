@@ -6,7 +6,7 @@ import type { CarpSighting } from "client/carp/sighting-type";
 
 /**
  * Asian carp sightings on the carp map (silver, bighead, grass and black carp in the Mississippi River Basin), from
- * `/api/carp/sightings` (iNaturalist, GBIF and USGS NAS merged on the server). One shared store: the markers draw it, the Carp
+ * `/v1/carp/sightings` (iNaturalist, GBIF and USGS NAS, stored in the carp SQLite database by the API). One shared store: the markers draw it, the Carp
  * chip counts it and toggles it. The timeline picks a start and an end date (the last `YEARS` years at most, what the server
  * returns) and a cursor within them that it moves (and plays): the map shows the sightings dated from the start up to the cursor,
  * each a dot in its species' colour.
@@ -15,7 +15,7 @@ export type { CarpSighting };
 
 export const FISH_COLOR = "#e8a33d";
 export const YEARS = 2;
-const MAX = 2000;
+const MAX = 5000;
 
 /** One colour per species, as the legend and the map dots use them. */
 export const SPECIES_COLORS: readonly { name: string; color: string }[] = [
@@ -156,7 +156,7 @@ export function setFishVisible(visible: boolean): void {
 export function loadFish(): void {
   if (state.status !== "idle") return;
   set({ status: "loading" });
-  fetch("/api/carp/sightings")
+  fetch("/v1/carp/sightings")
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((body: { sightings: CarpSighting[]; sources: Record<string, number | string> }) => {
       const windowed = rangeFish(body.sightings, state.startMs, state.endMs);

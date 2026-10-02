@@ -4,8 +4,8 @@ import { DEFAULT_RANGE_DAYS, RANGE_DAYS, RANGE_OPTIONS, rangeLabel } from "clien
 
 describe("RANGE_DAYS", () => {
   test("defaults to one year", () => {
-    expect(DEFAULT_RANGE_DAYS).toBe(365);
-    expect(RANGE_DAYS.defaults).toBe(365);
+    expect(DEFAULT_RANGE_DAYS).toBe(730);
+    expect(RANGE_DAYS.defaults).toBe(730);
   });
 
   test("offers 30, 90, 180 days, 1 year and 2 years, shortest first", () => {

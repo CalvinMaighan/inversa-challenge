@@ -1,6 +1,7 @@
 import { catalog } from "@calvinjs/active-state";
 
 import { AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
+import { ALERTS_SEEN } from "./alerts";
 import { APP } from "./app";
 import { CARP } from "./carp";
 import { FEEDS } from "./feeds";
@@ -19,6 +20,7 @@ import { VIEW } from "./view";
 import { VOICE } from "./voice";
 
 export { AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
+export { ALERTS_SEEN } from "./alerts";
 export { APP } from "./app";
 export { CARP } from "./carp";
 export { FEEDS } from "./feeds";
@@ -37,7 +39,7 @@ export { VIEW } from "./view";
 export { VOICE } from "./voice";
 
 /** Snapshot for `<ActiveState init={state} />`. Importing this module runs every `key()`. */
-export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, RANGE_DAYS);
+export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, RANGE_DAYS, ALERTS_SEEN);
 
 export type StateKeyId =
   | "APP"
@@ -62,7 +64,8 @@ export type StateKeyId =
   | "SCOPE_FEATHER"
   | "SCOPE_SHAPE"
   | "SCOPE_SIZE"
-  | "RANGE_DAYS";
+  | "RANGE_DAYS"
+  | "ALERTS_SEEN";
 
 /**
  * Every key id in code-unit order. PLAN.md C6: a key's position here is its `keyIndex` on the SAB transport,

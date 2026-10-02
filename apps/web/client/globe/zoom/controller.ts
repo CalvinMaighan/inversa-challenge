@@ -56,6 +56,8 @@ export type ZoomDeps = {
   imagery: () => { plan: LadderPlan; google3d: string };
   /** Where Google 3D may show for the active app. */
   zones: () => readonly Readonly<BBox>[];
+  /** The highest the camera may be for Google 3D to show for the active app. */
+  maxAltitudeM?: () => number;
   reducedMotion: () => boolean;
   /** The element whose `data-imagery-route` / `data-google3d` the imagery writes (re-evaluates the limits). */
   container?: HTMLElement;
@@ -326,7 +328,7 @@ export function installZoom(widget: CesiumWidget, deps: ZoomDeps): ZoomControlle
       const c = Cartographic.fromCartesian(d, ellipsoid);
       if (c) {
         const s = deps.imagery();
-        const threeD = googleZoneActive(s.plan, { lon: CesiumMath.toDegrees(c.longitude), lat: CesiumMath.toDegrees(c.latitude), altitudeM: c.height }, deps.zones()) && s.google3d !== "failed";
+        const threeD = googleZoneActive(s.plan, { lon: CesiumMath.toDegrees(c.longitude), lat: CesiumMath.toDegrees(c.latitude), altitudeM: c.height }, deps.zones(), deps.maxAltitudeM?.()) && s.google3d !== "failed";
         const minM = threeD ? MIN_ALT_3D_M : MIN_ALT_FLAT_M;
         const ground = scene.globe.getHeight(c) ?? 0;
         const h = Math.min(limits.maxM, Math.max(ground + minM, c.height));

@@ -6,12 +6,14 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import type { FeedState } from "shared/feed-state";
 
 import { SHEET_MEDIA } from "client/agent/layout/geometry";
+import { ALERTS_SEEN } from "client/state/alerts";
 import { FEEDS } from "client/state/feeds";
 import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
+import { hasNewData, latestMs, liveRows } from "../alerts/model";
 import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
@@ -19,13 +21,13 @@ import { aboutSentence, WINDOW_NOTE } from "../help/content";
 import DeveloperPanel from "../developer/DeveloperPanel";
 import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
 import { openEvidence } from "../selection";
-import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
+import { feedChip, feedSummary, formatLag, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
 
 /** An icon button's size. */
 export const ROUND_PX = 36;
-/** The cluster's buttons, left to right: About, Theme, Look, Developer. */
-export const TOPBAR_BUTTONS = 4;
+/** The cluster's buttons, left to right: Live data, About, Theme, Look, Developer. */
+export const TOPBAR_BUTTONS = 5;
 /** The cluster's width (the top row keeps this much room, plus a gutter, at its right). */
 export const TOPBAR_WIDTH_CSS = `calc(${TOPBAR_BUTTONS * ROUND_PX}px + ${TOPBAR_BUTTONS - 1} * var(--gap-m))`;
 
@@ -389,6 +391,117 @@ export function AboutContent({
   );
 }
 
+const LiveList = styled.ul`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: var(--gap-s) 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    grid-template-columns: 9px 1fr auto;
+    align-items: center;
+    column-gap: var(--gap-s);
+  }
+  b {
+    font: 600 12px / 1.3 var(--font-mono);
+  }
+  li > span {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  small {
+    color: var(--muted);
+    font: 400 11px / 1.3 var(--font-mono);
+    white-space: nowrap;
+  }
+`;
+
+/** The popover's body: every source's newest record, freshest first, ages ticking. Over plain props so it renders anywhere. */
+export function LiveDataContent({ list, nowMs }: { list: FeedState[]; nowMs: number }) {
+  const rows = liveRows(list, nowMs);
+  return (
+    <>
+      <p>Each source: when it was last checked, and how old its newest record is (a source only has what the world has reported: a species record can be days old and still be the latest). A dot on the bell shows when a source gives us something new.</p>
+      {rows.length === 0 ? (
+        <p>Nothing has reported yet.</p>
+      ) : (
+        <LiveList aria-label="Latest data" data-testid="live-data-list">
+          {rows.map((r) => (
+            <li key={r.source} data-feed={r.source} title={r.fetchedMs ? `Checked ${formatLag((nowMs - r.fetchedMs) / 1000)} ago` : undefined}>
+              <Dot $tone={r.state === "nominal" ? "ok" : r.state === "lagging" ? "warn" : r.state === "stale" ? "stale" : "danger"} />
+              <b>{r.label}</b>
+              <span>
+                <small>{r.checked ? `checked ${r.checked}` : "not checked"}</small>
+                <small>newest {r.age}</small>
+              </span>
+            </li>
+          ))}
+        </LiveList>
+      )}
+    </>
+  );
+}
+
+/**
+ * Live data: a bell with a dot when a source has reported something newer than the viewer last saw; its popover lists the
+ * newest record per source with its age. The feeds are pushed by the server every few seconds, so this is the real-time
+ * view of what is coming in.
+ */
+function LiveData({ list, seen, onSeen }: { list: FeedState[]; seen: number; onSeen: (ms: number) => void }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const pop = usePopover(triggerRef, popRef);
+  const id = useId();
+  const [now, setNow] = useState(() => Date.now());
+  const latest = latestMs(list);
+  // What arrives while the page loads (the feeds come in one by one) is the baseline, and so is whatever is in the open popover.
+  useEffect(() => {
+    const loading = typeof performance !== "undefined" && performance.now() < LOAD_BASELINE_MS;
+    if (latest > 0 && (seen === 0 || loading || pop.open) && latest !== seen) onSeen(latest);
+  }, [latest, seen, pop.open, onSeen]);
+  useEffect(() => {
+    if (!pop.open) return;
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, [pop.open]);
+  const fresh = hasNewData(list, seen);
+  const label = fresh ? "Live data: new data has arrived" : "Live data: the newest records from each source";
+  return (
+    <Anchor>
+      <Round
+        ref={triggerRef}
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={pop.open}
+        aria-controls={pop.open ? id : undefined}
+        aria-label={label}
+        title={label}
+        data-testid="live-data-button"
+        data-new={fresh ? "1" : "0"}
+        onClick={() => {
+          setNow(Date.now());
+          pop.toggle();
+        }}
+      >
+        <Icon name="bell" />
+        {fresh ? <Dot $tone="ok" $pulse /> : null}
+      </Round>
+      {pop.open ? (
+        <PopoverBox id={id} label="Live data" testId="live-data-popover" popRef={popRef} onClose={pop.close} align="right">
+          <LiveDataContent list={list} nowMs={now} />
+        </PopoverBox>
+      ) : null}
+    </Anchor>
+  );
+}
+
+/** Records that arrive in this first stretch of the page's life are already seen: only later ones light the dot. */
+const LOAD_BASELINE_MS = 20_000;
+
 const THEME_LABELS: Record<ThemeModeId, string> = { light: "Light", dark: "Dark", tactical: "Tactical" };
 
 function Theme({ mode, onPick }: { mode: ThemeModeId; onPick: (mode: ThemeModeId) => void }) {
@@ -520,13 +633,14 @@ function Developer() {
 export default function TopBar(props: ChromeProps) {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
   const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
+  const [seen, setSeen] = useActiveState<number>(ALERTS_SEEN);
   const look: LookState = {
     look: lookOf(useActiveState<LookId>(LOOK)[0]),
     shape: shapeOf(useActiveState<ScopeShape>(SCOPE_SHAPE)[0]),
     size: sizeOf(useActiveState<number>(SCOPE_SIZE)[0]),
     feather: featherOf(useActiveState<number>(SCOPE_FEATHER)[0]),
   };
-  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} />;
+  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} seen={seen ?? 0} onSeen={setSeen} />;
 }
 
 type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
@@ -540,10 +654,13 @@ export function TopBarView({
   mode,
   onTheme,
   look = DEFAULT_LOOK_STATE,
+  seen = 0,
+  onSeen = () => {},
   ...props
-}: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState }) {
+}: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState; seen?: number; onSeen?: (ms: number) => void }) {
   return (
     <Bar data-testid="hud-topbar">
+      <LiveData list={feeds} seen={seen} onSeen={onSeen} />
       <About list={feeds} {...props} />
       <Theme mode={mode} onPick={onTheme} />
       <Look {...look} />

@@ -9,7 +9,7 @@ export const RANGE_OPTIONS: readonly { days: number; label: string }[] = [
   { days: 730, label: "2 years" },
 ];
 
-export const DEFAULT_RANGE_DAYS = 365;
+export const DEFAULT_RANGE_DAYS = 730;
 
 /** How many days back the timeline starts (python and lionfish's TIME window, carp's sightings window). */
 export const RANGE_DAYS = key("RANGE_DAYS", DEFAULT_RANGE_DAYS);

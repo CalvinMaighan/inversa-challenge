@@ -2,7 +2,7 @@ import { key } from "@calvinjs/active-state";
 
 /** Frame step and replay window (PLAN.md C15). */
 export const TIME_STEP_MINUTES = 15;
-export const TIME_WINDOW_DAYS = 365;
+export const TIME_WINDOW_DAYS = 730;
 /** Playback speed in frames per second; the `play_timeline` voice tool uses the same default. */
 export const DEFAULT_SPEED = 8;
 
@@ -58,7 +58,7 @@ export function retime(prev: Pick<TimeState, "from" | "to">, atMs: number, nowMs
 }
 
 /** The longest period the timeline may span: the db worker fetches every frame of it. */
-export const MAX_RANGE_DAYS = 366;
+export const MAX_RANGE_DAYS = 731;
 
 /**
  * The window from the start of UTC day `startMs` to the end of UTC day `endMs` (or now, for today), cursor at its end,

@@ -46,15 +46,15 @@ const feed = (source: string, state: FeedState["state"], extra: Partial<FeedStat
 });
 
 describe("status popover", () => {
-  test("status popover: the chrome is four icon buttons (About, Theme, Look, Developer) with dialogs and no visible text", () => {
+  test("status popover: the chrome is five icon buttons (Live data, About, Theme, Look, Developer) with dialogs and no visible text", () => {
     const markup = html(<TopBarView focus={false} onFocus={noop} helpOpen={false} onHelp={noop} feeds={[feed("inat", "down")]} mode="dark" onTheme={noop} />);
     const triggers = [...markup.matchAll(/<button[^>]*aria-haspopup="dialog"[^>]*>/g)];
-    expect(triggers).toHaveLength(4);
-    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(4);
+    expect(triggers).toHaveLength(5);
+    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(5);
     for (const trigger of triggers) expect(trigger[0]).toMatch(/aria-label="[^"]+"/);
     // In this order, left to right.
     const ids = triggers.map((t) => /data-testid="([^"]+)"/.exec(t[0])?.[1]);
-    expect(ids).toEqual(["status-button", "theme-button", "look-button", "developer-button"]);
+    expect(ids).toEqual(["live-data-button", "status-button", "theme-button", "look-button", "developer-button"]);
     expect(markup).toContain('aria-label="Look: filters and map window"');
     // The Developer panel mounts only when its button is pressed.
     expect(markup).not.toContain('data-testid="developer-panel"');
