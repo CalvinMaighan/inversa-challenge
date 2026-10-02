@@ -112,10 +112,10 @@ export function loadFish(): void {
     .catch(() => set({ status: "error" }));
 }
 
-/** The records the map draws: dated within the window, newest first, capped. */
+/** The records of the timeline's window (exactly the last `YEARS` years, the span the timeline draws), newest first, capped. */
 export function recentFish(all: readonly CarpSighting[], nowMs: number): CarpSighting[] {
-  const from = new Date(nowMs).getFullYear() - YEARS;
-  return all.filter((s) => s.date !== null && Number(s.date.slice(0, 4)) >= from).slice(0, MAX);
+  const from = windowStartMs(nowMs);
+  return all.filter((s) => s.date !== null && Date.parse(s.date) >= from).slice(0, MAX);
 }
 
 const subscribe = (cb: () => void) => {
