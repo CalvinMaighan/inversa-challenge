@@ -2,14 +2,15 @@ name: release
 
 # Build the release on GitHub-hosted runners: the Axum binary (native cargo build on
 # ubuntu-24.04, same glibc as the Hetzner VM) and the Next standalone tree, packed
-# with deploy/ into one artifact. deploy.yml ships an artifact from a run of this
-# workflow to the VM. Nothing compiles on the host.
+# with deploy/ into one archive. Every merge to main (or a manual run) publishes it as a
+# GitHub Release named v0.1.<run number>; deploy.yml ships a release you pick by that
+# version to the VM. Nothing compiles on the host.
 # Secret: DOPPLER_TOKEN (Doppler service token, project inversa, config prd), used
 # only to inline NEXT_PUBLIC_CESIUM_ION_TOKEN into the client bundle.
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -108,6 +109,9 @@ jobs:
     needs: [api, web]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Only this job writes: it publishes the GitHub Release (and its tag).
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -121,12 +125,8 @@ jobs:
       - name: Pack release
         run: |
           set -euo pipefail
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            VERSION="$GITHUB_REF_NAME"
-          else
-            VERSION="r${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}"
-          fi
-          VERSION="$(printf '%s' "$VERSION" | tr -c 'A-Za-z0-9._-' '-')"
+          # One number per run of this workflow: v0.1.1, v0.1.2, ... Deploy picks one of these.
+          VERSION="v0.1.${GITHUB_RUN_NUMBER}"
           DIST="$RUNNER_TEMP/dist"
           mkdir -p "$DIST/api" "$DIST/web" "$DIST/deploy" out
           install -m 755 "$RUNNER_TEMP/api/inversa-api" "$DIST/api/inversa-api"
@@ -138,11 +138,13 @@ jobs:
             | tee "$DIST/release.json" out/release.json
           tar --zstd -C "$DIST" -cf out/inversa.tar.zst .
           (cd out && sha256sum inversa.tar.zst > SHA256SUMS)
-          echo "Release \`$VERSION\` (run $GITHUB_RUN_ID)" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: inversa-release
-          path: out/
-          if-no-files-found: error
-          retention-days: 90
-          compression-level: 0
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$VERSION" out/inversa.tar.zst out/SHA256SUMS out/release.json \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "$VERSION" \
+            --notes "Built from ${GITHUB_SHA::7} (release run $GITHUB_RUN_ID). Deploy it: Actions, deploy, Run workflow, version $VERSION."
+          echo "Release \`$VERSION\` is published. Deploy it from Actions, deploy, with version \`$VERSION\`." >> "$GITHUB_STEP_SUMMARY"
