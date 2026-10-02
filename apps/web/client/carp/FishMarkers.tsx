@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
-import { onGlobeReady } from "client/globe/api";
+import { getGlobe, onGlobeReady } from "client/globe/api";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 import { APP_ICONS, ICON_VIEWBOX } from "shared/app-icons";
 
-import { FISH_COLOR, loadFish, useFish } from "./fish";
+import { FISH_COLOR, fishOpacity, loadFish, useFish } from "./fish";
 
 const SIZE = 22;
 const SOURCE_NAMES = { inat: "iNaturalist", gbif: "GBIF", nas: "USGS NAS" } as const;
@@ -98,7 +98,7 @@ const FISH_ICON = (
  * markers, hidden behind the globe and when the Carp chip is off.
  */
 export default function FishMarkers() {
-  const { shown, visible } = useFish();
+  const { shown, visible, atMs } = useFish();
   const refs = useRef(new Map<string, HTMLAnchorElement>());
   const shownRef = useRef(shown);
   useEffect(() => {
@@ -108,6 +108,11 @@ export default function FishMarkers() {
   useEffect(() => {
     loadFish();
   }, []);
+
+  // New markers are placed on the next frame: ask for one when the set changes.
+  useEffect(() => {
+    getGlobe()?.requestRender();
+  }, [shown]);
 
   useEffect(() => {
     let off = () => {};
@@ -134,7 +139,7 @@ export default function FishMarkers() {
       stopReady();
       off();
     };
-  }, [shown, visible]);
+  }, []);
 
   if (!visible) return null;
   return (
@@ -150,6 +155,7 @@ export default function FishMarkers() {
           target="_blank"
           rel="noopener noreferrer"
           data-hidden=""
+          style={{ opacity: s.date ? (fishOpacity(Date.parse(s.date), atMs) ?? 0) : 0 }}
           data-fish={s.id}
           aria-label={`${s.species}, ${s.date ?? "date unknown"}, ${SOURCE_NAMES[s.source]} (opens in a new tab)`}
         >
