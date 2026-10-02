@@ -5,7 +5,6 @@ import { useLayoutEffect, useRef, type KeyboardEvent, type ReactNode } from "rea
 import styled from "client/styled";
 
 import { Icon, IconButton, MOBILE, Surface } from "./primitives";
-import { useStageLayout } from "./shell/StageShell";
 
 type Side = "left" | "right";
 
@@ -13,10 +12,9 @@ type Side = "left" | "right";
  * Edge panel: a column along the left or right edge between the top bar and the timeline on desktop, a bottom
  * sheet on phones (PRD §12). The HUD root sets `--hud-top` and `--hud-bottom` so panels never cover the bars.
  *
- * On the stage layout (docs/GODS_EYE.md GC1, from 768 px) the chat card owns the left: a left panel (carp's
- * "Locations to review", the lionfish survey) opens in the right card region instead, beside the circle, so it
- * never covers the circle's centre (GE7). A card that opens later on the right (a site, an area, a sighting) lies
- * over it until closed.
+ * On the stage layout (docs/GODS_EYE.md GC1, from 768 px) the HUD starts right of the chat card, so a left panel
+ * (carp's "Locations to review", the lionfish survey) opens at the left of the globe, next to the chat card, at the
+ * bottom just above the timeline and below the Ships button.
  */
 const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
@@ -24,6 +22,8 @@ const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number
   top: var(--hud-top);
   bottom: var(--hud-bottom);
   ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom)));` : "")}
+  /* A left panel sits at the bottom, just above the timeline, and stops under the Ships button (36 px and a gutter below the top row). */
+  ${(p) => (p.$side === "left" ? "top: auto; bottom: var(--hud-bottom); height: auto; max-height: calc(100cqh - var(--hud-top) - 36px - var(--gap-m) - var(--hud-bottom));" : "")}
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));
   width: min(${(p) => p.$width}px, calc(100cqw - 2 * var(--gap-m)));
   display: flex;
@@ -193,9 +193,8 @@ function usePanelFocus(open: boolean) {
   return { frameRef, tabRef, fromTabRef };
 }
 
-export default function Panel({ side: asked, title, open, onClose, onOpen, tabLabel, width = 360, maxHeight, actions, children, ...rest }: PanelProps) {
+export default function Panel({ side, title, open, onClose, onOpen, tabLabel, width = 360, maxHeight, actions, children, ...rest }: PanelProps) {
   const { frameRef, tabRef, fromTabRef } = usePanelFocus(open);
-  const side: Side = useStageLayout() ? "right" : asked;
   if (!open) {
     return onOpen ? (
       <Tab
