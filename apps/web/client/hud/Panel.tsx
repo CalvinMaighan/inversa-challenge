@@ -104,7 +104,8 @@ const Body = styled.div`
 /** Collapsed panel: a tab on the panel's edge (desktop), or a pill above the timeline (phone). */
 const Tab = styled(Surface.withComponent("button"))<{ $side: Side }>`
   position: absolute;
-  top: var(--hud-top);
+  /* A left tab (carp's Sites) sits at the bottom, just above the timeline, like its panel. */
+  ${(p) => (p.$side === "left" ? "bottom: var(--hud-bottom);" : "top: var(--hud-top);")}
   ${(p) => p.$side}: 0;
   display: flex;
   align-items: center;
