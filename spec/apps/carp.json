@@ -9,10 +9,10 @@
   "regions": [
     {
       "id": "louisiana",
-      "name": "Louisiana rivers",
-      "bbox": [-94.0, 28.9, -88.8, 32.9],
+      "name": "Mississippi River Basin and Louisiana rivers",
+      "bbox": [-97.0, 28.9, -82.0, 47.0],
       "cellDeg": 0.01,
-      "camera": { "lat": 31.1, "lon": -91.1, "heightM": 650000 }
+      "camera": { "lat": 38.0, "lon": -89.5, "heightM": 2400000 }
     }
   ],
   "locations": [
@@ -30,7 +30,21 @@
     { "id": "atchafalaya", "name": "Atchafalaya Basin (L'CARP)", "lat": 30.35, "lon": -91.55, "zoom": 8.5, "locations": ["atchafalaya-simmesport", "atchafalaya-krotz-springs", "atchafalaya-butte-la-rose", "atchafalaya-morgan-city"] }
   ],
   "feeds": [
-    { "source": "usgs", "mode": "poll", "name": "USGS Water Data (OGC API, continuous)", "homepage": "https://api.waterdata.usgs.gov/docs/ogcapi/", "params": { "api": "ogc", "parameters": ["00065", "00060"] } },
+    { "source": "usgs", "mode": "poll", "name": "USGS Water Data (OGC API, continuous)", "homepage": "https://api.waterdata.usgs.gov/docs/ogcapi/", "params": {
+      "api": "ogc",
+      "parameters": ["00065", "00060"],
+      "extraSites": [
+        { "id": "05331000", "name": "Mississippi River at St. Paul, MN", "lat": 44.9444, "lon": -93.0881 },
+        { "id": "05420500", "name": "Mississippi River at Clinton, IA", "lat": 41.7806, "lon": -90.2521 },
+        { "id": "05474500", "name": "Mississippi River at Keokuk, IA", "lat": 40.3937, "lon": -91.3743 },
+        { "id": "05587450", "name": "Mississippi River at Grafton, IL", "lat": 38.968, "lon": -90.429 },
+        { "id": "07010000", "name": "Mississippi River at St. Louis, MO", "lat": 38.629, "lon": -90.1798 },
+        { "id": "07020500", "name": "Mississippi River at Chester, IL", "lat": 37.9008, "lon": -89.8302 },
+        { "id": "07022000", "name": "Mississippi River at Thebes, IL", "lat": 37.2203, "lon": -89.4632 },
+        { "id": "07032000", "name": "Mississippi River at Memphis, TN", "lat": 35.1231, "lon": -90.0776 },
+        { "id": "07289000", "name": "Mississippi River at Vicksburg, MS", "lat": 32.315, "lon": -90.9058 }
+      ]
+    } },
     { "source": "nwps", "mode": "poll", "name": "NOAA National Water Prediction Service", "homepage": "https://water.noaa.gov", "params": { "fastWindowUtc": [12, 18] } },
     { "source": "nws-alerts", "mode": "poll", "name": "NWS alerts API (Louisiana)", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": { "area": "LA", "offices": ["KLIX", "KSHV", "KLCH", "KJAN"], "senders": ["NWS New Orleans LA", "NWS Shreveport LA", "NWS Lake Charles LA", "NWS Jackson MS"], "sameCodes": [] } },
     { "source": "nws-forecast", "mode": "poll", "name": "NWS gridpoint forecast", "homepage": "https://www.weather.gov/documentation/services-web-api", "params": {} },

@@ -658,14 +658,22 @@ impl<'t, 'c> RowWriter<'t, 'c> {
         !site.is_empty() && self.app.cfg.locations.iter().any(|l| l.nwps.as_deref() == Some(site))
     }
 
-    /// A reading of a conditions app must come from a configured gauge (`locations[].usgs`;
-    /// the ext_id may carry a `:sensor` suffix). Species apps keep every station in their regions.
+    /// A reading of a conditions app must come from a configured gauge (`locations[].usgs`, or a river
+    /// station the usgs feed lists under `extraSites`; the ext_id may carry a `:sensor` suffix). Species
+    /// apps keep every station in their regions.
     fn gauge_ok(&self, station: &StationRef) -> bool {
         if self.app.is_species() || !matches!(station.kind, crate::model::StationKind::Gage) {
             return true;
         }
         let site = station.ext_id.split(':').next().unwrap_or_default();
         self.app.cfg.locations.iter().any(|l| l.usgs.as_deref() == Some(site))
+            || self
+                .app
+                .cfg
+                .feed(crate::ingest::poll::usgs::SOURCE_ID)
+                .and_then(|f| f.params.get("extraSites"))
+                .and_then(|v| v.as_array())
+                .is_some_and(|extra| extra.iter().any(|e| e["id"].as_str() == Some(site)))
     }
 
     fn forecast_snapshot(&mut self, s: &NewSnapshot) -> rusqlite::Result<Option<bool>> {

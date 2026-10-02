@@ -810,7 +810,7 @@ mod tests {
             frame_at("class_b_position.json", t0 + 20_000, 29.21, -89.99), // same minute: thinned
             frame_at("class_b_position.json", t0 + 120_000, 29.22, -89.98),
             fixture("malformed.txt"),
-            frame_at("position_report.json", t0, 42.3, -83.0), // Detroit: outside carp, skipped
+            frame_at("position_report.json", t0, 42.3, -71.0), // Boston: outside carp, skipped
         ];
         let (url, sub) = mock_server(frames).await;
         let key = ApiKey::new("mock-key-123".into());
@@ -820,13 +820,13 @@ mod tests {
         let payloads = ais.fetch(&ctx).await.unwrap();
         let sub: Value = serde_json::from_str(&sub.await.unwrap()).unwrap();
         assert_eq!(sub["APIKey"], "mock-key-123");
-        assert_eq!(sub["BoundingBoxes"], json!([[[28.9, -94.0], [32.9, -88.8]]]), "the carp box, latitude first");
+        assert_eq!(sub["BoundingBoxes"], json!([[[28.9, -97.0], [47.0, -82.0]]]), "the carp box, latitude first");
         assert_eq!(payloads.len(), 1);
         let lines = String::from_utf8_lossy(&payloads[0].bytes).lines().count();
         assert_eq!(lines, 4, "static + 2 positions + the out-of-region one; the same-minute fix and the bad frame never queued");
         assert_eq!((ais.status.thinned.load(Ordering::Relaxed), ais.status.malformed.load(Ordering::Relaxed)), (1, 1));
         let out = crate::ingest::scheduler::ingest_payload(&state, &ais, payloads[0].clone(), None).await.unwrap();
-        assert_eq!((out.rows_in, out.rows_skipped), (4, 1), "the Detroit fix is outside the app's region");
+        assert_eq!((out.rows_in, out.rows_skipped), (4, 1), "the Boston fix is outside the app's region");
 
         let q = r#"query($bbox: BBox!, $from: Time!, $to: Time!) { vessels(bbox: $bbox, from: $from, to: $to) { mmsi name type points { at lat lon sog cog heading } } }"#;
         let vars = json!({ "bbox": { "west": -94.0, "south": 28.9, "east": -88.8, "north": 32.9 }, "from": iso(t0 - 60_000), "to": iso(now) });
