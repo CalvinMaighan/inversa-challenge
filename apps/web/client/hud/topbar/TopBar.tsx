@@ -394,29 +394,38 @@ export function AboutContent({
 const LiveList = styled.ul`
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--gap-s);
   margin: var(--gap-s) 0 0;
   padding: 0;
   list-style: none;
 
+  /* Two lines per source: its name and when it was checked, then what it checks and its newest record. */
   li {
     display: grid;
-    grid-template-columns: 9px 1fr auto;
-    align-items: center;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
     column-gap: var(--gap-s);
+    row-gap: 1px;
+    align-items: baseline;
+  }
+  li > :first-child {
+    grid-row: 1 / 3;
+    align-self: start;
+    margin-top: 4px;
   }
   b {
     font: 600 12px / 1.3 var(--font-mono);
-  }
-  li > span {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
   }
   small {
     color: var(--muted);
     font: 400 11px / 1.3 var(--font-mono);
     white-space: nowrap;
+  }
+  small:nth-of-type(2) {
+    white-space: normal;
+  }
+  small:nth-of-type(1),
+  small:nth-of-type(3) {
+    text-align: right;
   }
 `;
 
@@ -425,7 +434,7 @@ export function LiveDataContent({ list, nowMs }: { list: FeedState[]; nowMs: num
   const rows = liveRows(list, nowMs);
   return (
     <>
-      <p>Each source: when it was last checked, and how old its newest record is (a source only has what the world has reported: a species record can be days old and still be the latest). A dot on the bell shows when a source gives us something new.</p>
+      <p>Live checks of each data source.</p>
       {rows.length === 0 ? (
         <p>Nothing has reported yet.</p>
       ) : (
@@ -434,10 +443,9 @@ export function LiveDataContent({ list, nowMs }: { list: FeedState[]; nowMs: num
             <li key={r.source} data-feed={r.source} title={r.fetchedMs ? `Checked ${formatLag((nowMs - r.fetchedMs) / 1000)} ago` : undefined}>
               <Dot $tone={r.state === "nominal" ? "ok" : r.state === "lagging" ? "warn" : r.state === "stale" ? "stale" : "danger"} />
               <b>{r.label}</b>
-              <span>
-                <small>{r.checked ? `checked ${r.checked}` : "not checked"}</small>
-                <small>newest {r.age}</small>
-              </span>
+              <small>{r.checked ? `checked ${r.checked}` : "not checked"}</small>
+              <small>{r.what}</small>
+              <small>newest {r.age}</small>
             </li>
           ))}
         </LiveList>

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { hasNewData, latestMs, liveRows } from "client/hud/alerts/model";
+import { describeSource, hasNewData, latestMs, liveRows } from "client/hud/alerts/model";
 import { ALERTS_SEEN } from "client/state/alerts";
 import type { FeedState } from "shared/feed-state";
 
@@ -13,6 +13,9 @@ describe("live data rows", () => {
   test("freshest first, sources that have not reported left out", () => {
     const rows = liveRows(feeds, NOW);
     expect(rows.map((r) => r.source)).toEqual(["inat", "nas"]);
+    expect(rows[0]).toMatchObject({ label: "iNaturalist", what: "photo sightings by the public" });
+    expect(describeSource("nws-alerts").name).not.toBe(describeSource("nws-forecast").name);
+    expect(describeSource("mystery")).toEqual({ name: "MYSTERY", what: "" });
     expect(rows[0]!.age).toBe("10m ago");
     expect(rows[1]!.age).toBe("24h ago");
     expect(rows[0]!.fetchedMs).toBe(Date.parse("2026-10-02T11:58:00Z"));
