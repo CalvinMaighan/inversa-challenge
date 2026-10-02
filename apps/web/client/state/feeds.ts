@@ -5,8 +5,12 @@ import type { FeedState } from "shared/feed-state";
 /** Latest envelope per source (PLAN.md C3), sorted by source id so chips keep a stable order. */
 export const FEEDS = key("FEEDS", [] as FeedState[]);
 
-/** Replace the entry for `next.source`, or add it. Returns the new list. */
+/** Sources the server may still report that the maps no longer use (ships were removed): never shown. */
+export const HIDDEN_FEEDS: ReadonlySet<string> = new Set(["aisstream"]);
+
+/** Replace the entry for `next.source`, or add it (a hidden source is left out). Returns the new list. */
 export function mergeFeedState(list: readonly FeedState[], next: FeedState): FeedState[] {
+  if (HIDDEN_FEEDS.has(next.source)) return [...list];
   const rest = list.filter((f) => f.source !== next.source);
   return [...rest, next].sort((a, b) => (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
 }

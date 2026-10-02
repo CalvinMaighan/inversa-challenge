@@ -23,6 +23,10 @@ describe("FEEDS", () => {
     expect(FEEDS.defaults).toEqual([]);
   });
 
+  test("a hidden source (AIS: ships were removed) is never added", () => {
+    expect(mergeFeedState([feed("inat")], feed("aisstream")).map((f) => f.source)).toEqual(["inat"]);
+  });
+
   test("mergeFeedState replaces by source and keeps source order", () => {
     const list = mergeFeedState(mergeFeedState([], feed("nws")), feed("inat"));
     expect(list.map((f) => f.source)).toEqual(["inat", "nws"]);
