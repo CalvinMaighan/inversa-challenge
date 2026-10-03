@@ -165,6 +165,9 @@ export function buildVoiceInstructions(app: AppConfig): string {
   ].join("\n");
 }
 
+/** The first-run welcome, spoken word for word when the gate opens the microphone. */
+export const WELCOME_LINE = "Welcome to the Inversa Experience, I'm your voice assistant, how may I help you today?";
+
 /**
  * The first thing the voice says when the microphone is switched on, so the user hears at once that it is listening.
  * One short sentence: listening, and one thing to say, drawn from the app's own species and region.
@@ -174,10 +177,9 @@ export function greetingInstructions(app: AppConfig, opts: { welcome?: boolean }
   const region = copyText(app, "region", app.regions.map((r) => r.name).join(", "));
   if (opts.welcome) {
     return [
-      "Speak now, before the user says anything, in two short, warm sentences.",
-      `First: welcome them to the Inversa Experience, here for ${species} in ${region}.`,
-      "Second: ask how you can help, and say they can also click any dot on the globe to open a sighting.",
-      "Do not call tools. Do not describe yourself.",
+      "Speak now, before the user says anything. Always begin the session with exactly this sentence, word for word, in a warm voice, and nothing before it:",
+      `"${WELCOME_LINE}"`,
+      "Add nothing else after it: wait for the user. Do not call tools.",
     ].join(" ");
   }
   return [

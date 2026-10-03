@@ -1,18 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import { handleOpenSession } from "server/voice/http";
-import { buildVoiceInstructions, greetingInstructions } from "server/voice/voice-prompt";
+import { buildVoiceInstructions, greetingInstructions, WELCOME_LINE } from "server/voice/voice-prompt";
 import type { VoiceSessionRegistry } from "server/voice/voice-sessions";
 import { APP_IDS, getApp } from "shared/apps";
 
 describe("first-run welcome", () => {
-  test("the welcome greeting names the Inversa Experience, asks how to help and points at the dots", () => {
+  test("the welcome greeting is the one fixed sentence, word for word, for every app", () => {
+    expect(WELCOME_LINE).toBe("Welcome to the Inversa Experience, I'm your voice assistant, how may I help you today?");
     for (const id of APP_IDS) {
       const text = greetingInstructions(getApp(id), { welcome: true });
-      expect(text).toContain("Inversa Experience");
-      expect(text).toMatch(/how you can help/);
-      expect(text).toMatch(/click any dot/);
-      expect(text).toContain(getApp(id).taxa[0]?.name ?? "Asian carp");
+      expect(text).toContain(`"${WELCOME_LINE}"`);
+      expect(text).toMatch(/exactly this sentence, word for word/);
       expect(text).toMatch(/Do not call tools/);
     }
   });

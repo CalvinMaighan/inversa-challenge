@@ -91,9 +91,7 @@ describe("voice relay against a mocked xAI socket", () => {
     const create = await mock.waitFor((e) => e.type === "response.create");
     const response = create.response as { instructions: string; tool_choice: string };
     expect(response.tool_choice).toBe("none");
-    expect(response.instructions).toContain("Inversa Experience");
-    expect(response.instructions).toContain("Burmese python");
-    expect(response.instructions).toMatch(/click any dot/);
+    expect(response.instructions).toContain("Welcome to the Inversa Experience, I'm your voice assistant, how may I help you today?");
   });
 
   test("session.update carries the persona, eve, server VAD and all the tools", async () => {
