@@ -33,6 +33,7 @@ import {
   SPAWN_THINKING_TOOL,
   VIEW_SCREEN_TOOL,
   buildVoiceInstructions,
+  greetingInstructions,
   voiceToolsFor,
   formatProgressContext,
   formatResultContext,
@@ -40,6 +41,9 @@ import {
 } from "./voice-prompt";
 
 /** Delivery retry while the announcement window is blocked. */
+/** Server VAD: how sure the model must be that it hears speech, and how long a pause ends the turn. */
+const VAD_THRESHOLD = 0.6;
+const VAD_SILENCE_MS = 650;
 const ANNOUNCE_RETRY_MS = 1_000;
 /** Progress updates are spoken at most this often per task. */
 const PROGRESS_MIN_INTERVAL_MS = 8_000;
@@ -90,6 +94,8 @@ export type VoiceSessionOptions = {
   budget: VoiceBudget;
   maxSessionMs: number;
   meterMs?: number;
+  /** Speak a one-line "I'm listening" as soon as the microphone is live (default on). */
+  greet?: boolean;
 };
 
 function fingerprint(objective: string): string {
@@ -184,6 +190,7 @@ export class VoiceSession {
   private viewStateAt: number | null = null;
   private turnCounter = 0;
   private closed = false;
+  private greeted = false;
   private connGeneration = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private meterTimer: ReturnType<typeof setInterval> | null = null;
@@ -266,7 +273,9 @@ export class VoiceSession {
               instructions: buildVoiceInstructions(this.opts.app),
               tools: voiceToolsFor(this.opts.app),
               voice: VOICE_REALTIME_VOICE,
-              turn_detection: { type: "server_vad" },
+              // Explicit, so a quiet room ends the turn: 0.6 ignores a hum that 0.5 hears as speech, and 650 ms of silence
+              // ends it (the default 200 ms cuts a pause mid-question; far longer feels sluggish).
+              turn_detection: { type: "server_vad", threshold: VAD_THRESHOLD, prefix_padding_ms: 300, silence_duration_ms: VAD_SILENCE_MS },
               audio: {
                 input: {
                   format: { type: "audio/pcm", rate: VOICE_INPUT_SAMPLE_RATE },
@@ -285,6 +294,7 @@ export class VoiceSession {
       if (result === "ok") {
         this.setState("listening");
         this.startMeter();
+        this.greet();
       } else {
         this.conn?.close();
         this.conn = null;
@@ -844,6 +854,14 @@ export class VoiceSession {
       response: { modalities: ["text", "audio"], tool_choice: "none", instructions },
     });
     this.setState("thinking");
+  }
+
+  /** The spoken "I'm listening" the moment the microphone goes live (once per session, not on a reconnect). */
+  private greet(): void {
+    if (!this.conn || this.greeted || this.opts.greet === false) return;
+    this.greeted = true;
+    this.pendingResponses.push({ origin: "announcement", turnId: this.nextTurnId() });
+    this.conn.send({ type: "response.create", response: { modalities: ["text", "audio"], tool_choice: "none", instructions: greetingInstructions(this.opts.app) } });
   }
 
   private nextTurnId(): string {

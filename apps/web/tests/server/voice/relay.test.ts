@@ -27,7 +27,7 @@ function idleRunner(): AgentRunner {
   return { run: () => new Promise(() => undefined) };
 }
 
-async function startSession(runner: AgentRunner = idleRunner()): Promise<Harness> {
+async function startSession(runner: AgentRunner = idleRunner(), greet = false): Promise<Harness> {
   const mock = startMockXai();
   const session = new VoiceSession({
     ip: "127.0.0.1",
@@ -36,6 +36,7 @@ async function startSession(runner: AgentRunner = idleRunner()): Promise<Harness
     runner,
     budget: new VoiceBudget({ dataDir: mkdtempSync(path.join(tmpdir(), "voice-relay-")), dailyMinutes: 60 }),
     maxSessionMs: 60_000,
+    greet,
   });
   await session.connect();
   const events: VoiceServerEvent[] = [];
@@ -73,19 +74,30 @@ afterEach(() => {
 });
 
 describe("voice relay against a mocked xAI socket", () => {
+  test("the microphone going live is answered at once with a spoken one-line greeting, once, without tools", async () => {
+    const { mock } = await startSession(idleRunner(), true);
+    const create = await mock.waitFor((e) => e.type === "response.create");
+    const response = create.response as { instructions: string; tool_choice: string; modalities: string[] };
+    expect(response.tool_choice).toBe("none");
+    expect(response.modalities).toContain("audio");
+    expect(response.instructions).toMatch(/listening/);
+    expect(response.instructions).toContain("Burmese python");
+    expect(mock.received.filter((e) => e.type === "response.create")).toHaveLength(1);
+  });
+
   test("session.update carries the persona, eve, server VAD and all the tools", async () => {
     const { mock } = await startSession();
     const update = await mock.waitFor((e) => e.type === "session.update");
     const session = update.session as {
       voice: string;
       instructions: string;
-      turn_detection: { type: string };
+      turn_detection: { type: string; threshold: number; silence_duration_ms: number };
       tools: { name: string; parameters: Record<string, unknown> }[];
       audio: { input: { format: { rate: number } }; output: { format: { rate: number } } };
     };
     expect(mock.authHeaders[0]).toBe("Bearer test-key-not-real");
     expect(session.voice).toBe("eve");
-    expect(session.turn_detection.type).toBe("server_vad");
+    expect(session.turn_detection).toMatchObject({ type: "server_vad", threshold: 0.6, silence_duration_ms: 650 });
     expect(session.audio.input.format.rate).toBe(16_000);
     expect(session.audio.output.format.rate).toBe(24_000);
     expect(session.instructions).toContain(getApp("python").agent.persona);

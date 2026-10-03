@@ -160,6 +160,20 @@ export function buildVoiceInstructions(app: AppConfig): string {
   ].join("\n");
 }
 
+/**
+ * The first thing the voice says when the microphone is switched on, so the user hears at once that it is listening.
+ * One short sentence: listening, and one thing to say, drawn from the app's own species and region.
+ */
+export function greetingInstructions(app: AppConfig): string {
+  const species = app.taxa[0]?.name ?? "Asian carp";
+  const region = copyText(app, "region", app.regions.map((r) => r.name).join(", "));
+  return [
+    "Speak now, before the user says anything, in one short, warm sentence of about ten words.",
+    "Say that you are listening, and name one thing they can ask or tell you to do, about " + species + " or the map for " + region + ".",
+    "Do not call tools. Do not describe yourself.",
+  ].join(" ");
+}
+
 export const RESULT_RESPONSE_INSTRUCTIONS = [
   "The following is the final result of analysis you started earlier, not a new user request.",
   "Relay it naturally in one to three short sentences. Cover every item when several are listed.",

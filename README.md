@@ -60,7 +60,8 @@ Not integrated. Each needs a sign-up, a request or an agreement first.
 - **Live data** (bell, top right): the newest record from each live feed with its age, freshest first. A dot shows when something new arrives.
 - **Look** (eye, top right): visual modes and the map window (shape, size, soft edge).
 - **Developer** (`<>`, top right): tab **Feeds** shows every data source and its health; tab **API Keys** shows which keys are set and lets you paste missing ones.
-- **Agent** (left column): ask about what is on the map; answers cite their sources and can move the globe.
+- **Agent** (left column, tab 1): ask about the species and places on the map; answers cite their sources. It stays on topic (anything else is steered back to what it covers) and can drive the map: fly to a town, zoom, pick an area, set the period, filter species, open menus (layers, live data, look, period) and open a sighting's card to read it out. Tap the microphone and it answers aloud at once ("I'm listening"); the same controls work by voice.
+- **Questions** (tab 2): every question the agent supports, by topic, one tap to ask.
 
 ## Run locally
 
@@ -153,10 +154,10 @@ Only Axum writes the databases; the agent reaches data only through GraphQL. Eac
 
 ## Known gaps
 
-- **Carp agent still answers about Louisiana river gauges** (its tools and starter questions predate the move to sightings); the map is sightings only. It has no sightings tool yet.
+- **Voice** was tuned (server VAD threshold 0.6, 650 ms of silence ends a turn) but could only be checked against the mocked provider; if a turn still hangs on in a noisy room, raise `VAD_THRESHOLD` in `apps/web/server/voice/voice-session.ts`.
 - **Lionfish is heavy on the small server**: the first load of a long period builds many heat-map frames and can take several seconds, especially while a backfill runs.
 - **GOES-19 and NWWS-OI feeds are disabled** (need AWS and NOAA accounts).
-- **Notes, teammates and the WebRTC signal worker** still exist in the code and UI but are not deployed and are being removed.
+- **Notes, teammates and the WebRTC signal worker** are no longer in the UI (the Notes tab became Questions) but their code is still in the repo, undeployed.
 - **Lionfish survey card** still carries older layer wording; restyle pending.
 - Tests run locally (`bun run check`), not in CI, to keep CI fast.
 
