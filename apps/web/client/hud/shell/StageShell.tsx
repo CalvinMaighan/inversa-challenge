@@ -6,6 +6,7 @@ import { get, subscribe } from "@calvinjs/active-state";
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
 import { featherOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
+import Embers from "client/intro/Embers";
 import styled from "client/styled";
 
 import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
@@ -102,8 +103,9 @@ const GlobeLayer = styled.div`
   z-index: 0;
 
   ${STAGE_MEDIA} {
+    /* Transparent, not black: the page behind is black already, and the embers drift on it around the window. */
     & [data-globe] {
-      background: #000;
+      background: transparent;
     }
     [data-shell] & [data-globe] canvas {
       ${SCOPE_RULES}
@@ -237,6 +239,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
   return (
     <Main ref={mainRef} data-shell="" data-layout={stage ? "stage" : "dock"}>
       <Title>{app.name}</Title>
+      <Embers />
       <GlobePane data-slot="globe-pane" $sheet={hasSide}>
         <Stage data-stage="" aria-hidden="true" />
         <GlobeLayer data-slot="globe">{globe}</GlobeLayer>

@@ -10,11 +10,6 @@ import { getApp } from "shared/apps";
 import { LEAVE_MS, speciesCards } from "./model";
 import { choose, enter, introInit, useIntro } from "./store";
 
-const drift = keyframes`
-  from { transform: translate3d(0, 0, 0); opacity: 0; }
-  15% { opacity: 0.85; }
-  to { transform: translate3d(var(--dx), -110vh, 0); opacity: 0; }
-`;
 const spin = keyframes`
   to { transform: rotate(360deg); }
 `;
@@ -68,23 +63,6 @@ const Root = styled.div`
     * {
       animation: none !important;
     }
-  }
-`;
-
-const Embers = styled.div`
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-
-  i {
-    position: absolute;
-    bottom: -12px;
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: ${GOLD};
-    box-shadow: 0 0 8px 1px ${GOLD};
-    animation: ${drift} var(--dur) linear var(--delay) infinite;
   }
 `;
 
@@ -435,14 +413,6 @@ const Loading = styled.div`
   }
 `;
 
-/** Deterministic embers: the same on server and client. */
-const EMBERS = Array.from({ length: 22 }, (_, i) => ({
-  left: (i * 47 + 11) % 100,
-  dx: ((i * 29) % 90) - 45,
-  dur: 9 + ((i * 7) % 9),
-  delay: -((i * 13) % 14),
-}));
-
 function Mic() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -478,11 +448,6 @@ export default function Intro() {
 
   return (
     <Root data-intro-root="" data-phase={intro.phase} role="dialog" aria-modal="true" aria-label="Welcome to Inversa. Choose a species.">
-      <Embers aria-hidden="true">
-        {EMBERS.map((e, i) => (
-          <i key={i} style={{ left: `${e.left}%`, ["--dx" as string]: `${e.dx}px`, ["--dur" as string]: `${e.dur}s`, ["--delay" as string]: `${e.delay}s` }} />
-        ))}
-      </Embers>
       <Panel>
         <Sigil viewBox="-100 -100 200 200" fill="none" stroke={GOLD} strokeWidth="0.5" aria-hidden="true">
           <circle r="96" />
