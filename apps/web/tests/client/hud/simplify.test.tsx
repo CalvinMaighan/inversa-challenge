@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@emotion/react";
 import { init } from "@calvinjs/active-state";
 
+import { getApp } from "shared/apps";
 import type { FeedState } from "shared/feed-state";
 
 import { ExpertDetails, Summary } from "client/hud/drawer/EvidenceDrawer";
@@ -123,8 +124,14 @@ describe("plain evidence summary", () => {
     expect(qualityWords("curated", "nas")).toBe("official record");
     expect(qualityWords("casual", "inat")).toBe("casual record (unconfirmed)");
     expect(placeWords(25.47, -80.48)).toBe("near Homestead");
-    expect(placeWords(26.3, -81.0)).toBe("in South Florida");
-    expect(placeWords("25.7", -80.2)).toBe("in South Florida");
+    // No named place close: the app's own area (python here), never another region's name.
+    expect(placeWords(26.3, -81.0)).toBe("in South Florida and the Keys");
+    expect(placeWords("25.7", -80.2)).toBe("in South Florida and the Keys");
+    // A lionfish report from Isla Mujeres is in the Mexican Caribbean, not South Florida.
+    expect(placeWords(21.2, -86.7, getApp("lionfish"))).toBe("in the Mexican Caribbean");
+    expect(placeWords(26.3, -81.0, getApp("lionfish"))).toBe("in the Florida Keys");
+    expect(placeWords(17.5, -88.0, getApp("lionfish"))).toBe("in Belize");
+    expect(placeWords(36.0, -90.0, getApp("carp"))).toBe("in the Mississippi River Basin");
     expect(nearestPlace(25.7215, -80.2684)?.name).toBe("Coral Gables");
     // The national park is an area, never "near".
     expect(nearestPlace(25.3, -80.85)?.name).not.toBe("Everglades National Park");

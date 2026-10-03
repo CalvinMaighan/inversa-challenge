@@ -10,6 +10,7 @@
 import { speciesIndexOfTaxon } from "client/globe/species";
 import { activeApp } from "client/state/app";
 import { nearestPlace } from "client/voice/gazetteer";
+import { primaryRegion, regionAt, type AppConfig } from "shared/apps";
 import { QUALITY_CODES } from "shared/frames";
 import { vesselCard } from "shared/vessels";
 
@@ -87,10 +88,23 @@ export function qualityWords(quality: unknown, source: unknown): string | null {
   }
 }
 
-/** "near Coral Gables", or "in South Florida" when no named place is close. Never coordinates. */
-export function placeWords(lat: unknown, lon: unknown): string {
-  const place = typeof lat === "number" && typeof lon === "number" ? nearestPlace(lat, lon) : null;
-  return place ? `near ${place.name}` : "in South Florida";
+/** "the Mexican Caribbean", "Belize": a region's name as it reads after "in". */
+const inRegion = (full: string) => {
+  // "Florida Keys / South Florida" reads as its first part.
+  const name = full.split(" / ")[0]!.trim();
+  return /(Keys|Caribbean|Basin|Bay|Gulf|Sea|Everglades)$/.test(name) && !name.includes(" and ") ? `in the ${name}` : `in ${name}`;
+};
+
+/**
+ * "near Coral Gables" when a named place is close, else the app's own area the point lies in ("in the Mexican Caribbean"),
+ * else the app's first area. Never coordinates, and never another region's name: a report from Isla Mujeres is not "in South Florida".
+ */
+export function placeWords(lat: unknown, lon: unknown, app: AppConfig = activeApp()): string {
+  const num = typeof lat === "number" && typeof lon === "number" ? { lat, lon } : typeof lat === "string" && typeof lon === "string" && Number.isFinite(Number(lat)) && Number.isFinite(Number(lon)) ? { lat: Number(lat), lon: Number(lon) } : null;
+  const place = num ? nearestPlace(num.lat, num.lon) : null;
+  if (place) return `near ${place.name}`;
+  const region = (num ? regionAt(app, num.lat, num.lon) : null) ?? primaryRegion(app);
+  return inRegion(region.name);
 }
 
 /** Feed sources as a newcomer would name them. */
