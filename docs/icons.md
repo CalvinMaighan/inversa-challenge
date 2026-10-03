@@ -66,13 +66,10 @@ The solid side-view fish on the carp map and chip is Material Design Icons "fish
 path data copied from https://github.com/Templarian/MaterialDesign `svg/fish.svg`, checked 2026-10-01
 (`apps/web/client/carp/FishIcon.tsx`).
 
-## Fish apps: colour emoji (carp, lionfish)
+## Species pictures (all three apps)
 
-The carp and lionfish apps use colour emoji images from Noto Emoji (Google; Apache-2.0 for the images, SIL OFL 1.1 for the font),
-fetched as SVG through Iconify (https://icon-sets.iconify.design/noto/): `noto:tropical-fish` for carp, `noto:snake` for python and `noto:blowfish` for
-lionfish. The files are `apps/web/public/icons/noto-tropical-fish.svg` and `noto-blowfish.svg`, mapped in
-`apps/web/client/noto-icons.ts`; they replace the outline fish for those two apps in the app selector, the chips and the map
-markers. This supersedes the Material Design Icons fish entry above.
-
-The sighting card (the evidence drawer's species line) keeps the plain outline fish in the species colour; only the chips, the
-app selector and the map markers use the emoji.
+Each app shows its species picture, not an icon: `apps/web/public/species/carp.png`, `lionfish.png` and `python.png` (320 px, transparent
+background, made from the 1254 px originals supplied for the project), mapped in `apps/web/client/species-images.ts`. They are what
+`AppIcon` draws in the app selector, the species chips, the legend and the first-run gate, and the stand-in on a sighting card that has no
+photo. They replace the Noto Emoji images used before. The map markers still draw the outline icons above (a small tinted shape reads
+better on the globe than a picture), and the sighting card's species line keeps its plain outline in the species colour.

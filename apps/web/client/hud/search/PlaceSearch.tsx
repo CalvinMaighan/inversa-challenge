@@ -46,9 +46,10 @@ const Trigger = styled.button`
 
 const Pop = styled.div`
   position: absolute;
+  /* Above the button, its right edge on the button's right edge. */
   bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
+  left: auto;
   z-index: 9;
   width: min(380px, calc(100vw - 2 * var(--gap-m)));
   max-height: min(60vh, 460px);

@@ -318,6 +318,25 @@ const KIND_TITLES: Record<string, string> = {
   note: "Field note",
 };
 
+/** Stand-in where a sighting has no photo: the species' own picture, dimmed, with a plain line saying so. */
+const NoPhoto = styled.div`
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  margin-top: var(--gap-s);
+  padding: var(--gap-m);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-s);
+
+  img {
+    opacity: 0.55;
+  }
+  small {
+    color: var(--muted);
+    font: 400 12px / 1.3 var(--font-ui);
+  }
+`;
+
 const Lead = styled.section`
   margin-bottom: var(--gap-m);
 
@@ -425,6 +444,12 @@ export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evid
       {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
       {/* Same-origin media proxy (/v1/<app>/media/<id>) through the local media cache (client/media). */}
       {s.photo ? <CachedImage src={s.photo} alt={`Photo: ${s.title}`} data-testid="evidence-photo" /> : null}
+      {kind === "sighting" && !s.photo && sp ? (
+        <NoPhoto data-testid="evidence-no-photo">
+          <AppIcon icon={sp.icon} color={sp.color} size={72} title={`${sp.name}`} />
+          <small>No photo for this sighting</small>
+        </NoPhoto>
+      ) : null}
       {kind === "sighting" ? <ObservationPlace sourcePageUrl={evidence.sourcePageUrl} /> : null}
       {sp?.about ? (
         <p className="about" data-testid="species-about">

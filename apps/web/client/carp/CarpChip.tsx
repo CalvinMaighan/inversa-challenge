@@ -1,7 +1,7 @@
 "use client";
 
 import { Surface } from "client/hud/primitives";
-import { NOTO_ICON_URLS } from "client/noto-icons";
+import { SPECIES_IMAGE_URLS } from "client/species-images";
 import styled from "client/styled";
 
 import { setFishVisible, useFish } from "./fish";
@@ -42,7 +42,7 @@ export default function CarpChip() {
       onClick={() => setFishVisible(!visible)}
     >
       {/* eslint-disable-next-line @next/next/no-img-element -- a small same-origin SVG */}
-      <img src={NOTO_ICON_URLS.carp} alt="" width={18} height={18} />
+      <img src={SPECIES_IMAGE_URLS.carp} alt="" width={18} height={18} />
       Carp
       <small>{count}</small>
     </Chip>

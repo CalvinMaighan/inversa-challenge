@@ -483,7 +483,7 @@ export default function Intro() {
                 data-species={c.id}
               >
                 <Medallion>
-                  <AppIcon icon={app.icon} color={tint} size={intro.app === c.id ? 62 : 56} outline={false} />
+                  <AppIcon icon={app.icon} color={tint} size={intro.app === c.id ? 84 : 76} outline={false} />
                 </Medallion>
                 <CardBody>
                   <Title>{c.title}</Title>

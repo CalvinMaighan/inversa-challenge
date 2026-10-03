@@ -152,6 +152,17 @@ describe("plain evidence summary", () => {
     expect(expert).toContain("raw/inat/2026/09/30/0412.json.gz");
   });
 
+  test("a sighting with no photo shows the species picture as a stand-in, with a line saying so; one with a photo shows only the photo", () => {
+    const withPhoto = html(<Summary kind="sighting" evidence={sighting} atMs={NOW} />);
+    expect(withPhoto).not.toContain("evidence-no-photo");
+    const bare = { ...sighting, record: { ...sighting.record, mediaUrl: null } } as typeof sighting;
+    const lead = html(<Summary kind="sighting" evidence={bare} atMs={NOW} />);
+    expect(lead).toContain('data-testid="evidence-no-photo"');
+    expect(lead).toContain('src="/species/python.png"');
+    expect(lead).toContain("No photo for this sighting");
+    expect(lead).not.toContain('data-testid="evidence-photo"');
+  });
+
   test("plain evidence summary: the species card gives the Latin name, its status, the app's About line, its icon and colour, and its iNaturalist page", () => {
     const s = plainSummary("sighting", sighting.record, NOW)!;
     expect(s.title).toBe("Burmese python spotted near Coral Gables");
