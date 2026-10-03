@@ -23,7 +23,8 @@ const Dialog = styled.dialog`
   /* The HUD row lets the pointer through to the globe; the panel takes it back. */
   pointer-events: auto;
   width: min(640px, calc(100vw - 24px));
-  max-height: min(86vh, 900px);
+  /* A fixed height, so switching tabs never resizes the panel (each tab scrolls inside it). */
+  height: min(86vh, 900px);
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border);
