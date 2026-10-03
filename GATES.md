@@ -31,5 +31,5 @@ Branch: polish-for-review (PR #5 stacked). Checks run from the repo root.
   EXPECT: 0 fail
   EVIDENCE: bun 1234 pass 0 fail; check:ci ok; cargo not touched in this leaf (404 pass at the previous commit).
 
-- [ ] G8 Committed and pushed on the branch; PR description updated.
-  EVIDENCE: pending
+- [x] G8 Committed and pushed on the branch; PR description updated.
+  EVIDENCE: commit d00b509 pushed to polish-for-review; PR https://github.com/CalvinMaighan/inversa-challenge/pull/5 body updated.
