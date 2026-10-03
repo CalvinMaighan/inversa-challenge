@@ -29,5 +29,5 @@ Branch: polish-for-review (PR #5). Checks run from the repo root.
   EXPECT: 0 fail
   EVIDENCE: bun 1256 pass 0 fail (169 files, was 1234); check CHECK-OK with cargo 404 passed 0 failed (before the agent tool change; bun test tests/server/agent 181 pass after it).
 
-- [ ] G8 Verified in the browser pane (screenshots of the gate, the second step and the entered app), committed and pushed on the branch, PR body updated.
-  EVIDENCE: pending
+- [x] G8 Verified in the browser pane (screenshots of the gate, the second step and the entered app), committed and pushed on the branch, PR body updated.
+  EVIDENCE: docs/evidence/intro-gate-pick.jpg, intro-gate-enter.jpg, intro-entered-lionfish.jpg; commit 44d1102 pushed to polish-for-review; PR https://github.com/CalvinMaighan/inversa-challenge/pull/5 body has the "first-run gate" section.
