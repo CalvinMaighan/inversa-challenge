@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
@@ -9,82 +9,21 @@ import { TIME, type TimeState } from "client/state/time";
 
 import { fitGlobeInPane, fitInPane } from "client/globe/fit";
 import { gateOpen } from "client/intro/gate";
-import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
+import { MOBILE_QUERY, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
-import { useStageLayout } from "client/hud/shell/StageShell";
 import { LAYERS, type LayersState } from "client/state/layers";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { VIEW, type ViewState } from "client/state/view";
-import styled from "client/styled";
-import { copyText, type AppConfig } from "shared/apps";
+import type { AppConfig } from "shared/apps";
 
 import { areaCells, areasOf, frameAreas, cellEvidenceId, countReports, parseCellEvidenceId, snapshotAt, windowReports, type PriorityCell, } from "./model";
 import OceanHelp from "./OceanHelp";
 import Overlay from "./Overlay";
 import PriorityCard from "./PriorityCard";
-import { bannerDismissed, dismissBanner, resetView, setSummary, setView, useView, type HelpTopic } from "./store";
+import { resetView, setSummary, setView, useView, type HelpTopic } from "./store";
 import { TOP_CELLS, useCursor, useExplain, useLionfishData } from "./use-lionfish";
 
-const Banner = styled(Surface)`
-  position: absolute;
-  z-index: 3;
-  top: var(--hud-top);
-  /* Clear of the survey panel: on its left below 768 px, on its right on the stage layout (GE7). */
-  left: calc(max(var(--gap-m), env(safe-area-inset-left)) + var(--lf-panel-l, 0px));
-  right: calc(max(var(--gap-m), env(safe-area-inset-right)) + var(--lf-panel-r, 0px));
-  max-width: 640px;
-  margin: 0 auto;
-  display: flex;
-  gap: var(--gap-m);
-  align-items: flex-start;
-  padding: 8px 8px 8px 12px;
-  border-left: 3px solid var(--warn);
-  border-radius: var(--radius-m);
-  font: 400 12.5px / 1.45 var(--font-ui);
-  ul {
-    flex: 1;
-    margin: 0;
-    padding-left: 14px;
-  }
-  ${MOBILE} {
-    font-size: 12px;
-  }
-  &[data-expanded="false"] {
-    align-items: center;
-    padding-block: 4px;
-  }
-`;
-
-/** The collapsed banner: every caveat on one line, cut at the edge; pressing it shows them in full. */
-const OneLine = styled.button`
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font: inherit;
-  text-align: start;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  b {
-    font-weight: 600;
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-`;
-
-/** The banner's chevron: down to expand, up to collapse. */
-const Turn = styled.span<{ $up: boolean }>`
-  display: inline-flex;
-  transform: rotate(${(p) => (p.$up ? -90 : 90)}deg);
-`;
-
-/** Room inside the free rect for a report dot or a ranked square at an area's edge. */
+/** Room inside the free rect for a report dot or a ranked square at an area edge. */
 const AREA_INSET_PX = 22;
 
 /**
@@ -98,7 +37,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   const rangeDays = useActiveState<number>(RANGE_DAYS)[0] ?? DEFAULT_RANGE_DAYS;
   const data = useLionfishData(app, view.field, rangeDays);
   const mobile = useIsMobile();
-  const stage = useStageLayout();
   const cursor = useCursor();
   const live = cursor.live;
   const atMs = live ? data.liveMs : Math.min(cursor.atMs, data.liveMs);
@@ -128,17 +66,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
     return () => cancelAnimationFrame(id);
   }, [app]);
 
-  const [banner, setBanner] = useState(() => !bannerDismissed(typeof window === "undefined" ? null : window.sessionStorage));
-  // In full on a narrow desktop, one line on a phone (three wrapped caveats would take a fifth of the screen) and on
-  // the stage layout, where the line sits above the circle between the chat card and the survey panel (GE7); either
-  // way the reader can switch.
-  const [bannerOpen, setBannerOpen] = useState<boolean | null>(null);
-  const bannerFull = bannerOpen ?? (!mobile && !stage);
-  const notes = [
-    copyText(app, "sightingsNote", "Sightings are not abundance."),
-    copyText(app, "heatNote", "Heat stress is context, not proof of damage."),
-    copyText(app, "priorityNote", "Survey priority is not a risk or a probability."),
-  ];
   const reports = useMemo(() => data.reports?.reports ?? [], [data.reports]);
   // The period is the timeline's: one dot per report from its start date to the cursor.
   const fromMs = Date.parse(useActiveState<TimeState, string>(TIME, (t) => t.from)[0] ?? "") || undefined;
@@ -190,48 +117,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
         onReport={(r) => openEvidence(`sighting:${r.id}`)}
         onCell={openCell}
       />
-      {/* The open card repeats these lines; between the panel and the card the banner would be a sliver. */}
-      {banner && !(picked && !mobile) ? (
-        <Banner
-          as="aside"
-          role="note"
-          aria-label="How to read Lionfish Watch"
-          data-testid="lionfish-banner"
-          data-hud-obstacle=""
-          data-expanded={bannerFull ? "true" : "false"}
-        >
-          {bannerFull ? (
-            <ul id="lionfish-banner-notes">
-              {notes.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          ) : (
-            <OneLine type="button" aria-expanded={false} onClick={() => setBannerOpen(true)} data-testid="lionfish-banner-expand">
-              <b>How to read this map:</b> {notes.join(" ")}
-            </OneLine>
-          )}
-          {bannerFull ? (
-            <IconButton type="button" aria-label="Collapse to one line" title="Collapse to one line" aria-expanded={true} aria-controls="lionfish-banner-notes" data-testid="lionfish-banner-collapse" onClick={() => setBannerOpen(false)}>
-              <Turn $up>
-                <Icon name="chevron" />
-              </Turn>
-            </IconButton>
-          ) : null}
-          <IconButton
-            type="button"
-            aria-label="Dismiss for this session"
-            title="Dismiss for this session"
-            data-testid="lionfish-banner-dismiss"
-            onClick={() => {
-              dismissBanner(window.sessionStorage);
-              setBanner(false);
-            }}
-          >
-            <Icon name="close" />
-          </IconButton>
-        </Banner>
-      ) : null}
       <PriorityCard
         app={app}
         open={picked !== null}

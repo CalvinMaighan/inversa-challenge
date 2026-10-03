@@ -1,12 +1,25 @@
 import { randomUUID } from "node:crypto";
 
-import WebSocket from "ws";
+import type WebSocket from "ws";
 
 /**
  * Thin xAI Grok Voice WebSocket client (ported from deedee). OpenAI-style realtime envelope:
  * `session.update`, `input_audio_buffer.append`, `conversation.item.create`, `response.create`,
  * `response.cancel`. The API key stays on the server.
  */
+
+/**
+ * The `ws` module, loaded at run time and left out of the bundle: the production server runs on Bun, which supplies its own
+ * native `ws`; the pure-JS copy the bundler would inline closed every connection to xAI with code 1006 there (the standalone
+ * server's chunks held it). Under Node (dev, tests) the installed package loads as usual.
+ */
+async function loadWebSocket(): Promise<typeof import("ws").default> {
+  const mod = await import(/* turbopackIgnore: true */ /* webpackIgnore: true */ "ws");
+  return mod.default;
+}
+
+/** `WS_OPEN`. */
+const WS_OPEN = 1;
 
 export const VOICE_REALTIME_MODEL = "grok-voice-latest";
 export const VOICE_REALTIME_VOICE = "eve";
@@ -51,9 +64,10 @@ export class RealtimeConnection {
     private readonly handlers: RealtimeConnectionHandlers,
   ) {}
 
-  connect(): Promise<void> {
+  async connect(): Promise<void> {
+    const WS = await loadWebSocket();
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(this.target.url, {
+      const ws = new WS(this.target.url, {
         headers: { Authorization: `Bearer ${this.target.apiKey}` },
       });
       this.ws = ws;
@@ -63,7 +77,7 @@ export class RealtimeConnection {
       }, CONNECT_TIMEOUT_MS);
 
       this.ping = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) ws.ping();
+        if (ws.readyState === WS_OPEN) ws.ping();
       }, PING_MS);
       ws.on("open", () => {
         clearTimeout(timer);
@@ -95,12 +109,12 @@ export class RealtimeConnection {
   }
 
   send(payload: Record<string, unknown>): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || this.ws.readyState !== WS_OPEN) return;
     this.ws.send(JSON.stringify({ event_id: `event_${randomUUID().replaceAll("-", "")}`, ...payload }));
   }
 
   isOpen(): boolean {
-    return Boolean(this.ws && this.ws.readyState === WebSocket.OPEN);
+    return Boolean(this.ws && this.ws.readyState === WS_OPEN);
   }
 
   close(): void {

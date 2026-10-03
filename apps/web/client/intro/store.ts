@@ -20,8 +20,8 @@ import { startPreload, warmFiner } from "./preload";
  * The gate's state: which step it is on, the species picked, whether the microphone request is in flight, and how far
  * the background preload has got. A plain store (one writer, this module); the app's own state lives in the catalog.
  */
-/** The timeline's playback speed when the gate presses play for the user (8×, one of its speed choices). */
-const PLAY_SPEED = 8;
+/** The timeline's playback speed when the gate presses play for the user (32×, one of its speed choices). */
+const PLAY_SPEED = 32;
 
 export type IntroState = {
   phase: IntroPhase;
@@ -82,7 +82,7 @@ function parkTimelines(): void {
   parkFishAtStart();
 }
 
-/** The play button, pressed for the user at 8x: the timeline replays from its start and loads the data in as it goes. */
+/** The play button, pressed for the user at 32x: the timeline replays from its start and loads the data in as it goes. */
 function playTimeline(id: AppId): void {
   if (getApp(id).kind === "conditions") {
     startFishPlay(PLAY_SPEED);
