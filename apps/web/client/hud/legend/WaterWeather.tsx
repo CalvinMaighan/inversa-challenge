@@ -15,10 +15,6 @@ import type { AppConfig } from "shared/apps";
 import { Mono } from "../primitives";
 
 const Group = styled.section`
-  margin-top: var(--gap-s);
-  padding-top: var(--gap-s);
-  border-top: 1px solid var(--border);
-
   > h4 {
     margin: 0 0 2px;
     color: var(--muted);
@@ -223,8 +219,6 @@ export default function WaterWeather({ app, active = true, stats: given }: { app
   const credits = activeAttributions(rows);
   return (
     <Group aria-label={GROUP_LABEL} data-testid="water-weather">
-      <h4>{GROUP_LABEL}</h4>
-      <p>Live pictures from NOAA and NASA. They follow the timeline: each one shows the nearest moment its source has.</p>
       {rows.map((row) => (
         <OverlayRowView key={row.id} row={row} />
       ))}

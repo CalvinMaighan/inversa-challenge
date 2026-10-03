@@ -60,7 +60,9 @@ describe("layers bar", () => {
     const text = textOf(markup);
     expect(text).not.toContain("Ships");
     expect(markup).not.toContain("legend-toggle-vessels");
-    expect(text).toContain("Water and weather");
+    expect(text).not.toContain("Water and weather");
+    expect(text).toContain("Sea surface temperature map");
+    expect(text).not.toContain("Clouds");
     // Switches with names, off by default, in the order a reader scans them.
     for (const o of OVERLAY_IDS.filter((l) => hasLayer(app, l))) expect(markup).toContain(`data-testid="legend-toggle-${o}"`);
     expect(markup).not.toContain('data-testid="legend-group-ships"');

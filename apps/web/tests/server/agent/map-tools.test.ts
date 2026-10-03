@@ -118,7 +118,7 @@ describe("agent map tools", () => {
     expect(carp).toContain("## The map: layers, ships and looks");
     // Ships are no longer a layer of any app.
     expect(carp).not.toContain("vessels (Ships (AIS))");
-    for (const id of ["sst-map", "radar", "clouds", "lightning", "cyclones"]) expect(carp).toContain(`${id} (`);
+    for (const id of ["sst-map", "radar", "lightning", "cyclones"]) expect(carp).toContain(`${id} (`);
     expect(carp).not.toContain("[e:vessel:<mmsi>]");
     expect(carp).toContain("nvg (night vision");
     const python = agentSystemPrompt(PYTHON);

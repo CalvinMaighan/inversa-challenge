@@ -19,6 +19,8 @@ init(state);
 selectPython();
 afterEach(() => selectPython());
 
+/** Clouds are switched off in every app (they did not look good), so the rows are the other four. */
+const SHOWN_OVERLAYS = OVERLAY_IDS.filter((id) => id !== "clouds");
 const html = (el: ReactElement) => renderToStaticMarkup(<ThemeProvider theme={emotionTheme}>{el}</ThemeProvider>);
 const textOf = (markup: string) =>
   markup
@@ -34,8 +36,10 @@ describe("water and weather", () => {
     const markup = html(<WaterWeather app={getApp("lionfish")} stats={null} />);
     const group = markup.slice(markup.indexOf('data-testid="water-weather"'));
     expect(group.length).toBeGreaterThan(0);
-    expect(textOf(group)).toContain("Water and weather");
-    for (const id of OVERLAY_IDS) {
+    expect(textOf(group)).not.toContain("Water and weather");
+    expect(textOf(group)).not.toContain("Live pictures from NOAA and NASA");
+    expect(textOf(group)).not.toContain("Clouds");
+    for (const id of SHOWN_OVERLAYS) {
       expect(group).toContain(`data-overlay-row="${id}"`);
       // Off by default (GC6): the switch is unchecked and the row is dimmed.
       expect(group).toMatch(new RegExp(`<input[^>]*data-testid="legend-toggle-${id}"[^>]*>`));
@@ -70,7 +74,7 @@ describe("water and weather", () => {
     expect(textOf(markup)).toContain("Hurricanes and tropical storms");
     for (const app of ["carp", "lionfish", "python"] as const) {
       const visible = layersFor(getApp(app)).visible;
-      for (const id of OVERLAY_IDS) expect(visible[id]).toBe(false);
+      for (const id of SHOWN_OVERLAYS) expect(visible[id]).toBe(false);
     }
   });
 

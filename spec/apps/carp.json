@@ -414,12 +414,6 @@
       "description": "Where it is raining now."
     },
     {
-      "id": "clouds",
-      "label": "Clouds",
-      "defaultOn": false,
-      "description": "Cloud cover from the weather satellite."
-    },
-    {
       "id": "lightning",
       "label": "Lightning",
       "defaultOn": false,
@@ -436,7 +430,6 @@
     "locations": "Demonstration locations until Inversa supplies operating areas. L'CARP is reported as active in the Atchafalaya Basin (LDWF).",
     "sst-map": "NASA GIBS MUR sea surface temperature, daily; the newest picture is the day before.",
     "radar": "NOAA nowCOAST MRMS base reflectivity, about every 4 minutes, contiguous US only.",
-    "clouds": "NOAA nowCOAST GOES-19/18 longwave infrared, every 5 minutes.",
     "lightning": "NOAA nowCOAST 15-minute lightning strike density, about 8 km cells.",
     "cyclones": "NHC and CPHC advisories: positions, past track, forecast track and cone.",
     "alerts": "NWS products in effect at the cursor time; \"no active alerts\" shows the time of the last check.",
