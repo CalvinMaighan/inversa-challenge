@@ -130,6 +130,33 @@ export function scopeMaskSvg(win: ScopeWindow, vw: number, vh: number): string {
   return `${open}${defs}${parts.join("")}</svg>`;
 }
 
+/**
+ * The progressive-blur mask: the inverse of the visibility mask, as an SVG the size of the page. Alpha is 0 inside
+ * the window (the safe zone stays exactly as sharp as it is), rises along the soft edge, and is `1 - floor` at the
+ * end of the fade and beyond, so a backdrop blur under it grows from nothing to full strength outward. Built as a
+ * luminance mask: white page, then the same floor, blurred shape and sharp shape in black, so luminance is
+ * `1 - visibility`; a black rect drawn through it has that alpha. Nothing at feather 100 (no vignette, no blur).
+ */
+export function scopeBlurMaskSvg(win: ScopeWindow, vw: number, vh: number): string {
+  const open = `<svg xmlns="http://www.w3.org/2000/svg" width="${r1(vw)}" height="${r1(vh)}" viewBox="0 0 ${r1(vw)} ${r1(vh)}">`;
+  if (win.floor >= 1) return `${open}</svg>`;
+  const parts: string[] = [`<rect width="${r1(vw)}" height="${r1(vh)}" fill="#fff"/>`];
+  let defs = "";
+  if (win.floor > 0.001) parts.push(`<rect width="${r1(vw)}" height="${r1(vh)}" fill="#000" fill-opacity="${Math.round(win.floor * 1000) / 1000}"/>`);
+  const sigma = win.feather * SIGMA_PER_FADE;
+  if (sigma >= 0.05) {
+    defs = `<filter id="f" filterUnits="userSpaceOnUse" x="0" y="0" width="${r1(vw)}" height="${r1(vh)}"><feGaussianBlur stdDeviation="${r1(sigma)}"/></filter>`;
+    parts.push(shapeElement(win, win.feather / 2, ` fill="#000" filter="url(#f)"`));
+  }
+  parts.push(shapeElement(win, 0, ` fill="#000"`));
+  return `${open}<defs>${defs}<mask id="m" maskUnits="userSpaceOnUse" x="0" y="0" width="${r1(vw)}" height="${r1(vh)}" color-interpolation="sRGB">${parts.join("")}</mask></defs><rect width="${r1(vw)}" height="${r1(vh)}" mask="url(#m)"/></svg>`;
+}
+
+/** `scopeBlurMaskSvg` as a CSS `mask-image` value. */
+export function scopeBlurMaskCss(win: ScopeWindow, vw: number, vh: number): string {
+  return `url("data:image/svg+xml,${encodeURIComponent(scopeBlurMaskSvg(win, vw, vh))}")`;
+}
+
 /** `scopeMaskSvg` as a CSS `mask-image` value. */
 export function scopeMaskCss(win: ScopeWindow, vw: number, vh: number): string {
   return `url("data:image/svg+xml,${encodeURIComponent(scopeMaskSvg(win, vw, vh))}")`;

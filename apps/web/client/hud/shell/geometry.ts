@@ -63,3 +63,9 @@ export function featherValue(feather: number): string {
 const STAGE_RADIUS_CSS = `calc(${STAGE_DIAMETER_CSS} / 2)`;
 const FEATHER_VAR = `var(--scope-feather, ${DEFAULT_FEATHER})`;
 export const SCOPE_MASK_CSS = `radial-gradient(circle at 50% 50%, #000 ${STAGE_RADIUS_CSS}, rgb(0 0 0 / calc(${FEATHER_VAR} * ${FEATHER_VAR})) calc(${STAGE_RADIUS_CSS} * (1 + ${FEATHER_VAR})))`;
+
+/**
+ * The progressive blur's mask before the shell measures the page: the inverse of `SCOPE_MASK_CSS`, clear inside the
+ * radius and rising to `1 - feather²` at the end of the fade.
+ */
+export const SCOPE_BLUR_MASK_CSS = `radial-gradient(circle at 50% 50%, transparent ${STAGE_RADIUS_CSS}, rgb(0 0 0 / calc(1 - ${FEATHER_VAR} * ${FEATHER_VAR})) calc(${STAGE_RADIUS_CSS} * (1 + ${FEATHER_VAR})))`;

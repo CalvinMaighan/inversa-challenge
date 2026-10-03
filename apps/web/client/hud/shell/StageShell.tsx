@@ -9,8 +9,8 @@ import { featherOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/
 import Embers from "client/intro/Embers";
 import styled from "client/styled";
 
-import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
-import { scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
+import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_BLUR_MASK_CSS, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
+import { scopeBlurMaskCss, scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
 
 /**
  * The page frame (docs/GODS_EYE.md GC1). From 768 px up: a black page, the globe in a centred window on the stage,
@@ -125,6 +125,33 @@ export const STAGE_SCOPE_CSS = `
   }
 `;
 
+/**
+ * The soft edge's progressive blur: a backdrop blur over the globe, masked by the inverse of the window's mask, so the
+ * map is exactly as sharp as before inside the window and blurs more and more along the fade, outward. Stage layout
+ * only; no blur at all when the soft edge is off (feather 100).
+ */
+const EdgeBlur = styled.div`
+  display: none;
+
+  ${STAGE_MEDIA} {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(var(--scope-blur, 14px));
+    backdrop-filter: blur(var(--scope-blur, 14px));
+    mask-image: var(--scope-blur-mask, ${SCOPE_BLUR_MASK_CSS});
+    mask-repeat: no-repeat;
+    mask-position: 0 0;
+    -webkit-mask-image: var(--scope-blur-mask, ${SCOPE_BLUR_MASK_CSS});
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    display: none;
+  }
+`;
+
 const HudLayer = styled.div`
   position: absolute;
   inset: 0;
@@ -184,6 +211,7 @@ function applyScope(shell: HTMLElement): void {
   shell.dataset.shape = win.shape;
   const style = shell.style;
   style.setProperty("--scope-mask", scopeMaskCss(win, vw, vh));
+  style.setProperty("--scope-blur-mask", scopeBlurMaskCss(win, vw, vh));
   style.setProperty("--scope-clip", scopeClipCss(win));
   style.setProperty("--scope-w", `${win.width}px`);
   style.setProperty("--scope-h", `${win.height}px`);
@@ -243,6 +271,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
       <GlobePane data-slot="globe-pane" $sheet={hasSide}>
         <Stage data-stage="" aria-hidden="true" />
         <GlobeLayer data-slot="globe">{globe}</GlobeLayer>
+        <EdgeBlur data-slot="edge-blur" aria-hidden="true" />
         <HudLayer data-slot="hud">{hud}</HudLayer>
         {hasSide ? (
           <SideSlot ref={sideRef} data-slot="side" data-hud-obstacle={stage ? "" : undefined}>
