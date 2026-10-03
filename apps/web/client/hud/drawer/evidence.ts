@@ -7,7 +7,7 @@ import type { FeedState } from "shared/feed-state";
 
 import { parseEvidenceId } from "client/state/selection";
 import { activeApp } from "client/state/app";
-import { primaryRegion } from "shared/apps";
+import { APP_IDS, primaryRegion } from "shared/apps";
 import { gqlRequest } from "client/threads/api";
 
 import { FEED_FIELDS, feedLabel, formatLag, normalizeFeedState } from "../topbar/feed-chips";
@@ -278,13 +278,15 @@ const FEED_WORDS: Record<string, string> = { lagging: "delayed", stale: "out of 
 export function qualityBadges(evidence: Pick<Evidence, "kind" | "record" | "ingestLagSeconds" | "feed" | "links">): QualityBadge[] {
   const out: QualityBadge[] = [];
   const lag = evidence.ingestLagSeconds;
-  if (evidence.kind === "sighting" && lag !== null && lag > LATE_SECONDS) out.push({ badge: "late", label: `Late report — reached us ${formatLag(lag)} after it was seen` });
+  // Lionfish does not show the "late report" or "also reported elsewhere" lines: they read as noise on a survey map.
+  const lionfish = activeApp().id === APP_IDS[1];
+  if (!lionfish && evidence.kind === "sighting" && lag !== null && lag > LATE_SECONDS) out.push({ badge: "late", label: `Late report — reached us ${formatLag(lag)} after it was seen` });
   const flag = typeof evidence.record.flag === "string" ? evidence.record.flag.toLowerCase() : null;
   if (evidence.kind === "reading" && flag && flag !== "ok") out.push({ badge: "missing", label: FLAG_WORDS[flag] ?? "No reading" });
   if (evidence.kind === "fetch" && String(evidence.record.status ?? "").toLowerCase() === "error") out.push({ badge: "failed", label: "Data check failed" });
   const groups = groupLinks(evidence.links);
   if (groups.duplicate_of.length > 0) out.push({ badge: "duplicate", label: "Same animal as an earlier report" });
-  else if (groups.duplicates.length > 0) {
+  else if (!lionfish && groups.duplicates.length > 0) {
     const n = new Set(groups.duplicates.map((l) => l.id)).size;
     out.push({ badge: "duplicate", label: `Also reported ${n === 1 ? "once more" : `${n} more times`} elsewhere` });
   }

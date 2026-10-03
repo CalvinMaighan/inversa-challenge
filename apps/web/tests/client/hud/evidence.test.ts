@@ -173,3 +173,21 @@ describe("targets and selection", () => {
     expect(isDrawerOpen(undefined)).toBe(false);
   });
 });
+
+describe("lionfish quality badges", () => {
+  test("a late report and a duplicate elsewhere get no line on lionfish (other apps keep them)", async () => {
+    const { applyApp } = await import("client/state/app-switch");
+    const base = { record: {}, feed: null, kind: "sighting" as const };
+    const late = { ...base, ingestLagSeconds: 136 * 86_400 + 22 * 3600, links: [{ id: "sighting:9", relation: "duplicates", source: "gbif" }] };
+    try {
+      applyApp("lionfish");
+      expect(qualityBadges(late)).toEqual([]);
+      // "Same animal as an earlier report" is a different case and stays.
+      expect(qualityBadges({ ...late, links: [{ id: "sighting:1", relation: "duplicate_of", source: "gbif" }] }).map((b) => b.badge)).toEqual(["duplicate"]);
+      applyApp("python");
+      expect(qualityBadges(late).map((b) => b.label)).toEqual([expect.stringContaining("Late report"), expect.stringContaining("Also reported")]);
+    } finally {
+      selectPython();
+    }
+  });
+});
