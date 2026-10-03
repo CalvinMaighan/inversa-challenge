@@ -38,3 +38,14 @@ describe("first-run welcome", () => {
     expect(seen).toEqual([{ welcome: true }, { welcome: false }]);
   });
 });
+
+describe("what the voice hears", () => {
+  test("the persona tells the voice that carb, carbs and karp in the transcript mean carp, in every app", () => {
+    for (const id of APP_IDS) {
+      const text = buildVoiceInstructions(getApp(id));
+      expect(text).toContain("# What you hear");
+      expect(text).toMatch(/"carb", "carbs", "karp" or "car"[^.]*means carp/);
+      expect(text).toMatch(/never repeat the misheard spelling back/);
+    }
+  });
+});
