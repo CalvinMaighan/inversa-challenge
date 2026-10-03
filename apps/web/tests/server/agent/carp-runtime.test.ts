@@ -74,7 +74,7 @@ describe("agent carp", () => {
     expect(PROMPT).toMatch(/L'CARP/);
     expect(PROMPT).toMatch(/Atchafalaya Basin/);
     expect(PROMPT).toMatch(/silver, grass, bighead and black carp/);
-    expect(PROMPT).toMatch(/It cannot say where carp are or what moves them/);
+    expect(PROMPT).toMatch(/carp_sightings returns the stored reports/);
   });
 
   test("agent carp: UTC and Central time handling, the four times, units with their sources, and 'known at time T' semantics are stated", () => {

@@ -93,6 +93,11 @@ export function applyCarpViewEvent(event: object, nowMs = Date.now()): boolean {
 
 /** Citation chip: select the evidence, open the drawer, and fly there when the id carries coordinates. */
 export function openEvidence(id: string): void {
+  // A carp sighting is not in the evidence database: its panel and the flight there are the map controls'.
+  if (id.startsWith("fish:")) {
+    applyUiEvent({ name: "open_evidence", args: { evidenceId: id } });
+    return;
+  }
   set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId: id, drawerOpen: true }));
   const at = evidenceCoordinates(id);
   if (at) getGlobe()?.flyTo({ ...at, altitudeM: EVIDENCE_ALTITUDE_M });

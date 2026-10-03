@@ -46,7 +46,7 @@ describe("help sheet content", () => {
 
   test("active app: welcome, species guide, helper questions and About line are the app's", () => {
     const carp = getApp("carp");
-    expect(welcome(carp)).toContain("Louisiana demonstration locations");
+    expect(welcome(carp)).toContain("Mississippi River Basin");
     expect(welcome(carp)).not.toContain("invasive animal");
     expect(speciesGuide(carp)).toEqual([]);
     expect(exampleQuestions(carp)).toEqual(carp.helperQuestions.slice(0, 3));

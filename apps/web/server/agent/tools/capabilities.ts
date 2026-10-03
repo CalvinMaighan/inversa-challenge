@@ -19,6 +19,7 @@ import {
   speciesKeys,
 } from "@/server/agent/tools/evidence";
 import { carpTools, weatherForecast } from "@/server/agent/tools/carp";
+import { carpSightings } from "@/server/agent/tools/carp-fish";
 import { commonTools } from "@/server/agent/tools/common";
 import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfishSetView, lionfishTools } from "@/server/agent/tools/lionfish";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
@@ -1023,7 +1024,7 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
   // set_view plus reef_heat and marine_forecast; a species app scored density × activity × access keeps python's.
   const component = speciesOnly && isComponentApp(app as Partial<AppConfig> as AppConfig);
   // The NWS gridpoint forecast reads by point too, so a species app may list it (python's weekend planning).
-  const riverTools = kind === "species" ? [weatherForecast] : carpTools;
+  const riverTools = kind === "species" ? [weatherForecast] : [...carpTools, carpSightings];
   return [
     geocode,
     ...(speciesOnly ? [sightings, speciesCounts] : []),

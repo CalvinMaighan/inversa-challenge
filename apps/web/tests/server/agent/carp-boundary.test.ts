@@ -107,8 +107,7 @@ describe("carp boundary", () => {
       expect(ofType(events, "tool_start")).toHaveLength(0);
     }
     expect(scopeGuard(CARP, "Where are common carp in Louisiana right now?")).toBeNull();
-    expect(PROMPT).toMatch(/'Where are \(common\) carp'.*refuse without calling any tool/);
-    expect(PROMPT).toMatch(/It cannot say where carp are or what moves them/);
+    expect(PROMPT).toMatch(/carp_sightings returns the stored reports/);
     expect(stub.requests).toHaveLength(0);
   });
 
