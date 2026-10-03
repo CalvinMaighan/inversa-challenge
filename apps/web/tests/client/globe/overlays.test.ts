@@ -306,28 +306,28 @@ describe("water and weather", () => {
     const stats: LayerStats[] = [
       { id: RADAR, enabled: true, count: 1, frame: 2, updatedAt: 1, error: null, overlay: { shownMs: Date.parse("2026-10-01T19:36:00Z"), clamped: "latest", opacity: 0.75 } },
       { id: CYCLONES, enabled: true, count: 0, frame: 2, updatedAt: 1, error: null, breakdown: { storms: 0, loaded: 1 } },
-      { id: CLOUDS, enabled: true, count: 0, frame: 2, updatedAt: null, error: "tiles failed" },
+      { id: LIGHTNING, enabled: true, count: 0, frame: 2, updatedAt: null, error: "tiles failed" },
     ];
     const layers = layersFor(app);
     layers.visible[RADAR] = true;
     layers.visible[CYCLONES] = true;
-    layers.visible[CLOUDS] = true;
+    layers.visible[LIGHTNING] = true;
     const rows = overlayRows(app, layers, stats);
-    expect(rows.map((r) => r.id)).toEqual([SST_MAP, RADAR, CLOUDS, LIGHTNING, CYCLONES]);
-    expect(rows.map((r) => r.visible)).toEqual([false, true, true, false, true]);
+    expect(rows.map((r) => r.id)).toEqual([SST_MAP, RADAR, LIGHTNING, CYCLONES]);
+    expect(rows.map((r) => r.visible)).toEqual([false, true, true, true]);
     const radar = rows[1]!;
     expect(radar.label).toBe("Rain radar");
     expect(radar.blurb).toBe("Where it is raining now.");
     expect(radar.shown).toBe("Showing 19:36 UTC, 2026-10-01 (newest available)");
-    expect(rows[4]!.note).toBe("No active storms");
+    expect(rows[3]!.note).toBe("No active storms");
     expect(rows[2]!.error).toBe("tiles failed");
     expect(rows[0]!.shown).toBeNull();
     const sst = rows[0]!.legend;
     expect(sst.kind === "ramp" && sst.min === "0 °C / 32 °F" && sst.max === "32 °C / 90 °F").toBe(true);
     if (sst.kind === "ramp") expect(rampCss(sst)).toMatch(/^linear-gradient\(90deg, #2c0b7a 0%, .* 100%\)$/);
-    expect(activeAttributions(rows).map((a) => a.attribution)).toEqual([overlaySpec(RADAR).attribution, overlaySpec(CLOUDS).attribution, overlaySpec(CYCLONES).attribution]);
+    expect(activeAttributions(rows).map((a) => a.attribution)).toEqual([overlaySpec(RADAR).attribution, overlaySpec(LIGHTNING).attribution, overlaySpec(CYCLONES).attribution]);
     // Python lists no SST map.
-    expect(overlayRows(getApp("python"), layersFor(getApp("python")), null).map((r) => r.id)).toEqual([RADAR, CLOUDS, LIGHTNING, CYCLONES]);
+    expect(overlayRows(getApp("python"), layersFor(getApp("python")), null).map((r) => r.id)).toEqual([RADAR, LIGHTNING, CYCLONES]);
     expect(activeAttributions(overlayRows(getApp("python"), layersFor(getApp("python")), null))).toEqual([]);
   });
 });
