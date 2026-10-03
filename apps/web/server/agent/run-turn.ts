@@ -58,10 +58,15 @@ const REPLAYED = new Set<AgentStreamEvent["type"]>([
   "debug",
 ]);
 
+/**
+ * "Now" for the tools' default windows: the real time. The timeline's cursor does not move it (a replay from the start of the two
+ * years would otherwise make the agent answer from 2024 and see a window ending then); the cursor is told to the model in the view
+ * line ("timeline at ..."). Only an explicit replay knowledge time (`asOf`) sets the reference time.
+ */
 function referenceTime(params: RunTurnParams): Date {
   if (params.now) return params.now;
-  const viewTime = params.view ? Date.parse(params.view.time) : NaN;
-  return Number.isFinite(viewTime) ? new Date(viewTime) : new Date();
+  const asOf = params.view?.asOf;
+  return typeof asOf === "number" && Number.isFinite(asOf) ? new Date(asOf) : new Date();
 }
 
 function transcript(history: SessionMessage[]): string {

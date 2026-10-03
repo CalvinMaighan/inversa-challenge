@@ -197,7 +197,7 @@ function sparkCounts(sightings: FrameSightings | null, filter: LayersState["spec
   return filteredCounts(sightings.counts.length, (i) => sightings.records(i), filter);
 }
 
-/** Advance TIME.at by one frame every `1000 / speed` ms while playing (a day a frame on a long window, `playStride`); stop on the live edge. */
+/** Advance TIME.at by one frame every `1000 / speed` ms while playing (a day a frame on a long window, `playStride`); at the end the timeline goes live (the window re-taken at now). */
 function usePlayback(playing: boolean, speed: number) {
   useEffect(() => {
     if (!playing) return;
@@ -215,7 +215,7 @@ function usePlayback(playing: boolean, speed: number) {
           const from = Date.parse(prev.from);
           const to = Date.parse(prev.to);
           const next = stepAt(Date.parse(prev.at ?? prev.to), from, to) + steps * playStride(from, to);
-          if (next >= windowSteps(from, to)) return { ...prev, at: prev.to, playing: false };
+          if (next >= windowSteps(from, to)) return { ...prev, ...timeWindow(Date.now(), get<number>(RANGE_DAYS) ?? DEFAULT_RANGE_DAYS), playing: false };
           return { ...prev, at: new Date(timeAtStep(next, from)).toISOString() };
         });
       }

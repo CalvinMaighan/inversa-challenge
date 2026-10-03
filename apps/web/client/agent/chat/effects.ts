@@ -2,7 +2,7 @@ import { get, set } from "@calvinjs/active-state";
 
 import { getGlobe, type CameraTarget } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
-import { SELECTION, type SelectionState, parseEvidenceId } from "client/state/selection";
+import { SELECTION, type SelectionState, canonicalEvidenceId, parseEvidenceId } from "client/state/selection";
 import { TIME, retime, type TimeState } from "client/state/time";
 import { activeApp } from "client/state/app";
 import { applyCarpView } from "client/state/carp";
@@ -96,7 +96,8 @@ export function applyCarpViewEvent(event: object, nowMs = Date.now()): boolean {
 }
 
 /** Citation chip: select the evidence, open the drawer, and fly there when the id carries coordinates. */
-export function openEvidence(id: string): void {
+export function openEvidence(rawId: string): void {
+  const id = canonicalEvidenceId(rawId);
   // A carp sighting is not in the evidence database: its panel and the flight there are the map controls'.
   if (id.startsWith("fish:")) {
     applyUiEvent({ name: "open_evidence", args: { evidenceId: id } });

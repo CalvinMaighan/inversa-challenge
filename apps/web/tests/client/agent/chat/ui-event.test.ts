@@ -6,7 +6,8 @@ import { applyAgentSideEffects } from "client/agent/chat/effects";
 import { state } from "client/state";
 import { applyApp } from "client/state/app-switch";
 import { LAYERS, type LayersState } from "client/state/layers";
-import { LOOK } from "client/state/look";
+import { LOOK, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
+import { ACCENT_COLOR, THEME } from "client/state/theme";
 import { VOICE, type VoiceState } from "client/state/voice";
 import { applyUiCommand } from "client/voice/ui-command-handler";
 
@@ -41,5 +42,18 @@ describe("set_look schema", () => {
     expect(visible("hotspots")).toBe(false);
     applyAgentSideEffects({ type: "ui", name: "toggle_layer", args: { layer: "hotspots", visible: true } });
     expect(visible("hotspots")).toBe(true);
+  });
+});
+
+describe("set_theme and set_map_window", () => {
+  test("the browser applies both from the voice relay and the agent's ui event: the theme and the map window keys change", () => {
+    expect(applyUiCommand({ name: "set_theme", args: { mode: "light", accent: "gold" } })).toBe(true);
+    expect([get<string>(THEME), get<string>(ACCENT_COLOR)]).toEqual(["light", "gold"]);
+    expect(applyUiCommand({ name: "set_map_window", args: { shape: "oval", size: 80, softEdge: 20, blur: 12 } })).toBe(true);
+    expect([get<string>(SCOPE_SHAPE), get<number>(SCOPE_SIZE), get<number>(SCOPE_FEATHER), get<number>(SCOPE_BLUR)]).toEqual(["oval", 80, 20, 12]);
+    applyAgentSideEffects({ type: "ui", name: "set_theme", args: { mode: "dark" } });
+    expect(get<string>(THEME)).toBe("dark");
+    applyAgentSideEffects({ type: "ui", name: "set_map_window", args: { blur: 99 } });
+    expect(get<number>(SCOPE_BLUR)).toBe(12);
   });
 });

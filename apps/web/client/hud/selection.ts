@@ -5,7 +5,7 @@
  */
 import { set } from "@calvinjs/active-state";
 
-import { SELECTION, type SelectionState } from "client/state/selection";
+import { canonicalEvidenceId, SELECTION, type SelectionState } from "client/state/selection";
 
 export type HudSelection = SelectionState;
 
@@ -15,7 +15,8 @@ export function isDrawerOpen(selection: { evidenceId: string | null; drawerOpen?
 }
 
 /** Select an evidence id and open the drawer on it. */
-export function openEvidence(evidenceId: string): void {
+export function openEvidence(rawId: string): void {
+  const evidenceId = canonicalEvidenceId(rawId);
   set<HudSelection>(SELECTION, (prev = SELECTION.defaults) => ({ ...prev, evidenceId, drawerOpen: true }));
 }
 

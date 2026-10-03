@@ -11,10 +11,11 @@ import { setView as setLionfishView } from "client/lionfish/store";
 import { SELECTION, TIME, VIEW, VOICE } from "client/state";
 import { activeApp } from "client/state/app";
 import { LAYERS, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
-import { LOOK, type LookId } from "client/state/look";
+import { LOOK, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, type LookId, type ScopeShape } from "client/state/look";
+import { ACCENT_COLOR, THEME } from "client/state/theme";
 import { MENU } from "client/state/menu";
 import { RANGE_DAYS } from "client/state/range";
-import { parseEvidenceId, type SelectionState } from "client/state/selection";
+import { canonicalEvidenceId, parseEvidenceId, type SelectionState } from "client/state/selection";
 import { clampToWindow, TIME_STEP_MINUTES, TIME_WINDOW_DAYS, timeWindow, windowFor, type TimeState } from "client/state/time";
 import type { ViewState } from "client/state/view";
 import type { VoiceState } from "client/state/voice";
@@ -224,19 +225,37 @@ function apply(command: UiCommand, nowMs: number): boolean {
       selectFish(null);
       clearSelection();
       return true;
-    case "select":
-      if (command.args.evidenceId.startsWith("fish:")) return openFish(command.args.evidenceId);
-      if (!parseEvidenceId(command.args.evidenceId)) return false;
-      set<SelectionState>(SELECTION, (prev = SELECTION.defaults) => ({ ...prev, evidenceId: command.args.evidenceId }));
+    case "select": {
+      const evidenceId = canonicalEvidenceId(command.args.evidenceId);
+      if (evidenceId.startsWith("fish:")) return openFish(evidenceId);
+      if (!parseEvidenceId(evidenceId)) return false;
+      set<SelectionState>(SELECTION, (prev = SELECTION.defaults) => ({ ...prev, evidenceId }));
       return true;
-    case "open_evidence":
-      if (command.args.evidenceId.startsWith("fish:")) return openFish(command.args.evidenceId);
-      if (!parseEvidenceId(command.args.evidenceId)) return false;
-      set<SelectionState>(SELECTION, { evidenceId: command.args.evidenceId, drawerOpen: true });
+    }
+    case "open_evidence": {
+      const evidenceId = canonicalEvidenceId(command.args.evidenceId);
+      if (evidenceId.startsWith("fish:")) return openFish(evidenceId);
+      if (!parseEvidenceId(evidenceId)) return false;
+      set<SelectionState>(SELECTION, { evidenceId, drawerOpen: true });
       return true;
+    }
     case "set_look":
       set<LookId>(LOOK, command.args.look);
       return true;
+    case "set_theme": {
+      const { mode, accent } = command.args;
+      if (mode) set(THEME, mode);
+      if (accent) set(ACCENT_COLOR, accent);
+      return true;
+    }
+    case "set_map_window": {
+      const { shape, size, softEdge, blur } = command.args;
+      if (shape) set<ScopeShape>(SCOPE_SHAPE, shape);
+      if (size !== undefined) set<number>(SCOPE_SIZE, Math.round(size));
+      if (softEdge !== undefined) set<number>(SCOPE_FEATHER, Math.round(softEdge));
+      if (blur !== undefined) set<number>(SCOPE_BLUR, Math.round(blur));
+      return true;
+    }
   }
 }
 

@@ -127,3 +127,26 @@ describe("agent map tools", () => {
     expect(python).not.toContain("vessels (Ships");
   });
 });
+
+describe("set_theme and set_map_window", () => {
+  test("the shared vocabulary equals the client's modes, accents, shapes and ranges, and every app can use both tools", async () => {
+    const { THEME_MODES, ACCENT_IDS } = await import("client/themes/palette");
+    const { SCOPE_SHAPES, MAX_SCOPE_BLUR, MIN_SCOPE_SIZE, MAX_SCOPE_SIZE, MAX_SCOPE_FEATHER } = await import("client/state/look");
+    const { THEME_MODE_IDS, ACCENT_NAMES, SCOPE_SHAPE_IDS } = await import("shared/voice/ui-tools");
+    expect([...THEME_MODE_IDS]).toEqual([...THEME_MODES]);
+    expect([...ACCENT_NAMES]).toEqual([...ACCENT_IDS]);
+    expect([...SCOPE_SHAPE_IDS]).toEqual([...SCOPE_SHAPES]);
+    for (const app of [CARP, LIONFISH]) {
+      expect(parseUiCommand("set_theme", { mode: "light" }, app)).toEqual({ name: "set_theme", args: { mode: "light" } });
+      expect(parseUiCommand("set_theme", { accent: "gold" }, app)).not.toBeNull();
+      expect(parseUiCommand("set_theme", {}, app)).toBeNull();
+      expect(parseUiCommand("set_theme", { mode: "sepia" }, app)).toBeNull();
+      expect(parseUiCommand("set_map_window", { softEdge: 80, blur: MAX_SCOPE_BLUR, size: MIN_SCOPE_SIZE, shape: "oval" }, app)).not.toBeNull();
+      expect(parseUiCommand("set_map_window", { size: MAX_SCOPE_SIZE + 1 }, app)).toBeNull();
+      expect(parseUiCommand("set_map_window", { softEdge: MAX_SCOPE_FEATHER + 1 }, app)).toBeNull();
+      expect(parseUiCommand("set_map_window", {}, app)).toBeNull();
+      expect(app.agent.tools).toContain("set_theme");
+      expect(app.agent.tools).toContain("set_map_window");
+    }
+  });
+});
