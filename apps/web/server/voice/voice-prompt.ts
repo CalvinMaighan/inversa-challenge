@@ -135,8 +135,9 @@ export function voiceToolsFor(app: AppConfig): RealtimeToolDefinition[] {
   return [...uiToolsFor(app), ...HANDOFF_TOOLS];
 }
 
-export function buildVoiceInstructions(app: AppConfig): string {
+export function buildVoiceInstructions(app: AppConfig, opts: { welcome?: boolean } = {}): string {
   return [
+    ...(opts.welcome ? ["# First reply", `The first thing you say in this session, whatever the user says or does first, begins with this sentence word for word: "${WELCOME_LINE}" Say it once, only in your first reply; if they already asked something, answer it right after.`, ""] : []),
     "# Role",
     `You are the voice of ${app.name}. ${app.agent.persona}`,
     `Scope: ${app.agent.scope} When asked about anything outside it, say: ${app.agent.refusal} Then, in one more short sentence, steer them back: offer something this app does answer, such as the latest sightings, what the data feeds show, or moving the map to an area.`,

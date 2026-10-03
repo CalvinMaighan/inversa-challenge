@@ -290,7 +290,7 @@ export class VoiceSession {
           conn.send({
             type: "session.update",
             session: {
-              instructions: buildVoiceInstructions(this.opts.app),
+              instructions: buildVoiceInstructions(this.opts.app, { welcome: this.opts.welcome }),
               tools: voiceToolsFor(this.opts.app),
               voice: VOICE_REALTIME_VOICE,
               // Explicit, so a quiet room ends the turn: 0.6 ignores a hum that 0.5 hears as speech, and 650 ms of silence
