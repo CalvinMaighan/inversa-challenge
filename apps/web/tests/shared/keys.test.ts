@@ -38,14 +38,14 @@ function docKeyNames(): string[] {
 describe("key registry", () => {
   test("every key in the docs/GODS_EYE.md table is in the registry (Google's under its NEXT_PUBLIC_ name)", () => {
     const names = docKeyNames();
-    expect(names.length).toBeGreaterThanOrEqual(10);
+    expect(names.length).toBeGreaterThanOrEqual(5);
     const vars = KEY_REGISTRY.flatMap((k) => k.vars as readonly string[]);
     const missing = names.filter((n) => !vars.includes(n) && !vars.includes(`NEXT_PUBLIC_${n}`));
     expect(missing).toEqual([]);
   });
 
   test("the eight provider rows of the spec, each with scope, purpose, links and fallback", () => {
-    expect(KEY_REGISTRY.map((k) => k.label)).toEqual(["Google Maps", "Cesium ion", "AISStream", "OpenRouter", "xAI voice", "Fastino GLiDE", "AWS for GOES push", "NWWS"]);
+    expect(KEY_REGISTRY.map((k) => k.label)).toEqual(["Google Maps", "Cesium ion", "AISStream", "OpenRouter", "xAI voice", "Fastino GLiDE"]);
     expect(new Set(KEY_REGISTRY.map((k) => k.id)).size).toBe(KEY_REGISTRY.length);
     for (const k of KEY_REGISTRY) {
       expect(["browser", "server"]).toContain(k.scope);
@@ -60,8 +60,10 @@ describe("key registry", () => {
       for (const v of k.vars) expect(v.startsWith("NEXT_PUBLIC_")).toBe(k.scope === "browser");
     }
     expect(KEY_REGISTRY.filter((k) => k.priority === "headline").map((k) => k.id)).toEqual(["google-maps", "openrouter"]);
-    expect(keyEntry("aws-goes")?.vars).toEqual(["GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]);
-    expect(SERVER_KEY_VARS).toEqual(["AISSTREAM_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "FASTINO_API_KEY", "GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "NWWS_USER", "NWWS_PASS"]);
+    expect(keyEntry("fastino")?.vars).toEqual(["FASTINO_API_KEY"]);
+    expect(keyEntry("aws-goes")).toBeUndefined();
+    expect(keyEntry("nwws")).toBeUndefined();
+    expect(SERVER_KEY_VARS).toEqual(["AISSTREAM_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "FASTINO_API_KEY"]);
   });
 
   test("browser keys resolve localStorage first, then the build env; blank or failing storage falls through", () => {
@@ -96,18 +98,8 @@ describe("key registry", () => {
     const server: ServerKeyStatus[] = [
       { id: "openrouter", set: true, source: "external", writable: true, vars: [{ name: "OPENROUTER_API_KEY", set: true, source: "external" }] },
       { id: "aisstream", set: false, source: null, writable: true, vars: [{ name: "AISSTREAM_API_KEY", set: false, source: null }] },
-      {
-        id: "aws-goes",
-        set: false,
-        source: null,
-        writable: false,
-        vars: [
-          { name: "GOES_SQS_URL", set: true, source: "external" },
-          { name: "AWS_ACCESS_KEY_ID", set: false, source: null },
-          { name: "AWS_SECRET_ACCESS_KEY", set: false, source: null },
-        ],
-      },
-      { id: "nwws", set: false, source: "pending", writable: true, vars: [{ name: "NWWS_USER", set: false, source: "pending" }, { name: "NWWS_PASS", set: false, source: "pending" }] },
+      { id: "xai", set: false, source: null, writable: false, vars: [{ name: "XAI_API_KEY", set: false, source: null }] },
+      { id: "fastino", set: false, source: "pending", writable: true, vars: [{ name: "FASTINO_API_KEY", set: false, source: "pending" }] },
     ];
     const rows = panelRows(store, server, { "cesium-ion": "build-ion" });
     expect(JSON.stringify(rows)).not.toContain(SENTINEL);
@@ -119,8 +111,8 @@ describe("key registry", () => {
     expect(by.openrouter).toMatchObject({ set: true, external: true, inputs: [], link: { label: "MANAGE" } });
     expect(by.aisstream).toMatchObject({ set: false, inputs: [{ name: "AISSTREAM_API_KEY" }], link: { label: "GET KEY", href: "https://aisstream.io/apikeys" } });
     // Not writable here (production): the Doppler command for each missing variable, no paste field.
-    expect(by["aws-goes"]).toMatchObject({ inputs: [], commands: ["doppler secrets set AWS_ACCESS_KEY_ID", "doppler secrets set AWS_SECRET_ACCESS_KEY"] });
-    expect(by.nwws).toMatchObject({ pending: true, inputs: [] });
+    expect(by.xai).toMatchObject({ inputs: [], commands: ["doppler secrets set XAI_API_KEY"] });
+    expect(by.fastino).toMatchObject({ pending: true, inputs: [] });
     // Status unknown (GET failed): server rows offer nothing to paste.
     expect(panelRows(memory(), null).filter((r) => r.scope === "server").every((r) => r.inputs.length === 0 && r.commands.length === 0)).toBe(true);
     // Unset browser keys get one password field each, named by the variable.
@@ -128,7 +120,7 @@ describe("key registry", () => {
   });
 
   test("pasted values split into browser ids and server variables; blanks dropped", () => {
-    expect(splitPasted({ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: " g ", AISSTREAM_API_KEY: "a", NWWS_USER: "  ", UNKNOWN: "x" })).toEqual({
+    expect(splitPasted({ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: " g ", AISSTREAM_API_KEY: "a", FASTINO_API_KEY: "  ", UNKNOWN: "x" })).toEqual({
       browser: [["google-maps", "g"]],
       server: { AISSTREAM_API_KEY: "a" },
     });

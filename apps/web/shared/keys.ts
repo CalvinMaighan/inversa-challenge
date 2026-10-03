@@ -95,29 +95,6 @@ export const KEY_REGISTRY = [
     manageUrl: "https://docs.fastino.ai/quickstart",
     fallback: "every question goes straight to the agent, as before",
   },
-  {
-    id: "aws-goes",
-    label: "AWS for GOES push",
-    scope: "server",
-    priority: "optional",
-    vars: ["GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
-    purpose: "Satellite scans the moment they land",
-    getUrl: "https://console.aws.amazon.com/iam/home#/security_credentials",
-    manageUrl: "https://console.aws.amazon.com/iam/home#/security_credentials",
-    fallback: "the GOES feed reads down; the other feeds poll as usual",
-  },
-  {
-    id: "nwws",
-    label: "NWWS",
-    scope: "server",
-    priority: "optional",
-    vars: ["NWWS_USER", "NWWS_PASS"],
-    purpose: "Weather warnings the second they are issued",
-    // Accounts are requested by email (docs/HUMAN_STEPS.md section 8); this page explains NWWS-OI.
-    getUrl: "https://www.weather.gov/nwws/",
-    manageUrl: "https://www.weather.gov/nwws/",
-    fallback: "the api.weather.gov alerts poll",
-  },
 ] as const satisfies readonly KeyEntry[];
 
 export type KeyId = (typeof KEY_REGISTRY)[number]["id"];

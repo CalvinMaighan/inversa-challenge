@@ -37,8 +37,7 @@ Nothing here needs an account created by the agent. The user adds keys in Dopple
 | `AISSTREAM_API_KEY` | Doppler, server only | live vessels | ships layer shows "needs AISSTREAM_API_KEY", history already stored still replays |
 | `OPENROUTER_API_KEY` | Doppler, server only | the agent | agent answers 503 |
 | `XAI_API_KEY` | Doppler, server only | voice | voice off |
-| `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Doppler, server only | GOES push | poll feeds only |
-| `NWWS_USER`, `NWWS_PASS` | Doppler, server only | NWWS push | NWS alerts poller |
+| `FASTINO_API_KEY` | Doppler, server only | routing every question before the large model, ask-next, voice stop decision | every question goes straight to the agent |
 
 Google 3D Tiles bill per root-tileset request after a free monthly allowance; check the current price at https://developers.google.com/maps/billing-and-pricing/pricing before enabling billing (unverified here). The quota guard in `client/globe/quota.ts` already limits ion usage; GE3 adds a monthly cap for the direct route, default 1,000 sessions per browser, editable in the Developer panel.
 
@@ -96,10 +95,10 @@ A modal opened by the top-right Developer icon button, titled "Power up the glob
 Where a pasted key goes:
 
 - **Browser-side keys** (Google Maps, Cesium ion): saved to the browser's localStorage, applied on the next globe load, never sent to our server.
-- **Server-side keys** (AISStream, OpenRouter, xAI, AWS GOES, NWWS): only in local development, on loopback, `POST /api/dev/keys` appends them to `data/local-keys.env` (gitignored, mode 0600; created if absent) and `bun run dev` restarts the API and web processes with the new values (`scripts/dev.ts` watches that file and restarts only the processes it started). In any other environment the route answers 403 and the panel shows the `doppler secrets set NAME` command to copy instead, because production keys live in Doppler. A key already set through the shell or Doppler wins over the local file and shows `CONFIGURED EXTERNALLY`.
+- **Server-side keys** (AISStream, OpenRouter, xAI, Fastino): only in local development, on loopback, `POST /api/dev/keys` appends them to `data/local-keys.env` (gitignored, mode 0600; created if absent) and `bun run dev` restarts the API and web processes with the new values (`scripts/dev.ts` watches that file and restarts only the processes it started). In any other environment the route answers 403 and the panel shows the `doppler secrets set NAME` command to copy instead, because production keys live in Doppler. A key already set through the shell or Doppler wins over the local file and shows `CONFIGURED EXTERNALLY`.
 - Values are never returned by any route, never logged, never in a screenshot (the paste field is `type=password`).
 
-Registry rows (only keys this app really uses): Google Maps, Cesium ion, AISStream, OpenRouter, xAI voice, AWS for GOES push, NWWS.
+Registry rows (only keys this app really uses): Google Maps, Cesium ion, AISStream, OpenRouter, xAI voice, Fastino GLiDE.
 
 ## Later leaves (GE6-GE9) and what shipped
 
