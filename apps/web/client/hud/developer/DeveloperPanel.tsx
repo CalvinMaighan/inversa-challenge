@@ -170,13 +170,6 @@ const Line = styled.div`
   }
 `;
 
-const Priority = styled.span<{ $headline: boolean }>`
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: ${(p) => (p.$headline ? "var(--danger)" : "var(--warn)")};
-`;
-
 const Badge = styled.span`
   padding: 2px 6px;
   border: 1px solid var(--border);
@@ -296,10 +289,11 @@ const FeedsBody = styled.div`
 /** Tab 1: every data source the app reads, worst first, each with its mode, state and lag (the lionfish survey's feed list, for all apps). */
 function FeedsPane() {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
-  const list = sortFeedsForStatus(feeds ?? []);
+  // A feed switched off by configuration (a push feed without its credentials) is not a source this app reads.
+  const list = sortFeedsForStatus((feeds ?? []).filter((f) => !f.note?.startsWith("disabled:")));
   return (
     <FeedsBody role="tabpanel" id="developer-pane-feeds" aria-labelledby="developer-tab-feeds" data-testid="developer-feeds">
-      <p>Every data source this app reads, worst first. Each shows how it is fetched and how fresh its newest data is.</p>
+      <p>Every data source this app reads, worst first. Green: running normally. Yellow: lagging behind its usual schedule. Red: stale or down.</p>
       {list.length === 0 ? (
         <p>No feed state received yet.</p>
       ) : (
@@ -331,7 +325,6 @@ function Row({ row, onRemove }: { row: PanelRow; onRemove: (id: BrowserKeyId) =>
       <Line>
         <Dot $tone={row.set ? "ok" : row.pending ? "warn" : "muted"} $pulse={row.pending} role="img" aria-label={row.set ? "set" : row.pending ? "saved, loading" : "not set"} data-status="" />
         <b>{row.label}</b>
-        <Priority $headline={row.priority === "headline"} role="img" aria-label={row.priority === "headline" ? "unlocks a headline feature" : "optional"} title={row.priority === "headline" ? "Unlocks a headline feature" : "Optional"} />
         {row.scope === "browser" ? <Badge title="Runs in the browser: restrict it at the provider">BROWSER-SIDE</Badge> : null}
         {row.removable ? (
           <button type="button" className="text" onClick={() => onRemove(row.id as BrowserKeyId)} aria-label={`Remove the ${row.label} key stored in this browser`}>
@@ -505,7 +498,7 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
       </TabList>
       {tab === "feeds" ? <FeedsPane /> : null}
       <Body ref={formRef} onSubmit={save} key={revision} autoComplete="off" hidden={tab !== "keys"} role="tabpanel" id="developer-pane-keys" aria-labelledby="developer-tab-keys">
-        <p>The globe works without any keys. Each key below switches on another real feed.</p>
+        <p>The globe works without any keys. Each key below switches on another real feed. Green: the key is set. Grey: not set.</p>
         <Rows tabIndex={0} aria-label="Providers">
           {rows.map((row) => (
             <Row
