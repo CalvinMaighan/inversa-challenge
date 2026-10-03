@@ -487,7 +487,7 @@
       "species_info",
       "switch_app",
       "open_evidence",
-      "set_look"
+      "set_look", "set_theme", "set_map_window"
     ],
     "refusal": "Carp Field Conditions covers Asian carp sightings in the Mississippi River Basin and river and weather conditions at the eight Louisiana demonstration locations. It cannot estimate carp abundance, expected catch, legal access or trip safety, and it has no data for other species or regions (Burmese pythons are the Python app's, lionfish the Lionfish app's)."
   },

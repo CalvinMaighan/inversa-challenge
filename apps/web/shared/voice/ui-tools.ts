@@ -19,6 +19,11 @@ export const MENU_IDS = ["layers", "live_data", "look", "theme", "period", "deve
 export type MenuId = (typeof MENU_IDS)[number];
 /** The periods of the period button, in days (client/state/range.ts keeps the labels). */
 export const PERIOD_DAYS = [30, 90, 180, 365, 730] as const;
+/** The colour modes and accents of the Theme popover (client/themes/palette.ts keeps the colours; a test holds these equal). */
+export const THEME_MODE_IDS = ["light", "dark", "tactical"] as const;
+export const ACCENT_NAMES = ["crimson", "gold", "signal"] as const;
+/** The map window of the Look and map popover (client/state/look.ts): its shapes and the ranges of its three sliders. */
+export const SCOPE_SHAPE_IDS = ["circle", "oval", "rounded", "frame"] as const;
 /** Carp's species filter keys, as the legend chips use them. */
 export const CARP_SPECIES = ["silver", "bighead", "grass", "black"] as const;
 
@@ -70,6 +75,20 @@ function schemas(layers: readonly LayerId[], species: readonly string[], filtera
       text: z.string().min(2).max(600).describe("One to three plain sentences"),
       sources: z.array(z.object({ id: z.string().min(3).describe("Evidence id exactly as a result listed it, e.g. fish:inat:123"), label: z.string().min(1).max(100) })).max(6).default([]),
     }),
+    set_theme: z
+      .object({
+        mode: z.enum(THEME_MODE_IDS).optional().describe("light, dark or tactical (green on black)"),
+        accent: z.enum(ACCENT_NAMES).optional().describe("The accent colour: crimson, gold or signal (green)"),
+      })
+      .refine((v) => v.mode !== undefined || v.accent !== undefined, { message: "mode or accent required" }),
+    set_map_window: z
+      .object({
+        shape: z.enum(SCOPE_SHAPE_IDS).optional().describe("circle, oval, rounded (a wide rounded rectangle) or frame (the whole page, only the soft edge)"),
+        size: z.number().min(30).max(100).optional().describe("Window size, 30 to 100 percent"),
+        softEdge: z.number().min(0).max(100).optional().describe("Soft edge, 0 (hard edge, black outside) to 100 (no vignette)"),
+        blur: z.number().min(0).max(40).optional().describe("Edge blur, 0 to 40 px"),
+      })
+      .refine((v) => Object.values(v).some((x) => x !== undefined), { message: "give at least one of shape, size, softEdge, blur" }),
     // GE7: the globe's look (docs/GODS_EYE.md GC2), the same seven presets as the Look popover.
     set_look: z.object({
       look: z.enum(LOOK_IDS).describe(LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")),

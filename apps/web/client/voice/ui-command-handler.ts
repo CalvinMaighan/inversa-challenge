@@ -11,7 +11,8 @@ import { setView as setLionfishView } from "client/lionfish/store";
 import { SELECTION, TIME, VIEW, VOICE } from "client/state";
 import { activeApp } from "client/state/app";
 import { LAYERS, setLayerVisible, setSpeciesVisible, type LayersState } from "client/state/layers";
-import { LOOK, type LookId } from "client/state/look";
+import { LOOK, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, type LookId, type ScopeShape } from "client/state/look";
+import { ACCENT_COLOR, THEME } from "client/state/theme";
 import { MENU } from "client/state/menu";
 import { RANGE_DAYS } from "client/state/range";
 import { canonicalEvidenceId, parseEvidenceId, type SelectionState } from "client/state/selection";
@@ -241,6 +242,20 @@ function apply(command: UiCommand, nowMs: number): boolean {
     case "set_look":
       set<LookId>(LOOK, command.args.look);
       return true;
+    case "set_theme": {
+      const { mode, accent } = command.args;
+      if (mode) set(THEME, mode);
+      if (accent) set(ACCENT_COLOR, accent);
+      return true;
+    }
+    case "set_map_window": {
+      const { shape, size, softEdge, blur } = command.args;
+      if (shape) set<ScopeShape>(SCOPE_SHAPE, shape);
+      if (size !== undefined) set<number>(SCOPE_SIZE, Math.round(size));
+      if (softEdge !== undefined) set<number>(SCOPE_FEATHER, Math.round(softEdge));
+      if (blur !== undefined) set<number>(SCOPE_BLUR, Math.round(blur));
+      return true;
+    }
   }
 }
 

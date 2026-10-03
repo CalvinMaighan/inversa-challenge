@@ -295,6 +295,7 @@ function mapSection(app: AppConfig): string {
         ]
       : []),
     ...(tools.has("set_look") ? [`- set_look changes how the globe looks: ${LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")}. Call it only when the user asks for a look or mode ("night vision" is nvg, "thermal" is flir, "back to normal" is normal); a look changes no data.`] : []),
+    ...(tools.has("set_theme") ? ["- set_theme changes the colour theme (mode light, dark or tactical; accent crimson, gold or signal): when the user asks for light mode, dark mode or another colour, call it, do not just open the theme menu. set_map_window changes the Look and map window (shape, size, softEdge, blur): when the user asks for a different vignette, soft edge, blur or window size, call it. Say in a few words what you set."] : []),
   ].join("\n");
 }
 

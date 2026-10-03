@@ -46,7 +46,7 @@ async function run(name: string, input: unknown): Promise<CapabilityOutput> {
 
 describe("capability tools", () => {
   test("registry exposes the python tools", () => {
-    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "species_info", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "switch_app", "close_panel", "fly_to", "show_card", "open_evidence", "set_look"]);
+    expect(registry.list().map((cap) => cap.name)).toEqual(["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "species_info", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "switch_app", "set_theme", "set_map_window", "close_panel", "fly_to", "show_card", "open_evidence", "set_look"]);
   });
 
   test("species_counts: the app's one species in the box and window, citing its newest sighting, as a C17 table with the iNat page as its link", async () => {
