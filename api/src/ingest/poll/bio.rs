@@ -11,7 +11,7 @@ use crate::ingest::governor;
 use crate::ingest::source::{RawPayload, Source};
 use crate::state::{AppState, Config};
 
-use super::{gbif, inat, nas};
+use super::{eddmaps, gbif, inat, nas};
 
 /// The bio pollers the app's `feeds[]` lists, in ingest order (iNat before NAS and GBIF, which
 /// link to it as duplicates).
@@ -25,6 +25,9 @@ pub fn sources(_config: &Config, app: &Arc<App>) -> Vec<Arc<dyn Source>> {
     }
     if app.cfg.has_feed(gbif::ID) {
         out.push(Arc::new(gbif::Gbif::new(app.clone())));
+    }
+    if app.cfg.has_feed(eddmaps::ID) {
+        out.push(Arc::new(eddmaps::Eddmaps::new(app.clone())));
     }
     out
 }
@@ -290,7 +293,7 @@ mod tests {
     #[test]
     fn bio_registry_has_three_sources() {
         let ids: Vec<&str> = sources(&Config::for_tests(), &python()).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["inat", "nas", "gbif"]);
+        assert_eq!(ids, ["inat", "nas", "gbif", "eddmaps"], "python also polls EDDMapS");
         let ids: Vec<&str> = sources(&Config::for_tests(), &lionfish()).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["inat", "nas", "gbif"]);
         let carp = Arc::new(App::builtin("carp").unwrap());

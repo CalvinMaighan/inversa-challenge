@@ -32,7 +32,7 @@
   "feeds": [
     { "source": "usgs", "mode": "poll", "name": "USGS Water Data (OGC API, continuous)", "homepage": "https://api.waterdata.usgs.gov/docs/ogcapi/", "params": {
       "api": "ogc",
-      "parameters": ["00065", "00060"],
+      "parameters": ["00065", "00060", "00010"],
       "extraSites": [
         { "id": "05331000", "name": "Mississippi River at St. Paul, MN", "lat": 44.9444, "lon": -93.0881 },
         { "id": "05420500", "name": "Mississippi River at Clinton, IA", "lat": 41.7806, "lon": -90.2521 },

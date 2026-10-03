@@ -67,6 +67,7 @@
     { "source": "nas", "mode": "poll", "params": { "state": null, "global": true, "pageLimit": 4000, "parallelPages": 4, "cadenceDays": 7 } },
     { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },
     { "source": "openmeteo-marine", "mode": "poll", "name": "Open-Meteo Marine", "homepage": "https://open-meteo.com/en/docs/marine-weather-api", "params": { "stepDeg": 0.5, "forecastHours": 72, "waveModel": "meteofrance_wave", "currentModel": "meteofrance_currents", "metaCheckMinutes": 15 } },
+    { "source": "coops", "mode": "poll", "name": "NOAA CO-OPS tide stations (Florida)", "homepage": "https://tidesandcurrents.noaa.gov", "params": { "note": "6-minute water level and water temperature at the Florida stations inside the Florida Keys area" } },
     { "source": "ndbc", "mode": "poll", "params": { "bulk": true, "note": "latest_obs.txt; only Florida has sea-temperature buoys inside the areas" } },
     { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } },
     { "source": "aisstream", "mode": "push", "name": "AISStream.io vessel positions", "homepage": "https://aisstream.io", "params": {} }

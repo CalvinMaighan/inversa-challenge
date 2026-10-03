@@ -1490,12 +1490,12 @@ mod tests {
     async fn app_scheduler_plans_only_configured_feeds() {
         let python = test_state();
         let p = plan(&python);
-        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif"]);
-        assert_eq!(p.known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws"]);
+        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "eddmaps"]);
+        assert_eq!(p.known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "eddmaps", "goes19", "nwws"]);
 
         let lionfish = crate::app::test_support::test_state_for("lionfish");
         let p = plan(&lionfish);
-        assert_eq!(p.runnable_ids(), ["ndbc", "openmeteo-marine", "inat", "nas", "gbif", "crw"]);
+        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo-marine", "inat", "nas", "gbif", "crw"]);
         assert!(!p.known_ids().contains(&"nws") && !p.known_ids().contains(&"nwws") && !p.known_ids().contains(&"usgs"));
         let crw = p.known.iter().find(|(i, _)| i.id == "crw").expect("crw registered");
         assert_eq!(crw.0.name, "NOAA Coral Reef Watch");
@@ -1517,7 +1517,7 @@ mod tests {
         let cfg = crate::app::config::AppConfig::parse("fake.json", &v.to_string()).unwrap();
         let fake = AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
         let p = plan(&fake);
-        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "nas", "gbif"]);
+        assert_eq!(p.runnable_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "nas", "gbif", "eddmaps"]);
         assert!(!p.known_ids().contains(&"goes19"), "a push feed left out is not even registered as disabled");
         start(fake.clone(), Supervision::default()).await.unwrap();
         let registered: Vec<String> = fake
@@ -1525,7 +1525,7 @@ mod tests {
             .read(|c| c.prepare("select id from sources order by id")?.query_map([], |r| r.get(0))?.collect())
             .await
             .unwrap();
-        assert_eq!(registered, ["coops", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs"]);
+        assert_eq!(registered, ["coops", "eddmaps", "gbif", "nas", "ndbc", "nws", "nwws", "openmeteo", "usgs"]);
         let feeds = crate::feed_state::compute(&fake.obs, crate::state::now_ms()).await.unwrap();
         assert!(feeds.iter().all(|f| f.source != "inat"));
     }

@@ -18,6 +18,7 @@ const SOURCES: Record<string, { name: string; what: string }> = {
   inat: { name: "iNaturalist", what: "photo sightings by the public" },
   nas: { name: "USGS NAS", what: "agency and survey sightings" },
   gbif: { name: "GBIF", what: "museum and survey records" },
+  eddmaps: { name: "EDDMapS", what: "verified python reports (IveGot1)" },
   crw: { name: "Reef heat stress", what: "NOAA Coral Reef Watch, daily" },
   ndbc: { name: "Ocean buoys", what: "NOAA: sea temperature and waves" },
   "openmeteo-marine": { name: "Waves and currents", what: "Open-Meteo marine forecast" },

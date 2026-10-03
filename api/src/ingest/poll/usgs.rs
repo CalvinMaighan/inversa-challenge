@@ -535,7 +535,7 @@ mod tests {
         assert_eq!(
             urls[0],
             format!(
-                "{OGC}/continuous/items?f=json&monitoring_location_id=USGS-07381490,USGS-07381500,USGS-07381515,USGS-07381600,USGS-07374000,USGS-07355500,USGS-07367005,USGS-02489500,USGS-05331000,USGS-05420500,USGS-05474500,USGS-05587450,USGS-07010000,USGS-07020500,USGS-07022000,USGS-07032000,USGS-07289000&parameter_code=00065,00060&time=PT180M&limit=10000"
+                "{OGC}/continuous/items?f=json&monitoring_location_id=USGS-07381490,USGS-07381500,USGS-07381515,USGS-07381600,USGS-07374000,USGS-07355500,USGS-07367005,USGS-02489500,USGS-05331000,USGS-05420500,USGS-05474500,USGS-05587450,USGS-07010000,USGS-07020500,USGS-07022000,USGS-07032000,USGS-07289000&parameter_code=00065,00060,00010&time=PT180M&limit=10000"
             )
         );
         assert_eq!(Usgs::time_param(Some(now - 15 * 60_000), now), "&time=PT180M");
@@ -547,7 +547,8 @@ mod tests {
         let recorded_url = manifest["files"][0]["url"].as_str().unwrap().replace("&time=PT12H", "&time=PT180M");
         let (recorded_sites, recorded_rest) = recorded_url.split_once("&parameter_code").unwrap();
         assert!(urls[0].starts_with(recorded_sites));
-        assert!(urls[0].ends_with(recorded_rest));
+        assert!(recorded_rest.starts_with("=00065,00060&") && urls[0].contains("&parameter_code=00065,00060,00010&"), "carp also asks for water temperature (00010) now");
+        assert!(urls[0].ends_with("&time=PT180M&limit=10000"));
 
         let py = Usgs::for_tests(python_app());
         let Query::Boxes(boxes) = py.query() else { panic!("python queries by box") };

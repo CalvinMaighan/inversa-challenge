@@ -49,6 +49,7 @@ use serde::Deserialize;
 use crate::app::config::{App, APP_IDS};
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::poll::bio::{self, Pacer, Pager};
+use crate::ingest::poll::eddmaps::{self, Eddmaps};
 use crate::ingest::poll::gbif::{self, Gbif};
 use crate::ingest::poll::iem::{self, Iem};
 use crate::ingest::poll::inat::{self, Inat};
@@ -335,6 +336,10 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
             let n = retry("carp-sightings", || crate::carp_fish::refresh(&target)).await?;
             println!("carp-sightings: {n} records stored");
         }
+        // EDDMapS reports (python): one request, the whole public set.
+        if app.cfg.has_feed(eddmaps::ID) {
+            soft_fetch(&target, eddmaps::ID, &Eddmaps::new(app.clone()), &mut out, &mut skipped).await;
+        }
         if app.cfg.has_feed(crw::SOURCE_ID) {
             let src = crw::Crw::new(app.clone()).with_days((days as i64).min(CRW_BACKFILL_DAYS));
             soft_fetch(&target, crw::SOURCE_ID, &src, &mut out, &mut skipped).await;
@@ -529,7 +534,8 @@ pub fn fixture_sources(state: &AppState) -> Vec<Arc<dyn Source>> {
     if app.cfg.has_feed(crw::SOURCE_ID) {
         out.push(Arc::new(crw::Crw::new(app.clone())));
     }
-    out.extend(crate::ingest::poll::bio::sources(&state.config, app));
+    // EDDMapS has no recorded fixture: its reports are today's, so it is network-only.
+    out.extend(crate::ingest::poll::bio::sources(&state.config, app).into_iter().filter(|s| s.info().id != eddmaps::ID));
     out
 }
 
@@ -904,7 +910,7 @@ mod tests {
         run(lf.clone(), &s(&["--fixtures", "--app", "lionfish", "--dry-run"])).await.unwrap();
         assert!(run(lf.clone(), &s(&["--fixtures", "--app", "python"])).await.unwrap_err().to_string().contains("--app python"));
         let ids: Vec<&str> = fixture_sources(&lf).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["ndbc", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
+        assert_eq!(ids, ["ndbc", "coops", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
         assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 13, "python's database is untouched");
     }
 

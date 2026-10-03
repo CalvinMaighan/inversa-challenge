@@ -37,6 +37,7 @@ const LABELS: Record<string, string> = {
   openmeteo: "METEO",
   nas: "NAS",
   gbif: "GBIF",
+  eddmaps: "EDDMapS",
   aisstream: "AIS",
 };
 
