@@ -18,6 +18,9 @@ describe("species facts", () => {
     expect(speciesFactsFor("python").species.map((s) => s.name)).toEqual(["Burmese python"]);
     expect(speciesFactsFor("lionfish").species.map((s) => s.name)).toEqual(["Lionfish"]);
     expect(speciesFactsFor("carp").species.map((s) => s.name)).toEqual(["Asian carp (all four)", "Silver carp", "Bighead carp", "Grass carp", "Black carp"]);
+    // "Asian carp" with a topic only the four species carry still answers (the voice asked for "look" of "Asian carp" and got nothing).
+    expect(speciesFactsFor("carp", { species: "Asian carp", topic: "look" }).species.length).toBeGreaterThan(0);
+    expect(speciesFactsFor("carp", { species: "carp", topic: "diet" }).species.length).toBeGreaterThan(0);
   });
 
   test("a species and a topic narrow the answer; a name the app does not know gives everything", () => {

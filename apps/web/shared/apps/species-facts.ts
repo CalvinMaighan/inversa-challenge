@@ -133,6 +133,7 @@ const CARP_SHARED: SpeciesFacts = {
   scientificName: "silver, bighead, grass and black carp",
   facts: [
     { topic: "identify", title: "Telling the four apart", text: "Silver and bighead carp both have small scales, a big head with eyes set low and a toothless upturned mouth. Silver carp are silvery all over and the scaleless keel on the belly runs from the throat to the anus; bighead carp are darker grey with blotches, have a bigger head and the keel runs only from the pelvic fins to the anus. Grass carp are long and torpedo-shaped with large dark-edged scales and a normal, forward mouth; black carp are dark grey to black with a smooth pointed head. Silver carp are the ones that leap when a boat passes." },
+    { topic: "life", title: "How they breed", text: "All four spawn in rivers: a rise in water in spring and early summer triggers it, the eggs drift in the current and hatch in a day or two, so the young need a long stretch of moving water. A female lays hundreds of thousands of eggs or more, which is how a few fish become many." },
     { topic: "impact", title: "Why they are a problem", text: "Silver and bighead carp eat the plankton that native young fish and filter feeders depend on, grass carp strip plants and black carp eat mussels and snails. They reproduce in rivers, spread up the Mississippi and its tributaries and are held back from the Great Lakes by barriers and monitoring." },
     { topic: "hunting", title: "How they are harvested", text: "Bowfishing at night or in shallows, commercial netting and gill nets, cast nets and hook and line for smaller ones. Silver carp near a boat are often caught by hand net or bow as they leap. Commercial harvest and markets exist along the Mississippi and the Illinois River." },
     { topic: "rules", title: "The rules for taking them", text: "Rules are set by each state. Many states, Louisiana among them, restrict or forbid keeping or moving live silver and bighead carp, and encourage removal by anglers and bowfishers, often with no bag limit. A fish taken dead by bow or net is usually fine to keep, but confirm the current rule, the season and the licence with the state wildlife agency (in Louisiana, LDWF) before going out." },
@@ -159,6 +160,11 @@ export function speciesFactsFor(app: AppId, opts: { species?: string; topic?: Fa
   // Facts that hold for all four carp (comparing them, how they are caught, the rules) come with any one of them when a topic is asked.
   const shared = entry.species.find((s) => s.id === "asian-carp");
   if (shared && opts.topic && !species.includes(shared)) species = [shared, ...species];
-  const shaped = species.map((s) => ({ ...s, facts: opts.topic ? s.facts.filter((f) => f.topic === opts.topic) : s.facts })).filter((s) => s.facts.length > 0);
+  const shape = (list: readonly SpeciesFacts[], topic?: FactTopic) => list.map((s) => ({ ...s, facts: topic ? s.facts.filter((f) => f.topic === topic) : s.facts })).filter((s) => s.facts.length > 0);
+  let shaped = shape(species, opts.topic);
+  // A topic the named species has no fact for ("Asian carp" is one group, its facts sit under the four species) is not a reason to answer with nothing:
+  // the topic across every species of the app, then everything.
+  if (shaped.length === 0) shaped = shape(entry.species, opts.topic);
+  if (shaped.length === 0) shaped = shape(entry.species);
   return { species: shaped, sources: entry.sources.map((id) => SOURCES[id]!) };
 }
