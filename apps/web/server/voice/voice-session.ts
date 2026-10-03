@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { isAgentStreamEvent } from "shared/agent/events";
-import type { AppConfig } from "shared/apps";
+import { getApp, type AppConfig } from "shared/apps";
 import {
   VOICE_INPUT_SAMPLE_RATE,
   VOICE_OUTPUT_SAMPLE_RATE,
@@ -23,6 +23,7 @@ import {
   type RealtimeEvent,
   type RealtimeTarget,
 } from "./grok-realtime";
+import { foreignAppFor } from "@/server/agent/scope";
 import { hintFor, routeMessage, type Route, type RouteInput } from "@/server/agent/decisions";
 import { claimTurn, decidesStop, looksLikeHangUp, looksLikeStop } from "./stop-intent";
 import { isUiToolName, validateUiToolCall } from "./ui-command";
@@ -210,6 +211,8 @@ export class VoiceSession {
   private closed = false;
   private greeted = false;
   /** The user's words so far this turn, from the streaming transcript, and the sentence the analyst was started on early. */
+  /** The turn whose species the session already switched the app for. */
+  private switchedTurn = "";
   /** The turn whose router hint the voice model already got. */
   private hintedTurn = "";
   /** After a stop, replies the provider starts on its own are cancelled until this time. */
@@ -725,6 +728,7 @@ export class VoiceSession {
       this.stopEverything();
       return;
     }
+    if (this.switchForSpecies(text, turnId)) return;
     if (!route || turnId !== this.window.currentTurnId()) return;
     const leans = LEANS_ON_BEFORE.test(text);
     let started = false;
@@ -734,6 +738,25 @@ export class VoiceSession {
       if (early && this.early && this.early.turnId === turnId && typeof receipt.task_id === "string") this.early.taskId = receipt.task_id;
     }
     this.passDecision(route, turnId, started);
+  }
+
+  /**
+   * The user named another app's species (or asked to switch to it): the app switches now, on our side, with the same UI command
+   * the model's switch_app tool sends, and the model is told so it only has to say it. Once per turn, so a model that also calls the
+   * tool changes nothing.
+   */
+  private switchForSpecies(text: string, turnId: string): boolean {
+    if (!this.conn || this.switchedTurn === turnId) return false;
+    const target = foreignAppFor(this.opts.app, text);
+    if (!target) return false;
+    this.switchedTurn = turnId;
+    this.hintedTurn = turnId;
+    this.runUiTool("switch_app", { app: target });
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<router_hint>The app is switching to ${getApp(target).name} right now. Say in one short sentence that you are switching and what they can ask there. Do not refuse, and do not tell them to switch.</router_hint>` }] },
+    });
+    return true;
   }
 
   /**

@@ -66,13 +66,13 @@ describe("voice caps", () => {
     expect(mock.authHeaders).toHaveLength(0);
 
     // The route file is wired to the process registry and returns the same 429.
-    const g = globalThis as unknown as { __inversaVoiceRegistry?: VoiceSessionRegistry };
-    const saved = g.__inversaVoiceRegistry;
-    g.__inversaVoiceRegistry = registry;
+    const g = globalThis as unknown as { __inversaVoiceRegistryV2?: VoiceSessionRegistry };
+    const saved = g.__inversaVoiceRegistryV2;
+    g.__inversaVoiceRegistryV2 = registry;
     try {
       expect((await openRoute(openRequest())).status).toBe(429);
     } finally {
-      g.__inversaVoiceRegistry = saved;
+      g.__inversaVoiceRegistryV2 = saved;
     }
 
     // Under the cap the same registry opens a session.

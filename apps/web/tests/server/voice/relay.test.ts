@@ -110,7 +110,7 @@ describe("voice relay against a mocked xAI socket", () => {
     expect(session.audio.input.format.rate).toBe(16_000);
     expect(session.audio.output.format.rate).toBe(24_000);
     expect(session.instructions).toContain(getApp("python").agent.persona);
-    expect(session.instructions).toContain(getApp("python").agent.refusal);
+    expect(session.instructions).toContain("you switch for them");
     expect(session.instructions).toContain("Never invent numbers");
     expect(session.tools.map((t) => t.name).sort()).toEqual(
       [...UI_TOOL_NAMES, "spawn_thinking", "get_task_status", "cancel_task", "view_screen"].sort(),
@@ -118,6 +118,16 @@ describe("voice relay against a mocked xAI socket", () => {
     const flyTo = session.tools.find((t) => t.name === "fly_to")!;
     expect(flyTo.parameters.type).toBe("object");
     expect(flyTo.parameters).not.toHaveProperty("$schema");
+  });
+
+  test("naming another species switches the app at once, even misheard (\"car app\")", async () => {
+    const { mock, events } = await startSession();
+    mock.send({ type: "input_audio_buffer.speech_started" });
+    mock.send({ type: "conversation.item.input_audio_transcription.completed", transcript: "Hey, can you switch to the car app?" });
+    await until(() => events.some((e) => e.type === "ui.command"));
+    const command = events.find((e) => e.type === "ui.command") as Extract<VoiceServerEvent, { type: "ui.command" }>;
+    expect(command.name).toBe("switch_app");
+    expect(command.args).toEqual({ app: "carp" });
   });
 
   test("fly_to reaches VIEW", async () => {

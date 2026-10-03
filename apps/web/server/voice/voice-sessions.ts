@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import type { AppConfig } from "shared/apps";
 
-import { defaultAgentRunner, type AgentRunner } from "./agent-runner";
+import type { AgentRunner } from "./agent-runner";
 import { IpRateLimiter, VoiceBudget, voiceLimitsFromEnv, type VoiceLimits } from "./budget";
 import { defaultRealtimeTarget, type RealtimeTarget } from "./grok-realtime";
 import { VoiceSession } from "./voice-session";
@@ -127,13 +127,24 @@ export class VoiceSessionRegistry {
   }
 }
 
+/**
+ * The analyst runner, looked up on each run: the registry below outlives Turbopack module reloads in dev, and a runner captured
+ * when it was made would keep calling the old module's chunks ("Cannot find module") after the next edit.
+ */
+const latestRunner: AgentRunner = {
+  async run(input, onEvent) {
+    const { defaultAgentRunner: runner } = await import("./agent-runner");
+    return runner.run(input, onEvent);
+  },
+};
+
 /** Process-wide registry. Survives Turbopack module reloads in dev; one process in production. */
 export function voiceRegistry(): VoiceSessionRegistry {
-  const g = globalThis as unknown as { __inversaVoiceRegistry?: VoiceSessionRegistry };
-  g.__inversaVoiceRegistry ??= new VoiceSessionRegistry({
+  const g = globalThis as unknown as { __inversaVoiceRegistryV2?: VoiceSessionRegistry };
+  g.__inversaVoiceRegistryV2 ??= new VoiceSessionRegistry({
     limits: voiceLimitsFromEnv(),
-    runner: defaultAgentRunner,
+    runner: latestRunner,
     target: defaultRealtimeTarget,
   });
-  return g.__inversaVoiceRegistry;
+  return g.__inversaVoiceRegistryV2;
 }

@@ -7,12 +7,33 @@
  * places outside the region) is the model's job under the prompt's boundary rules and the tools' region checks.
  */
 
-import { APP_IDS, loadApps, type AppConfig } from "@/shared/apps";
+import { APP_IDS, loadApps, type AppConfig, type AppId } from "@/shared/apps";
 import { SWITCH_REQUEST } from "@/shared/switch-request";
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const cache = new WeakMap<AppConfig, RegExp | null>();
+
+/** Mishearings of the species names that speech-to-text produces (`car app`, `carb`, `lion fish`), as the word the user meant. */
+export function correctSpeciesWords(text: string): string {
+  let t = text.replace(/\b(carbs?|karps?)\b/gi, APP_IDS[0]).replace(/\blion fish\b/gi, APP_IDS[1]);
+  if (/\b(switch|go|open|select|take me|change|move|jump|pick|choose)\b/i.test(t)) t = t.replace(/\bcars?\b/gi, APP_IDS[0]);
+  return t;
+}
+
+/** The other app a question names by its species (or a mishearing of it), or null. For the voice, which switches at once. */
+export function foreignAppFor(app: AppConfig, question: string): AppId | null {
+  const text = correctSpeciesWords(question);
+  const apps = loadApps();
+  for (const id of APP_IDS) {
+    if (id === app.id) continue;
+    const names = apps[id].taxa.flatMap((t) => [t.id, t.name, t.scientificName, ...(t.aliases ?? [])]).filter((n) => n.length >= 4);
+    const own = new Set(app.taxa.flatMap((t) => [t.id, t.name, t.scientificName, ...(t.aliases ?? [])]).map((s) => s.toLowerCase()));
+    const pattern = new RegExp(`\\b(${names.filter((n) => !own.has(n.toLowerCase())).sort((a, b) => b.length - a.length).map(escape).join("|")})(es|s)?\\b`, "i");
+    if (names.length && pattern.test(text)) return id;
+  }
+  return /\bcarp\b/i.test(text) && app.id !== APP_IDS[0] ? APP_IDS[0] : null;
+}
 
 /** Names of species that belong to other apps only. */
 export function foreignSpeciesPattern(app: AppConfig): RegExp | null {

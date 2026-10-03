@@ -62,7 +62,7 @@ export function agentViewFromHud(hud: unknown, app: AppId): AgentView | undefine
 /** Cordis `runTurn`, loaded on first use so opening a voice session does not boot the agent harness. */
 export const defaultAgentRunner: AgentRunner = {
   async run(input, onEvent) {
-    const { runTurn } = await import("server/agent/run-turn");
+    const { runTurn } = await import("@/server/agent/run-turn");
     // runTurn never throws: failures come back as content plus an `error` event.
     const result = await runTurn(
       {
