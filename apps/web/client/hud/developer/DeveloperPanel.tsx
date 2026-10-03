@@ -4,13 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import ExternalLink from "client/external-link";
 import { FEEDS } from "client/state/feeds";
 import type { FeedState } from "shared/feed-state";
-import { readGoogleCap, readGoogleCounts, writeGoogleCap } from "client/globe/quota";
 import { browserKeyStore } from "client/keys";
-import { savePlacesCapField } from "client/places/budget";
-import PlacesCapField from "client/hud/search/PlacesCapField";
 import styled from "client/styled";
 import type { BrowserKeyId, ServerKeyStatus } from "shared/keys";
 
@@ -329,7 +325,7 @@ function FeedsPane() {
   );
 }
 
-function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: number; onRemove: (id: BrowserKeyId) => void }) {
+function Row({ row, onRemove }: { row: PanelRow; onRemove: (id: BrowserKeyId) => void }) {
   return (
     <li data-key-row={row.id} data-scope={row.scope} data-set={row.set ? "1" : "0"} data-pending={row.pending ? "1" : "0"}>
       <Line>
@@ -337,15 +333,11 @@ function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: n
         <b>{row.label}</b>
         <Priority $headline={row.priority === "headline"} role="img" aria-label={row.priority === "headline" ? "unlocks a headline feature" : "optional"} title={row.priority === "headline" ? "Unlocks a headline feature" : "Optional"} />
         {row.scope === "browser" ? <Badge title="Runs in the browser: restrict it at the provider">BROWSER-SIDE</Badge> : null}
-        {row.external ? <Badge title="Set through the environment or Doppler; shown, never changed here">CONFIGURED EXTERNALLY</Badge> : null}
         {row.removable ? (
           <button type="button" className="text" onClick={() => onRemove(row.id as BrowserKeyId)} aria-label={`Remove the ${row.label} key stored in this browser`}>
             REMOVE
           </button>
         ) : null}
-        <ExternalLink href={row.link.href} data-key-link={row.link.label} style={row.removable ? { marginLeft: 8 } : undefined}>
-          {row.link.label}
-        </ExternalLink>
       </Line>
       <Purpose>{row.purpose}</Purpose>
       {row.inputs.map((input) => (
@@ -372,20 +364,6 @@ function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: n
           ))}
         </Note>
       ) : null}
-      {row.id === "google-maps" ? (
-        <Note>
-          <label>
-            Monthly cap
-            <input type="number" name="google-cap" min={1} max={100000} step={1} defaultValue={cap} aria-label="Google 3D monthly cap, sessions in this browser" data-google-cap="" />
-          </label>
-          sessions in this browser · {used} used this month
-        </Note>
-      ) : null}
-      {row.id === "google-maps" ? (
-        <Note>
-          <PlacesCapField />
-        </Note>
-      ) : null}
     </li>
   );
 }
@@ -404,12 +382,9 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [needsReload, setNeedsReload] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [openedAt] = useState(() => Date.now());
   const tab = useActiveState<DeveloperTab>(DEVELOPER_TAB)[0] ?? "feeds";
   const store = browserKeyStore();
   const rows = panelRows(store, server);
-  const cap = readGoogleCap(store);
-  const used = readGoogleCounts(store, openedAt).sessions;
   const pending = rows.some((r) => r.pending);
 
   useLayoutEffect(() => {
@@ -454,22 +429,14 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
     const form = e.currentTarget;
     const data = new FormData(form);
     const values: Record<string, string> = {};
-    for (const [name, value] of data.entries()) if (typeof value === "string" && name !== "google-cap") values[name] = value;
+    for (const [name, value] of data.entries()) if (typeof value === "string") values[name] = value;
     const { browser, server: serverValues } = splitPasted(values);
-    const capValue = Number(data.get("google-cap"));
-    const capChanged = data.has("google-cap") && capValue !== cap;
-    const placesNote = savePlacesCapField(store, data);
-    if (browser.length === 0 && Object.keys(serverValues).length === 0 && !capChanged && !placesNote) {
+    if (browser.length === 0 && Object.keys(serverValues).length === 0) {
       setMessage("Paste a key first.");
       return;
     }
     setBusy(true);
     const notes: string[] = [];
-    if (placesNote) notes.push(placesNote);
-    if (capChanged) {
-      const now = writeGoogleCap(store, capValue);
-      notes.push(now === capValue ? `Google 3D cap set to ${now} sessions a month.` : "The cap must be a whole number from 1 to 100000.");
-    }
     if (browser.length > 0) {
       if (saveBrowserKeys(store, browser)) {
         notes.push("Browser keys saved in this browser; they apply on the next globe load.");
@@ -544,8 +511,6 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
             <Row
               key={row.id}
               row={row}
-              cap={cap}
-              used={used}
               onRemove={(id) => {
                 removeBrowserKey(store, id);
                 setNeedsReload(true);
