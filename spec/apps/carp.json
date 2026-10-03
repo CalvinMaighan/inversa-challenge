@@ -484,6 +484,7 @@
       "select_area",
       "zoom",
       "close_panel",
+      "species_info",
       "switch_app",
       "open_evidence",
       "set_look"

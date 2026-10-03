@@ -1,7 +1,8 @@
 /**
  * What the agent is for, as questions a person can click or say: the Questions tab lists all of them by topic, the empty chat
  * shows the first of each topic. Everything here is answered from the app's own data or done on the map by the agent's tools
- * (sightings, species counts, river and sea conditions, alerts, hotspots, feed health, camera, timeline, filters and menus);
+ * (sightings, species counts, river and sea conditions, alerts, hotspots, feed health, camera, timeline, filters and menus) or,
+ * for the "About" group, from the species' general facts (`species-facts.ts`: looks, diet, hunting, rules, safety);
  * nothing outside the app's species and places belongs in this list.
  */
 import type { AppConfig } from "./schema";
@@ -47,6 +48,13 @@ const CARP: readonly QuestionGroup[] = [
     ],
   },
   {
+    id: "about",
+    label: "About Asian carp",
+    hint: "What they look like, eat and how they are caught",
+    icon: "species",
+    questions: ["What do silver carp look like?", "How do I tell a silver carp from a bighead carp?", "What do Asian carp eat?", "How big do bighead carp get?", "How are Asian carp hunted or caught?", "What are the rules for taking Asian carp in Louisiana?", "Why do silver carp jump?", "Are Asian carp good to eat?", "How do I report an Asian carp?"],
+  },
+  {
     id: "rivers",
     label: "River conditions",
     hint: "Gauges, forecasts and alerts on the Mississippi and its neighbours",
@@ -71,6 +79,13 @@ const LIONFISH: readonly QuestionGroup[] = [
     hint: "Reports around the Florida Keys, Mexican Caribbean, Belize and Colombia",
     icon: "species",
     questions: ["Where were lionfish reported in the last 30 days?", "How many reports are there in the Florida Keys this year?", "Show me the most recent lionfish report", "Which reports have the most reliable ID?"],
+  },
+  {
+    id: "about",
+    label: "About lionfish",
+    hint: "What they look like, eat and how they are removed",
+    icon: "species",
+    questions: ["What does a lionfish look like?", "What do lionfish eat?", "How do divers hunt lionfish?", "What are the rules for taking lionfish?", "What do I do if a lionfish stings me?", "Is lionfish safe to eat?", "How fast do lionfish breed?", "How do I report a lionfish?"],
   },
   {
     id: "reef",
@@ -104,6 +119,13 @@ const PYTHON: readonly QuestionGroup[] = [
     hint: "Reports in South Florida and the Everglades",
     icon: "species",
     questions: ["Where were pythons reported in the last 7 days?", "How many python reports are there in the last year?", "Show me the most recent python report", "Which reports have the most reliable ID?"],
+  },
+  {
+    id: "about",
+    label: "About Burmese pythons",
+    hint: "What they look like, eat and how they are removed",
+    icon: "species",
+    questions: ["What does a Burmese python look like?", "How big do Burmese pythons get?", "What do Burmese pythons eat?", "When and where are pythons most active?", "How are pythons hunted or removed?", "What are the rules for removing pythons in Florida?", "How do I tell a Burmese python from a native snake?", "How do I report a python?"],
   },
   {
     id: "crews",

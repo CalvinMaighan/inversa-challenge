@@ -106,7 +106,7 @@ describe("voice relay against a mocked xAI socket", () => {
     };
     expect(mock.authHeaders[0]).toBe("Bearer test-key-not-real");
     expect(session.voice).toBe("eve");
-    expect(session.turn_detection).toMatchObject({ type: "server_vad", threshold: 0.6, silence_duration_ms: 650 });
+    expect(session.turn_detection).toMatchObject({ type: "server_vad", threshold: 0.6, silence_duration_ms: 450 });
     expect(session.audio.input.format.rate).toBe(16_000);
     expect(session.audio.output.format.rate).toBe(24_000);
     expect(session.instructions).toContain(getApp("python").agent.persona);

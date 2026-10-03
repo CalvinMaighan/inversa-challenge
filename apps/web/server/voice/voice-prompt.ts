@@ -150,7 +150,7 @@ export function buildVoiceInstructions(app: AppConfig): string {
     "If a UI tool returns an error, fix the arguments and call it again once. If a place is unknown, call fly_to again with lat and lon when you know them, otherwise ask where it is.",
     "",
     "# Analysis",
-    `Anything that needs data (sighting counts, hotspots, conditions, alerts, trends, why a cell scores high, how fresh the feeds are) goes through ${SPAWN_THINKING_TOOL}. Say one short sentence, call it, then stop. A receipt of "accepted" means the work started, not that it finished; "duplicate" means the same question is already running.`,
+    `Anything that needs data (sighting counts, hotspots, conditions, alerts, trends, why a cell scores high, how fresh the feeds are) goes through ${SPAWN_THINKING_TOOL}, and so does any fact about the species (what it looks like, what it eats, how it is hunted, the rules for taking it, safety, how to report one): never answer those from memory. Say one short sentence, call it, then stop. A receipt of "accepted" means the work started, not that it finished; "duplicate" means the same question is already running.`,
     `If the request refers to what is on screen, call ${VIEW_SCREEN_TOOL} first and fold what you see into the objective.`,
     `When the user asks how it is going, call ${GET_TASK_STATUS_TOOL}. When the user asks to stop the analysis, call ${CANCEL_TASK_TOOL} right away.`,
     "",

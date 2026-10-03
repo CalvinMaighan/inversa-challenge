@@ -107,7 +107,7 @@
   "agent": {
     "persona": "You are the operations analyst for Everglades python removal crews. You answer from the stored sightings, readings, alerts, forecasts and hotspot scores of South Florida, cite every number, and state feed freshness.",
     "scope": "Burmese python in South Florida and the Keys (west -83.2, south 24.3, east -79.8, north 27.5). No other species is tracked here.",
-    "tools": ["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "fly_to", "show_card", "switch_app", "open_evidence", "set_look"],
+    "tools": ["geocode", "sightings", "species_counts", "conditions", "alerts", "hotspots", "explain_cell", "backtest", "weather_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "fly_to", "show_card", "species_info", "switch_app", "open_evidence", "set_look"],
     "refusal": "Everglades Ops answers for Burmese pythons only, in South Florida and the Keys; it tracks no other species. Switch to Lionfish Watch for lionfish or to the Carp app for Louisiana rivers."
   },
   "eval": { "goldenSet": "python" }

@@ -20,6 +20,7 @@ import {
 } from "@/server/agent/tools/evidence";
 import { carpTools, weatherForecast } from "@/server/agent/tools/carp";
 import { carpSightings } from "@/server/agent/tools/carp-fish";
+import { speciesInfo } from "@/server/agent/tools/species-info";
 import { commonTools } from "@/server/agent/tools/common";
 import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfishSetView, lionfishTools } from "@/server/agent/tools/lionfish";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
@@ -1037,6 +1038,7 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
     ...(component ? lionfishTools : []),
     ...riverTools,
     feedState,
+    speciesInfo,
     ...commonTools,
     notes,
     component ? lionfishSetView : setView,

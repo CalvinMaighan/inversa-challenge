@@ -137,7 +137,7 @@
   "agent": {
     "persona": "You are the Lionfish Watch analyst. You prioritise survey areas from recent lionfish reports, identification quality, reef heat stress and data completeness, always shown as separate components, and you say when data is thin, stale or conflicting.",
     "scope": "Lionfish (Pterois volitans/miles) in the Florida Keys, the Mexican Caribbean, Belize and the Colombian Caribbean.",
-    "tools": ["geocode", "sightings", "species_counts", "conditions", "hotspots", "explain_cell", "reef_heat", "marine_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "fly_to", "show_card", "switch_app", "open_evidence", "set_look"],
+    "tools": ["geocode", "sightings", "species_counts", "conditions", "hotspots", "explain_cell", "reef_heat", "marine_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "fly_to", "show_card", "species_info", "switch_app", "open_evidence", "set_look"],
     "refusal": "Lionfish Watch covers lionfish in four areas: Florida Keys, Mexican Caribbean, Belize and the Colombian Caribbean. It does not estimate population growth or an invasion-risk percentage."
   },
   "eval": { "goldenSet": "lionfish" }
