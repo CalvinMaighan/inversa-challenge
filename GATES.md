@@ -1,29 +1,35 @@
-# Gates: Everglades Ops (root)
+# Gates: voice writes in chat + info cards with sources, prettier sources, Fastino decisions API, chat flow tested
 
-Scope: docs/BUILD_BRIEF.md R1–R19 delivered, integrated, and deployed at https://inversa.calvinmaighan.dev.
+Branch: polish-for-review (PR #5 stacked). Checks run from the repo root.
 
-- [ ] G1: bun run check is green (lint, typecheck, web tests, api tests)
-  CHECK: bun run check 2>&1 | tail -1
-  EXPECT: CHECK-OK
+- [ ] G1 Voice transcripts and spoken answers appear in the chat thread as messages (user and assistant), not only in the voice strip.
+  CHECK: cd apps/web && bun test tests/client/voice tests/client/agent 2>&1 | tail -4
+  EXPECT: 0 fail
   EVIDENCE: pending
 
-- [ ] G2: the api suite passes
-  CHECK: cargo test --manifest-path api/Cargo.toml 2>&1 | grep "test result" | grep -v " 0 passed" | head -1
-  EXPECT: /test result: ok\. \d+ passed; 0 failed/
+- [ ] G2 The voice can pull up an info card with sources: a `show_card` UI command (title, text, source evidence ids) renders a card in the chat thread and the sources open the sighting/feed.
+  CHECK: cd apps/web && bun test tests/shared tests/server/voice 2>&1 | tail -4
+  EXPECT: 0 fail
   EVIDENCE: pending
 
-- [ ] G3: the live agent eval passes (OpenRouter gpt-6-luna under doppler; at least 13 of 15, quality at least 4 of 5)
-  CHECK: bun run eval 2>&1 | grep -E "^EVAL (quality )?passed" | tr '\n' ' '
-  EXPECT: /EVAL quality passed [45]\/5 EVAL passed 1[3-5]\/15/
+- [ ] G3 Sources are redesigned (chips with source name, type, age, favicon-free icon, hover title, click opens the record) and shown on text and voice answers.
   EVIDENCE: pending
 
-- [ ] G4: every leaf and node gates file is met, or has only live-blocked ABANDON lines
-  CHECK: node /Users/calvin/.claude/skills/unlazy/scripts/gate-check.mjs --timeout 120 --status gates/*.md 2>&1 | tail -3
-  EXPECT: /ALL MET|ABANDON/
+- [ ] G4 Fastino API is called for real with FASTINO_API_KEY (key never printed or committed); the adapter has typed errors, timeout and a fallback when the key is missing.
+  CHECK: cd apps/web && bun test tests/server/fastino 2>&1 | tail -4
+  EXPECT: 0 fail
   EVIDENCE: pending
 
-- [ ] G5: live URL checks from T33–T35 (manual: quote curl outputs)
+- [ ] G5 Fastino is used as a decisions layer: (a) intent routing of a user message (on-topic/off-topic, which tools/UI action) before the big model, (b) used by both text agent and voice, (c) falls back to the existing flow when unavailable.
   EVIDENCE: pending
 
-- [ ] G6: a table mapping R1–R19 to their met gates is in the final report (manual)
+- [ ] G6 Chat agent flow tested end to end against the running dev stack: 6+ scripted questions (on-topic, off-topic, UI control, carp sightings, conditions) with recorded outcomes and latency.
+  EVIDENCE: pending
+
+- [ ] G7 Whole suite green: bun run check:ci, bun run test, cargo test.
+  CHECK: cd apps/web && bun run test 2>&1 | grep -E " fail$"
+  EXPECT: 0 fail
+  EVIDENCE: pending
+
+- [ ] G8 Committed and pushed on the branch; PR description updated.
   EVIDENCE: pending

@@ -85,6 +85,17 @@ export const KEY_REGISTRY = [
     fallback: "voice is off; text chat still works",
   },
   {
+    id: "fastino",
+    label: "Fastino GLiDE",
+    scope: "server",
+    priority: "optional",
+    vars: ["FASTINO_API_KEY"],
+    purpose: "Fast routing of every question before the big model",
+    getUrl: "https://docs.fastino.ai/quickstart",
+    manageUrl: "https://docs.fastino.ai/quickstart",
+    fallback: "every question goes straight to the agent, as before",
+  },
+  {
     id: "aws-goes",
     label: "AWS for GOES push",
     scope: "server",

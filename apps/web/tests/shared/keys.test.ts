@@ -44,8 +44,8 @@ describe("key registry", () => {
     expect(missing).toEqual([]);
   });
 
-  test("the seven provider rows of the spec, each with scope, purpose, links and fallback", () => {
-    expect(KEY_REGISTRY.map((k) => k.label)).toEqual(["Google Maps", "Cesium ion", "AISStream", "OpenRouter", "xAI voice", "AWS for GOES push", "NWWS"]);
+  test("the eight provider rows of the spec, each with scope, purpose, links and fallback", () => {
+    expect(KEY_REGISTRY.map((k) => k.label)).toEqual(["Google Maps", "Cesium ion", "AISStream", "OpenRouter", "xAI voice", "Fastino GLiDE", "AWS for GOES push", "NWWS"]);
     expect(new Set(KEY_REGISTRY.map((k) => k.id)).size).toBe(KEY_REGISTRY.length);
     for (const k of KEY_REGISTRY) {
       expect(["browser", "server"]).toContain(k.scope);
@@ -61,7 +61,7 @@ describe("key registry", () => {
     }
     expect(KEY_REGISTRY.filter((k) => k.priority === "headline").map((k) => k.id)).toEqual(["google-maps", "openrouter"]);
     expect(keyEntry("aws-goes")?.vars).toEqual(["GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"]);
-    expect(SERVER_KEY_VARS).toEqual(["AISSTREAM_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "NWWS_USER", "NWWS_PASS"]);
+    expect(SERVER_KEY_VARS).toEqual(["AISSTREAM_API_KEY", "OPENROUTER_API_KEY", "XAI_API_KEY", "FASTINO_API_KEY", "GOES_SQS_URL", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "NWWS_USER", "NWWS_PASS"]);
   });
 
   test("browser keys resolve localStorage first, then the build env; blank or failing storage falls through", () => {

@@ -49,7 +49,7 @@ describe("dev keys route", () => {
     expect(res.status).toBe(200);
     expect(res.text).not.toContain(SENTINEL);
     const rows = res.json as ServerKeyStatus[];
-    expect(rows.map((r) => r.id)).toEqual(["aisstream", "openrouter", "xai", "aws-goes", "nwws"]);
+    expect(rows.map((r) => r.id)).toEqual(["aisstream", "openrouter", "xai", "fastino", "aws-goes", "nwws"]);
     expect(rows.find((r) => r.id === "openrouter")).toEqual({ id: "openrouter", set: true, source: "external", writable: true, vars: [{ name: "OPENROUTER_API_KEY", set: true, source: "external" }] });
     // A row needing three variables is set only when all three are.
     expect(rows.find((r) => r.id === "aws-goes")).toMatchObject({ set: false, source: null, vars: [{ set: true, source: "external" }, { set: false }, { set: false }] });
