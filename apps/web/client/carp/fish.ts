@@ -50,7 +50,7 @@ type FishState = {
   hidden: string[];
 };
 
-export const SPEEDS = [1, 2, 4, 8] as const;
+export const SPEEDS = [1, 2, 4, 8, 32] as const;
 export type Speed = (typeof SPEEDS)[number];
 const DAYS_PER_SECOND = 15;
 const DAY_MS = 86_400_000;

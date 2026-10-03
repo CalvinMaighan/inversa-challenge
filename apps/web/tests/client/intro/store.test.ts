@@ -57,11 +57,11 @@ describe("first-run gate steps", () => {
     }
   });
 
-  test("entering presses play at 8x from the start of the timeline", async () => {
+  test("entering presses play at 32x from the start of the timeline", async () => {
     choose(LIONFISH_ID);
     await enter(false);
     const time = get<TimeState>(TIME)!;
-    expect(time).toMatchObject({ playing: true, speed: 8 });
+    expect(time).toMatchObject({ playing: true, speed: 32 });
     expect(time.at).toBe(time.from);
   });
 
