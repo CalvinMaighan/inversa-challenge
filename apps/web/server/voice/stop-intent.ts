@@ -14,8 +14,9 @@ function stem(text: string): string {
     .trim();
 }
 
+/** A stop, with the small words people put around it ("okay stop talking please"); "stop showing hotspots" is still a command. */
 const STOP_LINE =
-  /^(stop|stop talking|stop it|please stop|that'?s enough|shut up|be quiet|quiet|cancel that|never mind|nevermind)$/;
+  /^(?:(?:ok|okay|hey|um|uh|yeah|yes|please|just|now|alright|all right)\s+)*(?:stop|be quiet|quiet|silence|hush|enough|that'?s enough|shut up|cancel that|never ?mind|hold on|wait|pause)(?:\s+(?:please|now|talking|speaking|it|that|already|there|for now|a second|a minute|a moment))*$/;
 
 const HANG_UP_LINE = /^(end voice|end voice mode|hang up|stop listening|goodbye|bye|that'?s all)$/;
 

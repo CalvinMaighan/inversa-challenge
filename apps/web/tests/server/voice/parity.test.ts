@@ -56,3 +56,13 @@ describe("hands-free agent parity", () => {
     for (const covering of ["fly_to", "select_area", "set_time"]) expect(UI_TOOL_NAMES as string[]).toContain(covering);
   });
 });
+
+describe("hands-free agent knows all three apps", () => {
+  test("the persona names switch_app for the whole product and never limits the voice to one app", () => {
+    for (const id of APP_IDS) {
+      const persona = buildVoiceInstructions(getApp(id));
+      expect(persona).toContain("three apps");
+      expect(persona).toContain("never refuse another species");
+    }
+  });
+});

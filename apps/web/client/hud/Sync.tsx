@@ -11,7 +11,7 @@ import { TIME, timeWindow, type TimeState } from "client/state/time";
 import { gqlRequest, gqlSubscribe } from "client/threads/api";
 
 import { isLive } from "./topbar/clock";
-import { FEED_FIELDS, normalizeFeedState } from "./topbar/feed-chips";
+import { FEED_FIELDS, shownFeedState } from "./topbar/feed-chips";
 
 const FEEDS_QUERY = `query HudFeeds { feeds { ${FEED_FIELDS} } }`;
 const FEEDS_SUBSCRIPTION = `subscription HudFeedUpdates { feeds { ${FEED_FIELDS} } }`;
@@ -24,14 +24,14 @@ function FeedSync() {
     const controller = new AbortController();
     gqlRequest<{ feeds: unknown[] }>(FEEDS_QUERY, {}, controller.signal)
       .then(({ feeds }) => {
-        const rows = feeds.map(normalizeFeedState).filter((f): f is FeedState => f !== null);
+        const rows = feeds.map(shownFeedState).filter((f): f is FeedState => f !== null);
         set<FeedState[]>(FEEDS, (prev = []) => rows.reduce<FeedState[]>((list, f) => mergeFeedState(list, f), prev));
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) console.warn("[hud] feeds query failed", err);
       });
     const stop = gqlSubscribe<{ feeds: unknown }>(FEEDS_SUBSCRIPTION, {}, ({ feeds }) => {
-      const f = normalizeFeedState(feeds);
+      const f = shownFeedState(feeds);
       if (f) upsertFeedState(f);
     });
     return () => {

@@ -2,7 +2,7 @@
 
 import { apiOrigin } from "@/server/agent/config";
 import type { AppConfig } from "@/shared/apps";
-import type { FeedHealth, FeedState } from "@/shared/feed-state";
+import { isDisabledFeed, type FeedHealth, type FeedState } from "@/shared/feed-state";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 
@@ -164,5 +164,5 @@ export function dataVersion(feeds: readonly FeedState[]): string | null {
 
 export async function fetchFeeds(scope: GqlScope): Promise<FeedState[]> {
   const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeeds", "query AgentFeeds { feeds { ...FeedFields } }", {}, scope);
-  return data.feeds.map(toFeedState);
+  return data.feeds.filter((f) => !isDisabledFeed(f)).map(toFeedState);
 }

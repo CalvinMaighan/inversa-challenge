@@ -142,6 +142,8 @@ describe("stop intents and prompt formatting", () => {
     expect(looksLikeStop("Stop.")).toBe(true);
     expect(looksLikeStop("never mind")).toBe(true);
     expect(looksLikeStop("stop showing hotspots")).toBe(false);
+    for (const said of ["Okay, stop talking please.", "stop now", "Hey stop", "be quiet", "enough", "hold on"]) expect(looksLikeStop(said)).toBe(true);
+    expect(looksLikeStop("stop the carp filter and show python")).toBe(false);
     expect(looksLikeHangUp("Hang up!")).toBe(true);
     expect(looksLikeHangUp("stop")).toBe(false);
     expect(claimTurn("task-1")).toEqual({ action: "attach", taskId: "task-1" });

@@ -47,6 +47,8 @@ const VAD_THRESHOLD = 0.6;
 /** Silence that ends a turn for the provider. Shorter than a breath-and-think pause is wrong, longer feels slow: the early path below does not wait for it. */
 const VAD_SILENCE_MS = 450;
 /** A sentence the transcript ends with . ? or !, quiet this long, is treated as said: the analyst starts without waiting for the provider's end of turn. */
+/** How long after a stop the provider's automatic reply is cancelled. */
+const STOP_MUTE_MS = 2500;
 const EARLY_QUIET_MS = 180;
 const SENTENCE_END = /[.?!]['")\]]*\s*$/;
 const normalizeSaid = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -208,6 +210,8 @@ export class VoiceSession {
   private closed = false;
   private greeted = false;
   /** The user's words so far this turn, from the streaming transcript, and the sentence the analyst was started on early. */
+  /** After a stop, replies the provider starts on its own are cancelled until this time. */
+  private mutedUntil = 0;
   private partialText = "";
   private earlyTimer: ReturnType<typeof setTimeout> | null = null;
   private early: { turnId: string; said: string; taskId: string | null } | null = null;
@@ -512,6 +516,12 @@ export class VoiceSession {
       }
       case "response.created": {
         const id = responseIdOf(event);
+        // The provider answers every spoken turn on its own: the reply to "stop" is not wanted.
+        if (Date.now() < this.mutedUntil) {
+          this.pendingResponses.shift();
+          this.conn?.send({ type: "response.cancel" });
+          return;
+        }
         if (this.inputMode === "dictate") {
           this.pendingResponses.shift();
           this.conn?.send({ type: "response.cancel" });
@@ -670,6 +680,11 @@ export class VoiceSession {
   private onPartial(text: string): void {
     if (this.closed || this.inputMode !== "talk") return;
     this.partialText = text.trim();
+    // A stop is acted on as the words stream in, before the provider's own reply to them can start.
+    if (looksLikeStop(this.partialText)) {
+      this.stopEverything();
+      return;
+    }
     if (this.earlyTimer) clearTimeout(this.earlyTimer);
     this.earlyTimer = null;
     if (!SENTENCE_END.test(this.partialText) || this.partialText.split(/\s+/).length < 3) return;
@@ -687,6 +702,7 @@ export class VoiceSession {
   }
 
   private stopEverything(): void {
+    this.mutedUntil = Date.now() + STOP_MUTE_MS;
     this.interrupt();
     for (const tracked of this.tasks.values()) {
       if (!isTerminal(tracked.status)) this.cancelTask(tracked.id);

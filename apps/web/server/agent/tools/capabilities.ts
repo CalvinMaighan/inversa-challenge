@@ -54,6 +54,7 @@ import {
 import type { BBox } from "@/shared/agent/events";
 import type { AppConfig } from "@/shared/apps";
 import { QUALITY_CODES } from "@/shared/frames";
+import { isDisabledFeed } from "@/shared/feed-state";
 import { sightingPageUrl } from "@/shared/source-pages";
 import { regionAt } from "@/shared/apps";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
@@ -968,6 +969,7 @@ const feedState = {
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
+    data.feeds = data.feeds.filter((f) => !isDisabledFeed(f));
     const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it. This is the feeds' health only: whether one feed's data for a place is current needs that feed's data tool as well (sightings for inat, gbif or nas rows with their dates; reef_heat for crw; marine_forecast for the marine forecast), cited beside the fetch marker." }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
