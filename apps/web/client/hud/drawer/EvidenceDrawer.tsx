@@ -13,11 +13,10 @@ import Panel from "../Panel";
 import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../primitives";
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
-import NoteCard, { AddNoteButton } from "../notes/NoteCard";
+import NoteCard from "../notes/NoteCard";
 import AppIcon from "../appselect/AppIcon";
 import {
   evidenceBadges,
-  evidenceLocation,
   loadEvidence,
   parseBacktestId,
   parseHotspotId,
@@ -33,7 +32,6 @@ import { plainSummary } from "./summary";
 import SourcePageLink, { RecordValue } from "./SourcePageLink";
 import { useLoad } from "./use-load";
 import { CARD_MAX_WIDTH_CSS, STAGE_MEDIA } from "../shell/geometry";
-import NearbyAccess from "../search/NearbyAccess";
 
 /** The drawer is the sighting card at the right of the stage (GODS_EYE GC1): its inner edge never reaches the stage centre. */
 const CardScope = styled.div`
@@ -309,17 +307,6 @@ function Record({ evidence }: { evidence: Evidence }) {
   );
 }
 
-/** "Add note about this sighting" (T43), small and under the id: prefills the Notes composer with its place. */
-function SightingNoteAction({ id, evidence }: { id: string; evidence: Evidence }) {
-  const at = evidenceLocation(evidence.record);
-  if (!at) return null;
-  return (
-    <Section>
-      <AddNoteButton sightingId={id.slice("sighting:".length)} lon={at.lon} lat={at.lat} />
-    </Section>
-  );
-}
-
 const KIND_TITLES: Record<string, string> = {
   sighting: "Sighting",
   reading: "Station reading",
@@ -494,8 +481,6 @@ export default function EvidenceDrawer() {
         {state.status === "ready" ? <Summary kind={kind} evidence={state.data} atMs={atMs} /> : null}
         {state.status === "ready" ? <QualityBadges evidence={state.data} /> : null}
         {note && <NoteCard id={note} />}
-        {kind === "sighting" && state.status === "ready" && <SightingNoteAction id={id!} evidence={state.data} />}
-        {kind === "sighting" && state.status === "ready" && evidenceLocation(state.data.record) && <NearbyAccess at={evidenceLocation(state.data.record)!} />}
         {hotspot && (
           <Section>
             {showBacktest ? (
