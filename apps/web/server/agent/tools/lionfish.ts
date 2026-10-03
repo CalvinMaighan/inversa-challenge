@@ -540,7 +540,8 @@ const COMPONENT_FIELDS = "id value state weight rationale inputs";
 const HOT_EVIDENCE_FIELDS = "id kind observedAt submittedAt ingestedAt weight detail url";
 const cellFields = (withEvidence: boolean) => {
   const c = withEvidence ? `${COMPONENT_FIELDS} evidence { ${HOT_EVIDENCE_FIELDS} }` : COMPONENT_FIELDS;
-  return `cell lat lon score regionId rankScore thin
+  // HotspotExplain has no lat and lon (HotspotCell does): an explanation's centre comes from its cell id.
+  return `cell ${withEvidence ? "" : "lat lon"} score regionId rankScore thin
     components { recentReports { ${c} } idQuality { ${c} } heatStress { ${c} } completeness { ${c} } }
     heat { dhw baa sst anomaly observedAt ingestedAt station credit }
     fieldWindow { state issuedAt waveMaxM waveMinM calmHours horizonHours currentMaxMs station }`;
@@ -875,7 +876,8 @@ export const lionfishExplainCell = (species: z.ZodType<string>) => ({
     }
     const data = await gqlWithFeeds<{ explainCell: GqlExplain; feeds: GqlFeedState[] }>("AgentExplainCell", EXPLAIN_QUERY, { cell, species: input.species, at, weights: input.weights ?? null, basis: input.basis ? input.basis.toUpperCase() : null }, ctx);
     // The species asked for stands in when an API leaves it off the explanation, so the hotspot id is always whole.
-    const explained = { ...data.explainCell, species: data.explainCell.species ?? input.species };
+    const at0 = componentCellCentre(ctx.app, data.explainCell.cell ?? cell);
+    const explained = { ...data.explainCell, lat: data.explainCell.lat ?? at0?.lat ?? 0, lon: data.explainCell.lon ?? at0?.lon ?? 0, species: data.explainCell.species ?? input.species };
     const evidenceRows: Evidence[] = [];
     const seen = new Set<string>();
     const out = cellOut(ctx.app, explained.species, explained.at, explained, ctx.now, evidenceRows, seen, true);

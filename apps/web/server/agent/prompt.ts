@@ -346,6 +346,11 @@ export function viewContext(view: AgentView | undefined, now: Date, app: AppConf
       `Visible layers: ${view.layers.length > 0 ? view.layers.join(", ") : "none"}.`,
       `Selected evidence: ${view.selection ?? "none"}.`,
     );
+    // The cursor is where the user is looking, not the limit of what the agent may read.
+    const cursorMs = Date.parse(view.time);
+    if (Number.isFinite(cursorMs) && now.getTime() - cursorMs > 24 * 3_600_000 && !(typeof view.asOf === "number" && Number.isFinite(view.asOf))) {
+      lines.push(`The timeline cursor is in the past, but you can read all data up to the reference time. When an answer uses records dated after the cursor, say so in one clause ("these are after where you are on the timeline") instead of hiding them, or ask whether they want it as of the cursor.`);
+    }
     if (app.kind === "conditions") {
       const site = view.site ? app.locations.find((l) => l.nwps === view.site || l.id === view.site) : undefined;
       lines.push(`Selected site: ${site ? `${site.nwps} ${site.name}` : view.site ?? "none"} ("this location" means it).`);

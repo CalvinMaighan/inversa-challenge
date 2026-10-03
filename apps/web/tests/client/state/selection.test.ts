@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseEvidenceId, SELECTION } from "client/state/selection";
+import { canonicalEvidenceId, parseEvidenceId, SELECTION } from "client/state/selection";
 
 describe("SELECTION", () => {
   test("starts empty", () => {
@@ -25,5 +25,14 @@ describe("SELECTION", () => {
     expect(parseEvidenceId("sighting:")).toBeNull();
     expect(parseEvidenceId(":1")).toBeNull();
     expect(parseEvidenceId("sighting")).toBeNull();
+  });
+});
+
+describe("canonicalEvidenceId", () => {
+  test("a carp sighting written as a sighting id is the fish id; real sighting ids are left alone", () => {
+    expect(canonicalEvidenceId("sighting:inat:405306600")).toBe("fish:inat:405306600");
+    expect(canonicalEvidenceId("fish:inat:405306600")).toBe("fish:inat:405306600");
+    expect(canonicalEvidenceId("sighting:4039")).toBe("sighting:4039");
+    expect(canonicalEvidenceId("hotspot:lionfish:1:2:3")).toBe("hotspot:lionfish:1:2:3");
   });
 });
