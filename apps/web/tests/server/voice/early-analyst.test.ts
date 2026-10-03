@@ -71,6 +71,17 @@ describe("early analyst", () => {
     expect(asked[0]!.app).toBe("lionfish");
   });
 
+  test("Fastino's decision reaches the voice model as one router hint, saying the analyst already started", async () => {
+    const { mock, asked } = await startSession();
+    mock.send({ type: "input_audio_buffer.speech_started" });
+    delta(mock, "Where were lionfish reported this week?");
+    await until(() => asked.length === 1);
+    await until(() => mock.received.some((e) => e.type === "conversation.item.create" && JSON.stringify(e).includes("<router_hint>")));
+    const hints = mock.received.filter((e) => e.type === "conversation.item.create" && JSON.stringify(e).includes("<router_hint>"));
+    expect(hints).toHaveLength(1);
+    expect(JSON.stringify(hints[0])).toContain("analyst is already working");
+  });
+
   test("the final transcript of the same sentence does not ask again", async () => {
     const { mock, asked } = await startSession();
     mock.send({ type: "input_audio_buffer.speech_started" });

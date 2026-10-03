@@ -23,7 +23,7 @@ import {
   type RealtimeEvent,
   type RealtimeTarget,
 } from "./grok-realtime";
-import { routeMessage, type Route, type RouteInput } from "@/server/agent/decisions";
+import { hintFor, routeMessage, type Route, type RouteInput } from "@/server/agent/decisions";
 import { claimTurn, decidesStop, looksLikeHangUp, looksLikeStop } from "./stop-intent";
 import { isUiToolName, validateUiToolCall } from "./ui-command";
 import {
@@ -210,6 +210,8 @@ export class VoiceSession {
   private closed = false;
   private greeted = false;
   /** The user's words so far this turn, from the streaming transcript, and the sentence the analyst was started on early. */
+  /** The turn whose router hint the voice model already got. */
+  private hintedTurn = "";
   /** After a stop, replies the provider starts on its own are cancelled until this time. */
   private mutedUntil = 0;
   private partialText = "";
@@ -723,11 +725,36 @@ export class VoiceSession {
       this.stopEverything();
       return;
     }
-    if (!route || turnId !== this.window.currentTurnId() || LEANS_ON_BEFORE.test(text)) return;
-    if (EAGER_INTENTS.has(route.intent) && route.intentConfidence >= 0.9 && route.onTopic >= 0.8) {
+    if (!route || turnId !== this.window.currentTurnId()) return;
+    const leans = LEANS_ON_BEFORE.test(text);
+    let started = false;
+    if (!leans && EAGER_INTENTS.has(route.intent) && route.intentConfidence >= 0.9 && route.onTopic >= 0.8) {
       const receipt = this.spawnThinking(text);
+      started = true;
       if (early && this.early && this.early.turnId === turnId && typeof receipt.task_id === "string") this.early.taskId = receipt.task_id;
     }
+    this.passDecision(route, turnId, started);
+  }
+
+  /**
+   * Fastino's decision goes to the voice model as context before it replies (once per turn): the kind of request, the tools
+   * that usually serve it, and whether the analyst is already working on it. It is a hint, never an order: the voice model
+   * overrules it when the words say otherwise.
+   */
+  private passDecision(route: Route, turnId: string, analystStarted: boolean): void {
+    if (!this.conn || this.hintedTurn === turnId) return;
+    const hint = hintFor(route);
+    if (!hint) return;
+    this.hintedTurn = turnId;
+    const next = analystStarted
+      ? "The analyst is already working on this question: say one short sentence that you are looking into it, and do not call spawn_thinking again."
+      : route.intent === "map_control"
+        ? "This is a map or menu command: do it yourself now with the matching UI tool, with no analyst."
+        : "";
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<router_hint>${[hint, next].filter(Boolean).join(" ")}</router_hint>` }] },
+    });
   }
 
   private async runToolCall(call: {
