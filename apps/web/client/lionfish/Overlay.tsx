@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import { onGlobeReady } from "client/globe/api";
+import { get } from "@calvinjs/active-state";
+
+import { onGlobeReady, type DrapedImage } from "client/globe/api";
+import { VIEW, type ViewState } from "client/state/view";
 import { SELECTION, type SelectionState } from "client/state/selection";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
 import { drawField } from "./draw";
-import { reefImage, reefUrl, type ReefMode } from "./reef";
+import { reefImage, reefUrl, wideTiles, wideUrls, type ReefMode } from "./reef";
 import { componentText, heatAt, isLate, isoDay, type Area, type HeatPixel, type MarinePoint, type PriorityCell, type Report } from "./model";
 
 const Layer = styled.div`
@@ -186,6 +189,21 @@ export type OverlayProps = {
 
 type Placed = { lat: number; lon: number };
 
+const HEAT_ALPHA = 0.35;
+/** The timeline must rest this long before the reef pictures change to its day. */
+const SCRUB_SETTLE_MS = 450;
+/** Each tile is laid a cell (0.05 degrees) wider than its grid box, so neighbours overlap instead of leaving a hairline between them. */
+const SEAM_DEG = 0.05;
+
+/** One entry per wide tile, `west,south,east,north|url`, joined by `;`. */
+function keyOf(areas: readonly Area[], reef: ReefMode, atMs: number): string {
+  const urls = wideUrls(areas, reef, atMs);
+  return wideTiles(areas)
+    .map((t, i) => `${t.west},${t.south},${t.east},${t.north}|${urls[i]}`)
+    .join(";");
+}
+/** From this camera height up, the wide tiles (draped on the globe) show the reef heat; below it the finer area pictures do. */
+const WIDE_MIN_ALTITUDE_M = 1_500_000;
 /**
  * The lionfish layers over the globe: a canvas for CRW heat pixels and field-window glyphs (redrawn after every
  * globe frame), and buttons for reports and ranked cells (keyboard and screen readers reach them), positioned
@@ -193,6 +211,9 @@ type Placed = { lat: number; lon: number };
  */
 export default function Overlay(p: OverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /** The wide reef pictures draped on the globe, and whether they are showing (camera high enough). */
+  const wideLayers = useRef<DrapedImage[]>([]);
+  const wideOn = useRef(false);
   const selectedEvidence = useActiveState<SelectionState, string | null>(SELECTION, (s) => s.evidenceId)[0] ?? null;
   const refs = useRef(new Map<string, { el: HTMLButtonElement; at: Placed }>());
   const props = useRef(p);
@@ -201,6 +222,60 @@ export default function Overlay(p: OverlayProps) {
     props.current = p;
     redraw.current();
   });
+
+  // The wide reef heat: the pictures are imagery on the globe (they follow its curve and meet without seams), one per tile
+  // of the global grid. They change with the map and the product day, so their URLs are the key.
+  const liveKey = p.show.heat ? keyOf(p.areas, p.reef, p.atMs) : "";
+  // Scrubbing the timeline changes the product day many times a second: the pictures follow once it settles.
+  const [wideKey, setWideKey] = useState(liveKey);
+  useEffect(() => {
+    const t = setTimeout(() => setWideKey(liveKey), liveKey === "" ? 0 : SCRUB_SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [liveKey]);
+  const shown = useRef<DrapedImage[]>([]);
+  useEffect(() => {
+    if (!wideKey) {
+      for (const l of shown.current) l.remove();
+      shown.current = [];
+      wideLayers.current = [];
+      redraw.current();
+      return;
+    }
+    let cancelled = false;
+    let fresh: DrapedImage[] = [];
+    const stop = onGlobeReady((api) => {
+      if (!api.drape) return;
+      // The new day's pictures load beside the old ones; the old ones go when the new are on the globe, so the heat never blinks out.
+      fresh = wideKey.split(";").flatMap((entry) => {
+        const [box, url] = entry.split("|") as [string, string];
+        const [west, south, east, north] = box.split(",").map(Number) as [number, number, number, number];
+        const layer = api.drape!({ url, west: west - SEAM_DEG, south: south - SEAM_DEG, east: east + SEAM_DEG, north: north + SEAM_DEG, alpha: 0 });
+        return layer ? [layer] : [];
+      });
+      void Promise.all(fresh.map((l) => l.ready)).then(() => {
+        if (cancelled) return;
+        for (const l of shown.current) l.remove();
+        shown.current = fresh;
+        wideLayers.current = fresh;
+        for (const l of fresh) l.setAlpha(wideOn.current ? HEAT_ALPHA : 0);
+        redraw.current();
+      });
+    });
+    return () => {
+      cancelled = true;
+      stop();
+      // Not on the globe yet (or superseded): stop loading them. The ones already showing stay until a newer set replaces them.
+      if (shown.current !== fresh) for (const l of fresh) l.remove();
+    };
+  }, [wideKey]);
+  useEffect(
+    () => () => {
+      for (const l of shown.current) l.remove();
+      shown.current = [];
+      wideLayers.current = [];
+    },
+    [],
+  );
 
   useEffect(() => {
     let off = () => {};
@@ -230,9 +305,15 @@ export default function Overlay(p: OverlayProps) {
         ctx.clearRect(0, 0, w, h);
         const cur = props.current;
         const project = (lon: number, lat: number) => api.project(lon, lat);
-        // Reef heat: one NOAA picture per area, the chosen map for the product day at the cursor, pinned by its corners.
-        let maps = 0;
-        if (cur.show.heat) {
+        // Reef heat. From high up the wide tiles are draped on the globe as imagery (see the effect above); closer in, one
+        // finer NOAA picture per area, the chosen map for the product day at the cursor, pinned by its corners.
+        const wide = (get<ViewState>(VIEW)?.altitudeM ?? 0) >= WIDE_MIN_ALTITUDE_M;
+        if (wide !== wideOn.current) {
+          wideOn.current = wide;
+          for (const l of wideLayers.current) l.setAlpha(wide ? HEAT_ALPHA : 0);
+        }
+        let maps = cur.show.heat && wide ? wideLayers.current.length : 0;
+        if (cur.show.heat && !wide) {
           for (const a of cur.areas) {
             const img = reefImage(reefUrl(a, cur.reef, cur.atMs), () => redraw.current());
             const nw = project(a.bbox.west, a.bbox.north);
@@ -240,7 +321,7 @@ export default function Overlay(p: OverlayProps) {
             if (!img || !nw || !se) continue;
             ctx.save();
             ctx.imageSmoothingEnabled = false;
-            ctx.globalAlpha = 0.35;
+            ctx.globalAlpha = HEAT_ALPHA;
             ctx.drawImage(img, Math.min(nw.x, se.x), Math.min(nw.y, se.y), Math.abs(se.x - nw.x), Math.abs(se.y - nw.y));
             ctx.restore();
             maps += 1;

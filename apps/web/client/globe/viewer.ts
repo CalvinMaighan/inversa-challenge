@@ -40,6 +40,31 @@ import { registerZoom } from "./zoom/api";
 import { installZoom, type ZoomDiagnostics } from "./zoom/controller";
 
 const VIEW_WRITE_DEBOUNCE_MS = 250;
+/** Draped pictures (the reef heat tiles) are fetched this many at a time, and a failed one is asked for again. */
+const DRAPE_CONCURRENCY = 3;
+const DRAPE_ATTEMPTS = 5;
+let drapeActive = 0;
+const drapeWaiting: (() => void)[] = [];
+
+async function fetchPicture(url: string, signal: AbortSignal): Promise<Blob | null> {
+  if (drapeActive >= DRAPE_CONCURRENCY) await new Promise<void>((resolve) => drapeWaiting.push(resolve));
+  drapeActive += 1;
+  try {
+    for (let attempt = 0; attempt < DRAPE_ATTEMPTS && !signal.aborted; attempt += 1) {
+      try {
+        const res = await fetch(url, { signal });
+        if (res.ok) return await res.blob();
+      } catch {
+        if (signal.aborted) return null;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+    return null;
+  } finally {
+    drapeActive -= 1;
+    drapeWaiting.shift()?.();
+  }
+}
 const DEFAULT_FLIGHT_S = 1.6;
 /** After a marker click: time for the sighting card to mount and slide in before the visible rect is measured. */
 const CARD_SETTLE_MS = 350;
@@ -80,6 +105,9 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement, lightbo
     CesiumWidget,
     Color,
     EllipsoidTerrainProvider,
+    ImageryLayer,
+    Rectangle,
+    SingleTileImageryProvider,
     JulianDate,
     Math: CesiumMath,
     Occluder,
@@ -450,6 +478,42 @@ export function mountGlobe(container: HTMLElement, credits: HTMLElement, lightbo
       return () => cursorListeners.delete(cb);
     },
     stats: () => layers.map((l) => l.stats()),
+    drape({ url, west, south, east, north, alpha }) {
+      let removed = false;
+      let layer: InstanceType<typeof ImageryLayer> | null = null;
+      let blobUrl: string | null = null;
+      let currentAlpha = alpha;
+      const abort = new AbortController();
+      // The picture is fetched here (a few at a time, asked again when the service is slow) and handed to Cesium as a
+      // blob, so a busy public service shows up as a short wait, not as a flood of failed tile errors.
+      const ready = fetchPicture(url, abort.signal).then(async (blob) => {
+        if (!blob || removed || destroyed) return;
+        blobUrl = URL.createObjectURL(blob);
+        const provider = SingleTileImageryProvider.fromUrl(blobUrl, { rectangle: Rectangle.fromDegrees(west, south, east, north) });
+        layer = ImageryLayer.fromProviderAsync(provider, { alpha: currentAlpha });
+        scene.imageryLayers.add(layer);
+        governor.request();
+        await provider.then(() => undefined, () => undefined);
+        governor.request();
+      });
+      return {
+        ready,
+        setAlpha(a) {
+          currentAlpha = a;
+          if (removed || !layer) return;
+          layer.alpha = a;
+          governor.request();
+        },
+        remove() {
+          if (removed) return;
+          removed = true;
+          abort.abort();
+          if (layer && !destroyed) scene.imageryLayers.remove(layer, true);
+          if (blobUrl) URL.revokeObjectURL(blobUrl);
+          governor.request();
+        },
+      };
+    },
     describe(id) {
       if (destroyed) return null;
       for (const layer of layers) {

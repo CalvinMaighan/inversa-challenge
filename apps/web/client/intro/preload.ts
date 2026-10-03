@@ -9,6 +9,8 @@
  * Chunks go newest first, a few at a time, at low priority, so the active app's own loading wins every contest.
  */
 import { loadFish } from "client/carp/fish";
+import { areasOf } from "client/lionfish/model";
+import { DEFAULT_REEF_MODE, reefUrl, wideUrls } from "client/lionfish/reef";
 import { DEFAULT_RANGE_DAYS } from "client/state/range";
 import { timeWindow } from "client/state/time";
 import { allChunks, chunkUrl, frameAxis } from "client/threads/db/frames";
@@ -25,6 +27,15 @@ export function warmUrls(app: AppId, nowMs: number, days: number = DEFAULT_RANGE
   return allChunks(frameAxis(from, to))
     .reverse()
     .map((c) => chunkUrl(framesPath(app), c));
+}
+
+/**
+ * The reef heat pictures of the newest product day (default map): the wide backdrop tiles and one picture per area, the
+ * ones the lionfish map asks for when the layer is switched on, so the server holds them and the browser has them.
+ */
+export function heatWarmUrls(nowMs: number): string[] {
+  const areas = areasOf(getApp(APP_IDS[1]));
+  return [...wideUrls(areas, DEFAULT_REEF_MODE, nowMs, nowMs), ...areas.map((a) => reefUrl(a, DEFAULT_REEF_MODE, nowMs, nowMs))];
 }
 
 /** The apps' URLs interleaved (one of each in turn), so a slow app does not starve the next one. */
@@ -46,14 +57,16 @@ let running: Preload | null = null;
 export function startPreload(active: AppId, onProgress: (done: number, total: number) => void = () => {}, nowMs = Date.now()): Preload {
   if (running) return running;
   const queue = interleave(APP_IDS.filter((id) => id !== active).map((id) => warmUrls(id, nowMs)));
+  // The reef pictures come from a slow public service: they warm after the chunks and never hold the gate's progress.
+  const heat = heatWarmUrls(nowMs);
   const total = queue.length + 1;
   let done = 0;
   const tick = () => {
     done += 1;
     onProgress(done, total);
   };
-  const lane = async () => {
-    for (let url = queue.shift(); url !== undefined; url = queue.shift()) {
+  const lane = (urls: string[], counted: boolean) => async () => {
+    for (let url = urls.shift(); url !== undefined; url = urls.shift()) {
       try {
         const res = await fetch(url, { priority: "low" } as RequestInit);
         // The body has to be read to the end for the browser to keep it.
@@ -61,10 +74,11 @@ export function startPreload(active: AppId, onProgress: (done: number, total: nu
       } catch {
         // A failed warm only means the worker fetches that chunk itself later.
       }
-      tick();
+      if (counted) tick();
     }
   };
-  const finished = Promise.all([loadFish().finally(tick),...Array.from({ length: Math.min(LANES, queue.length) }, lane)]).then(() => undefined);
+  const finished = Promise.all([loadFish().finally(tick), ...Array.from({ length: Math.min(LANES, queue.length) }, lane(queue, true))]).then(() => undefined);
+  void finished.then(() => Promise.all(Array.from({ length: 2 }, lane(heat, false))));
   onProgress(0, total);
   running = { total, done: () => done, finished };
   return running;

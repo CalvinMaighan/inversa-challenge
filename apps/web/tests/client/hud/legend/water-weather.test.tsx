@@ -53,7 +53,7 @@ describe("water and weather", () => {
     expect(text).toContain("32 °C / 90 °F");
     expect(text).toContain("dBZ");
     expect(group).toMatch(/<input[^>]*type="range"[^>]*data-testid="overlay-opacity"/);
-    expect(text).toContain("75%");
+    expect(text).toContain("40%");
     // Nothing on: no attribution yet, and no "Showing" line.
     expect(group).not.toContain('data-testid="overlay-attribution"');
     expect(text).not.toContain("Showing");

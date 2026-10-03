@@ -31,7 +31,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 /** Opacity of a freshly enabled overlay; the slider in the Layers popover changes it for all of them. */
-export const DEFAULT_OVERLAY_OPACITY = 0.75;
+export const DEFAULT_OVERLAY_OPACITY = 0.4;
 
 export type OverlayLegend =
   | { kind: "ramp"; /** CSS colour stops, low to high, as the source draws them. */ stops: readonly string[]; min: string; max: string; unit: string }

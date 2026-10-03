@@ -16,6 +16,8 @@ import { overlayOpacity, subscribeOverlayOpacity } from "./opacity";
 
 /** The outgoing layer stays this long under the incoming one (tiles usually land within it). */
 const RETIRE_MS = 700;
+/** A failed tile is asked for again this many times before it counts as an error. */
+const TILE_RETRIES = 3;
 
 export type RasterOverlayId = Exclude<OverlayId, typeof CYCLONES>;
 
@@ -29,6 +31,9 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
   const retiring = new Set<ImageryLayer>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let offOpacity: (() => void) | null = null;
+  let offProgress: (() => void) | null = null;
+  /** A tile failed for good since the last time nothing was loading. */
+  let burstFailed = false;
   const stats: LayerStats = { id, enabled: false, count: 0, frame: -1, updatedAt: null, error: null };
 
   const removeLayer = (layer: ImageryLayer | null) => {
@@ -76,7 +81,14 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
       hasAlphaChannel: true,
       enablePickFeatures: false,
     });
-    provider.errorEvent.addEventListener((e: { message?: string }) => {
+    // One tile that fails once (the upstream is slow now and then) is asked for again, and only a tile that keeps
+    // failing shows as an error; the error clears when a later load finishes without one.
+    provider.errorEvent.addEventListener((e: { message?: string; timesRetried?: number; retry?: boolean }) => {
+      if ((e?.timesRetried ?? 0) < TILE_RETRIES) {
+        e.retry = true;
+        return;
+      }
+      burstFailed = true;
       stats.error = e?.message ? `tiles: ${e.message}` : "tiles failed";
     });
     const layer = new Layer(provider, { alpha: overlayOpacity() });
@@ -105,6 +117,15 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
     id,
     init(v) {
       viewer = v;
+      // When every tile has landed: a clean burst clears an old error (zooming in loads other tiles that arrive fine).
+      offProgress = v.scene.globe?.tileLoadProgressEvent?.addEventListener((pending: number) => {
+        if (pending !== 0) return;
+        if (!burstFailed && stats.error) {
+          stats.error = null;
+          ctx.requestRender();
+        }
+        burstFailed = false;
+      }) ?? null;
       offOpacity = subscribeOverlayOpacity(() => {
         const alpha = overlayOpacity();
         if (current) current.alpha = alpha;
@@ -131,6 +152,8 @@ export function createOverlayRasterLayer(id: RasterOverlayId, ctx: LayerContext)
     destroy() {
       offOpacity?.();
       offOpacity = null;
+      offProgress?.();
+      offProgress = null;
       setCredit(false);
       clear();
       viewer = null;

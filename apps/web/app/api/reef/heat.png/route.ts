@@ -11,7 +11,7 @@ const ERDDAP_PNG = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.t
 const VARIABLES = new Set(["CRW_DHW", "CRW_BAA_7D_MAX", "CRW_HOTSPOT", "CRW_SST"]);
 const LAST_TTL_MS = 3 * 3_600_000;
 const DAY_TTL_MS = 7 * 86_400_000;
-const MAX_ENTRIES = 200;
+const MAX_ENTRIES = 1000;
 
 type Entry = { at: number; ttl: number; bytes: ArrayBuffer };
 const cache = new Map<string, Entry>();
@@ -43,12 +43,28 @@ function upstream(p: URLSearchParams): { url: string; ttl: number } | null {
   return { url: `${ERDDAP_PNG}?${variable}${box}&.draw=surface&.colorBar=${bar}&.land=off&.size=${cols}%7C${rows}`, ttl: time === "last" ? LAST_TTL_MS : DAY_TTL_MS };
 }
 
+/** The public service is asked for at most this many pictures at once; the rest wait their turn. */
+const UPSTREAM_AT_ONCE = 3;
+let upstreamActive = 0;
+const upstreamWaiting: (() => void)[] = [];
+
 /** ERDDAP is slow and sometimes answers 5xx once: one more try before giving up. */
 async function fetchPicture(url: string): Promise<ArrayBuffer> {
+  if (upstreamActive >= UPSTREAM_AT_ONCE) await new Promise<void>((resolve) => upstreamWaiting.push(resolve));
+  upstreamActive += 1;
+  try {
+    return await fetchPictureNow(url);
+  } finally {
+    upstreamActive -= 1;
+    upstreamWaiting.shift()?.();
+  }
+}
+
+async function fetchPictureNow(url: string): Promise<ArrayBuffer> {
   let last: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(25_000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(45_000) });
       if (res.ok) return await res.arrayBuffer();
       last = new Error(`ERDDAP HTTP ${res.status}`);
     } catch (err) {

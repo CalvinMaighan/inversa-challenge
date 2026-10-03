@@ -17,6 +17,15 @@ export type CameraTarget = {
 
 export type ScreenPoint = { x: number; y: number };
 
+/** A picture laid over the globe by `GlobeApi.drape`. */
+export type DrapedImage = {
+  setAlpha(alpha: number): void;
+  /** Stops loading it if it has not arrived, and takes it off the globe. */
+  remove(): void;
+  /** Settles when the picture is on the globe or could not be loaded (never rejects). */
+  ready: Promise<void>;
+};
+
 export type GeoPoint = { lon: number; lat: number };
 
 export type GlobeApi = {
@@ -38,6 +47,11 @@ export type GlobeApi = {
    * Optional for stand-in globes; the Cesium globe implements it.
    */
   stats?(): LayerStats[];
+  /**
+   * Lay one picture over the globe as imagery, pinned to a lon/lat rectangle (it follows the globe's curve, unlike a
+   * picture drawn on a flat canvas). Optional for stand-in globes; the Cesium globe implements it.
+   */
+  drape?(spec: { url: string; west: number; south: number; east: number; north: number; alpha: number }): DrapedImage;
   /** What an evidence id from `pick` stands for, from what its layer drew (hover tooltips); null if unknown. */
   describe?(id: string): HoverFacts | null;
 };
