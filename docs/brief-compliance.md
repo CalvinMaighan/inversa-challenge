@@ -2,6 +2,8 @@
 
 Every line of Inversa's brief (`docs/TASK_BRIEF.md`), checked for each app (carp, lionfish, python) and for the system as a whole. Re-audited row by row for leaf D1 on 2026-10-01, on branch `leaf/d1` (from `pivot/three-apps` at `18e8f16`).
 
+**Update 2026-10-03:** the site is deployed (row 29). The UI has since been reduced to the map, the agent (text and hands-free voice), the Questions tab and the timeline: the Notes tab, team board and WebRTC panel are no longer shown, so rows that cite them describe code that is still in the repo but not on screen. The client-SQLite cache, SharedArrayBuffer threads and the frame replay (row 28, new technology) are still what the app runs on. Rows 11, 13 and 15 stay PARTIAL: GOES-19 and NWWS-OI need AWS and NOAA accounts, and `/api/health` shows each as disabled with the reason.
+
 Status values:
 
 - **MET**: built, and the gate or evidence file named in the row records it passing. Every MET row cites at least one `gates/*.md` or `docs/evidence/` path; `bun scripts/check-compliance-paths.ts` fails if a cited path does not exist.
@@ -56,7 +58,7 @@ Row 9 has no status of its own; the timeline rows below carry it.
 | # | Brief line | App | Where it is built | Evidence | Status |
 |---|---|---|---|---|---|
 | 28 | At least one meaningful part uses a technology new to the author | system | SharedArrayBuffer worker threads (`packages/active-state/src/threads/`), client SQLite on OPFS plus CRDT (`apps/web/client/threads/db/`, `apps/web/client/threads/crdt/`, `api/src/crdt.rs`), WebRTC data channels with a signal Worker on R2 (`apps/web/client/threads/rtc/`, `apps/signal-worker/`); `docs/new-technology.md` | `gates/leaf-T16.md` (10k messages over a real SAB ring), `gates/leaf-T19.md` G2 (`DBWORKER cached=0.4 opfs=1 proxy=1`), `gates/leaf-M1.md` G3 (`CRDT vectors passed: 19/19` both languages), G4 (`DM chars_streamed=40/40 p50_ms=26`), `gates/leaf-T21.md` | MET (the author confirms the "new to me" claim, rubric item `new-technology/claim-true`) |
-| 29 | The finished demo must be deployed online and accessible through a shared URL | system | `deploy/` (Caddyfile, systemd units, Litestream, bootstrap, restore), `.github/workflows/` | `gates/leaf-H1.md` G2 (`e2e:prod`: `PROD app=<id> health=ok ratelimit=ok costcap=ok errors=ok` per app), G4 (`RESTORE-OK apps=3`); `gates/leaf-T6.md` G7 ABANDON | PARTIAL: production-ready, not deployed. https://inversa.bigvalue.lol is the target; the deploy waits on the human steps in `docs/HUMAN_STEPS.md` (push, VM, DNS, R2, Doppler `prd`) |
+| 29 | The finished demo must be deployed online and accessible through a shared URL | system | `deploy/` (Caddyfile, systemd units, Litestream, bootstrap, restore), `.github/workflows/` | `gates/leaf-H1.md` G2 (`e2e:prod`: `PROD app=<id> health=ok ratelimit=ok costcap=ok errors=ok` per app), G4 (`RESTORE-OK apps=3`); `gates/leaf-T6.md` G7 ABANDON | MET: live at https://inversa.bigvalue.lol (Hetzner, Caddy TLS, Cloudflare DNS). `GET /api/health` answers 200 for all three apps (`degraded` only names the optional feeds that need NOAA or AWS accounts). Deployed by `release.yml` on merge to main, then `deploy.yml` |
 
 ## What they are looking for
 
