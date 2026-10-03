@@ -18,7 +18,7 @@ import { VIEW, type ViewState } from "client/state/view";
 import styled from "client/styled";
 import { copyText, type AppConfig } from "shared/apps";
 
-import { areaCells, areasOf, frameAreas, cellEvidenceId, countReports, parseCellEvidenceId, snapshotAt, utcText, windowReports, type PriorityCell, } from "./model";
+import { areaCells, areasOf, frameAreas, cellEvidenceId, countReports, parseCellEvidenceId, snapshotAt, windowReports, type PriorityCell, } from "./model";
 import OceanHelp from "./OceanHelp";
 import Overlay from "./Overlay";
 import PriorityCard from "./PriorityCard";
@@ -82,32 +82,6 @@ const OneLine = styled.button`
 const Turn = styled.span<{ $up: boolean }>`
   display: inline-flex;
   transform: rotate(${(p) => (p.$up ? -90 : 90)}deg);
-`;
-
-const AsOf = styled(Surface)`
-  position: absolute;
-  z-index: 4;
-  left: calc(50% + (var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)) / 2);
-  /* One gutter above the bottom bar (search, Layers: 32 px pills), itself a gutter above the timeline. */
-  bottom: calc(var(--hud-bottom) + 32px + var(--gap-m));
-  transform: translateX(-50%);
-  width: max-content;
-  max-width: min(600px, calc(100cqw - 2 * var(--gap-m) - var(--lf-panel-l, 0px) - var(--lf-panel-r, 0px)));
-  ${MOBILE} {
-    left: 50%;
-    max-width: calc(100cqw - 2 * var(--gap-m));
-  }
-  padding: 6px 12px;
-  border: 1px solid color-mix(in oklch, var(--warn) 60%, transparent);
-  border-radius: var(--radius-m);
-  font: 400 12px / 1.45 var(--font-ui);
-  b {
-    font-weight: 600;
-  }
-  small {
-    display: block;
-    color: var(--muted);
-  }
 `;
 
 /** Room inside the free rect for a report dot or a ranked square at an area's edge. */
@@ -272,16 +246,6 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
         onClose={clearSelection}
         onHelp={onHelp}
       />
-      {!live ? (
-        <AsOf role="status" data-testid="lionfish-asof" data-asof={atMs}>
-          <b>Known at {utcText(atMs)}</b>
-          <small>{copyText(app, "replayNote", "Reports submitted by then; priority from what was submitted by then.")}</small>
-          <small>
-            Priority snapshot {snapshot ? utcText(snapshot.atMs) : "not loaded for this time"}
-            {view.field ? " · field window is a forecast from now and is not replayed" : ""}
-          </small>
-        </AsOf>
-      ) : null}
       {view.help ? <OceanHelp topic={view.help} onClose={() => setView({ help: null })} /> : null}
     </div>
   );

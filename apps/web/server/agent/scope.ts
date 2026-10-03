@@ -1,7 +1,9 @@
 /**
- * Deterministic scope guard (P4, C-A5): a question that names another app's focus species is refused with
- * this app's refusal text before any model call. Built from the configs: the other apps' taxa names, aliases
- * and ids, minus anything this app itself covers. Everything subtler (abundance, catch, access, safety,
+ * Deterministic scope guidance (P4, C-A5): a question that names another app's focus species, or asks for what no
+ * feed can give (a risk percent, a causal claim, a population count, a place outside the regions), is recognised from
+ * the configs and given to the model as guidance (`scopeGuidance`); the model still answers, in its own words, with
+ * its tools. The patterns are built from the configs: the other apps' taxa names, aliases and ids, minus anything this
+ * app itself covers. Everything subtler (abundance, catch, access, safety,
  * places outside the region) is the model's job under the prompt's boundary rules and the tools' region checks.
  */
 
@@ -32,7 +34,21 @@ export function foreignSpeciesPattern(app: AppConfig): RegExp | null {
   return pattern;
 }
 
-/** The refusal to answer with, or null when the question passes the guard. */
+/**
+ * What the model is told about a question the guard recognised, or null when it passes. It steers, it does not answer:
+ * the model says plainly what the data cannot show, and then gives the most useful thing it can, cited from its tools.
+ */
+export function scopeGuidance(app: AppConfig, question: string): string | null {
+  const guard = scopeGuard(app, question);
+  if (!guard) return null;
+  return [
+    "Scope guidance for this question, from this app's own rules:",
+    guard,
+    "Answer the user yourself, in your own words; do not paste the guidance. Say plainly what this app and its data cannot tell, then give the most useful thing they can: call your tools for the part that is in scope (reports in a window, counts of reports, the survey priority and its separate components, conditions at a configured place) and cite it. If nothing in the question is in scope, say so in a sentence and offer what this app does answer. Never invent numbers or sources.",
+  ].join("\n");
+}
+
+/** The guard's wording for a question, or null when the question passes the guard. */
 export function scopeGuard(app: AppConfig, question: string): string | null {
   const pattern = foreignSpeciesPattern(app);
   const hit = pattern?.exec(question);

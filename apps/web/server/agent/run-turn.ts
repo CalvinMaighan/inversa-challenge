@@ -14,7 +14,7 @@ import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/serve
 import { greetingReply, hintFor, offTopicReply, routeMessage, shortcutFor, type Route, type RouteInput } from "@/server/agent/decisions";
 import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
-import { scopeGuard } from "@/server/agent/scope";
+import { scopeGuidance } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
@@ -128,14 +128,10 @@ async function runTurnUnguarded(
   if (overSpend) return refuse(overSpend.message);
   if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
 
-  // P4: another app's species is refused from the config, without a model call.
-  const refusal = scopeGuard(app, question);
-  if (refusal) {
-    onEvent({ type: "status", state: "generating" });
-    onEvent({ type: "content_delta", text: refusal });
-    appendSessionTurn(sessionId, question, refusal);
-    return finish({ content: refusal, citations: [], toolCalls: [], usage: empty, model: "scope-guard", cached: false });
-  }
+  // P4: a question the config rules recognise as out of scope (another app's species, a risk percent, a population count)
+  // is not refused here: the model gets the app's own wording as guidance and answers with its tools.
+  const guidance = scopeGuidance(app, question);
+  if (guidance) onEvent({ type: "debug", text: "scope guidance given to the model" });
 
   const history = sessionHistory(sessionId);
   // GLiDE decides what the message is while the feeds are checked for the cache: null (no key, slow, down) changes nothing.
@@ -264,6 +260,14 @@ async function runTurnUnguarded(
         createUserMessage({
           content: [{ type: "text", text: hint }],
           source: { kind: "plugin", plugin: "inversa-router", form: "recall" },
+        }),
+      );
+    }
+    if (guidance) {
+      agent.inject(
+        createUserMessage({
+          content: [{ type: "text", text: guidance }],
+          source: { kind: "plugin", plugin: "inversa-scope", form: "recall" },
         }),
       );
     }

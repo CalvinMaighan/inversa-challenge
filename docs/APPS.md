@@ -57,7 +57,7 @@ With Inversa's own data: operating locations and access constraints, crew and eq
 - App config selects feeds, areas, score, persona, eval and copy; the UI shell, agent runtime, timeline, evidence drawer, team features (WebRTC, WebSockets, GraphQL, active-state, workers, SQLite) are shared.
 - One deployment at `inversa.bigvalue.lol` serves all three apps. Data is partitioned by app id (separate SQLite file per app under `INVERSA_DATA_DIR/<app>`), same schema, so apps cannot leak into each other. Pollers, frames and the agent are keyed by app id.
 - **App selector:** a species icon button in the HUD opens a popover listing the apps (carp, lionfish, python) with icon, name, one-line question, feed-health dot. Selecting one swaps config, map preset, layers, helper questions, agent persona and timeline. Selection lives in the URL (`?app=carp`), so share links, replays and agent view-state carry it; default is carp; remembered per viewer in localStorage. Keyboard accessible, Escape returns focus, links in new tab like the rest of the chrome. Team (WebRTC) rooms are per app.
-- Scope guard (P4) applies per app: out-of-scope species, areas or locations get a refusal naming what the app covers.
+- Scope guard (P4) applies per app: a question about out-of-scope species, areas or locations is recognised from the configs and given to the model as guidance (the app's own refusal wording plus what to offer instead); the model still answers, with its tools.
 - PostGIS from the suggestion is still not adopted (SQLite stays). The "new technology" claim stays as already documented.
 
 ## C1 results (2026-10-01, verified: `gate-check --status gates/leaf-C1.md` 7 met; evidence `docs/evidence/carp-data-proof.md`)
