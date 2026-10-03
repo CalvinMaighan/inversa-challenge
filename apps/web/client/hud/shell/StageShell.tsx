@@ -139,8 +139,8 @@ const EdgeBlur = styled.div`
     inset: 0;
     z-index: 1;
     pointer-events: none;
-    -webkit-backdrop-filter: blur(var(--scope-blur, 14px));
-    backdrop-filter: blur(var(--scope-blur, 14px));
+    -webkit-backdrop-filter: blur(var(--scope-blur, 6px));
+    backdrop-filter: blur(var(--scope-blur, 6px));
     mask-image: var(--scope-blur-mask, ${SCOPE_BLUR_MASK_CSS});
     mask-repeat: no-repeat;
     mask-position: 0 0;

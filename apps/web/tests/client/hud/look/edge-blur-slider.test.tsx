@@ -21,7 +21,7 @@ describe("edge blur control", () => {
   });
 
   test("blurOf keeps a whole number 0..40 and falls back to the default", () => {
-    expect(DEFAULT_SCOPE_BLUR).toBe(14);
+    expect(DEFAULT_SCOPE_BLUR).toBe(6);
     expect(blurOf(20)).toBe(20);
     expect(blurOf("8")).toBe(8);
     expect(blurOf(99)).toBe(MAX_SCOPE_BLUR);
