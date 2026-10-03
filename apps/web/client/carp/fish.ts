@@ -127,6 +127,19 @@ export function setFishSpeed(speed: Speed): void {
   set({ speed });
 }
 
+/** The cursor at the start of the timeline, not playing (the first-run gate parks it there). */
+export function parkFishAtStart(): void {
+  stopPlay();
+  set({ playing: false, atMs: state.startMs, shown: upTo(state.windowed, state.startMs) });
+}
+
+/** Press play at `speed` from the start (the first-run gate does this on entry); a no-op when already playing. */
+export function startFishPlay(speed: Speed): void {
+  if (state.playing) return;
+  setFishSpeed(speed);
+  toggleFishPlay();
+}
+
 let timer: ReturnType<typeof setInterval> | null = null;
 function stopPlay() {
   if (timer) clearInterval(timer);

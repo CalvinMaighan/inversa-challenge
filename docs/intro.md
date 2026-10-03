@@ -5,8 +5,8 @@ Every page load opens behind a blurred full-screen gate (`apps/web/client/intro`
 ## Steps
 
 1. **Load.** A head script marks `<html data-intro>` before first paint, so the stylesheet hides the chat card and the HUD from the first frame (`[data-slot="hud"]`, `[data-slot="side"]`). The gate itself is server-rendered. The globe parks high (16,000 km) over the Americas. React removes unknown attributes from `<html>` while hydrating, so the head script also sets `window.__inversaIntro`, and the gate puts the attribute back in its first layout effect, before any paint.
-2. **Pick.** Three cards (icon, name, area, one line, what the app offers). The click calls `switchApp`, so that species' workers and layers start at once; the camera stays high.
-3. **Enter.** One button asks for the microphone through `startVoice({ welcome: true })`. The session opens with `?welcome=1`, so the relay's first spoken line is "Welcome to the Inversa Experience ... how can I help ... click any dot". Granted: the gate blurs out over 1.1 s, the chrome fades in, the globe flies to the app's area at 5,000 km (`entryView`). Refused: the gate stays, says why and offers "Continue without voice".
+2. **Pick.** Three cards (icon, name, area, one line, what the app offers). The click calls `switchApp`, so that species' workers and layers start at once. The camera stays fully zoomed out whichever species is chosen (the switch's own fly is overridden in the same tick), and both timelines (TIME for lionfish and python, the carp cursor) sit idle at their first day.
+3. **Enter.** One button asks for the microphone through `startVoice({ welcome: true })`. The session opens with `?welcome=1`, so the relay's first spoken line is "Welcome to the Inversa Experience ... how can I help ... click any dot". Granted: the gate blurs out over 1.1 s, the chrome fades in, the globe flies to the app's area at 5,000 km (`entryView`), and the play button is pressed for the user at 8× from the start of the timeline, so the data streams in as it replays. Refused: the gate stays, says why and offers "Continue without voice".
 
 ## Preload
 

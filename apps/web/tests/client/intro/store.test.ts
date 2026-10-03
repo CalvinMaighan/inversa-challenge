@@ -5,6 +5,7 @@ import { choose, enter, introInit, introState, resetIntro } from "client/intro/s
 import { ENTRY_ALTITUDE_M } from "client/intro/model";
 import { state } from "client/state";
 import { APP, type AppState } from "client/state/app";
+import { TIME, type TimeState } from "client/state/time";
 import { VIEW, type ViewState } from "client/state/view";
 import { APP_IDS, getApp } from "shared/apps";
 
@@ -43,6 +44,25 @@ describe("first-run gate steps", () => {
     const view = get<ViewState>(VIEW)!;
     expect(view.altitudeM).toBe(ENTRY_ALTITUDE_M);
     expect(view.seq).toBe(before + 1);
+  });
+
+  test("the gate keeps the whole globe in view and the timeline idle at its first day, whichever species is chosen", () => {
+    for (const id of [LIONFISH_ID, CARP_ID, LIONFISH_ID]) {
+      choose(id);
+      const view = get<ViewState>(VIEW)!;
+      expect(view.altitudeM).toBeGreaterThanOrEqual(10_000_000);
+      const time = get<TimeState>(TIME)!;
+      expect(time.at).toBe(time.from);
+      expect(time.playing).toBe(false);
+    }
+  });
+
+  test("entering presses play at 8x from the start of the timeline", async () => {
+    choose(LIONFISH_ID);
+    await enter(false);
+    const time = get<TimeState>(TIME)!;
+    expect(time).toMatchObject({ playing: true, speed: 8 });
+    expect(time.at).toBe(time.from);
   });
 
   test("entering before a species is chosen does nothing", async () => {
