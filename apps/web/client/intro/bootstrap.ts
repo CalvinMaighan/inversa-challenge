@@ -14,7 +14,9 @@ export function introBootstrapScript(): string {
   return `(function(){try{${p}if(p==="0"||(p!=="1"&&navigator.webdriver===true))return}catch(e){}${on}})();`;
 }
 
-/** The chrome (chat card and HUD) is hidden while the gate is up, and fades in when it opens. The globe stays. */
+/** The chrome (chat card and HUD) and the page's embers are hidden while the gate is up (it has its own), and fade in when it opens. The globe stays. */
 export const INTRO_CSS =
   `[data-slot="hud"],[data-slot="side"]{transition:opacity ${LEAVE_MS}ms ease .1s}` +
+  `[data-embers="page"]{transition:opacity ${LEAVE_MS}ms ease .5s}` +
+  `html[${INTRO_ATTR}] [data-embers="page"]{opacity:0;transition:none}` +
   `html[${INTRO_ATTR}] [data-slot="hud"],html[${INTRO_ATTR}] [data-slot="side"]{opacity:0;visibility:hidden;pointer-events:none;transition:none}`;

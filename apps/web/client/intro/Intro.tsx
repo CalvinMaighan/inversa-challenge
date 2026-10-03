@@ -7,6 +7,7 @@ import { appTint } from "client/hud/appselect/model";
 import styled, { keyframes } from "client/styled";
 import { getApp } from "shared/apps";
 
+import Embers from "./Embers";
 import { LEAVE_MS, speciesCards } from "./model";
 import { choose, enter, introInit, useIntro } from "./store";
 
@@ -448,6 +449,7 @@ export default function Intro() {
 
   return (
     <Root data-intro-root="" data-phase={intro.phase} role="dialog" aria-modal="true" aria-label="Welcome to Inversa. Choose a species.">
+      <Embers variant="gate" />
       <Panel>
         <Sigil viewBox="-100 -100 200 200" fill="none" stroke={GOLD} strokeWidth="0.5" aria-hidden="true">
           <circle r="96" />

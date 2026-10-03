@@ -39,13 +39,13 @@ const EMBERS = Array.from({ length: 22 }, (_, i) => ({
 }));
 
 /**
- * The golden embers drifting up the page, on the black behind the globe: the shell draws it under the globe pane, so
- * they show around the map window and, through its soft edge, at its rim. The first-run gate blurs them with the rest
- * of the page; after the gate opens they stay.
+ * The golden embers drifting up. `page`: on the black behind the globe (the shell draws it under the globe pane, so
+ * they show around the map window and at its rim); hidden while the first-run gate is up and faded in when it opens.
+ * `gate`: the gate's own, sharp, above the blur; they leave with it.
  */
-export default function Embers() {
+export default function Embers({ variant = "page" }: { variant?: "page" | "gate" }) {
   return (
-    <Layer aria-hidden="true" data-embers="">
+    <Layer aria-hidden="true" data-embers={variant}>
       {EMBERS.map((e, i) => (
         <i key={i} style={{ left: `${e.left}%`, ["--dx" as string]: `${e.dx}px`, ["--dur" as string]: `${e.dur}s`, ["--delay" as string]: `${e.delay}s` }} />
       ))}
