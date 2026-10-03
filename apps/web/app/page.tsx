@@ -5,6 +5,7 @@ import Globe from "client/globe";
 import { CESIUM_BASE_URL } from "client/globe/cesium";
 import Hud from "client/hud";
 import { AppScope } from "client/hud/appselect/AppBoot";
+import Intro from "client/intro/Intro";
 import StageShell from "client/hud/shell/StageShell";
 
 /**
@@ -18,18 +19,22 @@ export default function Page() {
   // instead of after hydration (docs/perf.md, cold load).
   preloadModule(`${CESIUM_BASE_URL}/index.js`, { as: "script" });
   return (
-    <StageShell
-      side={
-        <AppScope>
-          <AgentColumn />
-        </AppScope>
-      }
-      globe={<Globe />}
-      hud={
-        <AppScope>
-          <Hud />
-        </AppScope>
-      }
-    />
+    <>
+      <StageShell
+        side={
+          <AppScope>
+            <AgentColumn />
+          </AppScope>
+        }
+        globe={<Globe />}
+        hud={
+          <AppScope>
+            <Hud />
+          </AppScope>
+        }
+      />
+      {/* First-run gate: choose a species, then the microphone (docs/intro.md). Hidden by `?intro=0`. */}
+      <Intro />
+    </>
   );
 }

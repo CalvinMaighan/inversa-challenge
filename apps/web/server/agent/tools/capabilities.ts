@@ -59,6 +59,8 @@ import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
 /** Longest window a sightings or readings call may ask for: the 90-day backfill (lionfish replays a quarter). */
 const MAX_LOOKBACK_HOURS = 24 * 90;
+/** A sightings window may reach back as far as the map and timeline do: the two years held in the API's SQLite (fetched in 31-day pages). */
+const MAX_SIGHTING_HOURS = 24 * 731;
 /** Frames cover a 30-day window (PLAN.md C15): an empty recent window widens to it. */
 const WIDEN_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
@@ -68,7 +70,7 @@ const DEFAULT_SIGHTING_HOURS = 24 * 7;
  * Counting by submission date looks this far back for the observations. The API filters by observed time only (31-day
  * pages), so a record observed earlier than this and uploaded recently is beyond what the tool can search; the result says so.
  */
-const SUBMITTED_LOOKBACK_HOURS = MAX_LOOKBACK_HOURS;
+const SUBMITTED_LOOKBACK_HOURS = 24 * 90;
 /**
  * Conditions query this much around the asked-for box. Rows inside the box win; when no station lies inside it
  * ("water levels near Homestead", with the nearest gauge a few km out), the nearby stations answer instead.
@@ -102,8 +104,9 @@ function resolveWindow(
   input: { from?: string; to?: string; hours?: number },
   ctx: CapabilityContext,
   defaultHours: number,
+  maxHours: number = MAX_LOOKBACK_HOURS,
 ): { from: string; to: string } {
-  const window = lookbackWindow(input, ctx.now, defaultHours, MAX_LOOKBACK_HOURS);
+  const window = lookbackWindow(input, ctx.now, defaultHours, maxHours);
   return { from: window.from, to: window.to };
 }
 
@@ -186,7 +189,7 @@ const sightingsInput = z.object({
   quality: z.array(z.enum(QUALITY)).optional().describe("Limit to these quality grades."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
-  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default: the app's window, 7 days for python, 30 days for lionfish)."),
+  hours: z.number().min(1).max(MAX_SIGHTING_HOURS).optional().describe("Lookback from `to` (default: the app's window, 7 days for python, 30 days for lionfish). Up to 17544 (two years, the span of the map)."),
   dateField: z
     .enum(["observed", "submitted"])
     .optional()
@@ -221,7 +224,7 @@ const sightings = {
     }
     const explicit = Boolean(input.from) || Boolean(input.to) || input.hours !== undefined;
     const defaultHours = Math.min(ctx.app.windows?.defaultHours ?? DEFAULT_SIGHTING_HOURS, MAX_LOOKBACK_HOURS);
-    const asked = resolveWindow(input, ctx, defaultHours);
+    const asked = resolveWindow(input, ctx, defaultHours, MAX_SIGHTING_HOURS);
     const bySubmitted = input.dateField === "submitted";
     const knownAt = givenTime(input.knownAt);
     // The same call fetches the whole 30 days before `to`. A "recent" window (none given, or one ending now) that

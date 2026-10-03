@@ -590,7 +590,7 @@ async fn bulk(state: AppState, headers: HeaderMap, Query(q): Query<FramesQuery>)
             entry
         }
     };
-    let cache_control = (header::CACHE_CONTROL, "private, max-age=60");
+    let cache_control = (header::CACHE_CONTROL, "private, max-age=300");
     if headers.get(header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()) == Some(entry.etag.as_str()) {
         return (StatusCode::NOT_MODIFIED, [(header::ETAG, entry.etag.clone())], [cache_control]).into_response();
     }

@@ -27,7 +27,7 @@ function idleRunner(): AgentRunner {
   return { run: () => new Promise(() => undefined) };
 }
 
-async function startSession(runner: AgentRunner = idleRunner(), greet = false): Promise<Harness> {
+async function startSession(runner: AgentRunner = idleRunner(), greet = false, welcome = false): Promise<Harness> {
   const mock = startMockXai();
   const session = new VoiceSession({
     ip: "127.0.0.1",
@@ -37,6 +37,7 @@ async function startSession(runner: AgentRunner = idleRunner(), greet = false): 
     budget: new VoiceBudget({ dataDir: mkdtempSync(path.join(tmpdir(), "voice-relay-")), dailyMinutes: 60 }),
     maxSessionMs: 60_000,
     greet,
+    welcome,
   });
   await session.connect();
   const events: VoiceServerEvent[] = [];
@@ -83,6 +84,16 @@ describe("voice relay against a mocked xAI socket", () => {
     expect(response.instructions).toMatch(/listening/);
     expect(response.instructions).toContain("Burmese python");
     expect(mock.received.filter((e) => e.type === "response.create")).toHaveLength(1);
+  });
+
+  test("a first-run session opens with the spoken welcome to the Inversa Experience", async () => {
+    const { mock } = await startSession(idleRunner(), true, true);
+    const create = await mock.waitFor((e) => e.type === "response.create");
+    const response = create.response as { instructions: string; tool_choice: string };
+    expect(response.tool_choice).toBe("none");
+    expect(response.instructions).toContain("Inversa Experience");
+    expect(response.instructions).toContain("Burmese python");
+    expect(response.instructions).toMatch(/click any dot/);
   });
 
   test("session.update carries the persona, eve, server VAD and all the tools", async () => {

@@ -72,7 +72,7 @@ export class VoiceSessionRegistry {
     }
   }
 
-  async open(ip: string, app: AppConfig): Promise<OpenResult> {
+  async open(ip: string, app: AppConfig, opts: { welcome?: boolean } = {}): Promise<OpenResult> {
     const target = this.deps.target();
     if (!target) return { ok: false, status: 503, error: "Voice mode is not configured" };
     if (this.budget.exhausted()) {
@@ -99,6 +99,7 @@ export class VoiceSessionRegistry {
       target,
       runner: this.deps.runner,
       budget: this.budget,
+      welcome: opts.welcome === true,
       maxSessionMs: this.deps.limits.maxSessionMs,
     });
     try {

@@ -223,7 +223,7 @@ function watchHud(rt: Runtime): () => void {
 }
 
 /** Mic permission, then session open, then audio flows. Safe to call twice; the second is a no-op. */
-export async function startVoice(): Promise<void> {
+export async function startVoice(opts: { welcome?: boolean } = {}): Promise<void> {
   if (runtime || starting) return;
   // Idempotent: a no-op once the shell's <ActiveState init={state}> has booted the store.
   init(state);
@@ -265,7 +265,7 @@ export async function startVoice(): Promise<void> {
     });
     if (abort.signal.aborted) throw new DOMException("Aborted", "AbortError");
     // The session runs in the active app: its persona, its UI tools' layers and species (PLAN.md C-A5).
-    const res = await fetch(`/api/voice/session?app=${activeAppId()}`, {
+    const res = await fetch(`/api/voice/session?app=${activeAppId()}${opts.welcome ? "&welcome=1" : ""}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",

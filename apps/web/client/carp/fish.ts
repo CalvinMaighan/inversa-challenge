@@ -162,17 +162,20 @@ export function setFishVisible(visible: boolean): void {
   set({ visible });
 }
 
-/** Fetch once per page load. */
-export function loadFish(): void {
-  if (state.status !== "idle") return;
+let loading: Promise<void> = Promise.resolve();
+
+/** Fetch once per page load (the first-run preload starts it; the map's own call joins it). Resolves when it settled. */
+export function loadFish(): Promise<void> {
+  if (state.status !== "idle") return loading;
   set({ status: "loading" });
-  fetch("/v1/carp/sightings")
+  loading = fetch("/v1/carp/sightings")
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((body: { sightings: CarpSighting[]; sources: Record<string, number | string> }) => {
       const windowed = rangeFish(body.sightings, state.startMs, state.endMs);
       set({ status: "ready", all: body.sightings, windowed, shown: upTo(windowed, state.atMs), sources: body.sources });
     })
     .catch(() => set({ status: "error" }));
+  return loading;
 }
 
 const subscribe = (cb: () => void) => {

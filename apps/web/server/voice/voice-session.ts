@@ -103,6 +103,8 @@ export type VoiceSessionOptions = {
   meterMs?: number;
   /** Speak a one-line "I'm listening" as soon as the microphone is live (default on). */
   greet?: boolean;
+  /** The first-run welcome ("Welcome to the Inversa Experience"), spoken in place of the plain listening line. */
+  welcome?: boolean;
 };
 
 function fingerprint(objective: string): string {
@@ -895,7 +897,7 @@ export class VoiceSession {
     if (!this.conn || this.greeted || this.opts.greet === false) return;
     this.greeted = true;
     this.pendingResponses.push({ origin: "announcement", turnId: this.nextTurnId() });
-    this.conn.send({ type: "response.create", response: { modalities: ["text", "audio"], tool_choice: "none", instructions: greetingInstructions(this.opts.app) } });
+    this.conn.send({ type: "response.create", response: { modalities: ["text", "audio"], tool_choice: "none", instructions: greetingInstructions(this.opts.app, { welcome: this.opts.welcome }) } });
   }
 
   private nextTurnId(): string {
