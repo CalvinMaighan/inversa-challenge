@@ -9,6 +9,9 @@
 
 import { APP_IDS, loadApps, type AppConfig } from "@/shared/apps";
 
+/** "select the carp", "switch to lionfish", "go to the python app": a request to move to another of the three apps. */
+const SWITCH_REQUEST = /\b(switch|change|go|select|pick|choose|open|take me|move|jump)\b[^.?!]{0,40}\b(carp|lionfish|python|pythons|burmese|asian carp|app|species)\b/i;
+
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const cache = new WeakMap<AppConfig, RegExp | null>();
@@ -50,6 +53,8 @@ export function scopeGuidance(app: AppConfig, question: string): string | null {
 
 /** The guard's wording for a question, or null when the question passes the guard. */
 export function scopeGuard(app: AppConfig, question: string): string | null {
+  // Asking to switch to another species or app is an action the model takes (switch_app), not a question out of scope.
+  if (SWITCH_REQUEST.test(question)) return null;
   const pattern = foreignSpeciesPattern(app);
   const hit = pattern?.exec(question);
   if (hit) return `${app.agent.refusal} "${hit[0]}" is outside what this app answers for.`;

@@ -4,6 +4,7 @@ import { dispatchThread } from "client/agent/chat/store";
 import { fishById, filterSpecies, selectFish, SPECIES_COLORS } from "client/carp/fish";
 import { getGlobe } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
+import { switchApp } from "client/hud/appselect/switch";
 import { applyRange } from "client/hud/range/apply";
 import { clearSelection } from "client/hud/selection";
 import { setView as setLionfishView } from "client/lionfish/store";
@@ -20,6 +21,7 @@ import type { VoiceState } from "client/state/voice";
 import { APP_IDS, speciesIds } from "shared/apps";
 import type { EvidenceKind } from "shared/agent/events";
 import { parseUiCommand, type UiCommand } from "shared/voice/ui-tools";
+import { isVoiceLive, startVoice } from "./voice-runtime";
 
 import { resolvePlace } from "./gazetteer";
 import { bboxAround } from "./hud-state";
@@ -31,6 +33,8 @@ import { bboxAround } from "./hud-state";
  */
 
 const DEFAULT_FLY_ALTITUDE_M = 25_000;
+/** A voice session switches apps after the assistant's few words of confirmation. */
+const VOICE_SWITCH_DELAY_MS = 2_200;
 const STEP_MS = TIME_STEP_MINUTES * 60_000;
 const WINDOW_MS = TIME_WINDOW_DAYS * 86_400_000;
 
@@ -199,6 +203,21 @@ function apply(command: UiCommand, nowMs: number): boolean {
         nowMs,
         card: { title, text, sources: sources.map((s) => ({ id: s.id, kind: (s.id.split(":")[0] ?? "source") as EvidenceKind, label: s.label })) },
       });
+      return true;
+    }
+    case "switch_app": {
+      const target = command.args.app;
+      if (target === activeApp().id) return true;
+      // A live voice session belongs to the old app (switchApp closes it): it reconnects in the new one.
+      if (isVoiceLive()) {
+        // The assistant is saying it did it: let it finish, then move and reconnect.
+        setTimeout(() => {
+          switchApp(target);
+          setTimeout(() => void startVoice(), 400);
+        }, VOICE_SWITCH_DELAY_MS);
+        return true;
+      }
+      switchApp(target);
       return true;
     }
     case "close_panel":

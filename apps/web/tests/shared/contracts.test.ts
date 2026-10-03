@@ -62,7 +62,7 @@ describe("shared contracts", () => {
   });
 
   test("ui tools validate", () => {
-    expect(UI_TOOL_NAMES).toEqual(["fly_to", "set_time", "play_timeline", "toggle_layer", "select", "open_evidence", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "show_card", "set_look"]);
+    expect(UI_TOOL_NAMES).toEqual(["fly_to", "set_time", "play_timeline", "toggle_layer", "select", "open_evidence", "open_menu", "set_period", "filter_species", "select_area", "zoom", "switch_app", "close_panel", "show_card", "set_look"]);
     const python = getApp("python");
     expect(parseUiCommand("fly_to", { place: "Flamingo" }, python)?.name).toBe("fly_to");
     expect(parseUiCommand("fly_to", {}, python)).toBeNull();

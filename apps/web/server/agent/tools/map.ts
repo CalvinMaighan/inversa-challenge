@@ -16,7 +16,7 @@ import { findArea } from "@/server/agent/tools/lionfish";
 import { ageWords, bboxSchema, feedsFor, given, givenTime, HOUR_MS, localTime, output, resolveBbox } from "@/server/agent/tools/shared";
 import { findSite, siteBox } from "@/server/agent/tools/sites";
 import { resolvePlace } from "client/voice/gazetteer";
-import { LAYER_IDS, type AppConfig } from "@/shared/apps";
+import { getApp, LAYER_IDS, type AppConfig } from "@/shared/apps";
 import { LOOK_IDS, LOOK_WORDS } from "@/shared/look";
 import { parseUiCommand, uiToolSchemasFor } from "@/shared/voice/ui-tools";
 import { VESSEL_LABELS, type GqlVesselTrack } from "@/shared/vessels";
@@ -56,6 +56,7 @@ const CONTROL_DESCRIPTIONS = {
   filter_species: "Show or hide one species on the map (the species chips); only=true shows just that one. Returns at once.",
   select_area: "Choose one of this app's own named areas (the area button above the timeline) and fly there: lionfish has the Florida Keys, Mexican Caribbean, Belize and Colombian Caribbean; the other apps have one. Not for towns or rivers: use fly_to for any other place. Returns at once.",
   zoom: "Zoom the globe in (half the height), out (twice the height) or fit (frame the whole area again), around where it is now. To go to a place, call fly_to instead (then zoom if needed). Returns at once.",
+  switch_app: "Switch the whole app to another species: carp (Asian carp, Mississippi River Basin), lionfish (Caribbean reefs) or python (Burmese python, South Florida). Use it when the user asks to switch, select, open or go to another species or app. The map, timeline and chat move to it; their next question is answered for that species. Returns at once.",
   close_panel: "Close the open sighting card. Returns at once.",
   fly_to: "Move the globe camera to a place by name (a town, river town, reef town or area of this app) or to lat and lon; altitudeM is the camera height in metres (omit for a sensible default). Returns at once.",
   show_card: "Pin an info card in the chat with its sources: a short title, one to three plain sentences and up to four sources (id and label exactly as a data tool returned them). Use it when the user asks to keep or pin something. Returns at once.",
@@ -74,7 +75,13 @@ export function controlTools(app: AppConfig) {
       if (command.name === "fly_to" && command.args.lat === undefined && command.args.place && !resolvePlace(command.args.place)) {
         throw new Error(`fly_to: no place named "${command.args.place}" is known; call it again with lat and lon`);
       }
+      if (command.name === "switch_app" && command.args.app === ctx.app.id) {
+        return output({ applied: false, control: name, note: `Already on ${ctx.app.name}. Say so in one sentence.` }, [], [], 1);
+      }
       ctx.emit({ type: "ui", name: command.name, args: command.args });
+      if (command.name === "switch_app") {
+        return output({ applied: true, control: name, args: command.args, note: `The app is switching to ${getApp(command.args.app).name}. Tell the user in one sentence that you switched; they can ask about it next. Do not answer questions about the new species from this app's data.` }, [], [], 1);
+      }
       return output({ applied: true, control: name, args: command.args, note: "Done on the map. Say what you did in a few words; a control is no evidence of what it shows." }, [], [], 1);
     },
   }));

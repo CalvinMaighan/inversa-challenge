@@ -9,7 +9,7 @@
  */
 import { z } from "zod";
 
-import { appLayerIds, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
+import { APP_IDS, appLayerIds, LAYER_IDS, speciesIds, type AppConfig, type LayerId } from "shared/apps";
 import { LOOK_IDS, LOOK_WORDS } from "shared/look";
 
 export { LAYER_IDS };
@@ -63,6 +63,7 @@ function schemas(layers: readonly LayerId[], species: readonly string[], filtera
     filter_species: filterable.length > 0 ? z.object({ species: z.enum(filterable as [string, ...string[]]), visible: z.boolean().default(true), only: z.boolean().optional().describe("true: show only this one and hide the others") }) : z.object({ species: z.never().optional(), visible: z.boolean().default(true), only: z.boolean().optional() }),
     select_area: z.object({ area: z.string().min(2).describe("An area of this app by id or name, e.g. the Florida Keys, the Mexican Caribbean, Belize, the Mississippi River Basin") }),
     zoom: z.object({ direction: z.enum(["in", "out", "fit"]).describe("in: halve the height, out: double it, fit: frame the whole area again") }),
+    switch_app: z.object({ app: z.enum(APP_IDS).describe("carp (Asian carp, Mississippi River Basin), lionfish (Caribbean reefs) or python (Burmese python, South Florida)") }),
     close_panel: z.object({}),
     show_card: z.object({
       title: z.string().min(2).max(80),

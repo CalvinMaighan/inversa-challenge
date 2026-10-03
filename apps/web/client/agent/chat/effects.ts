@@ -103,9 +103,26 @@ export function openEvidence(id: string): void {
   if (at) getGlobe()?.flyTo({ ...at, altitudeM: EVIDENCE_ALTITUDE_M });
 }
 
+/** How long the finished answer stays in view before the app moves to the species the agent switched to. */
+export const SWITCH_AFTER_ANSWER_MS = 1200;
+
+/** The app a `switch_app` call asked for during the turn in flight: applied once its answer is whole (a switch remounts the chat). */
+let pendingSwitch: string | null = null;
+
 /** Side effects of one streamed event. */
 export function applyAgentSideEffects(event: AgentStreamEvent, nowMs = Date.now()): void {
   if (event.type === "view") applyViewEvent(event, nowMs);
+  // The switch waits for the end of the turn: moving apps mid-answer would stop the stream and wipe the reply.
+  if (event.type === "ui" && event.name === "switch_app") {
+    const app = (event.args as { app?: unknown } | undefined)?.app;
+    pendingSwitch = typeof app === "string" ? app : null;
+    return;
+  }
   // A map control (toggle_layer, set_look): validated again here, since the event crossed the network.
   if (event.type === "ui") applyUiEvent(event, nowMs);
+  if (event.type === "done") {
+    const app = pendingSwitch;
+    pendingSwitch = null;
+    if (app && event.content) setTimeout(() => applyUiEvent({ name: "switch_app", args: { app } }, Date.now()), SWITCH_AFTER_ANSWER_MS);
+  }
 }
