@@ -11,7 +11,7 @@ import { TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { frameIndexAt, type FrameSightings } from "client/threads/api";
 
-import { Dot, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
+import { Dot, GLASS_CSS, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
 import { useHudBottom } from "../shell/use-hud-bottom";
 import { formatClocks, isLive } from "../topbar/clock";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
@@ -151,7 +151,7 @@ const Tip = styled(Mono)`
   left: 0;
   padding: 3px 6px;
   border-radius: var(--radius-s);
-  background: var(--surface);
+  ${GLASS_CSS}
   border: 1px solid var(--border);
   font-size: 11px;
   white-space: pre;

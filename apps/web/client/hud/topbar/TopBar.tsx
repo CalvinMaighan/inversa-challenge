@@ -17,7 +17,7 @@ import type { MenuId } from "shared/voice/ui-tools";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
 import { hasNewData, latestMs, liveRows } from "../alerts/model";
-import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
+import { Dot, Icon, IconButton, MOBILE, Surface, GLASS_CSS, POPOVER_BUTTONS_CSS } from "../primitives";
 import DeveloperPanel from "../developer/DeveloperPanel";
 import { LookChoices, LookIcon, setLook, setScopeBlur, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
 import { formatLag } from "./feed-chips";
@@ -102,11 +102,11 @@ const Popover = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
   scrollbar-width: thin;
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;

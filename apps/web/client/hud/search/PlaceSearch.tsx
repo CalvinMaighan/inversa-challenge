@@ -8,7 +8,7 @@ import { createPlaceSearch, LIMITED_MESSAGE, MIN_REMOTE_CHARS, type SearchResult
 import styled from "client/styled";
 import type { PlaceHit } from "shared/places";
 
-import { MOBILE } from "../primitives";
+import { GLASS_CSS, MOBILE, POPOVER_BUTTONS_CSS } from "../primitives";
 import { usePopover } from "../topbar/TopBar";
 import Credit from "./Credit";
 
@@ -57,11 +57,11 @@ const Pop = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
   scrollbar-width: thin;
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;

@@ -26,6 +26,7 @@ const Chip = styled.button<{ $color: string }>`
   padding: 0 9px 0 8px;
   border: 1px solid transparent;
   border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
   background: transparent;
   color: var(--muted);
   font: 600 12px / 1 var(--font-ui);

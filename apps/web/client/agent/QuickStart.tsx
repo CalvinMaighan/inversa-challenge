@@ -48,6 +48,7 @@ const Card = styled.button`
   padding: 10px var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
+  box-shadow: var(--shadow);
   background: color-mix(in oklab, var(--surface-2) 70%, transparent);
   color: var(--text);
   text-align: left;

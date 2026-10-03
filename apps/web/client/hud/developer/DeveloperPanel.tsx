@@ -14,7 +14,7 @@ import PlacesCapField from "client/hud/search/PlacesCapField";
 import styled from "client/styled";
 import type { BrowserKeyId, ServerKeyStatus } from "shared/keys";
 
-import { Dot, Icon, IconButton } from "../primitives";
+import { Dot, GLASS_CSS, Icon, IconButton, POPOVER_BUTTONS_CSS } from "../primitives";
 import { feedChip, sortFeedsForStatus } from "../topbar/feed-chips";
 import { DEVELOPER_TAB, DEVELOPER_TABS, type DeveloperTab } from "./tab";
 import { DEV_KEYS_URL, panelRows, removeBrowserKey, saveBrowserKeys, splitPasted, type PanelRow } from "./model";
@@ -28,10 +28,10 @@ const Dialog = styled.dialog`
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
+  ${POPOVER_BUTTONS_CSS}
 
   &[open] {
     display: flex;

@@ -236,6 +236,7 @@ const Card = styled.article`
   border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
   border-left-width: 3px;
   border-radius: var(--radius-m);
+  box-shadow: var(--shadow);
   background: color-mix(in oklab, var(--accent) 6%, var(--surface-2));
 
   .tag {

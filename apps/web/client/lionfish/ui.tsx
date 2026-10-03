@@ -38,6 +38,7 @@ export const Chip = styled.button`
   padding: 4px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
   background: transparent;
   color: var(--text);
   font: 600 12px / 1.2 var(--font-ui);

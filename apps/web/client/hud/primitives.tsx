@@ -28,6 +28,20 @@ export function useIsMobile(): boolean {
   );
 }
 
+/**
+ * The glass every popover, dialog and tooltip shares with the HUD's other surfaces: the surface colour at 82 percent over a
+ * 10 px blur with a touch of saturation, and the theme's shadow. (The border and radius stay with each component.)
+ */
+export const GLASS_CSS = `
+  background: color-mix(in oklch, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  box-shadow: var(--shadow);
+`;
+
+/** Buttons inside a popover carry the theme's button shadow (`:where`, so a component's own box-shadow still wins). */
+export const POPOVER_BUTTONS_CSS = "& :where(button) { box-shadow: var(--shadow-button); }";
+
 /** Glass surface every HUD control sits on, so the globe reads through. Takes the pointer back from the HUD root. */
 export const Surface = styled.div`
   pointer-events: auto;

@@ -35,7 +35,7 @@ describe("theme modes", () => {
   test("colour tokens are OKLCH", () => {
     for (const mode of THEME_MODES) {
       for (const token of COLOR_TOKENS) {
-        if (token === "shadow") continue;
+        if (token === "shadow" || token === "shadow-button") continue;
         expect(PALETTES[mode].colors[token]).toMatch(OKLCH);
       }
     }

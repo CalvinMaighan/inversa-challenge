@@ -70,6 +70,7 @@ const Ask = styled.button`
   padding: 7px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
   background: color-mix(in oklab, var(--surface-2) 60%, transparent);
   color: var(--text);
   font: 400 var(--font-xs) / 1.4 var(--font-ui);

@@ -58,6 +58,7 @@ const Option = styled.button`
   padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-m);
+  box-shadow: var(--shadow-button);
   background: none;
   color: var(--text);
   text-align: left;

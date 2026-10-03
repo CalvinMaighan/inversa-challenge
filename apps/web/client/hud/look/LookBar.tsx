@@ -25,7 +25,7 @@ import {
 } from "client/state/look";
 import styled from "client/styled";
 
-import { IconButton, Surface } from "../primitives";
+import { GLASS_CSS, IconButton, POPOVER_BUTTONS_CSS, Surface } from "../primitives";
 
 /**
  * The Look controls (docs/GODS_EYE.md GC2, GE9, GE11): the seven presets and the map window: its shape and size
@@ -77,12 +77,10 @@ export const Popover = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: color-mix(in oklch, var(--surface) 82%, transparent);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;

@@ -33,6 +33,7 @@ export const COLOR_TOKENS = [
   "hud-line",
   "hud-glow",
   "shadow",
+  "shadow-button",
 ] as const;
 export type ColorToken = (typeof COLOR_TOKENS)[number];
 
@@ -64,6 +65,7 @@ export const PALETTES: Record<ThemeModeId, ModePalette> = {
       "hud-line": "oklch(0.189 0.003 17.4 / 0.55)",
       "hud-glow": accentAt(0.523, 0.22),
       shadow: "0 10px 30px rgb(20 10 10 / 8%)",
+      "shadow-button": "0 1px 2px rgb(20 10 10 / 10%), 0 2px 6px rgb(20 10 10 / 8%)",
     },
   },
   dark: {
@@ -84,6 +86,7 @@ export const PALETTES: Record<ThemeModeId, ModePalette> = {
       "hud-line": "oklch(0.957 0.005 297.7 / 0.5)",
       "hud-glow": accentAt(0.6, 0.35),
       shadow: "0 10px 30px rgb(0 0 0 / 35%)",
+      "shadow-button": "0 1px 0 rgb(255 255 255 / 5%) inset, 0 2px 6px rgb(0 0 0 / 40%)",
     },
   },
   tactical: {
@@ -104,6 +107,7 @@ export const PALETTES: Record<ThemeModeId, ModePalette> = {
       "hud-line": "oklch(0.82 0.19 148 / 0.7)",
       "hud-glow": "oklch(0.82 0.19 148 / 0.45)",
       shadow: "0 0 0 1px oklch(0.82 0.19 148 / 0.25), 0 10px 30px rgb(0 0 0 / 55%)",
+      "shadow-button": "0 0 0 1px oklch(0.82 0.19 148 / 0.2), 0 2px 6px rgb(0 0 0 / 50%)",
     },
   },
 };

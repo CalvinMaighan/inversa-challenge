@@ -11,7 +11,7 @@ import { LAYER_IDS } from "shared/voice/ui-tools";
 import { useActiveApp } from "../appselect/use-active-app";
 import { formatCount } from "../legend/model";
 import { useGlobeStats } from "../legend/useGlobeStats";
-import { MOBILE, Mono, Surface } from "../primitives";
+import { GLASS_CSS, MOBILE, Mono, Surface } from "../primitives";
 import { speciesChips, type ChipModel } from "./model";
 
 const [SIGHTINGS] = LAYER_IDS;
@@ -44,8 +44,7 @@ const Slot = styled.span`
     padding: 5px 8px;
     border: 1px solid var(--border);
     border-radius: var(--radius-s);
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    ${GLASS_CSS}
     color: var(--text);
     font: 400 12px / 1.35 var(--font-ui);
     visibility: hidden;
@@ -66,6 +65,7 @@ const Chip = styled.button<{ $color: string }>`
   padding: 0 9px 0 7px;
   border: 1px solid transparent;
   border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
   background: transparent;
   color: var(--muted);
   font: 600 12.5px / 1 var(--font-ui);

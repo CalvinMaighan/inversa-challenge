@@ -9,6 +9,7 @@ import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import { loadEvidence } from "../drawer/evidence";
+import { GLASS_CSS } from "../primitives";
 import { placeTooltip, tooltipLine, tooltipText, type SightingRecordHint, type TooltipText } from "./model";
 
 /** Dwell on one sighting before asking the evidence cache for its source and exact time. */
@@ -23,8 +24,7 @@ const Box = styled.div`
   padding: 5px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 12px / 1.35 var(--font-ui);
   pointer-events: none;
