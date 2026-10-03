@@ -16,8 +16,6 @@ import {
   PhaseLine,
   Reasoning,
   SendButton,
-  SourceChip,
-  Sources,
   Status,
   Thread,
   Title,
@@ -34,6 +32,7 @@ import { ClearIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
 import DataPanels from "./panels/DataPanels";
 import QuickStart from "./QuickStart";
+import { FollowUps, InfoCardView, SourceList } from "./SourceList";
 import ExpandedPanels from "./panels/ExpandedPanels";
 import { PHASE_LABELS, voiceIsLive, type AgentPhase } from "./phase";
 
@@ -68,8 +67,15 @@ const AssistantTurn = memo(function AssistantTurn({
   selected,
   onCite,
   onExpand,
+  followUps,
+  asking,
+  onAsk,
 }: {
   turn: AgentTurn;
+  /** Questions to offer under this (the newest) answer. */
+  followUps: readonly string[];
+  asking: boolean;
+  onAsk: (question: string) => void;
   /** Voice task objective, for voice turns. */
   objective: string | undefined;
   selected: string | null;
@@ -77,6 +83,13 @@ const AssistantTurn = memo(function AssistantTurn({
   onExpand: (turnId: string) => void;
 }) {
   const streaming = turn.status === "streaming";
+  if (turn.card) {
+    return (
+      <Assistant data-turn={turn.id} data-source="card" data-status={turn.status}>
+        <InfoCardView card={turn.card} selected={selected} onCite={onCite} />
+      </Assistant>
+    );
+  }
   return (
     <Assistant data-turn={turn.id} data-source={turn.source ?? "text"} data-status={turn.status} aria-busy={streaming}>
       {turn.source === "voice" ? <VoiceTag title={objective}>{objective ? `voice · ${objective}` : "voice"}</VoiceTag> : null}
@@ -91,23 +104,8 @@ const AssistantTurn = memo(function AssistantTurn({
           {message}
         </ErrorLine>
       ))}
-      {turn.citations.length > 0 && !streaming ? (
-        <Sources aria-label="Evidence">
-          {turn.citations.map((c, i) => (
-            <SourceChip
-              key={c.id}
-              type="button"
-              title={c.label}
-              data-evidence-id={c.id}
-              aria-current={selected === c.id ? "true" : undefined}
-              onClick={() => onCite(c.id)}
-            >
-              <b>{i + 1}</b>
-              <span>{c.label}</span>
-            </SourceChip>
-          ))}
-        </Sources>
-      ) : null}
+      {!streaming ? <SourceList items={turn.citations} selected={selected} onCite={onCite} /> : null}
+      {!streaming && followUps.length > 0 ? <FollowUps items={followUps} disabled={asking} onAsk={onAsk} /> : null}
     </Assistant>
   );
 });
@@ -176,6 +174,7 @@ export default function ChatPane({
   const stick = useRef(true);
   const live = voiceIsLive(voice);
   const pulsing = phase === "listening" || phase === "speaking";
+  const lastAssistantId = [...thread.messages].reverse().find((m) => m.role === "assistant")?.id;
 
   // Follow the stream while the reader is at the bottom; leave them alone once they scroll up.
   useLayoutEffect(() => {
@@ -272,7 +271,7 @@ export default function ChatPane({
         ) : (
           thread.messages.map((turn) =>
             turn.role === "user" ? (
-              <UserBubble key={turn.id} data-turn={turn.id}>
+              <UserBubble key={turn.id} data-turn={turn.id} data-source={turn.source}>
                 {turn.text}
               </UserBubble>
             ) : (
@@ -283,6 +282,9 @@ export default function ChatPane({
                 selected={selected}
                 onCite={onCite}
                 onExpand={setExpanded}
+                followUps={turn.id === lastAssistantId ? (turn.followUps ?? []) : []}
+                asking={asking}
+                onAsk={(q) => void ask(q)}
               />
             ),
           )

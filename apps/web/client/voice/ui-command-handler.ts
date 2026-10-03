@@ -1,5 +1,6 @@
 import { get, set } from "@calvinjs/active-state";
 
+import { dispatchThread } from "client/agent/chat/store";
 import { fishById, filterSpecies, selectFish, SPECIES_COLORS } from "client/carp/fish";
 import { getGlobe } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
@@ -17,6 +18,7 @@ import { clampToWindow, TIME_STEP_MINUTES, TIME_WINDOW_DAYS, timeWindow, windowF
 import type { ViewState } from "client/state/view";
 import type { VoiceState } from "client/state/voice";
 import { APP_IDS, speciesIds } from "shared/apps";
+import type { EvidenceKind } from "shared/agent/events";
 import { parseUiCommand, type UiCommand } from "shared/voice/ui-tools";
 
 import { resolvePlace } from "./gazetteer";
@@ -188,6 +190,17 @@ function apply(command: UiCommand, nowMs: number): boolean {
       return selectArea(command.args.area);
     case "zoom":
       return zoom(command.args.direction);
+    case "show_card": {
+      const { title, text, sources } = command.args;
+      // The sources are labelled records, each openable from the chat (a sighting's id opens its card on the map).
+      dispatchThread({
+        type: "card",
+        id: `card-${nowMs}-${Math.round(Math.random() * 1e6)}`,
+        nowMs,
+        card: { title, text, sources: sources.map((s) => ({ id: s.id, kind: (s.id.split(":")[0] ?? "source") as EvidenceKind, label: s.label })) },
+      });
+      return true;
+    }
     case "close_panel":
       selectFish(null);
       clearSelection();

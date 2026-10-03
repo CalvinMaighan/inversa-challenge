@@ -64,6 +64,11 @@ function schemas(layers: readonly LayerId[], species: readonly string[], filtera
     select_area: z.object({ area: z.string().min(2).describe("An area of this app by id or name, e.g. the Florida Keys, the Mexican Caribbean, Belize, the Mississippi River Basin") }),
     zoom: z.object({ direction: z.enum(["in", "out", "fit"]).describe("in: halve the height, out: double it, fit: frame the whole area again") }),
     close_panel: z.object({}),
+    show_card: z.object({
+      title: z.string().min(2).max(80),
+      text: z.string().min(2).max(600).describe("One to three plain sentences"),
+      sources: z.array(z.object({ id: z.string().min(3).describe("Evidence id exactly as a result listed it, e.g. fish:inat:123"), label: z.string().min(1).max(100) })).max(6).default([]),
+    }),
     // GE7: the globe's look (docs/GODS_EYE.md GC2), the same seven presets as the Look popover.
     set_look: z.object({
       look: z.enum(LOOK_IDS).describe(LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")),

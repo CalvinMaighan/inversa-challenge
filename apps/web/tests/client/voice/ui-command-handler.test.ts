@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { PYTHON_LAYERS, selectPython } from "@/tests/client/python-app";
 import { get, init, set } from "@calvinjs/active-state";
 
-import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
+import { asThread, type AgentThread } from "client/agent/chat/thread";
+import { AGENT_CHAT, LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
 import type { LayersState } from "client/state/layers";
 import type { SelectionState } from "client/state/selection";
 import { timeWindow, type TimeState } from "client/state/time";
@@ -33,6 +34,17 @@ const layers = () => get<LayersState>(LAYERS)!;
 const selection = () => get<SelectionState>(SELECTION)!;
 
 describe("ui command handler", () => {
+  test("show_card pins an info card with its sources in the chat thread", () => {
+    set(AGENT_CHAT, AGENT_CHAT.defaults);
+    const args = { title: "Newest python report", text: "Reported on 2026-10-02 in the Everglades.", sources: [{ id: "sighting:42", label: "Burmese python · 2026-10-02 · EDDMapS" }] };
+    expect(applyUiCommand({ name: "show_card", args }, NOW)).toBe(true);
+    const [card] = asThread(get<AgentThread>(AGENT_CHAT)).messages;
+    expect(card?.card?.title).toBe("Newest python report");
+    expect(card?.card?.sources).toEqual([{ id: "sighting:42", kind: "sighting", label: "Burmese python · 2026-10-02 · EDDMapS" }]);
+    // No title, no card.
+    expect(applyUiCommand({ name: "show_card", args: { text: "x" } }, NOW)).toBe(false);
+  });
+
   test("fly_to with lat/lon moves the camera, updates bbox and bumps seq", () => {
     expect(applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9, altitudeM: 5000 } }, NOW)).toBe(true);
     expect(view()).toEqual({

@@ -1,0 +1,60 @@
+
+=== carp: sightings, follow-up, comparison
+Q: How many silver carp sightings are on the map?
+   router: reports 86%, on topic 92% (1134 ms)
+   tools: carp_sightings | first text 2226ms | total 9651ms | openai/gpt-6-luna
+   A: There are **245 silver carp sighting reports** in the map’s two-year window, October 3, 2024–October 3, 2026; reports come from iNaturalist (165), USGS NAS (48), and GBIF (32). These are reports, not a count of fish, and some sources may report the same fish; I cannot estimate carp abundance or catc
+Q: and the bighead ones?
+   router: reports 99%, on topic 98% (762 ms)
+   tools: carp_sightings | first text 2188ms | total 5483ms | openai/gpt-6-luna
+   A: There are **27 bighead carp sighting reports** in the map’s two-year window, October 3, 2024–October 3, 2026: 18 from iNaturalist, 6 from USGS NAS, and 3 from GBIF. These are reports, not abundance; some sources may report the same fish. [e:fish:inat:246572347] [e:fish:nas:1740280] [e:fish:gbif:5106
+Q: Which species has the most reports?
+   router: reports 99%, on topic 98% (609 ms)
+   tools: carp_sightings | first text 1637ms | total 5015ms | openai/gpt-6-luna
+   A: **Grass carp have the most reports: 534** in the two-year map window (October 3, 2024–October 3, 2026). The counts are black carp 493, silver carp 245, and bighead carp 27. [e:fish:gbif:5939089277] [e:fish:gbif:6176741760] These are reports, not abundance, and sources can overlap. Data refreshed **2
+   ask next: ["Which species has the most reports this year?","Where do the sightings come from?","Show the last 30 days"]
+
+=== carp: place, controls
+Q: What was reported near Memphis?
+   
+   tools: carp_sightings | first text 3745ms | total 9746ms | openai/gpt-6-luna
+   A: Near Memphis, stored reports cover grass carp, black carp, and silver carp; none were returned for bighead carp. The 13 reports span 2025-04-13 to 2026-08-09, and are reports—not estimates of abundance. - **Grass carp: 4 reports** — 2025-04-13 [e:fish:inat:270258670], 2026-03-18 [e:fish:inat:3778743
+Q: Zoom into Memphis and show only silver carp
+   
+   tools: filter_species, ui:filter_species, zoom, ui:zoom, set_view | first text 3460ms | total 10317ms | openai/gpt-6-luna
+   A: The map is zoomed in, and only silver carp are selected. I couldn’t move the map to Memphis with the configured-location control.
+Q: Open the period menu and set it to 90 days
+   router: map_control 100%, on topic 96% (665 ms)
+   tools: open_menu, ui:open_menu, set_period, ui:set_period | first text 2110ms | total 4401ms | openai/gpt-6-luna
+   A: The period menu is open, and the map is set to show the last 90 days.
+   ask next: ["Show the last 30 days","Which data feeds are live right now?","Are there flood alerts on the Atchafalaya?"]
+
+=== python: data, off-topic in the middle, feeds
+Q: Where were pythons reported in the last 7 days?
+   router: reports 95%, on topic 96% (563 ms)
+   tools: sightings, set_view | first text 8591ms | total 8594ms | openai/gpt-6-luna
+   A: Four distinct Burmese python reports were recorded in the last 7 days, all research grade: one near the eastern Everglades on October 1 [e:sighting:183], one near the eastern Everglades on September 29 [e:sighting:180], one in the southern Everglades on September 29 [e:sighting:182], and one near th
+Q: what's the weather in Paris
+   router: off_topic 92%, on topic 3% (733 ms)
+   tools: - | first text 1675ms | total 2302ms | openai/gpt-6-luna
+   A: Everglades Ops only covers Burmese python reports and weather or water conditions in South Florida and the Keys. I can help with weather around the Everglades, python reports, hotspot rankings, or data sources and freshness.
+Q: which feeds are stale right now?
+   
+   tools: feed_state | first text 7076ms | total 7079ms | openai/gpt-6-luna
+   A: No feeds are marked **stale** right now. Three are **lagging**: CO-OPS, newest observation 9 min old [e:fetch:10251]; NDBC, 27 min old [e:fetch:10237]; and USGS, 27 min old [e:fetch:10207]. GOES-19 and NWWS are disabled by configuration [e:fetch:2920]. coops is lagging (newest 9 min old) [e:fetch:10
+   ask next: ["Where do the python reports come from?","Show the last 30 days","Did the cold snap change python activity?"]
+
+=== lionfish: conditions, area, card
+Q: How hot is the water around the Florida Keys?
+   router: conditions 84%, on topic 86% (564 ms)
+   tools: geocode, reef_heat, conditions, set_view | first text 1740ms | total 9812ms | openai/gpt-6-luna
+   A: Around the Florida Keys, recent measured water temperatures vary by station: Vaca Key is **27.8 °C** and Key West **28.4 °C**, while nearby inshore readings range from **26.6 °C** at Cane Patch to **29.3 °C** at Johnson Key.[e:reading:47:water_c:1790990280000:measured] [e:reading:22:water_c:17909902
+Q: Take me to Belize
+   router: map_control 96%, on topic 75% (719 ms)
+   tools: select_area, ui:select_area | first text 4530ms | total 4532ms | openai/gpt-6-luna
+   A: I’ve taken you to Belize on the map.
+Q: Pin a card about the newest lionfish report
+   router: reports 48%, on topic 61% (704 ms)
+   tools: sightings, show_card, ui:show_card | first text 1945ms | total 8060ms | openai/gpt-6-luna
+   A: Pinned a card about the newest report: a research-grade lionfish sighting in the Colombian Caribbean, observed 2026-09-30 and submitted 2026-10-01, 1.7 days later. [e:sighting:4200] Freshness: iNaturalist and GBIF were nominal; their latest fetches were at 2026-10-03 01:51 UTC [e:fetch:3716] and 202
+   ask next: ["Show me the most recent lionfish report","Which reports arrived late?","Show the last 30 days"]

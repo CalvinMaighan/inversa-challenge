@@ -23,7 +23,8 @@ import {
   type RealtimeEvent,
   type RealtimeTarget,
 } from "./grok-realtime";
-import { claimTurn, looksLikeHangUp, looksLikeStop } from "./stop-intent";
+import { routeMessage } from "@/server/agent/decisions";
+import { claimTurn, decidesStop, looksLikeHangUp, looksLikeStop } from "./stop-intent";
 import { isUiToolName, validateUiToolCall } from "./ui-command";
 import {
   CANCEL_TASK_TOOL,
@@ -44,6 +45,10 @@ import {
 /** Server VAD: how sure the model must be that it hears speech, and how long a pause ends the turn. */
 const VAD_THRESHOLD = 0.6;
 const VAD_SILENCE_MS = 650;
+/** Data questions the analyst can start on at once (GLiDE intents). */
+const EAGER_INTENTS: ReadonlySet<string> = new Set(["reports", "conditions", "priority", "data_sources"]);
+/** Words that point back at an earlier turn: such a question is worded by the voice model, not eagerly. */
+const LEANS_ON_BEFORE = /\b(it|its|that|those|them|these|this|there|same|again|more|also|too|other|previous|earlier)\b/i;
 const ANNOUNCE_RETRY_MS = 1_000;
 /** Progress updates are spoken at most this often per task. */
 const PROGRESS_MIN_INTERVAL_MS = 8_000;
@@ -79,6 +84,8 @@ type TrackedTask = {
   step: string | null;
   summary: string | null;
   error: string | null;
+  /** What the analyst cited (id to label), handed to the voice for `show_card`. */
+  sources: Map<string, string>;
 };
 
 type ToolReceipt = Record<string, unknown>;
@@ -615,11 +622,35 @@ export class VoiceSession {
       return;
     }
     if (looksLikeStop(text)) {
-      this.interrupt();
-      for (const tracked of this.tasks.values()) {
-        if (!isTerminal(tracked.status)) this.cancelTask(tracked.id);
-      }
+      this.stopEverything();
+      return;
     }
+    void this.decideAndAct(text);
+  }
+
+  private stopEverything(): void {
+    this.interrupt();
+    for (const tracked of this.tasks.values()) {
+      if (!isTerminal(tracked.status)) this.cancelTask(tracked.id);
+    }
+  }
+
+  /**
+   * What a transcript's wording does not settle goes to Fastino GLiDE (null without a key, so nothing changes then): whether a
+   * short utterance is a stop, and whether a data question can be handed to the analyst this instant instead of waiting for the
+   * voice model to decide to. The analyst joins the one task per turn (claimTurn), so the voice model calling spawn_thinking too
+   * attaches to it. Not for a follow-up that leans on earlier turns ("and those?"): the voice model words that objective.
+   */
+  private async decideAndAct(text: string): Promise<void> {
+    const turnId = this.window.currentTurnId();
+    const [stop, route] = await Promise.all([decidesStop(text), routeMessage({ app: this.opts.app, question: text })]);
+    if (this.closed) return;
+    if (stop === true) {
+      this.stopEverything();
+      return;
+    }
+    if (!route || turnId !== this.window.currentTurnId() || LEANS_ON_BEFORE.test(text)) return;
+    if (EAGER_INTENTS.has(route.intent) && route.intentConfidence >= 0.9 && route.onTopic >= 0.8) this.spawnThinking(text);
   }
 
   private async runToolCall(call: {
@@ -708,6 +739,7 @@ export class VoiceSession {
       step: null,
       summary: null,
       error: null,
+      sources: new Map(),
     };
     this.tasks.set(tracked.id, tracked);
     if (turnId) this.turnTasks.set(turnId, tracked.id);
@@ -721,6 +753,7 @@ export class VoiceSession {
           if (tracked.status !== "running") return;
           // Every C7 agent event streams to the orb card; anything else the runner emits stays local.
           if (isAgentStreamEvent(event)) this.emit({ type: "task.event", taskId: tracked.id, event });
+          if (event.type === "citation" && typeof event.id === "string" && typeof event.label === "string") tracked.sources.set(event.id, event.label);
           if (event.type === "tool_start") this.onTaskStep(tracked.id, str(event.capabilityName) || "working");
           if (event.type === "status") this.onTaskStep(tracked.id, str(event.state) || "working");
         },
@@ -808,6 +841,7 @@ export class VoiceSession {
       objective: tracked.objective,
       result: tracked.summary,
       error: tracked.error,
+      sources: [...tracked.sources].slice(0, 8).map(([id, label]) => ({ id, label })),
     });
     this.scheduleAnnouncements();
   }

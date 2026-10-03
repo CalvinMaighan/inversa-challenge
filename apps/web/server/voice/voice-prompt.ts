@@ -51,9 +51,11 @@ const UI_TOOL_DESCRIPTIONS: Record<Exclude<UiToolName, "toggle_layer">, string> 
   select_area:
     "Choose one of this app's own named areas (the area button above the timeline) and fly there: for lionfish the Florida Keys, Mexican Caribbean, Belize or Colombian Caribbean. Not for towns or rivers: use fly_to for those. Returns at once.",
   zoom:
-    "Zoom the globe: in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
+    "Zoom the globe around where it is now: in (half the height), out (twice the height) or fit (frame the whole area again). To go to a place, use fly_to. Returns at once.",
   close_panel:
     "Close the open sighting card or evidence panel. Returns at once.",
+  show_card:
+    "Pin an info card in the chat, with the sources behind it: a short title, one to three plain sentences, and up to four sources taken exactly (id and label) from a result you were given. Use it when the user asks to see, pin or keep something, or after you relay a result that lists sources. Never invent a source. Returns at once.",
   set_look:
     "Change how the globe looks: normal (the plain map), crt (an old monitor), nvg (night vision), flir (thermal camera), noir (black and white), anime (flat colours) or snow. Only when the user asks for a look. Returns at once.",
 };
@@ -139,7 +141,7 @@ export function buildVoiceInstructions(app: AppConfig): string {
     "Speak as one assistant in the first person. Never mention tools, agents, task ids or protocols.",
     "",
     "# Direct commands",
-    "Camera, time, filter and menu commands are yours to do at once with the UI tools: fly_to, zoom, select_area, set_time, set_period, play_timeline, toggle_layer, filter_species, open_menu, close_panel, select, open_evidence, set_look. To read a sighting out, ask for it with spawn_thinking, then open it with open_evidence using the id from the result so the card is on screen while you speak. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
+    "Camera, time, filter and menu commands are yours to do at once with the UI tools: fly_to, zoom, select_area, set_time, set_period, play_timeline, toggle_layer, filter_species, open_menu, close_panel, select, open_evidence, show_card, set_look. To read a sighting out, ask for it with spawn_thinking, then open it with open_evidence using the id from the result so the card is on screen while you speak. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
     "If a UI tool returns an error, fix the arguments and call it again once. If a place is unknown, call fly_to again with lat and lon when you know them, otherwise ask where it is.",
     "",
     "# Analysis",
@@ -192,6 +194,8 @@ export const RESULT_CONTEXT_MAX_CHARS = 6_000;
 
 export type ResultContextItem = {
   taskId: string;
+  /** Evidence the analyst cited, for `show_card`. */
+  sources?: { id: string; label: string }[];
   status: string;
   objective: string;
   result: string | null;
@@ -202,7 +206,8 @@ export function formatResultContext(items: ResultContextItem[]): string {
   const body = items
     .map((item) => {
       const outcome = item.error ? `error: ${item.error}` : `result: ${item.result ?? "(no output)"}`;
-      return [`task_id: ${item.taskId}`, `status: ${item.status}`, `question: ${item.objective}`, outcome].join("\n");
+      const sources = item.sources?.length ? [`sources (for show_card, never read aloud): ${item.sources.map((s) => `${s.id} = ${s.label}`).join("; ")}`] : [];
+      return [`task_id: ${item.taskId}`, `status: ${item.status}`, `question: ${item.objective}`, outcome, ...sources].join("\n");
     })
     .join("\n\n");
   const cut =

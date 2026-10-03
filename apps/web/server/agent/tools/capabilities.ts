@@ -985,7 +985,7 @@ const setViewInput = z
 const setView = {
   name: "set_view",
   description:
-    "Fly the globe to an area, a camera preset or a configured location, and move the timeline. asOf switches the timeline to replay: what was known then. Use it when the answer is about a place or a past moment.",
+    "Fly the globe to a camera preset or one of the app's configured locations (not a town: for any other place call fly_to), and move the timeline. asOf switches the timeline to replay: what was known then. Use it when the answer is about a configured location or a past moment.",
   inputSchema: setViewInput,
   async execute(input: z.infer<typeof setViewInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const presetName = given(input.preset);

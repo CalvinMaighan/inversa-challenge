@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { get, set, uuid } from "@calvinjs/active-state";
+import { get, uuid } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { AGENT_CHAT, LAYERS, SELECTION, TIME, VIEW } from "client/state";
+import { activeAppId } from "client/state/app";
 import { onTaskEvent } from "client/voice/voice-runtime";
 import type { AgentStreamEvent } from "shared/agent/events";
 
@@ -13,10 +14,23 @@ import { clearPanels, recordToolEnd } from "../panels/store";
 import { applyAgentSideEffects } from "./effects";
 import { AGENT_STREAM_URL, streamAgentTurn } from "./ndjson";
 import { buildAgentRequest, type ViewSnapshot } from "./request";
-import { asThread, isAsking, reduceThread, voiceTurnId, type AgentThread, type ThreadAction } from "./thread";
+import { dispatchThread } from "./store";
+import { asThread, isAsking, voiceTurnId, type AgentThread } from "./thread";
 
-function dispatch(action: ThreadAction): void {
-  set<AgentThread>(AGENT_CHAT, (prev) => reduceThread(asThread(prev), action));
+const dispatch = dispatchThread;
+
+/** Ask the server which questions to offer next (Fastino GLiDE); nothing is shown when it has no suggestion. */
+async function loadFollowUps(id: string, question: string, answer: string): Promise<void> {
+  if (!answer.trim()) return;
+  const asked = asThread(get<AgentThread>(AGENT_CHAT)).messages.filter((m) => m.role === "user").map((m) => m.text);
+  try {
+    const res = await fetch("/api/agent/followups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ app: activeAppId(), question, answer, asked }) });
+    if (!res.ok) return;
+    const { items } = (await res.json()) as { items?: string[] };
+    if (Array.isArray(items) && items.length > 0) dispatch({ type: "followups", id, items: items.slice(0, 3) });
+  } catch {
+    // Suggestions are a nicety; the answer stands without them.
+  }
 }
 
 function readSnapshot(): ViewSnapshot {
@@ -59,7 +73,14 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
       applyAgentSideEffects(event);
       recordToolEnd(id, event);
       // A finished answer brackets its results on the globe and frames them.
-      if (event.type === "done") showTurn(id);
+      if (event.type === "done") {
+        showTurn(id);
+        // The next questions come once the answer is whole (a stopped or failed turn gets none).
+        if (event.content) {
+          const q = [...asThread(get<AgentThread>(AGENT_CHAT)).messages].reverse().find((m) => m.role === "user")?.text ?? "";
+          void loadFollowUps(id, q, event.content);
+        }
+      }
       const last = pending.current[pending.current.length - 1];
       if (last && last.id === id) last.events.push(event);
       else pending.current.push({ id, voiceTaskId, events: [event] });

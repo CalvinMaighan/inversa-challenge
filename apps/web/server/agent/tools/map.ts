@@ -55,9 +55,10 @@ const CONTROL_DESCRIPTIONS = {
   set_period: "Set how far back the map and timeline reach: 30, 90, 180, 365 (1 year) or 730 (2 years) days; dots, counts and the timeline change together. Returns at once.",
   filter_species: "Show or hide one species on the map (the species chips); only=true shows just that one. Returns at once.",
   select_area: "Choose one of this app's own named areas (the area button above the timeline) and fly there: lionfish has the Florida Keys, Mexican Caribbean, Belize and Colombian Caribbean; the other apps have one. Not for towns or rivers: use fly_to for any other place. Returns at once.",
-  zoom: "Zoom the globe in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
+  zoom: "Zoom the globe in (half the height), out (twice the height) or fit (frame the whole area again), around where it is now. To go to a place, call fly_to instead (then zoom if needed). Returns at once.",
   close_panel: "Close the open sighting card. Returns at once.",
   fly_to: "Move the globe camera to a place by name (a town, river town, reef town or area of this app) or to lat and lon; altitudeM is the camera height in metres (omit for a sensible default). Returns at once.",
+  show_card: "Pin an info card in the chat with its sources: a short title, one to three plain sentences and up to four sources (id and label exactly as a data tool returned them). Use it when the user asks to keep or pin something. Returns at once.",
   open_evidence: "Open one sighting's card on the map and fly to it, by the evidence id exactly as a data tool returned it (sighting:<id>, fish:<id>). Returns at once.",
 } as const;
 

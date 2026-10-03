@@ -60,7 +60,7 @@ Not integrated. Each needs a sign-up, a request or an agreement first.
 - **Live data** (bell, top right): the newest record from each live feed with its age, freshest first. A dot shows when something new arrives.
 - **Look** (eye, top right): visual modes and the map window (shape, size, soft edge).
 - **Developer** (`<>`, top right): tab **Feeds** shows every data source and its health; tab **API Keys** shows which keys are set and lets you paste missing ones.
-- **Agent** (left column, tab 1): ask about the species and places on the map; answers cite their sources. It stays on topic (anything else is steered back to what it covers) and can drive the map: fly to a town, zoom, pick an area, set the period, filter species, open menus (layers, live data, look, period) and open a sighting's card to read it out. Tap the microphone and it answers aloud at once ("I'm listening"); the same controls work by voice.
+- **Agent** (left column, tab 1): ask about the species and places on the map; answers cite their sources. It stays on topic (anything else is steered back to what it covers) and can drive the map: fly to a town, zoom, pick an area, set the period, filter species, open menus (layers, live data, look, period) and open a sighting's card to read it out. Tap the microphone and it answers aloud at once ("I'm listening"); the same controls work by voice, what you say and what it says appear in the chat, and it can pin an info card with its sources. Under each answer, "Ask next" offers the most likely follow-up questions.
 - **Questions** (tab 2): every question the agent supports, by topic, one tap to ask.
 
 ## Run locally
@@ -96,6 +96,7 @@ The globe works with none of them. Set them in Doppler (`inversa`, config `dev` 
 | `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Cesium terrain and aerial imagery | keyless Esri imagery |
 | `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Photorealistic 3D Tiles (optional) | ion imagery |
 | `XAI_API_KEY` | voice | text still works |
+| `FASTINO_API_KEY` | Fastino GLiDE decisions: every question is routed before the big model (off-topic and greetings answered in about a second), suggested next questions, and the voice's stop and eager-analysis decisions | everything runs as before, just without those shortcuts |
 | `R2_*` | Litestream backups and raw archive in Cloudflare R2 | local files only |
 
 Agent spend is capped per day ($5 total, $2 per app).
@@ -144,6 +145,15 @@ Litestream: SQLite files → R2
 | Client state (`@calvinjs/active-state`) | `apps/web/client/state/`, `packages/active-state/` |
 
 Only Axum writes the databases; the agent reaches data only through GraphQL. Each app's data is its own files and every request carries the app in its path.
+
+## Decisions with Fastino GLiDE
+
+[GLiDE](https://docs.fastino.ai/concepts/glide) is a decision model: it reads a state and answers typed questions with probabilities instead of writing text. The app asks it small questions where a decision is all that is needed, and keeps the large model for answers:
+
+- **Routing** (`apps/web/server/agent/decisions.ts`): each message gets `on_topic` (yes/no) and `intent` (reports, conditions, priority, data sources, map control, greeting, off topic). A confident off-topic message or greeting is answered at once from the app's own topics (no model call, no spend); everything else reaches the agent with the intent and the tools that usually serve it as a hint.
+- **Ask next** (`server/agent/followups.ts`): picks the likeliest next questions from the supported-questions list.
+- **Voice** (`server/voice/voice-session.ts`): decides whether a short utterance means stop, and starts the analyst on a data question at once instead of waiting for the voice model.
+- Without `FASTINO_API_KEY`, or when the API is slow or down (4 s timeout, then a 60 s cool-down after three failures), none of it runs and the app behaves as before.
 
 ## Honesty rules
 

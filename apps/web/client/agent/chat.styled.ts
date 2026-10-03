@@ -123,6 +123,16 @@ export const Empty = styled.p`
 
 export const UserBubble = styled.div`
   align-self: flex-end;
+  /* Said out loud: a small tag says so. */
+  &[data-source="voice"]::before {
+    content: "voice";
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font: 500 10px / 1.2 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
   max-width: 85%;
   padding: 6px 10px;
   border-radius: var(--radius-s);

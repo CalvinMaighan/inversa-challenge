@@ -30,6 +30,7 @@ export type Route = {
 /** Confidence the app needs before it skips the model (off topic, greeting) or passes the decision on as a hint. */
 export const SHORTCUT_CONFIDENCE = 0.95;
 export const HINT_CONFIDENCE = 0.6;
+const ROUTE_TIMEOUT_MS = 2_500;
 
 /** Which of an app's tools usually serve each intent. */
 const TOOLS_FOR: Record<Intent, readonly string[]> = {
@@ -86,7 +87,8 @@ export async function routeMessage({ app, question, history = [], signal, glide 
     conversation: history.slice(-4).map((m) => `${m.role}: ${m.content.slice(0, 220)}`),
     message: question.slice(0, 600),
   };
-  const result = await decide(state, questions, { signal, ...glide });
+  // An unsure decision can take 8 to 12 s (GLiDE reasons longer when it doubts); the turn does not wait past this and runs as before.
+  const result = await decide(state, questions, { signal, timeoutMs: ROUTE_TIMEOUT_MS, ...glide });
   if (!result) return null;
   const { on_topic, intent } = result.answers;
   if (!(INTENTS as readonly string[]).includes(intent.choice)) return null;

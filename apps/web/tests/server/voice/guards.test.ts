@@ -160,3 +160,14 @@ describe("stop intents and prompt formatting", () => {
     expect(formatProgressContext("a", "sightings")).toContain("progress: sightings");
   });
 });
+
+describe("result context sources", () => {
+  test("the analyst's sources reach the voice for show_card, with a note that they are not read aloud", () => {
+    const text = formatResultContext([
+      { taskId: "t1", status: "completed", objective: "newest bighead", result: "One report.", error: null, sources: [{ id: "fish:inat:1", label: "Bighead carp · 2026-08-29 · iNaturalist" }] },
+      { taskId: "t2", status: "completed", objective: "feeds", result: "All live.", error: null },
+    ]);
+    expect(text).toContain("sources (for show_card, never read aloud): fish:inat:1 = Bighead carp · 2026-08-29 · iNaturalist");
+    expect(text.match(/sources \(for show_card/g)).toHaveLength(1);
+  });
+});
