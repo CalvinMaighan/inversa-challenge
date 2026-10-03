@@ -14,6 +14,7 @@ import { Dot, Icon, IconButton, Mono, Pill, SectionTitle, type Tone } from "../p
 import { clearSelection, closeDrawer, isDrawerOpen, openEvidence, type HudSelection } from "../selection";
 import { feedChip, formatLag } from "../topbar/feed-chips";
 import NoteCard from "../notes/NoteCard";
+import ObservationPlace from "./ObservationPlace";
 import AppIcon from "../appselect/AppIcon";
 import {
   evidenceBadges,
@@ -424,6 +425,7 @@ export function Summary({ kind, evidence, atMs }: { kind: string; evidence: Evid
       {s.parts.length > 0 ? <p>{s.parts.join(" · ")}</p> : null}
       {/* Same-origin media proxy (/v1/<app>/media/<id>) through the local media cache (client/media). */}
       {s.photo ? <CachedImage src={s.photo} alt={`Photo: ${s.title}`} data-testid="evidence-photo" /> : null}
+      {kind === "sighting" ? <ObservationPlace sourcePageUrl={evidence.sourcePageUrl} /> : null}
       {sp?.about ? (
         <p className="about" data-testid="species-about">
           {sp.about}

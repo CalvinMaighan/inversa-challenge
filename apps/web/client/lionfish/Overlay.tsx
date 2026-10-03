@@ -141,6 +141,13 @@ const Marker = styled.button`
     pointer-events: none;
     z-index: 2;
   }
+  /* A sighting's popover has a red border when the sighting has a photo and none when it has not. */
+  .tip[data-sighting] {
+    border-color: transparent;
+  }
+  .tip[data-sighting][data-image] {
+    border-color: var(--accent);
+  }
   .tip b {
     display: block;
     font-weight: 600;
@@ -370,7 +377,7 @@ export default function Overlay(p: OverlayProps) {
               aria-label={reportLabel(r)}
               onClick={() => p.onReport(r)}
             >
-              <span className="tip" role="tooltip" aria-hidden="true">
+              <span className="tip" role="tooltip" aria-hidden="true" data-sighting="" data-image={r.photoUrl ? "" : undefined}>
                 <b>
                   {`Lionfish report · ${sourceName(r.source)}`}
                   {r.photoUrl ? <ImageGlyph /> : null}

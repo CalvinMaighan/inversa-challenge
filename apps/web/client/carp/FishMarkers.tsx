@@ -89,6 +89,13 @@ const Layer = styled.div`
   .tip[data-hidden] {
     visibility: hidden;
   }
+  /* A sighting's popover has a red border when the sighting has a photo and none when it has not. */
+  .tip[data-sighting] {
+    border-color: transparent;
+  }
+  .tip[data-sighting][data-image] {
+    border-color: var(--accent);
+  }
   .tip b {
     display: block;
     font-weight: 600;
@@ -243,6 +250,9 @@ export default function FishMarkers() {
           return;
         }
         tip.innerHTML = "";
+        tip.setAttribute("data-sighting", "");
+        if (hit.s.photo) tip.setAttribute("data-image", "");
+        else tip.removeAttribute("data-image");
         const b = document.createElement("b");
         b.textContent = hit.s.species;
         const small = document.createElement("small");
