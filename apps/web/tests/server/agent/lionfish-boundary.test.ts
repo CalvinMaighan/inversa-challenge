@@ -71,12 +71,10 @@ describe("lionfish boundary", () => {
   test("lionfish boundary: other apps' species are recognised by the scope guard and handed to the model as guidance, not answered for it", () => {
     for (const question of ["Where are Burmese pythons on Cozumel?", "Any Burmese python reports in the Keys?", "Show python sightings near Belize City."]) {
       const guidance = scopeGuidance(LIONFISH, question)!;
-      expect(guidance).toContain(LIONFISH.agent.refusal);
-      expect(guidance).toMatch(/Answer the user yourself, in your own words/);
-      expect(guidance).toMatch(/call your tools for the part that is in scope/);
+      expect(guidance).toContain("switch_app");
+      expect(guidance).toMatch(/switched/);
     }
     expect(scopeGuidance(LIONFISH, "Where were lionfish reported in the last 7 days?")).toBeNull();
-    expectMeetsRefusal("lionfish-boundary-other-species", scopeGuard(LIONFISH, "Where are Burmese pythons on Cozumel?")!);
   });
 
   test("lionfish boundary: a risk percent, causal reef damage, heat stress as proof and a population count are refused by topic, in words that meet the documented criteria", () => {

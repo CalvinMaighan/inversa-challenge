@@ -99,8 +99,8 @@ describe("carp boundary", () => {
   test("carp boundary: other species (another app's) are recognised by the scope guard and handed to the model as guidance; common carp is left to the prompt's boundary", () => {
     for (const question of ["Where are Burmese pythons active in the Everglades?", "Any lionfish sightings near Key Largo?", "How many pythons were reported around Marathon this week?"]) {
       const guidance = scopeGuidance(CARP, question)!;
-      expect(guidance).toContain(CARP.agent.refusal);
-      expect(guidance).toMatch(/Answer the user yourself, in your own words/);
+      expect(guidance).toContain("switch_app");
+      expect(guidance).toMatch(/switched/);
     }
     expect(scopeGuard(CARP, "Where are common carp in Louisiana right now?")).toBeNull();
     expect(PROMPT).toMatch(/carp_sightings returns the stored reports/);

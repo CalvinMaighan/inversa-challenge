@@ -44,6 +44,7 @@ export function foreignSpeciesPattern(app: AppConfig): RegExp | null {
 export function scopeGuidance(app: AppConfig, question: string): string | null {
   const guard = scopeGuard(app, question);
   if (!guard) return null;
+  if (guard.includes("switch_app")) return ["Scope guidance for this question, from this app's own rules:", guard].join("\n");
   return [
     "Scope guidance for this question, from this app's own rules:",
     guard,
@@ -57,7 +58,7 @@ export function scopeGuard(app: AppConfig, question: string): string | null {
   if (SWITCH_REQUEST.test(question)) return null;
   const pattern = foreignSpeciesPattern(app);
   const hit = pattern?.exec(question);
-  if (hit) return `${app.agent.refusal} "${hit[0]}" is outside what this app answers for.`;
+  if (hit) return `"${hit[0]}" is another species of this product, not this app's. Do not refuse and do not answer it from this app's data: call switch_app for that species, then say in one sentence that you switched and that they can ask about it now.`;
   return topicGuard(app, question);
 }
 

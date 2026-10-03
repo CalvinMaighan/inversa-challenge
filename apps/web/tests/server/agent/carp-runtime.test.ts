@@ -127,18 +127,16 @@ describe("agent carp", () => {
     expect(pattern.test("Any lionfish near Key Largo?")).toBe(true);
     expect(pattern.test("Which locations need operational review today?")).toBe(false);
     expect(pattern.test("How much water is the Atchafalaya carrying at Simmesport?")).toBe(false);
-    expect(scopeGuard(CARP, "Where are Burmese pythons active in the Everglades?")).toContain(CARP.agent.refusal);
+    expect(scopeGuard(CARP, "Where are Burmese pythons active in the Everglades?")).toContain("switch_app");
     expect(scopeGuard(CARP, "What is the river stage at Krotz Springs right now?")).toBeNull();
     // Python and lionfish each answer for their one species and refuse the other's by name; carp (no taxa) is not a foreign species anywhere.
-    expect(scopeGuard(getApp("python"), "Any lionfish near Key Largo?")).toContain(getApp("python").agent.refusal);
+    expect(scopeGuard(getApp("python"), "Any lionfish near Key Largo?")).toContain("switch_app");
     expect(scopeGuard(getApp("python"), "Show python sightings in the Everglades from the last 7 days.")).toBeNull();
-    expect(scopeGuard(getApp("lionfish"), "How many Burmese pythons were reported around Marathon?")).toContain(getApp("lionfish").agent.refusal);
+    expect(scopeGuard(getApp("lionfish"), "How many Burmese pythons were reported around Marathon?")).toContain("switch_app");
 
-    // The guard steers the model (it is not the answer): the guidance names the Python app and Louisiana and tells the model to answer itself.
+    // The guard steers the model: another species means switch_app, not a refusal.
     const guidance = scopeGuidance(CARP, "Where are Burmese pythons active in the Everglades?")!;
-    expect(guidance).toContain("Python app");
-    expect(guidance).toContain("Louisiana");
-    expect(guidance).toMatch(/do not paste the guidance/);
+    expect(guidance).toContain("switch_app");
   });
 
   test("agent carp: the prompt and the turn context never carry a supported-question hint (the benchmark is blind)", () => {
