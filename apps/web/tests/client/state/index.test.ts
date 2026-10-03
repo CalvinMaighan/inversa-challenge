@@ -11,7 +11,7 @@ import { registeredStateKeys } from "@/eslint-plugins/inversa/state-key-registra
 const PLAN_KEYS = ["APP", "CARP", "TIME", "VIEW", "LAYERS", "SELECTION", "FEEDS", "MISSIONS", "PEERS", "ME", "NOTES", "MESSAGES", "AGENT_CARD", "AGENT_CHAT", "AGENT_HIGHLIGHT", "VOICE"];
 const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
 /** The look of the globe (docs/GODS_EYE.md GC2, GE9): preset, and the map window: on or off, soft edge, shape, size. */
-const LOOK_KEYS = ["LOOK", "SCOPE_FEATHER", "SCOPE_SHAPE", "SCOPE_SIZE"];
+const LOOK_KEYS = ["LOOK", "SCOPE_BLUR", "SCOPE_FEATHER", "SCOPE_SHAPE", "SCOPE_SIZE"];
 /** How far back the timelines go (the period button in the top row). */
 const RANGE_KEYS = ["RANGE_DAYS", "ALERTS_SEEN", "MENU"];
 
@@ -61,6 +61,7 @@ describe("transport key index (PLAN.md C6)", () => {
       "NOTES",
       "PEERS",
       "RANGE_DAYS",
+      "SCOPE_BLUR",
       "SCOPE_FEATHER",
       "SCOPE_SHAPE",
       "SCOPE_SIZE",

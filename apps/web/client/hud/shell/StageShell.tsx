@@ -5,7 +5,7 @@ import { get, subscribe } from "@calvinjs/active-state";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
-import { featherOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
+import { blurOf, featherOf, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
 import Embers from "client/intro/Embers";
 import styled from "client/styled";
 
@@ -211,6 +211,7 @@ function applyScope(shell: HTMLElement): void {
   shell.dataset.shape = win.shape;
   const style = shell.style;
   style.setProperty("--scope-mask", scopeMaskCss(win, vw, vh));
+  style.setProperty("--scope-blur", `${blurOf(get(SCOPE_BLUR))}px`);
   style.setProperty("--scope-blur-mask", scopeBlurMaskCss(win, vw, vh));
   style.setProperty("--scope-clip", scopeClipCss(win));
   style.setProperty("--scope-w", `${win.width}px`);
@@ -235,7 +236,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
     if (!main) return;
     const sync = () => applyScope(main);
     sync();
-    const offs = [SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER].map((k) => subscribe(k, sync));
+    const offs = [SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER, SCOPE_BLUR].map((k) => subscribe(k, sync));
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(sync) : null;
     observer?.observe(main);
     return () => {

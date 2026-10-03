@@ -10,7 +10,7 @@ import { SHEET_MEDIA } from "client/agent/layout/geometry";
 import { ALERTS_SEEN } from "client/state/alerts";
 import { FEEDS } from "client/state/feeds";
 import { MENU } from "client/state/menu";
-import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
+import { blurOf, featherOf, LOOK, lookOf, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
 import type { MenuId } from "shared/voice/ui-tools";
@@ -22,7 +22,7 @@ import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
 import { useActiveApp } from "../appselect/use-active-app";
 import { aboutSentence, WINDOW_NOTE } from "../help/content";
 import DeveloperPanel from "../developer/DeveloperPanel";
-import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
+import { LookChoices, LookIcon, setLook, setScopeBlur, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
 import { openEvidence } from "../selection";
 import { feedChip, feedSummary, formatLag, sortFeedsForStatus } from "./feed-chips";
 import { freshnessLines } from "./freshness";
@@ -577,7 +577,7 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
  * Look (GE9): the visual presets and the map window (shape, size, soft edge), as an icon button in the cluster. Its
  * popover opens below it, right edges aligned.
  */
-function Look({ look, shape, size, feather }: LookState) {
+function Look({ look, shape, size, feather, blur }: LookState) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
   const pop = usePopover(triggerRef, popRef, "look");
@@ -604,10 +604,12 @@ function Look({ look, shape, size, feather }: LookState) {
             shape={shape}
             size={size}
             feather={feather}
+            blur={blur}
             onLook={setLook}
             onShape={setScopeShape}
             onSize={setScopeSize}
             onFeather={setScopeFeather}
+            onBlur={setScopeBlur}
           />
         </PopoverBox>
       ) : null}
@@ -678,14 +680,15 @@ export default function TopBar(props: ChromeProps) {
     shape: shapeOf(useActiveState<ScopeShape>(SCOPE_SHAPE)[0]),
     size: sizeOf(useActiveState<number>(SCOPE_SIZE)[0]),
     feather: featherOf(useActiveState<number>(SCOPE_FEATHER)[0]),
+    blur: blurOf(useActiveState<number>(SCOPE_BLUR)[0]),
   };
   return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} seen={seen ?? 0} onSeen={setSeen} />;
 }
 
 type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
 /** The Look keys the Look popover shows. */
-type LookState = { look: LookId; shape: ScopeShape; size: number; feather: number };
-const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined) };
+type LookState = { look: LookId; shape: ScopeShape; size: number; feather: number; blur: number };
+const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined), blur: blurOf(undefined) };
 
 /** The chrome over plain props (the stores are read by TopBar), so it renders anywhere, tests included. */
 export function TopBarView({
