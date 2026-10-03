@@ -1,49 +1,39 @@
 import { describe, expect, test } from "bun:test";
 
-import { activeLayers } from "client/hud/layers/LayerRail";
+import { railLayers } from "client/hud/layers/LayerRail";
 import { layersFor } from "client/state/layers";
 import { getApp } from "shared/apps";
 
-const reefOff = { heat: false, mode: "dhw" } as const;
+const idsOf = (rail: { id: string }[]) => rail.map((l) => l.id);
+const onIds = (rail: { id: string; on: boolean }[]) => rail.filter((l) => l.on).map((l) => l.id);
 
 describe("layer rail", () => {
-  test("a fresh app has only sightings on, so the rail starts with one button", () => {
-    for (const id of ["lionfish", "python"] as const) {
-      const app = getApp(id);
-      expect(activeLayers(app, layersFor(app), reefOff, true).map((l) => l.id)).toEqual(["sightings"]);
-    }
+  test("a button for every layer the app can show, in the Layers panel's order; only sightings is on at first", () => {
+    const lion = getApp("lionfish");
+    const rail = railLayers(lion, layersFor(lion), { heat: false }, true);
+    expect(idsOf(rail)).toEqual(["sightings", "reef", "sst-map", "radar", "lightning", "cyclones"]);
+    expect(onIds(rail)).toEqual(["sightings"]);
+    const py = getApp("python");
+    expect(idsOf(railLayers(py, layersFor(py), { heat: false }, true))).toEqual(["sightings", "radar", "lightning", "cyclones"]);
+    expect(onIds(railLayers(py, layersFor(py), { heat: false }, true))).toEqual(["sightings"]);
   });
 
-  test("carp's sightings are the fish dots: one button while they show, none once hidden", () => {
-    const app = getApp("carp");
-    expect(activeLayers(app, layersFor(app), reefOff, true).map((l) => l.id)).toEqual(["sightings"]);
-    expect(activeLayers(app, layersFor(app), reefOff, false)).toEqual([]);
+  test("carp's sightings are the fish dots; the reef heat map is only a lionfish layer", () => {
+    const carp = getApp("carp");
+    expect(idsOf(railLayers(carp, layersFor(carp), { heat: true }, true))).toEqual(["sightings", "sst-map", "radar", "lightning", "cyclones"]);
+    expect(onIds(railLayers(carp, layersFor(carp), { heat: false }, false))).toEqual([]);
+    expect(onIds(railLayers(carp, layersFor(carp), { heat: false }, true))).toEqual(["sightings"]);
+    const py = getApp("python");
+    expect(idsOf(railLayers(py, layersFor(py), { heat: true }, true))).not.toContain("reef");
   });
 
-  test("every layer that is switched on gets a button, in the panel's order: sightings, reef heat, then the overlays", () => {
-    const app = getApp("lionfish");
-    const layers = layersFor(app);
+  test("a layer that is switched on shows as on, and a click is a toggle", () => {
+    const lion = getApp("lionfish");
+    const layers = layersFor(lion);
     layers.visible.radar = true;
-    layers.visible["sst-map"] = true;
-    const ids = activeLayers(app, layers, { heat: true, mode: "temp" }, true).map((l) => l.id);
-    expect(ids).toEqual(["sightings", "reef", "sst-map", "radar"]);
-  });
-
-  test("each button knows how to switch its layer off", () => {
-    const app = getApp("python");
-    const layers = layersFor(app);
-    layers.visible.lightning = true;
-    const rail = activeLayers(app, layers, reefOff, true);
-    expect(rail.map((l) => l.id)).toEqual(["sightings", "lightning"]);
-    for (const l of rail) {
-      expect(typeof l.off).toBe("function");
-      expect(l.label.length).toBeGreaterThan(2);
-      expect(l.blurb.length).toBeGreaterThan(8);
-    }
-  });
-
-  test("the reef heat map is only a lionfish layer", () => {
-    const app = getApp("python");
-    expect(activeLayers(app, layersFor(app), { heat: true, mode: "dhw" }, true).map((l) => l.id)).toEqual(["sightings"]);
+    const rail = railLayers(lion, layers, { heat: true }, true);
+    expect(onIds(rail)).toEqual(["sightings", "reef", "radar"]);
+    for (const l of rail) expect(typeof l.toggle).toBe("function");
+    expect(rail.every((l) => l.label.length > 2)).toBe(true);
   });
 });
