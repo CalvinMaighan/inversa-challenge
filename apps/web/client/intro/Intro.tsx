@@ -334,6 +334,22 @@ const Footer = styled.div`
   animation: ${rise} 700ms 300ms ease both;
 `;
 
+/** The button, its hint and the skip link: always there, faint and dead until a species is chosen. */
+const Actions = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.15;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+
+  &[data-active] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+`;
+
 const Cta = styled.button`
   display: inline-flex;
   align-items: center;
@@ -513,26 +529,22 @@ export default function Intro() {
           })}
         </Cards>
         <Footer>
-          {picked ? (
-            <>
-              <Cta ref={cta} type="button" disabled={intro.busy} onClick={() => void enter(true)}>
-                <Mic />
-                {intro.busy ? "Waiting for the microphone…" : "Enter the Inversa Experience"}
-              </Cta>
-              <Hint data-tone={intro.note ? "warn" : undefined}>
-                {intro.note
-                  ? `${intro.note.replace(/[.\s]*$/, ".")} Allow the microphone for this site, or carry on without voice.`
-                  : "Your browser will ask for the microphone. Your guide speaks first and answers by voice."}
-              </Hint>
-              {intro.note || !intro.busy ? (
-                <Quiet type="button" onClick={() => void enter(false)}>
-                  Continue without voice
-                </Quiet>
-              ) : null}
-            </>
-          ) : (
-            <Hint>Pick the species you want to explore. Everything you see is already loading behind this screen.</Hint>
-          )}
+          <Actions data-active={picked ? "" : undefined} inert={!picked}>
+            <Cta ref={cta} type="button" disabled={intro.busy} onClick={() => void enter(true)}>
+              <Mic />
+              {intro.busy ? "Waiting for the microphone…" : "Enter the Inversa Experience"}
+            </Cta>
+            <Hint data-tone={intro.note ? "warn" : undefined}>
+              {intro.note
+                ? `${intro.note.replace(/[.\s]*$/, ".")} Allow the microphone for this site, or carry on without voice.`
+                : "Your browser will ask for the microphone. Your guide speaks first and answers by voice."}
+            </Hint>
+            {intro.note || !intro.busy ? (
+              <Quiet type="button" onClick={() => void enter(false)}>
+                Continue without voice
+              </Quiet>
+            ) : null}
+          </Actions>
           <Loading aria-live="polite">
             <div>
               <b style={{ transform: `scaleX(${intro.progress})` }} />
