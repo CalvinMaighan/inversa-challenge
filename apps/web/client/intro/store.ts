@@ -14,7 +14,7 @@ import { getApp, type AppId } from "shared/apps";
 
 import { INTRO_FLAG } from "./constants";
 import { entryView, INTRO_ATTR, LEAVE_MS, OVERVIEW_ALTITUDE_M, overviewView, progressOf, type IntroPhase } from "./model";
-import { startPreload } from "./preload";
+import { startPreload, warmFiner } from "./preload";
 
 /**
  * The gate's state: which step it is on, the species picked, whether the microphone request is in flight, and how far
@@ -99,6 +99,7 @@ export function choose(id: AppId): void {
   // The switch put the camera on the app's own area; the gate keeps the whole globe in view whichever species is chosen.
   set<ViewState>(VIEW, (prev = VIEW.defaults) => (prev.altitudeM >= OVERVIEW_ALTITUDE_M * 0.9 ? prev : overviewView(prev)));
   parkTimelines();
+  warmFiner(id);
   patch({ phase: "enter", app: id, note: null });
 }
 

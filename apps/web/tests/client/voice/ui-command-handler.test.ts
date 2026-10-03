@@ -177,7 +177,7 @@ describe("ui command handler", () => {
     expect(hud.camera.place).toBe("Key West");
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
-    expect(hud.layers).toEqual(["sightings", "missions", "peers", "notes"]);
+    expect(hud.layers).toEqual(["sightings"]);
     // "Hide pythons on hotspots" switches the species off: nothing is shown.
     expect(hud.species).toEqual([]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");

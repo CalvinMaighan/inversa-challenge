@@ -23,4 +23,4 @@ Honest limits: frame chunk URLs shift every hour (the axis starts at the hour tw
 
 ## Skipping
 
-`?intro=0`. Automated browsers (`navigator.webdriver`) skip it unless `?intro=1`, so the e2e scripts are unchanged. A refresh clears the old `#` camera so the globe starts high again.
+`?intro=0`. The e2e build (`NEXT_PUBLIC_INVERSA_E2E=1`) skips it unless `?intro=1`, so the e2e scripts are unchanged; every other build, dev included, shows it on every load. A refresh clears the old `#` camera so the globe starts high again.

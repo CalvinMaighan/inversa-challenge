@@ -374,12 +374,12 @@
     {
       "id": "locations",
       "label": "Locations",
-      "defaultOn": true
+      "defaultOn": false
     },
     {
       "id": "alerts",
       "label": "NWS alerts",
-      "defaultOn": true
+      "defaultOn": false
     },
     {
       "id": "stations",
@@ -389,17 +389,17 @@
     {
       "id": "missions",
       "label": "Team missions",
-      "defaultOn": true
+      "defaultOn": false
     },
     {
       "id": "peers",
       "label": "Teammates",
-      "defaultOn": true
+      "defaultOn": false
     },
     {
       "id": "notes",
       "label": "Field notes",
-      "defaultOn": true
+      "defaultOn": false
     },
     {
       "id": "sst-map",

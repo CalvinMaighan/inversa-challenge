@@ -31,6 +31,7 @@ import Timeline from "./timeline/Timeline";
 import GlobeTooltip from "./tooltip/GlobeTooltip";
 import { GUTTER_PX } from "./shell/geometry";
 import TopBar, { ROUND_PX, TOPBAR_WIDTH_CSS } from "./topbar/TopBar";
+import LayerRail from "./layers/LayerRail";
 import ZoomControls from "./zoom/ZoomControls";
 
 /**
@@ -181,6 +182,7 @@ function HudBody({ sync = true }: HudProps) {
         {conditions ? null : <Timeline />}
         {helpOpen ? <HelpSheet onClose={closeHelp} /> : null}
         {/* GE8: zoom controls (+/-, altitude slider, reset, fit sightings) at the right of the globe. */}
+        {drawerOpen ? null : <LayerRail />}
         <ZoomControls />
         <BottomBar />
       </Chrome>

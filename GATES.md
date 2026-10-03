@@ -22,7 +22,7 @@ Branch: polish-for-review (PR #5). Checks run from the repo root.
   EVIDENCE: client/intro/preload.ts. Network log in the pane at python start: 24 GET /v1/lionfish/frames?...&step=60 (2024-10-03 to 2026-10-03, newest first, all 200) plus GET /v1/carp/sightings. API chunk max-age 60 -> 300 (frames.rs). Agent: carp_sightings default 730 days (earlier); python/lionfish sightings tool hours max 90 days -> 731 days (capabilities.ts MAX_SIGHTING_HOURS). Tests: preload.test.ts (chunk plan, 23 to 26 chunks, newest first, <= 744 frames).
 
 - [x] G6 Skip switch for tests and dev: `?intro=0`, and automated browsers skip the gate unless `?intro=1`, so the existing e2e scripts' flows are unchanged.
-  EVIDENCE: bootstrap.test.ts (4 cases: marks, ?intro=0, webdriver skip, ?intro=1 forces). The Playwright e2e scripts were NOT re-run in this pass (they need the full stack); the skip relies on navigator.webdriver, which Playwright sets.
+  EVIDENCE: bootstrap.test.ts (4 cases: marks, ?intro=0, e2e-build skip, ?intro=1 forces). The Playwright e2e scripts were NOT re-run in this pass (they need the full stack); the skip relies on NEXT_PUBLIC_INVERSA_E2E=1, which e2e/stack.ts sets for its build.
 
 - [x] G7 Whole suite green: bun run check (lint, typecheck, bun test, cargo test).
   CHECK: cd apps/web && bun run test 2>&1 | grep -E " fail$"

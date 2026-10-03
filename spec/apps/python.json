@@ -63,9 +63,9 @@
     { "id": "sst", "label": "Sea surface temperature (GOES)", "defaultOn": false },
     { "id": "stations", "label": "Gauges and buoys", "defaultOn": false },
     { "id": "alerts", "label": "NWS alerts", "defaultOn": false },
-    { "id": "missions", "label": "Team missions", "defaultOn": true },
-    { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "missions", "label": "Team missions", "defaultOn": false },
+    { "id": "peers", "label": "Teammates", "defaultOn": false },
+    { "id": "notes", "label": "Field notes", "defaultOn": false },
     { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
     { "id": "lightning", "label": "Lightning", "defaultOn": false, "description": "Where lightning struck in the last 15 minutes." },
     { "id": "cyclones", "label": "Hurricanes and tropical storms", "defaultOn": false, "description": "Active storms, their track and forecast cone." }

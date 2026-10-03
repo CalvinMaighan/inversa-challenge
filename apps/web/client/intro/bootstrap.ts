@@ -5,13 +5,13 @@ import { INTRO_ATTR, INTRO_FLAG, INTRO_SKIP_PARAM, LEAVE_MS } from "./constants"
  * the HUD from the very first frame (the gate itself is server-rendered). `introInit` (store.ts) removes the mark when
  * the gate opens the app.
  *
- * No gate for `?intro=0`, and none for automated browsers (`navigator.webdriver`: the e2e scripts drive the app
- * itself) unless `?intro=1` asks for it.
+ * No gate for `?intro=0`. The e2e builds (`NEXT_PUBLIC_INVERSA_E2E=1`, whose scripts drive the app itself) skip it too
+ * unless `?intro=1` asks for it; every other build, dev included, shows it on every load.
  */
-export function introBootstrapScript(): string {
+export function introBootstrapScript(skipByDefault: boolean = process.env.NEXT_PUBLIC_INVERSA_E2E === "1"): string {
   const on = `document.documentElement.setAttribute(${JSON.stringify(INTRO_ATTR)},"");window[${JSON.stringify(INTRO_FLAG)}]=true`;
   const p = `var p=new URLSearchParams(location.search).get(${JSON.stringify(INTRO_SKIP_PARAM)});`;
-  return `(function(){try{${p}if(p==="0"||(p!=="1"&&navigator.webdriver===true))return}catch(e){}${on}})();`;
+  return `(function(){try{${p}if(p==="0"||(p!=="1"&&${skipByDefault}))return}catch(e){}${on}})();`;
 }
 
 /** The chrome (chat card and HUD) and the page's embers are hidden while the gate is up (it has its own), and fade in when it opens. The globe stays. */

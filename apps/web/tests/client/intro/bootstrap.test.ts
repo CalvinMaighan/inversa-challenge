@@ -4,13 +4,12 @@ import { INTRO_CSS, introBootstrapScript } from "client/intro/bootstrap";
 import { INTRO_ATTR, INTRO_FLAG } from "client/intro/constants";
 
 /** Runs the head script against a fake page. */
-function run(search: string | null, webdriver = false): { attrs: Record<string, string>; flag: unknown } {
+function run(search: string | null, e2eBuild = false): { attrs: Record<string, string>; flag: unknown } {
   const attrs: Record<string, string> = {};
   const win: Record<string, unknown> = {};
   const location = { search: search ?? "" };
-  const navigator = { webdriver };
   const document = { documentElement: { setAttribute: (k: string, v: string) => (attrs[k] = v) } };
-  new Function("document", "location", "window", "navigator", "URLSearchParams", introBootstrapScript())(document, location, win, navigator, URLSearchParams);
+  new Function("document", "location", "window", "URLSearchParams", introBootstrapScript(e2eBuild))(document, location, win, URLSearchParams);
   return { attrs, flag: win[INTRO_FLAG] };
 }
 
@@ -27,8 +26,9 @@ describe("intro head script", () => {
     expect(flag).toBeUndefined();
   });
 
-  test("automated browsers skip the gate unless ?intro=1 asks for it", () => {
+  test("an e2e build skips the gate unless ?intro=1 asks for it; a normal build never does, even in an automated browser", () => {
     expect(run("?app=carp", true).attrs[INTRO_ATTR]).toBeUndefined();
+    expect(run("?app=carp", false).attrs[INTRO_ATTR]).toBe("");
     expect(run("?intro=1", true).attrs[INTRO_ATTR]).toBe("");
   });
 
