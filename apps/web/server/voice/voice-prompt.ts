@@ -49,7 +49,7 @@ const UI_TOOL_DESCRIPTIONS: Record<Exclude<UiToolName, "toggle_layer">, string> 
   filter_species:
     "Show or hide one species on the map (the species chips at the top left). With only=true, show just that one and hide the others. Returns at once.",
   select_area:
-    "Choose one of this app's areas (the area button above the timeline) and fly there: for lionfish the Florida Keys, Mexican Caribbean, Belize or Colombian Caribbean. Returns at once.",
+    "Choose one of this app's own named areas (the area button above the timeline) and fly there: for lionfish the Florida Keys, Mexican Caribbean, Belize or Colombian Caribbean. Not for towns or rivers: use fly_to for those. Returns at once.",
   zoom:
     "Zoom the globe: in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
   close_panel:

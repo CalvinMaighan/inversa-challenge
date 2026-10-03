@@ -15,6 +15,7 @@ import { gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { findArea } from "@/server/agent/tools/lionfish";
 import { ageWords, bboxSchema, feedsFor, given, givenTime, HOUR_MS, localTime, output, resolveBbox } from "@/server/agent/tools/shared";
 import { findSite, siteBox } from "@/server/agent/tools/sites";
+import { resolvePlace } from "client/voice/gazetteer";
 import { LAYER_IDS, type AppConfig } from "@/shared/apps";
 import { LOOK_IDS, LOOK_WORDS } from "@/shared/look";
 import { parseUiCommand, uiToolSchemasFor } from "@/shared/voice/ui-tools";
@@ -53,9 +54,10 @@ const CONTROL_DESCRIPTIONS = {
   open_menu: "Open or close one on-screen menu: layers, live_data (newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes) or developer. Returns at once.",
   set_period: "Set how far back the map and timeline reach: 30, 90, 180, 365 (1 year) or 730 (2 years) days; dots, counts and the timeline change together. Returns at once.",
   filter_species: "Show or hide one species on the map (the species chips); only=true shows just that one. Returns at once.",
-  select_area: "Choose one of this app's areas and fly there (lionfish: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean). Returns at once.",
+  select_area: "Choose one of this app's own named areas (the area button above the timeline) and fly there: lionfish has the Florida Keys, Mexican Caribbean, Belize and Colombian Caribbean; the other apps have one. Not for towns or rivers: use fly_to for any other place. Returns at once.",
   zoom: "Zoom the globe in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
   close_panel: "Close the open sighting card. Returns at once.",
+  fly_to: "Move the globe camera to a place by name (a town, river town, reef town or area of this app) or to lat and lon; altitudeM is the camera height in metres (omit for a sensible default). Returns at once.",
   open_evidence: "Open one sighting's card on the map and fly to it, by the evidence id exactly as a data tool returned it (sighting:<id>, fish:<id>). Returns at once.",
 } as const;
 
@@ -68,6 +70,9 @@ export function controlTools(app: AppConfig) {
     async execute(input: unknown, ctx: CapabilityContext): Promise<CapabilityOutput> {
       const command = parseUiCommand(name, input, ctx.app);
       if (!command) throw new Error(`${name}: the arguments are not valid for this app`);
+      if (command.name === "fly_to" && command.args.lat === undefined && command.args.place && !resolvePlace(command.args.place)) {
+        throw new Error(`fly_to: no place named "${command.args.place}" is known; call it again with lat and lon`);
+      }
       ctx.emit({ type: "ui", name: command.name, args: command.args });
       return output({ applied: true, control: name, args: command.args, note: "Done on the map. Say what you did in a few words; a control is no evidence of what it shows." }, [], [], 1);
     },

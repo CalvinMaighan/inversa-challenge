@@ -9,8 +9,50 @@ export type Place = { name: string; lat: number; lon: number; altitudeM: number;
 const TOWN_M = 15_000;
 const UNIT_M = 40_000;
 const REGION_M = 90_000;
+/** Cities and river towns of the Mississippi River Basin, and reef towns of the Caribbean areas. */
+const RIVER_M = 60_000;
+const REEF_M = 120_000;
 
 export const PLACES: readonly Place[] = [
+  // Mississippi River Basin (carp)
+  { name: "St. Louis", lat: 38.627, lon: -90.1994, altitudeM: RIVER_M, aliases: ["saint louis", "st louis"] },
+  { name: "Memphis", lat: 35.1495, lon: -90.049, altitudeM: RIVER_M },
+  { name: "Vicksburg", lat: 32.3526, lon: -90.8779, altitudeM: RIVER_M },
+  { name: "Natchez", lat: 31.5604, lon: -91.4032, altitudeM: RIVER_M },
+  { name: "Baton Rouge", lat: 30.4515, lon: -91.1871, altitudeM: RIVER_M },
+  { name: "New Orleans", lat: 29.9511, lon: -90.0715, altitudeM: RIVER_M },
+  { name: "Morgan City", lat: 29.6994, lon: -91.2068, altitudeM: RIVER_M },
+  { name: "Cairo", lat: 37.0053, lon: -89.1765, altitudeM: RIVER_M, aliases: ["cairo illinois", "where the ohio meets the mississippi"] },
+  { name: "Cape Girardeau", lat: 37.3059, lon: -89.5181, altitudeM: RIVER_M },
+  { name: "Chester", lat: 37.9017, lon: -89.8221, altitudeM: RIVER_M, aliases: ["chester illinois"] },
+  { name: "Grafton", lat: 38.9687, lon: -90.4293, altitudeM: RIVER_M, aliases: ["grafton illinois", "the illinois river mouth"] },
+  { name: "Keokuk", lat: 40.3964, lon: -91.3849, altitudeM: RIVER_M },
+  { name: "Clinton", lat: 41.8445, lon: -90.1887, altitudeM: RIVER_M, aliases: ["clinton iowa"] },
+  { name: "Davenport", lat: 41.5236, lon: -90.5776, altitudeM: RIVER_M, aliases: ["quad cities"] },
+  { name: "St. Paul", lat: 44.9537, lon: -93.09, altitudeM: RIVER_M, aliases: ["saint paul", "st paul", "minneapolis", "twin cities"] },
+  { name: "Louisville", lat: 38.2527, lon: -85.7585, altitudeM: RIVER_M, aliases: ["the ohio river at louisville"] },
+  { name: "Kansas City", lat: 39.0997, lon: -94.5786, altitudeM: RIVER_M, aliases: ["the missouri river"] },
+  { name: "Chicago", lat: 41.8781, lon: -87.6298, altitudeM: RIVER_M, aliases: ["the chicago canal", "chicago sanitary canal", "the carp barrier"] },
+  { name: "Atchafalaya Basin", lat: 30.35, lon: -91.55, altitudeM: 180_000, aliases: ["atchafalaya", "the atchafalaya"] },
+  { name: "Mississippi River Basin", lat: 38, lon: -89.5, altitudeM: 2_400_000, aliases: ["the mississippi", "the basin", "mississippi river", "mississippi"] },
+  // Caribbean areas (lionfish)
+  { name: "Florida Keys", lat: 24.75, lon: -81.0, altitudeM: 250_000, aliases: ["the keys", "keys"] },
+  { name: "Key West", lat: 24.5551, lon: -81.78, altitudeM: UNIT_M },
+  { name: "Key Largo", lat: 25.0865, lon: -80.4473, altitudeM: UNIT_M },
+  { name: "Marathon", lat: 24.7137, lon: -81.0901, altitudeM: UNIT_M },
+  { name: "Cancun", lat: 21.1619, lon: -86.8515, altitudeM: REEF_M, aliases: ["cancún"] },
+  { name: "Cozumel", lat: 20.4318, lon: -86.9203, altitudeM: REEF_M },
+  { name: "Playa del Carmen", lat: 20.6296, lon: -87.0739, altitudeM: REEF_M },
+  { name: "Tulum", lat: 20.2114, lon: -87.4654, altitudeM: REEF_M },
+  { name: "Mexican Caribbean", lat: 20.0, lon: -87.2, altitudeM: 420_000, aliases: ["the mexican caribbean", "quintana roo", "riviera maya"] },
+  { name: "Belize", lat: 17.1, lon: -87.9, altitudeM: 320_000, aliases: ["the belize reef", "belize barrier reef"] },
+  { name: "Belize City", lat: 17.4995, lon: -88.1976, altitudeM: REEF_M },
+  { name: "Ambergris Caye", lat: 17.9, lon: -87.96, altitudeM: REEF_M, aliases: ["san pedro belize"] },
+  { name: "Placencia", lat: 16.5146, lon: -88.3661, altitudeM: REEF_M },
+  { name: "Colombian Caribbean", lat: 11.6, lon: -77.9, altitudeM: 900_000, aliases: ["colombia", "the colombian caribbean"] },
+  { name: "Cartagena", lat: 10.391, lon: -75.4794, altitudeM: REEF_M },
+  { name: "Santa Marta", lat: 11.2408, lon: -74.199, altitudeM: REEF_M },
+  { name: "San Andres", lat: 12.5847, lon: -81.7006, altitudeM: REEF_M, aliases: ["san andrés", "providencia"] },
   { name: "Flamingo", lat: 25.1417, lon: -80.9237, altitudeM: TOWN_M, aliases: ["flamingo visitor center", "flamingo marina"] },
   { name: "Everglades City", lat: 25.859, lon: -81.3862, altitudeM: TOWN_M, aliases: ["gulf coast visitor center"] },
   { name: "Chokoloskee", lat: 25.8126, lon: -81.3615, altitudeM: TOWN_M },

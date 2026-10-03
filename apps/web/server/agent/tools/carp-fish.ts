@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 
+import { resolvePlace } from "client/voice/gazetteer";
 import { apiOrigin } from "@/server/agent/config";
 import type { CapabilityContext, CapabilityOutput } from "@/server/agent/runtime/registry";
 import { evidence } from "@/server/agent/tools/evidence";
@@ -25,6 +26,7 @@ const NAMES: Record<(typeof CARP_SPECIES)[number], string> = { silver: "Silver c
 const input = z.object({
   species: z.array(z.enum(CARP_SPECIES)).max(4).optional().describe("silver, bighead, grass and/or black. Omit for all four."),
   days: z.number().int().min(1).max(731).optional().describe("Look back this many days from today (default 365; the data holds two years)."),
+  place: z.string().min(2).max(80).optional().describe("A town, river town or area (St. Louis, Memphis, Baton Rouge, the Atchafalaya): only reports within about 60 km of it. Replaces bbox."),
   bbox: bboxSchema.optional().describe("Only reports inside this box."),
   newestFirst: z.boolean().optional().describe("List the newest reports first (default true)."),
 });
@@ -42,7 +44,9 @@ export const carpSightings = {
     const body = (await res.json()) as Answer;
     const wanted = new Set((args.species ?? CARP_SPECIES).map((s) => NAMES[s]));
     const since = ctx.now.getTime() - (args.days ?? 365) * DAY_MS;
-    const box = args.bbox;
+    const hit = given(args.place) ? resolvePlace(given(args.place)!) : null;
+    if (given(args.place) && !hit) throw new Error(`carp_sightings: no place named "${args.place}" is known; leave place out, or pass a bbox`);
+    const box = hit ? { west: hit.lon - 0.65, east: hit.lon + 0.65, south: hit.lat - 0.55, north: hit.lat + 0.55 } : args.bbox;
     const rows = body.sightings
       .filter((f) => wanted.has(f.species) && f.date !== null && Date.parse(f.date) >= since && Date.parse(f.date) <= ctx.now.getTime() + DAY_MS && (!box || inBox(box, f)))
       .sort((a, b) => (args.newestFirst === false ? 1 : -1) * ((b.date ?? "").localeCompare(a.date ?? "")));
@@ -57,6 +61,7 @@ export const carpSightings = {
     const dates = rows.map((f) => f.date!).sort();
     return output(
       {
+        ...(hit ? { place: hit.name, placeBox: box } : {}),
         window: { days: args.days ?? 365, from: new Date(since).toISOString().slice(0, 10), to: ctx.now.toISOString().slice(0, 10) },
         total: rows.length,
         bySpecies,
