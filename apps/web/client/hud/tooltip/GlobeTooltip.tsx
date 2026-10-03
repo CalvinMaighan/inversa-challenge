@@ -9,6 +9,8 @@ import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import { loadEvidence } from "../drawer/evidence";
+import ImageGlyph from "client/media/ImageGlyph";
+
 import { GLASS_CSS } from "../primitives";
 import { placeTooltip, tooltipLine, tooltipText, type SightingRecordHint, type TooltipText } from "./model";
 
@@ -167,6 +169,7 @@ export default function GlobeTooltip() {
       {shown.text.parts.map((p, i) => (
         <span key={i}> · {p}</span>
       ))}
+      {shown.text.image ? <ImageGlyph /> : null}
     </Box>
   );
 }

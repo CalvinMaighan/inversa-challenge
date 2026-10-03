@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { getGlobe, onGlobeReady } from "client/globe/api";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
+import { imageGlyphSvg } from "client/media/glyph";
 import styled from "client/styled";
 
 import { loadFish, selectFish, speciesColor, useFish, type CarpSighting } from "./fish";
@@ -94,6 +95,12 @@ const Layer = styled.div`
   }
   .tip small {
     display: block;
+    color: var(--muted);
+  }
+  .tip .img {
+    display: inline-block;
+    margin-left: 6px;
+    vertical-align: -2px;
     color: var(--muted);
   }
 `;
@@ -240,6 +247,13 @@ export default function FishMarkers() {
         b.textContent = hit.s.species;
         const small = document.createElement("small");
         small.textContent = SOURCE_NAMES[hit.s.source];
+        if (hit.s.photo) {
+          const img = document.createElement("span");
+          img.className = "img";
+          img.title = "Has a photo";
+          img.innerHTML = imageGlyphSvg();
+          b.append(img);
+        }
         tip.append(b, hit.s.date ?? "Date unknown", small);
         tip.style.left = `${hit.dot.x}px`;
         tip.style.top = `${hit.dot.y}px`;

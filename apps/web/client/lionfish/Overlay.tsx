@@ -11,6 +11,8 @@ import { SELECTION, type SelectionState } from "client/state/selection";
 import { STAGE_SCOPE_CSS } from "client/hud/shell/StageShell";
 import styled from "client/styled";
 
+import ImageGlyph from "client/media/ImageGlyph";
+
 import { drawField } from "./draw";
 import { reefImage, reefUrl, wideTiles, wideUrls, type ReefMode } from "./reef";
 import { componentText, heatAt, isLate, isoDay, type Area, type HeatPixel, type MarinePoint, type PriorityCell, type Report } from "./model";
@@ -369,7 +371,10 @@ export default function Overlay(p: OverlayProps) {
               onClick={() => p.onReport(r)}
             >
               <span className="tip" role="tooltip" aria-hidden="true">
-                <b>{`Lionfish report · ${sourceName(r.source)}`}</b>
+                <b>
+                  {`Lionfish report · ${sourceName(r.source)}`}
+                  {r.photoUrl ? <ImageGlyph /> : null}
+                </b>
                 Observed {isoDay(r.observedMs)}
                 <small>{r.submittedMs !== null ? `Submitted ${isoDay(r.submittedMs)}` : "No submitted date at the source"}</small>
                 <small>{r.quality.toLowerCase().replace("_", " ")}</small>
