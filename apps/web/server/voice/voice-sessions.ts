@@ -5,7 +5,7 @@ import type { AppConfig } from "shared/apps";
 import type { AgentRunner } from "./agent-runner";
 import { IpRateLimiter, VoiceBudget, voiceLimitsFromEnv, type VoiceLimits } from "./budget";
 import { defaultRealtimeTarget, type RealtimeTarget } from "./grok-realtime";
-import { VoiceSession } from "./voice-session";
+import type { VoiceSession } from "./voice-session";
 
 /** No browser listener: close soon so a missed Stop cannot keep Grok open for the whole cap. */
 const IDLE_CLOSE_MS = 20_000;
@@ -93,7 +93,9 @@ export class VoiceSessionRegistry {
     }
     for (const existing of replacing) existing.close("replaced");
 
-    const session = new VoiceSession({
+    // Loaded here, not at the top: the registry outlives dev hot reloads, and a class imported once would never see an edit.
+    const { VoiceSession: Session } = await import("./voice-session");
+    const session = new Session({
       ip,
       app,
       target,
@@ -140,11 +142,11 @@ const latestRunner: AgentRunner = {
 
 /** Process-wide registry. Survives Turbopack module reloads in dev; one process in production. */
 export function voiceRegistry(): VoiceSessionRegistry {
-  const g = globalThis as unknown as { __inversaVoiceRegistryV2?: VoiceSessionRegistry };
-  g.__inversaVoiceRegistryV2 ??= new VoiceSessionRegistry({
+  const g = globalThis as unknown as { __inversaVoiceRegistryV3?: VoiceSessionRegistry };
+  g.__inversaVoiceRegistryV3 ??= new VoiceSessionRegistry({
     limits: voiceLimitsFromEnv(),
     runner: latestRunner,
     target: defaultRealtimeTarget,
   });
-  return g.__inversaVoiceRegistryV2;
+  return g.__inversaVoiceRegistryV3;
 }

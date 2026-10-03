@@ -24,6 +24,7 @@ import {
   type RealtimeTarget,
 } from "./grok-realtime";
 import { foreignAppFor } from "@/server/agent/scope";
+import { buildDataSnapshot, lastSnapshotError } from "./data-snapshot";
 import { hintFor, routeMessage, type Route, type RouteInput } from "@/server/agent/decisions";
 import { claimTurn, decidesStop, looksLikeHangUp, looksLikeStop } from "./stop-intent";
 import { isUiToolName, validateUiToolCall } from "./ui-command";
@@ -50,6 +51,8 @@ const VAD_SILENCE_MS = 450;
 /** A sentence the transcript ends with . ? or !, quiet this long, is treated as said: the analyst starts without waiting for the provider's end of turn. */
 /** How long after a stop the provider's automatic reply is cancelled. */
 const STOP_MUTE_MS = 2500;
+/** The data briefing is read again at most this often. */
+const SNAPSHOT_EVERY_MS = 60_000;
 const EARLY_QUIET_MS = 180;
 const SENTENCE_END = /[.?!]['")\]]*\s*$/;
 const normalizeSaid = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -115,6 +118,8 @@ export type VoiceSessionOptions = {
   welcome?: boolean;
   /** Decides what a transcript is (Fastino); a stub in tests. Defaults to `routeMessage`. */
   route?: (input: RouteInput) => Promise<Route | null>;
+  /** The briefing of the newest data the voice model gets (see data-snapshot.ts); a stub in tests. */
+  snapshot?: (app: AppConfig, now: number, signal?: AbortSignal) => Promise<string | null>;
 };
 
 function fingerprint(objective: string): string {
@@ -211,6 +216,9 @@ export class VoiceSession {
   private closed = false;
   private greeted = false;
   /** The user's words so far this turn, from the streaming transcript, and the sentence the analyst was started on early. */
+  private snapshotAt = 0;
+  private snapshotBody = "";
+  private snapshotText: string | null = null;
   /** The turn whose species the session already switched the app for. */
   private switchedTurn = "";
   /** The turn whose router hint the voice model already got. */
@@ -324,6 +332,7 @@ export class VoiceSession {
         this.setState("listening");
         this.startMeter();
         this.greet();
+        void this.refreshSnapshot();
       } else {
         this.conn?.close();
         this.conn = null;
@@ -489,6 +498,7 @@ export class VoiceSession {
   private onProviderEvent(event: RealtimeEvent): void {
     switch (event.type) {
       case "input_audio_buffer.speech_started": {
+        void this.refreshSnapshot();
         this.clearEarly();
         const turnId = this.nextTurnId();
         this.window.beginTurn(turnId);
@@ -833,13 +843,34 @@ export class VoiceSession {
 
   private viewScreen(): ToolReceipt {
     if (!this.viewState) {
-      return { ok: true, screen: null, note: "The screen has not reported its state yet." };
+      return { ok: true, screen: null, note: "The screen has not reported its state yet.", latest_data: this.snapshotText, latest_data_error: this.snapshotText ? null : lastSnapshotError };
     }
     return {
       ok: true,
       screen: this.viewState,
       reported_ms_ago: this.viewStateAt === null ? null : Date.now() - this.viewStateAt,
+      latest_data: this.snapshotText,
     };
+  }
+
+  /**
+   * The newest data, as a briefing the voice model keeps in its conversation (once at the start, then again whenever it
+   * changed and the user speaks, at most once a minute), so it can answer quick questions from it and knows what the analyst
+   * will be reading. It reads the API for now, not what the timeline has drawn.
+   */
+  private async refreshSnapshot(): Promise<void> {
+    if (this.closed || Date.now() - this.snapshotAt < SNAPSHOT_EVERY_MS) return;
+    this.snapshotAt = Date.now();
+    const text = await (this.opts.snapshot ?? buildDataSnapshot)(this.opts.app, Date.now()).catch(() => null);
+    if (!text || this.closed || !this.conn) return;
+    const body = text.replace(/^Data as of [^\n]*\n/, "");
+    if (body === this.snapshotBody) return;
+    this.snapshotBody = body;
+    this.snapshotText = text;
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<data_snapshot>${text}</data_snapshot>` }] },
+    });
   }
 
   private spawnThinking(objective: string): ToolReceipt {
