@@ -11,7 +11,7 @@ import type { AgentStreamEvent } from "shared/agent/events";
 
 import { clearHighlight, showTurn } from "../panels/effects";
 import { clearPanels, recordToolEnd } from "../panels/store";
-import { applyAgentSideEffects } from "./effects";
+import { applyAgentSideEffects, onReask } from "./effects";
 import { AGENT_STREAM_URL, streamAgentTurn } from "./ndjson";
 import { buildAgentRequest, type ViewSnapshot } from "./request";
 import { dispatchThread } from "./store";
@@ -101,7 +101,7 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
   );
 
   const send = useCallback(
-    async (question: string): Promise<boolean> => {
+    async (question: string, opts: { silent?: boolean } = {}): Promise<boolean> => {
       const text = question.trim();
       if (!text || abortRef.current || isAsking(asThread(get<AgentThread>(AGENT_CHAT)))) return false;
       let sessionId = asThread(get<AgentThread>(AGENT_CHAT)).sessionId;
@@ -112,7 +112,8 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
       const userId = uuid();
       const assistantId = uuid();
       const nowMs = Date.now();
-      dispatch({ type: "user", id: userId, text, nowMs });
+      // A silent turn answers a question already on the thread (asked again in the app the agent just switched to).
+      if (!opts.silent) dispatch({ type: "user", id: userId, text, nowMs });
       dispatch({ type: "assistant", id: assistantId, nowMs });
 
       const abort = new AbortController();
@@ -138,6 +139,11 @@ export function useAgentChat(endpoint: string = AGENT_STREAM_URL) {
     },
     [endpoint, enqueue, flush],
   );
+
+  useEffect(() => {
+    onReask((question) => void send(question, { silent: true }));
+    return () => onReask(null);
+  }, [send]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

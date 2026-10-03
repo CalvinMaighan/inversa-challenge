@@ -80,7 +80,7 @@ export function controlTools(app: AppConfig) {
       }
       ctx.emit({ type: "ui", name: command.name, args: command.args });
       if (command.name === "switch_app") {
-        return output({ applied: true, control: name, args: command.args, note: `The app is switching to ${getApp(command.args.app).name}. Tell the user in one sentence that you switched; they can ask about it next. Do not answer questions about the new species from this app's data.` }, [], [], 1);
+        return output({ applied: true, control: name, args: command.args, note: `The app is switching to ${getApp(command.args.app).name}. Tell the user in one sentence that you switched. Their question is asked again in the new app right after this answer, so do not tell them to ask it again and do not answer it from this app's data.` }, [], [], 1);
       }
       return output({ applied: true, control: name, args: command.args, note: "Done on the map. Say what you did in a few words; a control is no evidence of what it shows." }, [], [], 1);
     },

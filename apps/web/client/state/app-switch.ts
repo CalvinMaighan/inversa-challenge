@@ -3,7 +3,7 @@ import { get, set } from "@calvinjs/active-state";
 import { boardIdFor, getApp, type AppId } from "shared/apps";
 import type { FeedState } from "shared/feed-state";
 
-import { AGENT_CHAT, AGENT_HIGHLIGHT } from "./agent";
+import { AGENT_HIGHLIGHT } from "./agent";
 import { APP, type AppState } from "./app";
 import { CARP } from "./carp";
 import { FEEDS } from "./feeds";
@@ -18,7 +18,7 @@ import { VIEW, viewFor, type ViewState } from "./view";
 /**
  * Make `id` the active app (PLAN.md C-A5) and reset everything that belongs to the previous one: the map preset
  * (VIEW, with `seq` bumped so the globe flies there), the app's layers and species filter, the team board
- * (`<app>:main`, C-A6), feed envelopes, selection, the agent thread and highlights. TIME is kept: the
+ * (`<app>:main`, C-A6), feed envelopes, selection and the agent highlights. The agent thread is kept: the chat stays mounted and its transcript carries across a switch (the server keeps one history per app and session). TIME is kept: the
  * moment the viewer is looking at does not depend on the app. A no-op when `id` is already active.
  *
  * URL and localStorage are the caller's (`client/hud/appselect/switch.ts`); this touches the store only, so tests
@@ -37,7 +37,6 @@ export function applyApp(id: AppId): boolean {
   set<FeedState[]>(FEEDS, []);
   set(SELECTION, SELECTION.defaults);
   set(CARP, CARP.defaults);
-  set(AGENT_CHAT, AGENT_CHAT.defaults);
   set(AGENT_HIGHLIGHT, AGENT_HIGHLIGHT.defaults);
   return true;
 }

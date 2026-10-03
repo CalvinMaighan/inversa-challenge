@@ -17,7 +17,7 @@ import type { FeedState } from "shared/feed-state";
 init(state);
 
 describe("active app switch", () => {
-  test("active app: applyApp resets the view, layers, board, feeds, selection and agent thread, and keeps TIME", () => {
+  test("active app: applyApp resets the view, layers, board, feeds, and selection, and keeps TIME and the agent thread", () => {
     set<MissionsState>(MISSIONS, (p = MISSIONS.defaults) => ({ ...p, panelOpen: true, missionCount: 4 }));
     set(SELECTION, { evidenceId: "sighting:1", drawerOpen: true });
     set(FEEDS, [{ source: "usgs", mode: "poll", state: "nominal", newestObservedAt: null, lastFetchAt: null, lastFetchRunId: null, lagSeconds: null, note: null }]);
@@ -32,7 +32,7 @@ describe("active app switch", () => {
     expect(get<MissionsState>(MISSIONS)).toMatchObject({ boardId: "lionfish:main", missionCount: 0, panelOpen: true });
     expect(get<SelectionState>(SELECTION)).toEqual(SELECTION.defaults);
     expect(get<FeedState[]>(FEEDS)).toEqual([]);
-    expect(get<AgentChatState>(AGENT_CHAT)).toEqual(AGENT_CHAT.defaults);
+    expect(get<AgentChatState>(AGENT_CHAT)).toEqual({ sessionId: "s1", messages: [] });
     expect(get<TimeState>(TIME)).toBe(time);
   });
 

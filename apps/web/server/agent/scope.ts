@@ -8,9 +8,7 @@
  */
 
 import { APP_IDS, loadApps, type AppConfig } from "@/shared/apps";
-
-/** "select the carp", "switch to lionfish", "go to the python app": a request to move to another of the three apps. */
-const SWITCH_REQUEST = /\b(switch|change|go|select|pick|choose|open|take me|move|jump)\b[^.?!]{0,40}\b(carp|lionfish|python|pythons|burmese|asian carp|app|species)\b/i;
+import { SWITCH_REQUEST } from "@/shared/switch-request";
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -58,7 +56,7 @@ export function scopeGuard(app: AppConfig, question: string): string | null {
   if (SWITCH_REQUEST.test(question)) return null;
   const pattern = foreignSpeciesPattern(app);
   const hit = pattern?.exec(question);
-  if (hit) return `"${hit[0]}" is another species of this product, not this app's. Do not refuse and do not answer it from this app's data: call switch_app for that species, then say in one sentence that you switched and that they can ask about it now.`;
+  if (hit) return `"${hit[0]}" is another species of this product, not this app's. Do not refuse and do not answer it from this app's data: call switch_app for that species, then say in one sentence that you switched; the question is asked again in the new app, so do not answer it.`;
   return topicGuard(app, question);
 }
 
