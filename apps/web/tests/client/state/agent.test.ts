@@ -4,13 +4,13 @@ import { AGENT_CARD, AGENT_CHAT, AGENT_TABS, SHEET_SNAPS } from "client/state/ag
 
 describe("AGENT_CARD / AGENT_CHAT", () => {
   test("the chat column starts on the Agent tab, sheet collapsed, nothing unread", () => {
-    expect(AGENT_CARD.defaults).toEqual({ tab: "agent", sheet: "collapsed", unread: { agent: false, board: false } });
+    expect(AGENT_CARD.defaults).toEqual({ tab: "agent", sheet: "collapsed", unread: { agent: false, questions: false } });
     expect(AGENT_CARD.tab).toBe("AGENT_CARD.tab");
     expect(AGENT_CARD.sheet).toBe("AGENT_CARD.sheet");
   });
 
   test("tabs and sheet snaps are ordered as the column shows them", () => {
-    expect(AGENT_TABS).toEqual(["agent", "board"]);
+    expect(AGENT_TABS).toEqual(["agent", "questions"]);
     expect(SHEET_SNAPS).toEqual(["collapsed", "half", "full"]);
   });
 

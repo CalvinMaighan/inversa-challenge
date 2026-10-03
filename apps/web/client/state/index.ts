@@ -8,6 +8,7 @@ import { FEEDS } from "./feeds";
 import { LAYERS } from "./layers";
 import { LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "./look";
 import { ME } from "./me";
+import { MENU } from "./menu";
 import { MESSAGES } from "./messages";
 import { MISSIONS } from "./missions";
 import { NOTES } from "./notes";
@@ -27,6 +28,7 @@ export { FEEDS } from "./feeds";
 export { LAYERS } from "./layers";
 export { LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "./look";
 export { ME } from "./me";
+export { MENU } from "./menu";
 export { MESSAGES } from "./messages";
 export { MISSIONS } from "./missions";
 export { NOTES } from "./notes";
@@ -39,7 +41,7 @@ export { VIEW } from "./view";
 export { VOICE } from "./voice";
 
 /** Snapshot for `<ActiveState init={state} />`. Importing this module runs every `key()`. */
-export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, RANGE_DAYS, ALERTS_SEEN);
+export const state = catalog(APP, CARP, TIME, VIEW, LAYERS, SELECTION, FEEDS, MISSIONS, PEERS, ME, NOTES, MESSAGES, AGENT_CARD, AGENT_CHAT, AGENT_HIGHLIGHT, VOICE, THEME, ACCENT_COLOR, LOOK, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, RANGE_DAYS, ALERTS_SEEN, MENU);
 
 export type StateKeyId =
   | "APP"
@@ -65,7 +67,8 @@ export type StateKeyId =
   | "SCOPE_SHAPE"
   | "SCOPE_SIZE"
   | "RANGE_DAYS"
-  | "ALERTS_SEEN";
+  | "ALERTS_SEEN"
+  | "MENU";
 
 /**
  * Every key id in code-unit order. PLAN.md C6: a key's position here is its `keyIndex` on the SAB transport,

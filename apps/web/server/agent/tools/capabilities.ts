@@ -24,7 +24,7 @@ import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfi
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWindowed, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
-import { setLook, toggleLayer, vessels } from "@/server/agent/tools/map";
+import { controlTools, setLook, toggleLayer, vessels } from "@/server/agent/tools/map";
 import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenList, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
 import { localTime } from "@/server/agent/tools/shared";
@@ -1038,6 +1038,7 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
     component ? lionfishSetView : setView,
     // GE7: the map controls and the ships (server/agent/tools/map.ts); the app's allowlist decides.
     toggleLayer(app as AppConfig),
+    ...controlTools(app as AppConfig),
     setLook,
     vessels,
   ];

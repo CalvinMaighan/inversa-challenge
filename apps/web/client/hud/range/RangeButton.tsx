@@ -5,8 +5,9 @@ import { get, set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { setFishRange } from "client/carp/fish";
+import { applyRange } from "./apply";
 import { DEFAULT_RANGE_DAYS, RANGE_DAYS, RANGE_OPTIONS, rangeLabel } from "client/state/range";
-import { TIME, timeWindow, type TimeState } from "client/state/time";
+import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import { Surface } from "../primitives";
@@ -91,13 +92,6 @@ function CalendarIcon() {
   );
 }
 
-/** Put every timeline on the last `days` days: python and lionfish's TIME window, carp's sightings range. */
-function applyRange(days: number): void {
-  const now = Date.now();
-  set<TimeState>(TIME, (prev = TIME.defaults) => ({ ...prev, ...timeWindow(now, days), playing: false }));
-  setFishRange(now - days * DAY_MS, now, now);
-}
-
 /** Puts the timelines on RANGE_DAYS when the HUD mounts, if one is not already on it (a choice applies itself when made). */
 function useRangeSync(): void {
   useEffect(() => {
@@ -116,7 +110,7 @@ export default function RangeButton() {
   const days = useActiveState<number>(RANGE_DAYS)[0] ?? DEFAULT_RANGE_DAYS;
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "period");
   const id = useId();
   return (
     <Anchor>

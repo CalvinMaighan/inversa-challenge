@@ -84,7 +84,7 @@ export default function LayersBar() {
   const layers = useMemo(() => ({ ...LAYERS.defaults, ...stored }), [stored]);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "layers");
   const id = useId();
   const barRef = useRef<HTMLDivElement>(null);
 

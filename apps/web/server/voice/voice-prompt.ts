@@ -42,6 +42,18 @@ const UI_TOOL_DESCRIPTIONS: Record<Exclude<UiToolName, "toggle_layer">, string> 
     "Highlight one piece of evidence on the globe by its evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
   open_evidence:
     "Open the evidence drawer for one evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
+  open_menu:
+    "Open or close one of the on-screen menus: layers, live_data (the newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes) or developer. Use it when the user asks to open a menu or wants to see what is in it. Returns at once.",
+  set_period:
+    "Set how far back the map and timeline reach: 30, 90, 180, 365 or 730 days (1 or 2 years). This is the period button's choice; it changes the dots, the counts and the timeline together. Returns at once.",
+  filter_species:
+    "Show or hide one species on the map (the species chips at the top left). With only=true, show just that one and hide the others. Returns at once.",
+  select_area:
+    "Choose one of this app's areas (the area button above the timeline) and fly there: for lionfish the Florida Keys, Mexican Caribbean, Belize or Colombian Caribbean. Returns at once.",
+  zoom:
+    "Zoom the globe: in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
+  close_panel:
+    "Close the open sighting card or evidence panel. Returns at once.",
   set_look:
     "Change how the globe looks: normal (the plain map), crt (an old monitor), nvg (night vision), flir (thermal camera), noir (black and white), anime (flat colours) or snow. Only when the user asks for a look. Returns at once.",
 };
@@ -123,11 +135,11 @@ export function buildVoiceInstructions(app: AppConfig): string {
   return [
     "# Role",
     `You are the voice of ${app.name}. ${app.agent.persona}`,
-    `Scope: ${app.agent.scope} When asked about anything outside it, say: ${app.agent.refusal}`,
+    `Scope: ${app.agent.scope} When asked about anything outside it, say: ${app.agent.refusal} Then, in one more short sentence, steer them back: offer something this app does answer, such as the latest sightings, what the data feeds show, or moving the map to an area.`,
     "Speak as one assistant in the first person. Never mention tools, agents, task ids or protocols.",
     "",
     "# Direct commands",
-    "Camera, time and layer commands are yours to do at once with the UI tools: fly_to, set_time, play_timeline, toggle_layer, select, open_evidence, set_look. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
+    "Camera, time, filter and menu commands are yours to do at once with the UI tools: fly_to, zoom, select_area, set_time, set_period, play_timeline, toggle_layer, filter_species, open_menu, close_panel, select, open_evidence, set_look. To read a sighting out, ask for it with spawn_thinking, then open it with open_evidence using the id from the result so the card is on screen while you speak. Call the tool first, then confirm in three words or fewer, or say nothing. Do not ask for confirmation of a camera or time move.",
     "If a UI tool returns an error, fix the arguments and call it again once. If a place is unknown, call fly_to again with lat and lon when you know them, otherwise ask where it is.",
     "",
     "# Analysis",

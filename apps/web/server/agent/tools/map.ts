@@ -47,6 +47,33 @@ export function toggleLayer(app: AppConfig) {
   };
 }
 
+// ---------------------------------------------------------------- the rest of the controls
+
+const CONTROL_DESCRIPTIONS = {
+  open_menu: "Open or close one on-screen menu: layers, live_data (newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes) or developer. Returns at once.",
+  set_period: "Set how far back the map and timeline reach: 30, 90, 180, 365 (1 year) or 730 (2 years) days; dots, counts and the timeline change together. Returns at once.",
+  filter_species: "Show or hide one species on the map (the species chips); only=true shows just that one. Returns at once.",
+  select_area: "Choose one of this app's areas and fly there (lionfish: Florida Keys, Mexican Caribbean, Belize, Colombian Caribbean). Returns at once.",
+  zoom: "Zoom the globe in (half the height), out (twice the height) or fit (frame the whole area again). Returns at once.",
+  close_panel: "Close the open sighting card. Returns at once.",
+  open_evidence: "Open one sighting's card on the map and fly to it, by the evidence id exactly as a data tool returned it (sighting:<id>, fish:<id>). Returns at once.",
+} as const;
+
+/** The mouse-and-menu controls the voice has too (shared/voice/ui-tools.ts): validated for this app, applied by the browser. */
+export function controlTools(app: AppConfig) {
+  return (Object.keys(CONTROL_DESCRIPTIONS) as (keyof typeof CONTROL_DESCRIPTIONS)[]).map((name) => ({
+    name,
+    description: CONTROL_DESCRIPTIONS[name],
+    inputSchema: app.layers?.length ? uiToolSchemasFor(app)[name] : z.object({}).passthrough(),
+    async execute(input: unknown, ctx: CapabilityContext): Promise<CapabilityOutput> {
+      const command = parseUiCommand(name, input, ctx.app);
+      if (!command) throw new Error(`${name}: the arguments are not valid for this app`);
+      ctx.emit({ type: "ui", name: command.name, args: command.args });
+      return output({ applied: true, control: name, args: command.args, note: "Done on the map. Say what you did in a few words; a control is no evidence of what it shows." }, [], [], 1);
+    },
+  }));
+}
+
 // ---------------------------------------------------------------- set_look
 
 const lookInput = z.object({ look: z.enum(LOOK_IDS).describe(LOOK_IDS.map((id) => `${id}: ${LOOK_WORDS[id]}`).join("; ")) });

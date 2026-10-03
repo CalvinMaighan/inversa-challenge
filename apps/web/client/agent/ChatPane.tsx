@@ -2,18 +2,13 @@
 
 import { memo, useCallback, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 
-import { useActiveApp } from "client/hud/appselect/use-active-app";
-import { exampleQuestions, speciesGuide, welcome } from "client/hud/help/content";
 import type { VoiceState } from "client/state/voice";
 
 import {
   Assistant,
   Composer,
-  Empty,
   ErrorLine,
   Header,
-  Hint,
-  HintChip,
   IconButton,
   Input,
   MicButton,
@@ -35,9 +30,10 @@ import {
 import ActionTimeline from "./chat/ActionTimeline";
 import { formatWorkDuration } from "./chat/tools";
 import { plainReasoning, type AgentThread, type AgentTurn } from "./chat/thread";
-import { ClearIcon, CloseIcon, MicIcon, SendIcon, StopIcon } from "./icons";
+import { ClearIcon, MicIcon, SendIcon, StopIcon } from "./icons";
 import StreamMarkdown from "./markdown/StreamMarkdown";
 import DataPanels from "./panels/DataPanels";
+import QuickStart from "./QuickStart";
 import ExpandedPanels from "./panels/ExpandedPanels";
 import { PHASE_LABELS, voiceIsLive, type AgentPhase } from "./phase";
 
@@ -143,9 +139,8 @@ export type ChatPaneProps = {
   voice: ChatVoice | undefined;
   selected: string | null;
   inputRef: RefObject<HTMLTextAreaElement | null>;
-  /** First visit: show the hint line with example questions above the composer. */
-  showHint: boolean;
-  onDismissHint: () => void;
+  /** Open the Questions tab (the "see everything you can ask" link of the empty chat). */
+  onMoreQuestions?: () => void;
   onSend: (question: string) => Promise<boolean>;
   onStop: () => void;
   onClear: () => void;
@@ -165,17 +160,15 @@ export default function ChatPane({
   voice,
   selected,
   inputRef,
-  showHint,
-  onDismissHint,
   onSend,
   onStop,
   onClear,
   onCite,
   onToggleVoice,
+  onMoreQuestions,
   onComposerFocus,
   compact = false,
 }: ChatPaneProps) {
-  const app = useActiveApp();
   const [draft, setDraft] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const closeExpanded = useCallback(() => setExpanded(null), []);
@@ -193,7 +186,6 @@ export default function ChatPane({
   const ask = async (question: string) => {
     if (!question || asking) return;
     stick.current = true;
-    onDismissHint();
     const sent = await onSend(question);
     if (!sent) setDraft(question);
   };
@@ -276,21 +268,7 @@ export default function ChatPane({
         }}
       >
         {thread.messages.length === 0 ? (
-          // The first-visit hint says the same thing with examples; the empty line is for later visits.
-          showHint ? null : (
-            <Empty>
-              {app.kind === "species"
-                ? "Ask about the sightings on the map, or anything about these animals. Answers cite their evidence and fly the globe."
-                : "Ask about the gauges, forecasts and alerts on the map. Answers cite their evidence and fly the globe."}
-              <span data-helper-questions="" style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 6, marginTop: 8 }}>
-                {exampleQuestions(app).map((q) => (
-                  <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
-                    {q}
-                  </HintChip>
-                ))}
-              </span>
-            </Empty>
-          )
+          <QuickStart asking={asking} onAsk={(q) => void ask(q)} onMore={onMoreQuestions} />
         ) : (
           thread.messages.map((turn) =>
             turn.role === "user" ? (
@@ -311,33 +289,6 @@ export default function ChatPane({
         )}
       </Thread>
       {expanded && thread.messages.some((m) => m.id === expanded) ? <ExpandedPanels turnId={expanded} onClose={closeExpanded} /> : null}
-      {showHint ? (
-        <Hint data-chat-hint="" role="region" aria-label="Welcome">
-          <p>
-            {app.kind === "conditions" ? null : <span data-welcome="">{welcome(app)}</span>}
-            <IconButton type="button" aria-label="Dismiss hint" onClick={onDismissHint}>
-              <CloseIcon />
-            </IconButton>
-          </p>
-          {app.kind === "species" ? (
-            <ul aria-label="The species on the map">
-              {speciesGuide(app).map((s, i) => (
-                <li key={s.id} data-welcome-species={s.id}>
-                  <i style={{ background: app.taxa[i]?.color }} aria-hidden="true" />
-                  <span>
-                    <b>{s.full}</b> — {s.line}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {exampleQuestions(app).map((q) => (
-            <HintChip key={q} type="button" data-example-question="" disabled={asking} onClick={() => void ask(q)}>
-              {q}
-            </HintChip>
-          ))}
-        </Hint>
-      ) : null}
         </>
       )}
       {composer}

@@ -1,16 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type PointerEvent } from "react";
 import { get, set, subscribe } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import { creditSlotRef } from "client/globe/credit-slot";
-import { teamCell } from "client/hud/missions/team";
-import { cell, useCell } from "client/hud/store";
-import type { BoardModel } from "client/hud/missions/board";
-import { AGENT_CARD, MISSIONS, SELECTION, VOICE } from "client/state";
+import { AGENT_CARD, SELECTION, VOICE } from "client/state";
 import type { AgentCardState, AgentTab, SheetSnap } from "client/state/agent";
-import type { MissionsState } from "client/state/missions";
 import type { SelectionState } from "client/state/selection";
 import { startVoice, stopVoice } from "client/voice/voice-runtime";
 
@@ -18,7 +14,7 @@ import ChatPane, { type ChatVoice } from "./ChatPane";
 import { openEvidence } from "./chat/effects";
 import { isWorking } from "./chat/thread";
 import { useAgentChat } from "./chat/useAgentChat";
-import { Column, CreditSlot, Header, MissionsScroll, ResizeHandle, SheetHandle, Tab, TabPanel, Tabs, UnreadDot } from "./column.styled";
+import { Column, CreditSlot, Header, ResizeHandle, SheetHandle, Tab, TabPanel, Tabs, UnreadDot } from "./column.styled";
 import {
   clampColumnWidth,
   COLUMN_DEFAULT_PX,
@@ -36,15 +32,13 @@ import {
   transitionFor,
   widthForKey,
 } from "./layout/geometry";
-import { agentActivity, boardActivity, markActivity, openTab } from "./layout/unread";
+import { agentActivity, markActivity, openTab } from "./layout/unread";
 import { agentPhase, voiceIsLive } from "./phase";
+import QuestionsPanel from "./QuestionsPanel";
 
-/** localStorage key: the first-visit hint was dismissed or a question was asked. */
-export const HINT_STORAGE_KEY = "inversa:chat-hint-seen";
-
-/** The board tab reads "Notes" (T43): field notes first, crew missions behind a disclosure inside it. */
-const TAB_LABEL: Record<AgentTab, string> = { agent: "Agent", board: "Notes" };
-const TABS: readonly AgentTab[] = ["agent", "board"];
+/** The second tab lists every question the agent supports. */
+const TAB_LABEL: Record<AgentTab, string> = { agent: "Agent", questions: "Questions" };
+const TABS: readonly AgentTab[] = ["agent", "questions"];
 /** A handle press that moves less than this is a tap (cycle snaps), not a drag. */
 const TAP_SLOP_PX = 6;
 
@@ -102,41 +96,29 @@ export function setSheet(sheet: SheetSnap): void {
   writeCard((prev) => (prev.sheet === sheet ? prev : { ...prev, sheet }));
 }
 
-const NO_BOARD = cell<BoardModel | null>(null);
-
 /**
- * Unread dots: the Agent tab lights when an answer (typed or voice) finishes behind Notes; the Notes tab lights
- * on field notes, mission ops, removals or team chat behind Agent. The first signature is the baseline.
+ * Unread dot: the Questions tab never has news; the Agent tab lights when an answer (typed or voice) finishes while the
+ * Questions tab is showing. The first signature is the baseline.
  */
 function useUnreadTracking(agentSignature: string): void {
-  const team = useCell(teamCell);
-  const board = useCell(team?.board ?? NO_BOARD);
-  const boardSignature = boardActivity(board);
-  const last = useRef<Record<AgentTab, string | null>>({ agent: null, board: null });
-
+  const last = useRef<string | null>(null);
   useEffect(() => {
-    for (const [tab, signature] of [
-      ["agent", agentSignature],
-      ["board", boardSignature],
-    ] as const) {
-      const previous = last.current[tab];
-      if (signature === previous) continue;
-      const state = card();
-      const unread = markActivity(state, tab, previous, signature);
-      if (unread !== state.unread) writeCard((prev) => ({ ...prev, unread }));
-      if (signature !== null) last.current[tab] = signature;
-    }
-  }, [agentSignature, boardSignature]);
+    const previous = last.current;
+    if (agentSignature === previous) return;
+    const state = card();
+    const unread = markActivity(state, "agent", previous, agentSignature);
+    if (unread !== state.unread) writeCard((prev) => ({ ...prev, unread }));
+    last.current = agentSignature;
+  }, [agentSignature]);
 }
 
 /**
- * The chat column (PRD §12 "Layout", T40): always open left of the globe, with Agent and Notes tabs. The
- * Agent tab is the field agent's thread and composer (typed and voice), the Notes tab the team board (field
- * notes, chat, presence, crew missions). The
+ * The chat column (PRD §12 "Layout", T40): always open left of the globe, with Agent and Questions tabs. The
+ * Agent tab is the field agent's thread and composer (typed and voice), the Questions tab every question it supports. The
  * right edge drags (or arrow-keys) between 360 and 560 px, remembered per browser. Under 768 px it becomes a
  * bottom sheet over the globe: a composer bar when collapsed, dragged or tapped up to half or full height.
  */
-export default function AgentColumn({ missions }: { missions?: ReactNode }) {
+export default function AgentColumn() {
   const [state] = useActiveState<AgentCardState>(AGENT_CARD);
   const ui = { ...AGENT_CARD.defaults, ...state };
   const [voice] = useActiveState<ChatVoice>(VOICE);
@@ -148,7 +130,6 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
   const [storedWidth, setStoredWidth] = useState(COLUMN_DEFAULT_PX);
   const [dragWidth, setDragWidth] = useState<number | null>(null);
   const [dragHeight, setDragHeight] = useState<number | null>(null);
-  const [showHint, setShowHint] = useState(false);
   const [reduced, setReduced] = useState(false);
 
   const phase = agentPhase(voice, isWorking(chat.thread));
@@ -158,28 +139,9 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
   useEffect(() => {
     queueMicrotask(() => {
       setStoredWidth(parseStoredWidth(readStorage(COLUMN_WIDTH_STORAGE_KEY)));
-      setShowHint(readStorage(HINT_STORAGE_KEY) === null);
       setReduced(prefersReducedMotion());
     });
   }, []);
-
-  // MISSIONS.panelOpen mirrors the Notes tab; a mission clicked on the globe, or "Add note about this sighting",
-  // opens the tab (and the sheet).
-  useEffect(() => {
-    const syncFromMissions = () => {
-      const open = get<MissionsState>(MISSIONS)?.panelOpen === true;
-      const ui = card();
-      if (open && ui.tab !== "board") {
-        writeCard((prev) => ({ ...openTab(prev, "board"), sheet: prev.sheet === "collapsed" ? "half" : prev.sheet }));
-      }
-    };
-    syncFromMissions();
-    return subscribe(MISSIONS, syncFromMissions);
-  }, []);
-  useEffect(() => {
-    const open = ui.tab === "board";
-    if ((get<MissionsState>(MISSIONS)?.panelOpen ?? false) !== open) set<MissionsState>(MISSIONS, (prev) => ({ ...MISSIONS.defaults, ...prev, panelOpen: open }));
-  }, [ui.tab]);
 
   // Phones show one sheet at a time: the evidence drawer (inside the globe pane) wins while it opens.
   useEffect(() => {
@@ -197,11 +159,6 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
     if (voiceIsLive(voice)) stopVoice();
     else void startVoice();
   }, [voice]);
-
-  const dismissHint = useCallback(() => {
-    setShowHint(false);
-    writeStorage(HINT_STORAGE_KEY, new Date().toISOString());
-  }, []);
 
   // ---- desktop width ----------------------------------------------------------------------------------------
   const width = clampColumnWidth(dragWidth ?? storedWidth, viewport.width || undefined);
@@ -355,13 +312,12 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
           voice={voice}
           selected={selected ?? null}
           inputRef={inputRef}
-          showHint={showHint && chat.thread.messages.length === 0}
-          onDismissHint={dismissHint}
           onSend={chat.send}
           onStop={chat.stop}
           onClear={chat.clear}
           onCite={openEvidence}
           onToggleVoice={toggleVoice}
+          onMoreQuestions={() => selectTab("questions")}
           onComposerFocus={() => {
             if (!sheetLayout) return;
             writeCard((prev) => ({ ...openTab(prev, "agent"), sheet: prev.sheet === "collapsed" ? "half" : prev.sheet }));
@@ -369,8 +325,14 @@ export default function AgentColumn({ missions }: { missions?: ReactNode }) {
           compact={compact}
         />
       </TabPanel>
-      <TabPanel role="tabpanel" id="chat-panel-board" aria-labelledby="chat-tab-board" hidden={ui.tab !== "board" || compact} data-tabpanel="board" data-testid="hud-missions">
-        <MissionsScroll>{missions}</MissionsScroll>
+      <TabPanel role="tabpanel" id="chat-panel-questions" aria-labelledby="chat-tab-questions" hidden={ui.tab !== "questions" || compact} data-tabpanel="questions">
+        <QuestionsPanel
+          asking={chat.asking}
+          onAsk={(question) => {
+            selectTab("agent");
+            void chat.send(question);
+          }}
+        />
       </TabPanel>
       {sheetLayout ? null : (
         <ResizeHandle

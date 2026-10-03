@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 describe("voice relay against a mocked xAI socket", () => {
-  test("session.update carries the persona, eve, server VAD and all ten tools", async () => {
+  test("session.update carries the persona, eve, server VAD and all the tools", async () => {
     const { mock } = await startSession();
     const update = await mock.waitFor((e) => e.type === "session.update");
     const session = update.session as {

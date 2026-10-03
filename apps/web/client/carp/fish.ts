@@ -93,6 +93,16 @@ export function toggleSpecies(name: string): void {
   set({ hidden, shown: upTo(state.windowed, state.atMs, hidden) });
 }
 
+/** Show only (or show or hide) one species by name, as the legend chips do; `only` hides the others. */
+export function filterSpecies(name: string, visible: boolean, only = false): void {
+  const all = SPECIES_COLORS.map((s) => s.name);
+  const hidden = only ? all.filter((n) => n !== name) : visible ? state.hidden.filter((n) => n !== name) : [...new Set([...state.hidden, name])];
+  set({ hidden, shown: upTo(state.windowed, state.atMs, hidden) });
+}
+
+/** One loaded sighting by id, or undefined. */
+export const fishById = (id: string): CarpSighting | undefined => state.all.find((s) => s.id === id);
+
 /** The records dated within `[startMs, endMs]` (the end day included), newest first, capped. */
 export function rangeFish(all: readonly CarpSighting[], startMs: number, endMs: number): CarpSighting[] {
   return all.filter((s) => s.date !== null && Date.parse(s.date) >= startMs && Date.parse(s.date) < endMs + DAY_MS).slice(0, MAX);

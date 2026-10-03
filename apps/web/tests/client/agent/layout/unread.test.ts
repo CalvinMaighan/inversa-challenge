@@ -39,22 +39,22 @@ describe("layout: unread dots", () => {
 
   test("activity on the hidden tab lights its dot; the showing tab never gets one", () => {
     const onAgent = ui({ tab: "agent" });
-    expect(markActivity(onAgent, "board", "a", "b")).toEqual({ agent: false, board: true });
+    expect(markActivity(onAgent, "questions", "a", "b")).toEqual({ agent: false, questions: true });
     expect(markActivity(onAgent, "agent", "a", "b")).toBe(onAgent.unread);
-    const onBoard = ui({ tab: "board" });
-    expect(markActivity(onBoard, "agent", "a", "b")).toEqual({ agent: true, board: false });
+    const onBoard = ui({ tab: "questions" });
+    expect(markActivity(onBoard, "agent", "a", "b")).toEqual({ agent: true, questions: false });
   });
 
   test("the first signature is the baseline, and an unchanged one is no news", () => {
     const state = ui();
-    expect(markActivity(state, "board", null, "first")).toBe(state.unread);
-    expect(markActivity(state, "board", "same", "same")).toBe(state.unread);
-    expect(markActivity(state, "board", "x", null)).toBe(state.unread);
+    expect(markActivity(state, "questions", null, "first")).toBe(state.unread);
+    expect(markActivity(state, "questions", "same", "same")).toBe(state.unread);
+    expect(markActivity(state, "questions", "x", null)).toBe(state.unread);
   });
 
   test("opening a tab clears its dot and leaves the other", () => {
-    const state = ui({ tab: "agent", unread: { agent: true, board: true } });
-    expect(openTab(state, "board")).toEqual({ ...state, tab: "board", unread: { agent: true, board: false } });
-    expect(openTab(state, "agent").unread).toEqual({ agent: false, board: true });
+    const state = ui({ tab: "agent", unread: { agent: true, questions: true } });
+    expect(openTab(state, "questions")).toEqual({ ...state, tab: "questions", unread: { agent: true, questions: false } });
+    expect(openTab(state, "agent").unread).toEqual({ agent: false, questions: true });
   });
 });

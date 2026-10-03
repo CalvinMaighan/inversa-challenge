@@ -14,6 +14,14 @@ import { LOOK_IDS, LOOK_WORDS } from "shared/look";
 
 export { LAYER_IDS };
 
+/** The HUD menus the agent may open: each is a button's popover (client/hud). */
+export const MENU_IDS = ["layers", "live_data", "look", "theme", "about", "period", "developer"] as const;
+export type MenuId = (typeof MENU_IDS)[number];
+/** The periods of the period button, in days (client/state/range.ts keeps the labels). */
+export const PERIOD_DAYS = [30, 90, 180, 365, 730] as const;
+/** Carp's species filter keys, as the legend chips use them. */
+export const CARP_SPECIES = ["silver", "bighead", "grass", "black"] as const;
+
 const lat = z.number().min(-90).max(90);
 const lon = z.number().min(-180).max(180);
 
@@ -22,7 +30,7 @@ function toggleLayer(layers: readonly LayerId[], species: readonly string[]) {
   return species.length > 0 ? base.extend({ species: z.enum(species as [string, ...string[]]).optional() }) : base.extend({ species: z.never().optional() });
 }
 
-function schemas(layers: readonly LayerId[], species: readonly string[]) {
+function schemas(layers: readonly LayerId[], species: readonly string[], filterable: readonly string[] = species) {
   return {
     fly_to: z
       .object({
@@ -50,6 +58,12 @@ function schemas(layers: readonly LayerId[], species: readonly string[]) {
     open_evidence: z.object({
       evidenceId: z.string().min(3),
     }),
+    open_menu: z.object({ menu: z.enum(MENU_IDS).describe("layers, live_data (newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes), developer (API keys and feeds)"), open: z.boolean().default(true) }),
+    set_period: z.object({ days: z.union(PERIOD_DAYS.map((d) => z.literal(d)) as [z.ZodLiteral<30>, z.ZodLiteral<90>, ...z.ZodLiteral<number>[]]).describe("30, 90, 180, 365 or 730 days back from today") }),
+    filter_species: filterable.length > 0 ? z.object({ species: z.enum(filterable as [string, ...string[]]), visible: z.boolean().default(true), only: z.boolean().optional().describe("true: show only this one and hide the others") }) : z.object({ species: z.never().optional(), visible: z.boolean().default(true), only: z.boolean().optional() }),
+    select_area: z.object({ area: z.string().min(2).describe("An area of this app by id or name, e.g. the Florida Keys, the Mexican Caribbean, Belize, the Mississippi River Basin") }),
+    zoom: z.object({ direction: z.enum(["in", "out", "fit"]).describe("in: halve the height, out: double it, fit: frame the whole area again") }),
+    close_panel: z.object({}),
     // GE7: the globe's look (docs/GODS_EYE.md GC2), the same seven presets as the Look popover.
     set_look: z.object({
       look: z.enum(LOOK_IDS).describe(LOOK_IDS.map((id) => `${id} (${LOOK_WORDS[id]})`).join(", ")),
@@ -61,6 +75,7 @@ function schemas(layers: readonly LayerId[], species: readonly string[]) {
 const anySpecies = {
   ...schemas(LAYER_IDS, []),
   toggle_layer: z.object({ layer: z.enum(LAYER_IDS), visible: z.boolean(), species: z.string().optional() }),
+  filter_species: z.object({ species: z.string(), visible: z.boolean().default(true), only: z.boolean().optional() }),
 };
 
 export type UiToolName = keyof typeof anySpecies;
@@ -78,7 +93,7 @@ const cache = new WeakMap<AppConfig, UiToolSchemas>();
 export function uiToolSchemasFor(app: AppConfig): UiToolSchemas {
   let s = cache.get(app);
   if (!s) {
-    s = schemas(appLayerIds(app), speciesIds(app)) as unknown as UiToolSchemas;
+    s = schemas(appLayerIds(app), speciesIds(app), app.id === "carp" ? CARP_SPECIES : speciesIds(app)) as unknown as UiToolSchemas;
     cache.set(app, s);
   }
   return s;

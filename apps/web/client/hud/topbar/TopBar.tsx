@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { get, set, subscribe } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import type { FeedState } from "shared/feed-state";
@@ -8,9 +9,11 @@ import type { FeedState } from "shared/feed-state";
 import { SHEET_MEDIA } from "client/agent/layout/geometry";
 import { ALERTS_SEEN } from "client/state/alerts";
 import { FEEDS } from "client/state/feeds";
+import { MENU } from "client/state/menu";
 import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
+import type { MenuId } from "shared/voice/ui-tools";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
 import { hasNewData, latestMs, liveRows } from "../alerts/model";
@@ -221,8 +224,25 @@ const Choices = styled.div`
  * A button with a popover under it. Esc (inside the popover) or a click outside closes it; Esc and the
  * popover's own actions hand focus back to the button.
  */
-export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>) {
-  const [open, setOpen] = useState(false);
+export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>, menu?: MenuId) {
+  const [local, setLocal] = useState(false);
+  const current = useSyncExternalStore(
+    (cb) => subscribe(MENU, cb),
+    () => get<string | null>(MENU) ?? null,
+    () => null,
+  );
+  // A named menu lives in MENU (one open at a time, and the agent can open it); an unnamed one keeps its own state.
+  const open = menu ? current === menu : local;
+  const setOpen = useCallback(
+    (next: boolean | ((v: boolean) => boolean)) => {
+      if (!menu) return setLocal(next);
+      const isOpen = get<string | null>(MENU) === menu;
+      const value = typeof next === "function" ? next(isOpen) : next;
+      if (value) set<string | null>(MENU, menu);
+      else if (isOpen) set<string | null>(MENU, null);
+    },
+    [menu],
+  );
   useEffect(() => {
     if (!open) return;
     popRef.current?.focus({ preventScroll: true });
@@ -232,7 +252,7 @@ export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popR
     };
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
-  }, [open, popRef, triggerRef]);
+  }, [open, popRef, triggerRef, setOpen]);
   const close = () => {
     setOpen(false);
     triggerRef.current?.focus({ preventScroll: true });
@@ -298,7 +318,7 @@ function Feeds({ list }: { list: FeedState[] }) {
 function About({ list, focus, onFocus, helpOpen, onHelp }: ChromeProps & { list: FeedState[] }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "about");
   const id = useId();
   const summary = feedSummary(list);
   const label =
@@ -462,7 +482,7 @@ export function LiveDataContent({ list, nowMs }: { list: FeedState[]; nowMs: num
 function LiveData({ list, seen, onSeen }: { list: FeedState[]; seen: number; onSeen: (ms: number) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "live_data");
   const id = useId();
   const [now, setNow] = useState(() => Date.now());
   const latest = latestMs(list);
@@ -515,7 +535,7 @@ const THEME_LABELS: Record<ThemeModeId, string> = { light: "Light", dark: "Dark"
 function Theme({ mode, onPick }: { mode: ThemeModeId; onPick: (mode: ThemeModeId) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "theme");
   const id = useId();
   return (
     <>
@@ -560,7 +580,7 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
 function Look({ look, shape, size, feather }: LookState) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "look");
   const id = useId();
   return (
     <Anchor>
@@ -607,7 +627,18 @@ function DeveloperIcon() {
 /** Developer: opens the provider keys panel ("Power up the globe", client/hud/developer); closing it hands focus back here. */
 function Developer() {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const menu = useSyncExternalStore(
+    (cb) => subscribe(MENU, cb),
+    () => get<string | null>(MENU) ?? null,
+    () => null,
+  );
+  const open = menu === "developer";
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const isOpen = get<string | null>(MENU) === "developer";
+    const value = typeof next === "function" ? next(isOpen) : next;
+    if (value) set<string | null>(MENU, "developer");
+    else if (isOpen) set<string | null>(MENU, null);
+  };
   const close = () => {
     setOpen(false);
     triggerRef.current?.focus({ preventScroll: true });

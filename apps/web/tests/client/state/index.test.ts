@@ -13,7 +13,7 @@ const THEME_KEYS = ["THEME", "ACCENT_COLOR"];
 /** The look of the globe (docs/GODS_EYE.md GC2, GE9): preset, and the map window: on or off, soft edge, shape, size. */
 const LOOK_KEYS = ["LOOK", "SCOPE_FEATHER", "SCOPE_SHAPE", "SCOPE_SIZE"];
 /** How far back the timelines go (the period button in the top row). */
-const RANGE_KEYS = ["RANGE_DAYS", "ALERTS_SEEN"];
+const RANGE_KEYS = ["RANGE_DAYS", "ALERTS_SEEN", "MENU"];
 
 describe("state catalog", () => {
   test("holds exactly the PLAN keys plus the theme and look keys", () => {
@@ -55,6 +55,7 @@ describe("transport key index (PLAN.md C6)", () => {
       "LAYERS",
       "LOOK",
       "ME",
+      "MENU",
       "MESSAGES",
       "MISSIONS",
       "NOTES",

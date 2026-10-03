@@ -2,8 +2,8 @@ import { key } from "@calvinjs/active-state";
 
 import type { EvidenceKind } from "shared/agent/events";
 
-/** Chat column tabs (PRD §12 "Layout"): the agent thread, or the team board (shown as "Notes", T43). */
-export const AGENT_TABS = ["agent", "board"] as const;
+/** Chat column tabs: the agent thread, or the list of questions the agent supports. */
+export const AGENT_TABS = ["agent", "questions"] as const;
 export type AgentTab = (typeof AGENT_TABS)[number];
 
 /** Phone bottom-sheet snap points, lowest first. Desktop ignores it: the column is always fully open. */
@@ -51,7 +51,7 @@ export type AgentHighlightState = {
   hover: AgentHighlightTarget | null;
 };
 
-const cardDefaults: AgentCardState = { tab: "agent", sheet: "collapsed", unread: { agent: false, board: false } };
+const cardDefaults: AgentCardState = { tab: "agent", sheet: "collapsed", unread: { agent: false, questions: false } };
 const chatDefaults: AgentChatState = { sessionId: null, messages: [] };
 const highlightDefaults: AgentHighlightState = { turnId: null, targets: [], hover: null };
 
