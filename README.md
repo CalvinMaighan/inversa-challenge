@@ -14,6 +14,41 @@ A CesiumJS globe over live public feeds, with a field agent you can ask about wh
 ![Lionfish: one dot per report and the Coral Reef Watch heat map around the Florida Keys](docs/evidence/readme-lionfish.jpg)
 ![Python: Burmese python reports across south Florida](docs/evidence/readme-python.jpg)
 
+## Data sources
+
+Live and polled by the Axum API. Per-source detail, checks and evidence: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md); live health in the Developer panel (Feeds).
+
+| Source | Apps | What we take |
+|---|---|---|
+| iNaturalist | carp, lionfish, python | Citizen sightings with photos, polled every 10 minutes |
+| USGS NAS | carp, lionfish, python | Curated non-native species records, polled weekly |
+| GBIF | lionfish, python | Occurrence records with deep history; copies of iNaturalist are linked, not counted twice |
+| EDDMapS (Bugwood, Univ. of Georgia) | python | Reviewer-verified Burmese python occurrences (new) |
+| USGS Water Data | carp, python | Gauge stage, discharge and water temperature; carp has nine Mississippi River gauges from St. Paul to Vicksburg (water temperature new) |
+| NOAA CO-OPS Tides & Currents | lionfish, python | 6-minute water level and water temperature at coastal stations; Florida Keys stations for lionfish (new) |
+| NOAA NWPS | carp | River stage and flow forecasts, flood thresholds |
+| IEM river forecast archive | carp | Past NWS river forecasts for replay |
+| NWS alerts and gridpoint forecast | carp, python | Active warnings and rain, wind and temperature forecasts |
+| NOAA Coral Reef Watch | lionfish | Sea temperature, heat stress (DHW), bleaching alert, hotspot |
+| Open-Meteo (marine and forecast) | lionfish, python | Waves and currents; air temperature for the python activity rule |
+| NDBC buoys | lionfish, python | Measured sea and air temperature |
+
+Disabled: GOES-19 and NWWS-OI (need AWS and NOAA accounts). AISStream was removed with the vessel layer.
+
+## Roadmap: data sources not added yet
+
+Not integrated. Each needs a sign-up, a request or an agreement first.
+
+| Source | App | Access | Notes |
+|---|---|---|---|
+| **USGS API key** (optional) | carp, python | Free sign-up at api.waterdata.usgs.gov/signup; set `USGS_API_KEY` in Doppler | The code already reads it. Only raises the rate limit |
+| **Global Fishing Watch** | lionfish | Free, needs a token (globalfishingwatch.org/our-apis); the API returns 401 without one | Only pays off if vessel layers return to the UI |
+| **REEF volunteer survey data** | lionfish | Free on request, no public API; ask for a data export | Most of it already reaches us through NAS |
+| **UF and USGS python telemetry** | python | Free, static dataset from the USGS data release | A history layer, not a live feed |
+| **MICRA and RAFT carp acoustic telemetry** | carp | Unverified; likely a download or data request | No public endpoint confirmed |
+| **FWC Python Action Team and SFWMD bounty logs** | python | Internal to Inversa | Needs a data export or webhook from Inversa |
+| **Sentinel GPS prey project** | python | Needs a data-sharing agreement with the research partners | Not public |
+
 ## Using it
 
 - **Period** (top left, next to the species chips): 30 days, 90 days, 180 days, 1 year, 2 years (default). Dots, counts and the timeline all follow it.
@@ -100,7 +135,7 @@ Litestream: SQLite files → R2
 
 | Part | Where |
 |---|---|
-| Pollers (iNaturalist, NAS, GBIF, Coral Reef Watch, Open-Meteo, NDBC) | `api/src/ingest/poll/` |
+| Pollers (iNaturalist, NAS, GBIF, EDDMapS, USGS Water, CO-OPS, NWPS, IEM, NWS, Coral Reef Watch, Open-Meteo, NDBC) | `api/src/ingest/poll/` |
 | Backfill CLI | `api/src/backfill.rs` |
 | SQLite, GraphQL | `api/src/db/`, `api/schema.graphql`, `api/src/graphql/` |
 | App config (one JSON per app, read by Rust and TS) | `spec/apps/` |

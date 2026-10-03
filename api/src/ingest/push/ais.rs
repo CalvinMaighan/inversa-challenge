@@ -798,8 +798,12 @@ mod tests {
 
     #[tokio::test]
     async fn vessels_ingest_from_mock_socket_to_graphql_and_evidence() {
-        use crate::app::test_support::test_state_for;
-        let state = test_state_for("carp");
+        // No built-in app lists the AIS feed any more (ships were removed from the maps), so the carp config gets it back here.
+        let mut v: Value = serde_json::from_str(crate::app::config::builtin_json("carp").unwrap()).unwrap();
+        v["feeds"].as_array_mut().unwrap().push(json!({ "source": "aisstream", "mode": "push", "params": {} }));
+        v["agent"]["tools"].as_array_mut().unwrap().push(json!("vessels"));
+        let cfg = crate::app::config::AppConfig::parse("carp-ais.json", &v.to_string()).unwrap();
+        let state = crate::state::AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
         crate::ingest::scheduler::start(state.clone(), Default::default()).await.unwrap();
         let now = physical::now_ms();
         // Five seconds into a minute, so t0 and t0 + 20 s share it.
@@ -854,7 +858,7 @@ mod tests {
         assert!(f.newest_observed_at.is_some(), "stored history still counts");
 
         // Python does not list the feed: no vessels there.
-        let py = test_state_for("python");
+        let py = crate::app::test_support::test_state_for("python");
         let res = crate::graphql::schema().execute(async_graphql::Request::new("{ vessels(bbox: {west: -81, south: 25, east: -80, north: 26}, from: \"2026-09-30T00:00:00Z\", to: \"2026-09-30T01:00:00Z\") { mmsi } }").data(py)).await;
         assert_eq!(res.errors[0].extensions.as_ref().unwrap().get("code"), Some(&async_graphql::Value::from("NO_VESSEL_FEED")));
     }

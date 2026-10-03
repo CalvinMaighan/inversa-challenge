@@ -1506,7 +1506,7 @@ mod tests {
         let carp = crate::app::test_support::test_state_for("carp");
         let p = plan(&carp);
         assert_eq!(p.runnable_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);
-        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws", "aisstream"]);
+        assert_eq!(p.known_ids(), ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem", "nwws"]);
         let nwws = p.known.iter().find(|(i, _)| i.id == "nwws").unwrap();
         assert!(nwws.1.as_deref().unwrap().contains("NWWS_USER"), "registered but down with the reason: {:?}", nwws.1);
 

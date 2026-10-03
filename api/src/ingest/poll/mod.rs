@@ -40,9 +40,9 @@ mod tests {
     use crate::app::test_support::{router_for, test_state_for};
     use crate::ingest::scheduler::{plan, start};
 
-    const LIONFISH_FEEDS: [&str; 9] = ["aisstream", "coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
+    const LIONFISH_FEEDS: [&str; 8] = ["coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
 
-    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those (seven plus `aisstream`, GE4, and CO-OPS tide
+    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those (seven, with CO-OPS tide
     /// stations for the Florida Keys): no NWS/NWWS, no Open-Meteo forecast, no GOES LST/cloud/fire.
     #[tokio::test]
     async fn lionfish_feed_set() {
@@ -90,6 +90,8 @@ mod tests {
             registered.extend(known);
         }
         let listed: BTreeSet<&str> = crate::app::config::SOURCES.iter().map(|(id, _)| *id).collect();
+        // The AIS adapter is dormant: ships were removed from the maps, so no app lists the feed.
+        registered.insert("aisstream");
         assert_eq!(registered, listed, "every known source id is used by an app");
         assert!(crate::app::config::PENDING_SOURCES.is_empty(), "no feed waits for an adapter");
         assert!(!listed.contains("web"), "the web hook source serves no app");

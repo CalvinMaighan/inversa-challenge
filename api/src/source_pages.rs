@@ -907,7 +907,7 @@ mod tests {
         let sources = body["data"]["sources"].as_array().unwrap_or_else(|| panic!("{body}"));
         let mut feeds: Vec<&str> = sources.iter().map(|s| s["feed"].as_str().unwrap()).collect();
         feeds.sort_unstable();
-        assert_eq!(feeds, ["aisstream", "coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
+        assert_eq!(feeds, ["coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
         assert_eq!(body["data"]["crw"], serde_json::json!({"feed": "crw", "mode": "WEBHOOK", "doi": CRW_DOI}));
         assert_eq!(body["data"]["none"], serde_json::Value::Null);
         let goes = sources.iter().find(|s| s["feed"] == "goes19-sst").unwrap();
