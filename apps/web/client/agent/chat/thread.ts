@@ -1,4 +1,4 @@
-import type { AgentChatMessage, AgentChatState } from "client/state/agent";
+import type { AgentChatMessage, AgentChatState, AgentCitation } from "client/state/agent";
 import type { AgentStreamEvent } from "shared/agent/events";
 
 /**
@@ -27,9 +27,16 @@ export type AgentToolRow = {
 
 export type AgentTurnPhase = "thinking" | "reading" | "generating";
 
+/** A short info card with the sources behind it, pinned in the chat (by the agent or the voice). */
+export type InfoCard = { title: string; text: string; sources: AgentCitation[] };
+
 export type AgentTurn = AgentChatMessage & {
-  /** Set on turns that came from a voice-spawned task. */
+  /** Set on turns that came from voice: a spoken question or reply, or a voice-spawned task. */
   source?: "voice";
+  /** An info card instead of streamed text. */
+  card?: InfoCard;
+  /** Questions worth asking next, picked after the answer (Fastino GLiDE). */
+  followUps?: string[];
   /** Voice task id, for the task objective in the header. */
   taskId?: string;
   /** Last `status` while streaming. */
@@ -64,6 +71,12 @@ export type ThreadAction =
   | { type: "session"; sessionId: string }
   | { type: "user"; id: string; text: string; nowMs: number }
   | { type: "assistant"; id: string; nowMs: number }
+  /** What the user said into the microphone, once the transcript is final. */
+  | { type: "voice_user"; id: string; text: string; nowMs: number }
+  /** What the voice said on its own (a greeting, a confirmation, a short answer). */
+  | { type: "voice_say"; id: string; text: string; nowMs: number }
+  | { type: "card"; id: string; card: InfoCard; nowMs: number }
+  | { type: "followups"; id: string; items: string[] }
   | { type: "events"; id: string; events: readonly AgentStreamEvent[]; nowMs: number; voiceTaskId?: string }
   | { type: "stop"; id: string; nowMs: number }
   | { type: "fail"; id: string; message: string; nowMs: number }
@@ -183,6 +196,20 @@ export function reduceThread(state: AgentThread, action: ThreadAction): AgentThr
       };
     case "assistant":
       return { ...state, messages: capped([...state.messages, assistantTurn(action.id, action.nowMs)]) };
+    case "voice_user":
+    case "voice_say": {
+      const role = action.type === "voice_user" ? "user" : "assistant";
+      const turn: AgentTurn = { id: action.id, role, text: action.text, citations: [], status: "done", at: iso(action.nowMs), source: "voice", endedAtMs: action.nowMs };
+      // A transcript can be finalised twice (a retry on the wire): the second replaces the first.
+      const known = state.messages.some((m) => m.id === action.id);
+      return { ...state, messages: known ? state.messages.map((m) => (m.id === action.id ? turn : m)) : capped([...state.messages, turn]) };
+    }
+    case "card": {
+      const turn: AgentTurn = { id: action.id, role: "assistant", text: action.card.text, citations: action.card.sources, status: "done", at: iso(action.nowMs), card: action.card, endedAtMs: action.nowMs };
+      return { ...state, messages: capped([...state.messages.filter((m) => m.id !== action.id), turn]) };
+    }
+    case "followups":
+      return updateTurn(state, action.id, (turn) => ({ ...turn, followUps: action.items }));
     case "events": {
       let next = state;
       if (!next.messages.some((m) => m.id === action.id)) {

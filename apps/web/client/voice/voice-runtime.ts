@@ -2,6 +2,7 @@
 
 import { get, init, set, subscribe } from "@calvinjs/active-state";
 
+import { dispatchThread } from "client/agent/chat/store";
 import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
 import { activeAppId } from "client/state/app";
 import type { VoiceState as VoiceKeyState } from "client/state/voice";
@@ -106,6 +107,8 @@ function handleEvent(event: VoiceServerEvent): void {
       return;
     case "transcript.user":
       if (event.text.trim() || event.final) patchVoice({ userText: event.text, transcript: event.text });
+      // What was said lands in the chat too, once it is final.
+      if (event.final && event.text.trim()) dispatchThread({ type: "voice_user", id: `voice-user-${event.turnId}`, text: event.text.trim(), nowMs: Date.now() });
       return;
     case "transcript.assistant": {
       // Deltas of a new response start a fresh line instead of appending to the previous answer.
@@ -113,6 +116,8 @@ function handleEvent(event: VoiceServerEvent): void {
       assistantResponseId = event.responseId;
       const text = event.final ? event.text : `${prefix}${event.text}`;
       patchVoice({ assistantText: text, transcript: text });
+      // The voice's own replies (greeting, confirmations, short answers) are chat messages; a spoken result repeats the analyst's turn, already in the thread.
+      if (event.final && event.origin === "turn" && text.trim()) dispatchThread({ type: "voice_say", id: `voice-say-${event.responseId}`, text: text.trim(), nowMs: Date.now() });
       return;
     }
     case "task.updated": {
@@ -218,7 +223,7 @@ function watchHud(rt: Runtime): () => void {
 }
 
 /** Mic permission, then session open, then audio flows. Safe to call twice; the second is a no-op. */
-export async function startVoice(): Promise<void> {
+export async function startVoice(opts: { welcome?: boolean } = {}): Promise<void> {
   if (runtime || starting) return;
   // Idempotent: a no-op once the shell's <ActiveState init={state}> has booted the store.
   init(state);
@@ -260,7 +265,7 @@ export async function startVoice(): Promise<void> {
     });
     if (abort.signal.aborted) throw new DOMException("Aborted", "AbortError");
     // The session runs in the active app: its persona, its UI tools' layers and species (PLAN.md C-A5).
-    const res = await fetch(`/api/voice/session?app=${activeAppId()}`, {
+    const res = await fetch(`/api/voice/session?app=${activeAppId()}${opts.welcome ? "&welcome=1" : ""}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "{}",

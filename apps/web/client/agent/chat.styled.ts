@@ -123,6 +123,16 @@ export const Empty = styled.p`
 
 export const UserBubble = styled.div`
   align-self: flex-end;
+  /* Said out loud: a small tag says so. */
+  &[data-source="voice"]::before {
+    content: "voice";
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted);
+    font: 500 10px / 1.2 var(--font-mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
   max-width: 85%;
   padding: 6px 10px;
   border-radius: var(--radius-s);
@@ -387,6 +397,7 @@ export const SourceChip = styled.button`
   padding: 2px 8px 2px 3px;
   border: 1px solid var(--border);
   border-radius: var(--radius-round);
+  box-shadow: var(--shadow);
   background: transparent;
   color: var(--muted);
   font: 400 var(--font-xs) / 1.4 var(--font-ui);
@@ -438,6 +449,7 @@ export const Input = styled.textarea`
   padding: 7px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
+  box-shadow: var(--shadow);
   background: color-mix(in oklab, var(--bg) 70%, transparent);
   font: 400 var(--font-s) / 1.4 var(--font-ui);
   resize: none;
@@ -538,6 +550,7 @@ export const HintChip = styled.button`
   padding: 4px 10px;
   border: 1px solid color-mix(in oklab, var(--accent) 45%, var(--border));
   border-radius: var(--radius-round);
+  box-shadow: var(--shadow);
   background: color-mix(in oklab, var(--accent) 8%, transparent);
   color: var(--text);
   font: 500 var(--font-xs) / 1.3 var(--font-ui);

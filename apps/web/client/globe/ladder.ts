@@ -8,8 +8,9 @@
  *   2275207 (first choice without a Google key, the fallback when the direct load fails).
  * - otherwise: keyless Esri World Imagery on the ellipsoid, with OpenStreetMap if Esri fails, and no Google 3D.
  *
- * Google 3D only shows while the camera is low over the active app's zone, where it pays off: Miami and the Keys
- * (python, lionfish), the Louisiana river sites (carp).
+ * Google 3D shows while the camera is over the active app's whole area and below that app's altitude (AREA_3D_MAX_ALTITUDE_M):
+ * south Florida from 2,000 km (python), the Mississippi River Basin from 5,000 km (carp), the four Caribbean areas from
+ * 5,000 km (lionfish), so the imagery is loaded for the whole area and not only around the sightings.
  */
 import type { BBox } from "shared/agent/events";
 import type { AppId } from "shared/apps";
@@ -30,23 +31,15 @@ const box = (west: number, south: number, east: number, north: number): Readonly
  */
 export const GOOGLE_3D_ZONE: readonly Readonly<BBox>[] = Object.freeze([box(-80.55, 25.4, -79.95, 26.35), box(-80.75, 24.85, -80.2, 25.4), box(-82.1, 24.4, -80.7, 24.95)]);
 
-/**
- * Louisiana (carp) around the demonstration river sites (spec/apps/carp.json): the Atchafalaya from Simmesport to
- * Morgan City with Baton Rouge on the Mississippi, the Red River at Alexandria, the Ouachita at Monroe, and the
- * Pearl near Bogalusa. The basin between them stays on aerial imagery.
- */
-export const LOUISIANA_3D_ZONE: readonly Readonly<BBox>[] = Object.freeze([
-  box(-92.0, 29.55, -91.0, 31.1),
-  box(-92.6, 31.15, -92.3, 31.45),
-  box(-92.25, 32.4, -92.0, 32.6),
-  box(-89.95, 30.68, -89.7, 30.9),
-]);
-
+/** The apps' whole areas (the regions of spec/apps/*.json; carp's is the Mississippi River Basin box its sightings are pulled for). */
 export const GOOGLE_3D_ZONES: Readonly<Record<AppId, readonly Readonly<BBox>[]>> = Object.freeze({
-  python: GOOGLE_3D_ZONE,
-  lionfish: GOOGLE_3D_ZONE,
-  carp: LOUISIANA_3D_ZONE,
+  python: Object.freeze([box(-83.2, 24.3, -79.8, 27.5)]),
+  lionfish: Object.freeze([box(-83.2, 24.3, -79.8, 27.5), box(-87.9, 18.3, -86.6, 21.7), box(-88.5, 16.0, -87.3, 18.2), box(-81.8, 9.7, -74.0, 13.5)]),
+  carp: Object.freeze([box(-97, 28.9, -82, 47)]),
 });
+
+/** How high the camera may be, per app, for Google 3D to show over its area. */
+export const AREA_3D_MAX_ALTITUDE_M: Readonly<Record<AppId, number>> = Object.freeze({ python: 2_000_000, lionfish: 5_000_000, carp: 5_000_000 });
 
 /** Above this the photorealistic mesh adds nothing over aerial imagery but costs tiles. */
 export const GOOGLE_3D_MAX_ALTITUDE_M = 30_000;
@@ -128,6 +121,6 @@ export function insideBBox(bbox: Readonly<BBox>, lon: number, lat: number): bool
 }
 
 /** Whether the Google 3D tileset should be on for this camera, over `zones` (Miami/Keys unless given). */
-export function googleZoneActive(plan: LadderPlan, camera: CameraSample, zones: readonly Readonly<BBox>[] = GOOGLE_3D_ZONE): boolean {
-  return plan.google3d.length > 0 && camera.altitudeM < GOOGLE_3D_MAX_ALTITUDE_M && zones.some((b) => insideBBox(b, camera.lon, camera.lat));
+export function googleZoneActive(plan: LadderPlan, camera: CameraSample, zones: readonly Readonly<BBox>[] = GOOGLE_3D_ZONE, maxAltitudeM: number = GOOGLE_3D_MAX_ALTITUDE_M): boolean {
+  return plan.google3d.length > 0 && camera.altitudeM < maxAltitudeM && zones.some((b) => insideBBox(b, camera.lon, camera.lat));
 }

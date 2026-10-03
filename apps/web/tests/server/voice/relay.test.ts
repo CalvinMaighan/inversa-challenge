@@ -27,7 +27,7 @@ function idleRunner(): AgentRunner {
   return { run: () => new Promise(() => undefined) };
 }
 
-async function startSession(runner: AgentRunner = idleRunner()): Promise<Harness> {
+async function startSession(runner: AgentRunner = idleRunner(), greet = false, welcome = false): Promise<Harness> {
   const mock = startMockXai();
   const session = new VoiceSession({
     ip: "127.0.0.1",
@@ -36,6 +36,8 @@ async function startSession(runner: AgentRunner = idleRunner()): Promise<Harness
     runner,
     budget: new VoiceBudget({ dataDir: mkdtempSync(path.join(tmpdir(), "voice-relay-")), dailyMinutes: 60 }),
     maxSessionMs: 60_000,
+    greet,
+    welcome,
   });
   await session.connect();
   const events: VoiceServerEvent[] = [];
@@ -73,23 +75,42 @@ afterEach(() => {
 });
 
 describe("voice relay against a mocked xAI socket", () => {
-  test("session.update carries the persona, eve, server VAD and all ten tools", async () => {
+  test("the microphone going live is answered at once with a spoken one-line greeting, once, without tools", async () => {
+    const { mock } = await startSession(idleRunner(), true);
+    const create = await mock.waitFor((e) => e.type === "response.create");
+    const response = create.response as { instructions: string; tool_choice: string; modalities: string[] };
+    expect(response.tool_choice).toBe("none");
+    expect(response.modalities).toContain("audio");
+    expect(response.instructions).toMatch(/listening/);
+    expect(response.instructions).toContain("Burmese python");
+    expect(mock.received.filter((e) => e.type === "response.create")).toHaveLength(1);
+  });
+
+  test("a first-run session opens with the spoken welcome to the Inversa Experience", async () => {
+    const { mock } = await startSession(idleRunner(), true, true);
+    const create = await mock.waitFor((e) => e.type === "response.create");
+    const response = create.response as { instructions: string; tool_choice: string };
+    expect(response.tool_choice).toBe("none");
+    expect(response.instructions).toContain("Welcome to the Inversa Experience, I'm your voice assistant, how may I help you today?");
+  });
+
+  test("session.update carries the persona, eve, server VAD and all the tools", async () => {
     const { mock } = await startSession();
     const update = await mock.waitFor((e) => e.type === "session.update");
     const session = update.session as {
       voice: string;
       instructions: string;
-      turn_detection: { type: string };
+      turn_detection: { type: string; threshold: number; silence_duration_ms: number };
       tools: { name: string; parameters: Record<string, unknown> }[];
       audio: { input: { format: { rate: number } }; output: { format: { rate: number } } };
     };
     expect(mock.authHeaders[0]).toBe("Bearer test-key-not-real");
     expect(session.voice).toBe("eve");
-    expect(session.turn_detection.type).toBe("server_vad");
+    expect(session.turn_detection).toMatchObject({ type: "server_vad", threshold: 0.6, silence_duration_ms: 450 });
     expect(session.audio.input.format.rate).toBe(16_000);
     expect(session.audio.output.format.rate).toBe(24_000);
     expect(session.instructions).toContain(getApp("python").agent.persona);
-    expect(session.instructions).toContain(getApp("python").agent.refusal);
+    expect(session.instructions).toContain("you switch for them");
     expect(session.instructions).toContain("Never invent numbers");
     expect(session.tools.map((t) => t.name).sort()).toEqual(
       [...UI_TOOL_NAMES, "spawn_thinking", "get_task_status", "cancel_task", "view_screen"].sort(),
@@ -97,6 +118,16 @@ describe("voice relay against a mocked xAI socket", () => {
     const flyTo = session.tools.find((t) => t.name === "fly_to")!;
     expect(flyTo.parameters.type).toBe("object");
     expect(flyTo.parameters).not.toHaveProperty("$schema");
+  });
+
+  test("naming another species switches the app at once, even misheard (\"car app\")", async () => {
+    const { mock, events } = await startSession();
+    mock.send({ type: "input_audio_buffer.speech_started" });
+    mock.send({ type: "conversation.item.input_audio_transcription.completed", transcript: "Hey, can you switch to the car app?" });
+    await until(() => events.some((e) => e.type === "ui.command"));
+    const command = events.find((e) => e.type === "ui.command") as Extract<VoiceServerEvent, { type: "ui.command" }>;
+    expect(command.name).toBe("switch_app");
+    expect(command.args).toEqual({ app: "carp" });
   });
 
   test("fly_to reaches VIEW", async () => {

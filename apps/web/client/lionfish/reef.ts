@@ -1,12 +1,12 @@
 /**
  * Reef heat maps: NOAA Coral Reef Watch's 5 km daily products as finished pictures from the PacIOOS ERDDAP
- * (`dhw_5km` `transparentPng`), one per area, drawn on the globe overlay. The server colours them (palette and range
+ * (`dhw_5km` `transparentPng`), one per area, drawn on the globe overlay. ERDDAP colours them (palette and range
  * are ours), draws only the area asked for and takes the product day, so there are no readings to page through
- * and nothing to store. CORS is open (`Access-Control-Allow-Origin: *`), so the pictures load under the page's COEP.
+ * and nothing to store. They come through our own `/api/reef/heat.png`, which asks ERDDAP once and serves every visitor.
  */
 import type { Area } from "./model";
 
-const ERDDAP_PNG = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.transparentPng";
+const HEAT_PNG = "/api/reef/heat.png";
 const DAY_MS = 86_400_000;
 /** The newest product day is about two days behind the wall clock; asking for a later one fails. */
 const PRODUCT_LAG_MS = 2 * DAY_MS;
@@ -101,18 +101,51 @@ export const BAA_CLASSES: readonly { label: string; color: string }[] = [
   { label: "Alert 2", color: "#e500e5" },
 ];
 
+/**
+ * The wide backdrop: the same pictures in fixed 20 degree tiles on a global grid (so every visitor asks for the same ones
+ * and the server's cache serves them), at 1.25 px per 5 km cell (500 px a side: the service answers in seconds, and a 5,000 km view shows a tile about 400 px wide), covering the areas and the room around them that a
+ * camera 5,000 km up shows. The area pictures (6 px per cell) are drawn over them when they have loaded.
+ */
+export const WIDE_TILE_DEG = 20;
+export const WIDE_PX_PER_CELL = 1.25;
+/** About what a 5,000 km camera sees beyond the areas' edge (26 degrees of latitude), less the tile's own reach. */
+export const WIDE_MARGIN_DEG = 18;
+/** CRW covers the oceans between these latitudes for our purposes. */
+const WIDE_LAT_LIMIT = 60;
+
+export type Box = { west: number; south: number; east: number; north: number };
+
+/** The global-grid tiles that cover the areas and the margin around them. */
+export function wideTiles(areas: readonly Pick<Area, "bbox">[]): Box[] {
+  if (areas.length === 0) return [];
+  const west = Math.min(...areas.map((a) => a.bbox.west)) - WIDE_MARGIN_DEG;
+  const east = Math.max(...areas.map((a) => a.bbox.east)) + WIDE_MARGIN_DEG;
+  const south = Math.max(-WIDE_LAT_LIMIT, Math.min(...areas.map((a) => a.bbox.south)) - WIDE_MARGIN_DEG);
+  const north = Math.min(WIDE_LAT_LIMIT, Math.max(...areas.map((a) => a.bbox.north)) + WIDE_MARGIN_DEG);
+  const out: Box[] = [];
+  for (let w = Math.floor(Math.max(-180, west) / WIDE_TILE_DEG) * WIDE_TILE_DEG; w < Math.min(180, east); w += WIDE_TILE_DEG) {
+    for (let s = Math.floor(south / WIDE_TILE_DEG) * WIDE_TILE_DEG; s < north; s += WIDE_TILE_DEG) {
+      out.push({ west: w, south: s, east: w + WIDE_TILE_DEG, north: s + WIDE_TILE_DEG });
+    }
+  }
+  return out;
+}
+
+/** The pictures of every wide tile for a mode and product day, in the order the grid lists them. */
+export function wideUrls(areas: readonly Pick<Area, "bbox">[], mode: ReefMode, atMs: number, nowMs = Date.now()): string[] {
+  return wideTiles(areas).map((t) => reefUrl({ bbox: t }, mode, atMs, nowMs, WIDE_PX_PER_CELL));
+}
+
 /** The picture of one area for a mode, at the product day for `atMs` (the newest day when it is past the lag). */
-export function reefUrl(area: Pick<Area, "bbox">, mode: ReefMode, atMs: number, nowMs = Date.now()): string {
+export function reefUrl(area: Pick<Area, "bbox">, mode: ReefMode, atMs: number, nowMs = Date.now(), pxPerCell = PX_PER_CELL): string {
   const s = REEF_SPECS[mode];
   const { west, south, east, north } = area.bbox;
   const productMs = Math.floor(atMs / DAY_MS) * DAY_MS + DAY_MS / 2;
   const time = productMs > nowMs - PRODUCT_LAG_MS ? "last" : new Date(productMs).toISOString().replace(".000Z", "Z");
-  const cols = Math.min(MAX_PX, Math.max(32, Math.round(((east - west) / CELL_DEG) * PX_PER_CELL)));
-  const rows = Math.min(MAX_PX, Math.max(32, Math.round(((north - south) / CELL_DEG) * PX_PER_CELL)));
-  // Latitude runs north to south on the grid, longitude west to east.
-  const box = `%5B(${time})%5D%5B(${north}):(${south})%5D%5B(${west}):(${east})%5D`;
-  const bar = `Rainbow%7C${s.discrete ? "D" : "C"}%7CLinear%7C${s.min}%7C${s.max}%7C${s.discrete ? 5 : ""}`;
-  return `${ERDDAP_PNG}?${s.variable}${box}&.draw=surface&.colorBar=${bar}&.land=off&.size=${cols}%7C${rows}`;
+  const cols = Math.min(MAX_PX, Math.max(32, Math.round(((east - west) / CELL_DEG) * pxPerCell)));
+  const rows = Math.min(MAX_PX, Math.max(32, Math.round(((north - south) / CELL_DEG) * pxPerCell)));
+  const q = new URLSearchParams({ v: s.variable, time, west: String(west), east: String(east), south: String(south), north: String(north), min: String(s.min), max: String(s.max), d: s.discrete ? "1" : "0", cols: String(cols), rows: String(rows) });
+  return `${HEAT_PNG}?${q.toString()}`;
 }
 
 type Entry = { img: HTMLImageElement; ready: boolean; failed: boolean };

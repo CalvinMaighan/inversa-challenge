@@ -67,9 +67,9 @@
     { "source": "nas", "mode": "poll", "params": { "state": null, "global": true, "pageLimit": 4000, "parallelPages": 4, "cadenceDays": 7 } },
     { "source": "crw", "mode": "poll", "name": "NOAA Coral Reef Watch", "homepage": "https://coralreefwatch.noaa.gov", "params": { "erddap": "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/dhw_5km.json", "variables": ["CRW_SST", "CRW_SSTANOMALY", "CRW_DHW", "CRW_BAA"], "points": { "fl-keys": [24.525, -81.375], "mx-caribbean": [18.575, -87.325], "belize": [16.775, -87.825], "co-caribbean": [12.525, -81.625] } } },
     { "source": "openmeteo-marine", "mode": "poll", "name": "Open-Meteo Marine", "homepage": "https://open-meteo.com/en/docs/marine-weather-api", "params": { "stepDeg": 0.5, "forecastHours": 72, "waveModel": "meteofrance_wave", "currentModel": "meteofrance_currents", "metaCheckMinutes": 15 } },
+    { "source": "coops", "mode": "poll", "name": "NOAA CO-OPS tide stations (Florida)", "homepage": "https://tidesandcurrents.noaa.gov", "params": { "note": "6-minute water level and water temperature at the Florida stations inside the Florida Keys area" } },
     { "source": "ndbc", "mode": "poll", "params": { "bulk": true, "note": "latest_obs.txt; only Florida has sea-temperature buoys inside the areas" } },
-    { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } },
-    { "source": "aisstream", "mode": "push", "name": "AISStream.io vessel positions", "homepage": "https://aisstream.io", "params": {} }
+    { "source": "goes19-sst", "mode": "push", "name": "GOES-19 SST (full disk)", "params": { "products": ["ABI-L2-SSTF"] } }
   ],
   "score": {
     "label": "Survey priority (four components shown separately; rankScore is a weighted mean that only orders cells; no single risk percent)",
@@ -83,17 +83,16 @@
   "windows": { "defaultHours": 720, "optionsHours": [48, 168, 720] },
   "layers": [
     { "id": "sightings", "label": "Lionfish reports", "defaultOn": true },
-    { "id": "hotspots", "label": "Survey priority", "defaultOn": true },
+    { "id": "hotspots", "label": "Survey priority", "defaultOn": false },
     { "id": "sst", "label": "Sea surface temperature (GOES-19)", "defaultOn": false },
-    { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": true },
+    { "id": "heat", "label": "Reef heat stress (CRW)", "defaultOn": false },
     { "id": "marine", "label": "Waves and currents (Open-Meteo)", "defaultOn": false },
     { "id": "stations", "label": "Buoys and tide stations (Florida)", "defaultOn": false },
-    { "id": "missions", "label": "Team missions", "defaultOn": true },
-    { "id": "peers", "label": "Teammates", "defaultOn": true },
-    { "id": "notes", "label": "Field notes", "defaultOn": true },
+    { "id": "missions", "label": "Team missions", "defaultOn": false },
+    { "id": "peers", "label": "Teammates", "defaultOn": false },
+    { "id": "notes", "label": "Field notes", "defaultOn": false },
     { "id": "sst-map", "label": "Sea surface temperature map", "defaultOn": false, "description": "How warm the sea was, satellite picture, one per day." },
     { "id": "radar", "label": "Rain radar", "defaultOn": false, "description": "Where it is raining now." },
-    { "id": "clouds", "label": "Clouds", "defaultOn": false, "description": "Cloud cover from the weather satellite." },
     { "id": "lightning", "label": "Lightning", "defaultOn": false, "description": "Where lightning struck in the last 15 minutes." },
     { "id": "cyclones", "label": "Hurricanes and tropical storms", "defaultOn": false, "description": "Active storms, their track and forecast cone." }
   ],
@@ -101,7 +100,6 @@
     "sightings": "One dot per report, by observed date. Submitted date can lag years.",
     "sst-map": "NASA GIBS MUR sea surface temperature, daily; the newest picture is the day before.",
     "radar": "NOAA nowCOAST MRMS base reflectivity, about every 4 minutes, contiguous US only.",
-    "clouds": "NOAA nowCOAST GOES-19/18 longwave infrared, every 5 minutes.",
     "lightning": "NOAA nowCOAST 15-minute lightning strike density, about 8 km cells.",
     "cyclones": "NHC and CPHC advisories: positions, past track, forecast track and cone.",
     "hotspots": "Priority components shown separately; weights are configurable and labelled.",
@@ -139,7 +137,7 @@
   "agent": {
     "persona": "You are the Lionfish Watch analyst. You prioritise survey areas from recent lionfish reports, identification quality, reef heat stress and data completeness, always shown as separate components, and you say when data is thin, stale or conflicting.",
     "scope": "Lionfish (Pterois volitans/miles) in the Florida Keys, the Mexican Caribbean, Belize and the Colombian Caribbean.",
-    "tools": ["geocode", "sightings", "species_counts", "conditions", "hotspots", "explain_cell", "reef_heat", "marine_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "vessels", "toggle_layer", "set_look"],
+    "tools": ["geocode", "sightings", "species_counts", "conditions", "hotspots", "explain_cell", "reef_heat", "marine_forecast", "feed_state", "source_info", "evidence", "team_board", "notes", "set_view", "toggle_layer", "open_menu", "set_period", "filter_species", "select_area", "zoom", "close_panel", "fly_to", "show_card", "species_info", "switch_app", "open_evidence", "set_look"],
     "refusal": "Lionfish Watch covers lionfish in four areas: Florida Keys, Mexican Caribbean, Belize and the Colombian Caribbean. It does not estimate population growth or an invasion-risk percentage."
   },
   "eval": { "goldenSet": "lionfish" }

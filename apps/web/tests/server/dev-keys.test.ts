@@ -44,25 +44,25 @@ async function read(res: Response): Promise<{ status: number; text: string; json
 
 describe("dev keys route", () => {
   test("GET reports booleans and sources only: an external key is set, its value never in the body", async () => {
-    const env = devEnv({ OPENROUTER_API_KEY: SENTINEL, GOES_SQS_URL: SENTINEL });
+    const env = devEnv({ OPENROUTER_API_KEY: SENTINEL, FASTINO_API_KEY: SENTINEL });
     const res = await read(handleGet(req("GET"), env));
     expect(res.status).toBe(200);
     expect(res.text).not.toContain(SENTINEL);
     const rows = res.json as ServerKeyStatus[];
-    expect(rows.map((r) => r.id)).toEqual(["aisstream", "openrouter", "xai", "aws-goes", "nwws"]);
+    expect(rows.map((r) => r.id)).toEqual(["aisstream", "openrouter", "xai", "fastino"]);
     expect(rows.find((r) => r.id === "openrouter")).toEqual({ id: "openrouter", set: true, source: "external", writable: true, vars: [{ name: "OPENROUTER_API_KEY", set: true, source: "external" }] });
-    // A row needing three variables is set only when all three are.
-    expect(rows.find((r) => r.id === "aws-goes")).toMatchObject({ set: false, source: null, vars: [{ set: true, source: "external" }, { set: false }, { set: false }] });
+    expect(rows.find((r) => r.id === "fastino")).toMatchObject({ set: true, source: "external", vars: [{ name: "FASTINO_API_KEY", set: true, source: "external" }] });
+    expect(rows.find((r) => r.id === "xai")).toMatchObject({ set: false, source: null });
     for (const r of rows) for (const v of r.vars) expect(typeof v.set).toBe("boolean");
     expect(logged.join("\n")).not.toContain(SENTINEL);
   });
 
   test("POST writes data/local-keys.env with mode 0600, echoes names only, and GET then shows it pending, then local", async () => {
     const env = devEnv({ INVERSA_DEV_SUPERVISOR: "1" });
-    const res = await read(await handlePost(req("POST", { values: { AISSTREAM_API_KEY: SENTINEL, NWWS_USER: "user-1" } }), env));
+    const res = await read(await handlePost(req("POST", { values: { AISSTREAM_API_KEY: SENTINEL, FASTINO_API_KEY: "user-1" } }), env));
     expect(res.status).toBe(200);
     expect(res.text).not.toContain(SENTINEL);
-    expect(res.json).toMatchObject({ saved: ["AISSTREAM_API_KEY", "NWWS_USER"], external: [], restart: "supervisor" });
+    expect(res.json).toMatchObject({ saved: ["AISSTREAM_API_KEY", "FASTINO_API_KEY"], external: [], restart: "supervisor" });
     const file = localKeysPath(env);
     expect(file).toBe(path.join(dataDir, "local-keys.env"));
     expect(statSync(file).mode & 0o777).toBe(0o600);
@@ -71,8 +71,7 @@ describe("dev keys route", () => {
     const pending = await read(handleGet(req("GET"), env));
     expect(pending.text).not.toContain(SENTINEL);
     expect((pending.json as ServerKeyStatus[]).find((r) => r.id === "aisstream")).toMatchObject({ set: false, source: "pending" });
-    // NWWS needs two variables: one pending, one missing.
-    expect((pending.json as ServerKeyStatus[]).find((r) => r.id === "nwws")).toMatchObject({ set: false, source: "pending", vars: [{ source: "pending" }, { source: null }] });
+    expect((pending.json as ServerKeyStatus[]).find((r) => r.id === "fastino")).toMatchObject({ set: false, source: "pending", vars: [{ source: "pending" }] });
 
     // After the supervisor restart: the value is in the env and its name in INVERSA_LOCAL_KEYS.
     const loaded = await read(handleGet(req("GET"), { ...env, AISSTREAM_API_KEY: SENTINEL, INVERSA_LOCAL_KEYS: "AISSTREAM_API_KEY" }));
@@ -84,14 +83,14 @@ describe("dev keys route", () => {
     expect(second.json).toMatchObject({ saved: ["XAI_API_KEY"], restart: "manual" });
     const text = readFileSync(file, "utf8");
     expect(text).toContain(`AISSTREAM_API_KEY=${SENTINEL}`);
-    expect(text).toContain("NWWS_USER=user-1");
+    expect(text).toContain("FASTINO_API_KEY=user-1");
     expect(text).toContain("XAI_API_KEY=xai-dummy-1");
     expect(statSync(file).mode & 0o777).toBe(0o600);
 
     const logs = logged.join("\n");
     expect(logs).not.toContain(SENTINEL);
     expect(logs).not.toContain("user-1");
-    expect(logs).toContain("[dev keys] saved AISSTREAM_API_KEY, NWWS_USER");
+    expect(logs).toContain("[dev keys] saved AISSTREAM_API_KEY, FASTINO_API_KEY");
   });
 
   test("a key already in the environment is reported external and not overwritten", async () => {
@@ -199,8 +198,8 @@ describe("dev keys route", () => {
     const file = localKeysPath(env);
     await handlePost(req("POST", { values: { XAI_API_KEY: "first" } }), env);
     writeFileSync(file, readFileSync(file, "utf8"), { mode: 0o600 });
-    await handlePost(req("POST", { values: { NWWS_PASS: "second" } }), env);
+    await handlePost(req("POST", { values: { FASTINO_API_KEY: "second" } }), env);
     expect(statSync(file).mode & 0o777).toBe(0o600);
-    expect(readFileSync(file, "utf8")).toMatch(/NWWS_PASS=second\nXAI_API_KEY=first\n$/);
+    expect(readFileSync(file, "utf8")).toMatch(/FASTINO_API_KEY=second\nXAI_API_KEY=first\n$/);
   });
 });

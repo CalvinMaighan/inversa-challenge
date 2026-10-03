@@ -23,6 +23,8 @@ export type GlobeViewer = {
     };
     /** GE5 raster overlays are Cesium imagery layers; absent on the test fake, where those layers report an error. */
     imageryLayers?: { add(layer: unknown, index?: number): void; remove(layer: unknown, destroy?: boolean): boolean };
+    /** Fires with the number of globe tiles still loading; absent on the test fake. */
+    globe?: { tileLoadProgressEvent?: { addEventListener(cb: (pending: number) => void): () => void } };
   };
   /** GE5: the credit line (`CesiumWidget.creditDisplay`); overlays register their attribution while on. */
   creditDisplay?: { addStaticCredit(credit: unknown): void; removeStaticCredit(credit: unknown): void };

@@ -1,6 +1,7 @@
 mod app;
 mod archive;
 mod backfill;
+mod carp_fish;
 mod crdt;
 mod db;
 #[cfg(test)]
@@ -50,6 +51,7 @@ async fn main() {
     let registry = AppRegistry::open(config, &ids).unwrap_or_else(|e| panic!("open apps: {e:#}"));
     for state in registry.iter() {
         ingest::scheduler::spawn(state.clone());
+        carp_fish::spawn(state.clone());
         frames::spawn_builder(state.clone());
         feed_state::spawn_publisher(state.obs.clone(), state.hub.clone(), std::time::Duration::from_secs(15));
     }

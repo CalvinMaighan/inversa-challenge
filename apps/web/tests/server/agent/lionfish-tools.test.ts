@@ -485,7 +485,7 @@ describe("lionfish tool: sightings, conditions and set_view changes", () => {
     expect((hotspot.data.recordsInside as any[]).length).toBeGreaterThan(4);
     const sources = await run("source_info", {});
     const rows = sources.data.rows as any[];
-    expect(rows.map((r) => r.feed)).toEqual(["inat", "gbif", "nas", "crw", "openmeteo-marine", "ndbc", "goes19-sst", "aisstream"]);
+    expect(rows.map((r) => r.feed)).toEqual(["inat", "gbif", "nas", "crw", "openmeteo-marine", "coops", "ndbc", "goes19-sst"]);
     // Each feed's facts point at the tool that shows its rows; "all" means every feed.
     expect(String(rows.find((r) => r.feed === "nas").next)).toMatch(/call sightings over the four areas/);
     expect(String(rows.find((r) => r.feed === "crw").next)).toMatch(/call reef_heat/);

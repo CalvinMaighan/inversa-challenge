@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import styled from "client/styled";
 
 import { useActiveApp } from "../appselect/use-active-app";
-import { Icon, IconButton } from "../primitives";
+import { GLASS_CSS, Icon, IconButton, POPOVER_BUTTONS_CSS } from "../primitives";
 import { HELP_GROUPS, helpEntries } from "./content";
 
 const Sheet = styled.section`
@@ -21,9 +21,9 @@ const Sheet = styled.section`
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
+  ${POPOVER_BUTTONS_CSS}
 `;
 
 const Head = styled.header`

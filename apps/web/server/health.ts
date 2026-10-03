@@ -76,6 +76,7 @@ function appEntry(id: string, api: WebHealth["api"], apps: ApiApp[]): AppEntry {
   }
   const downFeeds: AppEntry["downFeeds"] = [];
   for (const feed of found.feeds as ApiFeed[]) {
+    if (typeof feed.note === "string" && feed.note.startsWith("disabled:")) continue;
     const state = feed.state;
     if (state === "nominal" || state === "lagging" || state === "stale" || state === "down") feeds[state] += 1;
     if (state === "down") downFeeds.push({ source: String(feed.source), reason: typeof feed.note === "string" && feed.note ? feed.note : "down (no reason given)" });

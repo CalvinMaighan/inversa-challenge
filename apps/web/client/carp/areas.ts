@@ -6,7 +6,7 @@ import type { BBox } from "shared/agent/events";
 
 export type Area = { id: string; name: string; lat: number; lon: number; altitudeM: number; bbox: BBox };
 
-/** The basin's main corridor, Gulf to Minnesota: the box the sightings are pulled for (app/api/carp/sightings/route.ts). */
+/** The basin's main corridor, Gulf to Minnesota: the box the sightings are pulled for (api/src/carp_fish.rs). */
 export const BASIN_BBOX: BBox = { west: -97, south: 28.9, east: -82, north: 47 };
 
 export const CARP_AREAS: readonly Area[] = [

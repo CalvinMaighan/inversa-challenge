@@ -33,11 +33,12 @@ const notFound = () => json({ error: "Voice session not found" }, 404);
 /** First `X-Forwarded-For` hop (Caddy sets it), then `X-Real-IP`, else one shared local bucket. */
 export { clientIp };
 
-/** `POST /api/voice/session?app=<id>`: the session runs in that app (persona, tools, scope). */
+/** `POST /api/voice/session?app=<id>`: the session runs in that app (persona, tools, scope). `welcome=1` is the first-run greeting. */
 export async function handleOpenSession(request: Request, registry: VoiceSessionRegistry): Promise<Response> {
-  const app = new URL(request.url).searchParams.get("app");
+  const params = new URL(request.url).searchParams;
+  const app = params.get("app");
   if (!isAppId(app)) return json({ error: "unknown_app", apps: APP_IDS }, 404);
-  const result = await registry.open(clientIp(request), getApp(app));
+  const result = await registry.open(clientIp(request), getApp(app), { welcome: params.get("welcome") === "1" });
   if (!result.ok) {
     const headers: Record<string, string> = result.retryAfterSeconds ? { "Retry-After": String(result.retryAfterSeconds) } : {};
     return json({ error: result.error }, result.status, headers);

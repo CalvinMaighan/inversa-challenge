@@ -26,7 +26,7 @@ export type LionfishView = {
   panelOpen: boolean | null;
 };
 
-export const VIEW_DEFAULTS: LionfishView = { area: null, basis: "observed", days: DEFAULT_WINDOW_DAYS, lateOnly: false, heat: true, reef: DEFAULT_REEF_MODE, field: false, help: null, panelOpen: null };
+export const VIEW_DEFAULTS: LionfishView = { area: null, basis: "observed", days: DEFAULT_WINDOW_DAYS, lateOnly: false, heat: false, reef: DEFAULT_REEF_MODE, field: false, help: null, panelOpen: null };
 
 let state: LionfishView = VIEW_DEFAULTS;
 const listeners = new Set<() => void>();

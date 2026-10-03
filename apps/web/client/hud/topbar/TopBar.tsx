@@ -1,31 +1,31 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { get, set, subscribe } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
 import type { FeedState } from "shared/feed-state";
 
 import { SHEET_MEDIA } from "client/agent/layout/geometry";
+import { ALERTS_SEEN } from "client/state/alerts";
 import { FEEDS } from "client/state/feeds";
-import { featherOf, LOOK, lookOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
+import { MENU } from "client/state/menu";
+import { blurOf, featherOf, LOOK, lookOf, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE, shapeOf, sizeOf, type LookId, type ScopeShape } from "client/state/look";
 import { THEME } from "client/state/theme";
 import styled from "client/styled";
+import type { MenuId } from "shared/voice/ui-tools";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
-import LegendBody from "../legend/LegendPanel";
-import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
-import { useActiveApp } from "../appselect/use-active-app";
-import { aboutSentence, WINDOW_NOTE } from "../help/content";
+import { hasNewData, latestMs, liveRows } from "../alerts/model";
+import { Dot, Icon, IconButton, MOBILE, Surface, GLASS_CSS, POPOVER_BUTTONS_CSS } from "../primitives";
 import DeveloperPanel from "../developer/DeveloperPanel";
-import { LookChoices, LookIcon, setLook, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
-import { openEvidence } from "../selection";
-import { feedChip, feedSummary, sortFeedsForStatus } from "./feed-chips";
-import { freshnessLines } from "./freshness";
+import { LookChoices, LookIcon, setLook, setScopeBlur, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
+import { formatLag } from "./feed-chips";
 
 /** An icon button's size. */
 export const ROUND_PX = 36;
-/** The cluster's buttons, left to right: About, Theme, Look, Developer. */
-export const TOPBAR_BUTTONS = 4;
+/** The cluster's buttons, left to right: Live data, Theme, Look, Developer. */
+export const TOPBAR_BUTTONS = 5;
 /** The cluster's width (the top row keeps this much room, plus a gutter, at its right). */
 export const TOPBAR_WIDTH_CSS = `calc(${TOPBAR_BUTTONS * ROUND_PX}px + ${TOPBAR_BUTTONS - 1} * var(--gap-m))`;
 
@@ -102,11 +102,11 @@ const Popover = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
   scrollbar-width: thin;
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;
@@ -139,67 +139,6 @@ const Popover = styled.div`
   }
 `;
 
-const Fresh = styled.ul`
-  margin: 0 0 var(--gap-s);
-  padding: 0;
-  list-style: none;
-  color: var(--muted);
-  font-size: 12.5px;
-`;
-
-const Row = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap-s);
-`;
-
-const FeedList = styled.ul`
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-
-  li {
-    display: grid;
-    grid-template-columns: 9px 1fr auto auto;
-    align-items: center;
-    column-gap: 7px;
-  }
-
-  b {
-    font: 600 12px / 1.3 var(--font-mono);
-  }
-
-  small {
-    color: var(--muted);
-    font: 400 11px / 1.3 var(--font-mono);
-    white-space: nowrap;
-  }
-
-  p {
-    grid-column: 2 / -1;
-    margin: 0 0 3px;
-    color: var(--muted);
-    font-size: 11.5px;
-  }
-`;
-
-/** A feed's name, as a button that opens its latest fetch run in the evidence drawer. */
-const FeedRun = styled.button`
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  &:hover b,
-  &:focus-visible b {
-    text-decoration: underline;
-  }
-`;
-
 const Choices = styled.div`
   display: flex;
   flex-direction: column;
@@ -219,8 +158,25 @@ const Choices = styled.div`
  * A button with a popover under it. Esc (inside the popover) or a click outside closes it; Esc and the
  * popover's own actions hand focus back to the button.
  */
-export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>) {
-  const [open, setOpen] = useState(false);
+export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popRef: RefObject<HTMLDivElement | null>, menu?: MenuId) {
+  const [local, setLocal] = useState(false);
+  const current = useSyncExternalStore(
+    (cb) => subscribe(MENU, cb),
+    () => get<string | null>(MENU) ?? null,
+    () => null,
+  );
+  // A named menu lives in MENU (one open at a time, and the agent can open it); an unnamed one keeps its own state.
+  const open = menu ? current === menu : local;
+  const setOpen = useCallback(
+    (next: boolean | ((v: boolean) => boolean)) => {
+      if (!menu) return setLocal(next);
+      const isOpen = get<string | null>(MENU) === menu;
+      const value = typeof next === "function" ? next(isOpen) : next;
+      if (value) set<string | null>(MENU, menu);
+      else if (isOpen) set<string | null>(MENU, null);
+    },
+    [menu],
+  );
   useEffect(() => {
     if (!open) return;
     popRef.current?.focus({ preventScroll: true });
@@ -230,7 +186,7 @@ export function usePopover(triggerRef: RefObject<HTMLButtonElement | null>, popR
     };
     document.addEventListener("pointerdown", onDown, true);
     return () => document.removeEventListener("pointerdown", onDown, true);
-  }, [open, popRef, triggerRef]);
+  }, [open, popRef, triggerRef, setOpen]);
   const close = () => {
     setOpen(false);
     triggerRef.current?.focus({ preventScroll: true });
@@ -261,50 +217,95 @@ export function PopoverBox({ id, label, testId, popRef, onClose, children, align
   );
 }
 
-/** Technical feed health, worst first, each with its lag and, off nominal, the server's note. */
-function Feeds({ list }: { list: FeedState[] }) {
-  if (list.length === 0) return <p>No feed state received yet.</p>;
+const LiveList = styled.ul`
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-s);
+  margin: var(--gap-s) 0 0;
+  padding: 0;
+  list-style: none;
+
+  /* Two lines per source: its name and when it was checked, then what it checks and its newest record. */
+  li {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+    column-gap: var(--gap-s);
+    row-gap: 1px;
+    align-items: baseline;
+  }
+  li > :first-child {
+    grid-row: 1 / 3;
+    align-self: start;
+    margin-top: 4px;
+  }
+  b {
+    font: 600 12px / 1.3 var(--font-mono);
+  }
+  small {
+    color: var(--muted);
+    font: 400 11px / 1.3 var(--font-mono);
+    white-space: nowrap;
+  }
+  small:nth-of-type(2) {
+    white-space: normal;
+  }
+  small:nth-of-type(1),
+  small:nth-of-type(3) {
+    text-align: right;
+  }
+`;
+
+/** The popover's body: every source's newest record, freshest first, ages ticking. Over plain props so it renders anywhere. */
+export function LiveDataContent({ list, nowMs }: { list: FeedState[]; nowMs: number }) {
+  const rows = liveRows(list, nowMs);
   return (
-    <FeedList aria-label="Feeds">
-      {sortFeedsForStatus(list).map((feed) => {
-        const chip = feedChip(feed);
-        // The chip opens the feed's latest fetch run in the drawer: state, note and error readable without a hover.
-        const run = feed.lastFetchRunId ? `fetch:${feed.lastFetchRunId}` : null;
-        const open = run ? () => openEvidence(run) : undefined;
-        return (
-          <li key={chip.source} title={chip.title} data-feed={chip.source} data-state={chip.state}>
-            <Dot $tone={chip.tone} />
-            {open ? (
-              <FeedRun type="button" onClick={open} title={`Open ${chip.label}'s latest fetch run: state, note and error`}>
-                <b>{chip.label}</b>
-              </FeedRun>
-            ) : (
-              <b>{chip.label}</b>
-            )}
-            <small>
-              {chip.state} · {chip.mode}
-            </small>
-            <small>{chip.lag}</small>
-            {chip.state !== "nominal" && feed.note ? <p>{feed.note}</p> : null}
-          </li>
-        );
-      })}
-    </FeedList>
+    <>
+      <p>Live checks of each data source.</p>
+      {rows.length === 0 ? (
+        <p>Nothing has reported yet.</p>
+      ) : (
+        <LiveList aria-label="Latest data" data-testid="live-data-list">
+          {rows.map((r) => (
+            <li key={r.source} data-feed={r.source} title={r.fetchedMs ? `Checked ${formatLag((nowMs - r.fetchedMs) / 1000)} ago` : undefined}>
+              <Dot $tone={r.state === "nominal" ? "ok" : r.state === "lagging" ? "warn" : r.state === "stale" ? "stale" : "danger"} />
+              <b>{r.label}</b>
+              <small>{r.checked ? `checked ${r.checked}` : "not checked"}</small>
+              <small>{r.what}</small>
+              <small>newest {r.age}</small>
+            </li>
+          ))}
+        </LiveList>
+      )}
+    </>
   );
 }
 
-function About({ list, focus, onFocus, helpOpen, onHelp }: ChromeProps & { list: FeedState[] }) {
+/**
+ * Live data: a bell with a dot when a source has reported something newer than the viewer last saw; its popover lists the
+ * newest record per source with its age. The feeds are pushed by the server every few seconds, so this is the real-time
+ * view of what is coming in.
+ */
+function LiveData({ list, seen, onSeen }: { list: FeedState[]; seen: number; onSeen: (ms: number) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "live_data");
   const id = useId();
-  const summary = feedSummary(list);
-  const label =
-    list.length === 0
-      ? "About this map and its data"
-      : `About this map and its data: ${summary.degraded === 0 ? "every data source running normally" : `${summary.degraded} of ${list.length} data sources delayed or down`}`;
+  const [now, setNow] = useState(() => Date.now());
+  const latest = latestMs(list);
+  // What arrives while the page loads (the feeds come in one by one) is the baseline, and so is whatever is in the open popover.
+  useEffect(() => {
+    const loading = typeof performance !== "undefined" && performance.now() < LOAD_BASELINE_MS;
+    if (latest > 0 && (seen === 0 || loading || pop.open) && latest !== seen) onSeen(latest);
+  }, [latest, seen, pop.open, onSeen]);
+  useEffect(() => {
+    if (!pop.open) return;
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, [pop.open]);
+  const fresh = hasNewData(list, seen);
+  const label = fresh ? "Live data: new data has arrived" : "Live data: the newest records from each source";
   return (
-    <>
+    <Anchor>
       <Round
         ref={triggerRef}
         type="button"
@@ -313,88 +314,34 @@ function About({ list, focus, onFocus, helpOpen, onHelp }: ChromeProps & { list:
         aria-controls={pop.open ? id : undefined}
         aria-label={label}
         title={label}
-        data-testid="status-button"
-        data-health={list.length === 0 ? "unknown" : summary.state}
-        onClick={pop.toggle}
+        data-testid="live-data-button"
+        data-new={fresh ? "1" : "0"}
+        onClick={() => {
+          setNow(Date.now());
+          pop.toggle();
+        }}
       >
-        <Icon name="info" />
-        {list.length > 0 && summary.degraded > 0 ? <Dot $tone={summary.tone} /> : null}
+        <Icon name="bell" />
+        {fresh ? <Dot $tone="ok" $pulse /> : null}
       </Round>
       {pop.open ? (
-        <PopoverBox id={id} label="About this map" testId="status-popover" popRef={popRef} onClose={pop.close}>
-          <AboutContent
-            list={list}
-            focus={focus}
-            onFocus={onFocus}
-            helpOpen={helpOpen}
-            onHelp={() => {
-              pop.close();
-              onHelp(!helpOpen);
-            }}
-          />
+        <PopoverBox id={id} label="Live data" testId="live-data-popover" popRef={popRef} onClose={pop.close} align="right">
+          <LiveDataContent list={list} nowMs={now} />
         </PopoverBox>
       ) : null}
-    </>
+    </Anchor>
   );
 }
 
-/** What the About popover holds: what this is, freshness, Focus, Help, the data sources and the expert layers. */
-export function AboutContent({
-  list,
-  nowMs,
-  focus,
-  onFocus,
-  helpOpen,
-  onHelp,
-}: {
-  list: FeedState[];
-  /** Wall clock for "checked 6 min ago"; taken when the popover opens unless given (tests). */
-  nowMs?: number;
-  focus: boolean;
-  onFocus: (next: boolean) => void;
-  helpOpen: boolean;
-  onHelp: () => void;
-}) {
-  const [expert, setExpert] = useState(false);
-  const [now] = useState(() => nowMs ?? Date.now());
-  const app = useActiveApp();
-  return (
-    <>
-      <p>{aboutSentence(app)}</p>
-      <p data-testid="window-note">{WINDOW_NOTE}</p>
-      <Fresh aria-label="Data freshness">
-        {freshnessLines(list, now).map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </Fresh>
-      <Row>
-        <IconButton type="button" $active={focus} aria-pressed={focus} onClick={() => onFocus(!focus)} title="Focus: dim everything outside the selection">
-          <Icon name="focus" />
-          Focus
-        </IconButton>
-        <IconButton type="button" $active={helpOpen} title="Help: what every control does" data-help-button="" data-testid="help-button" onClick={onHelp}>
-          <Icon name="help" />
-          Help
-        </IconButton>
-      </Row>
-      <details data-testid="data-sources">
-        <summary>Data sources</summary>
-        <Feeds list={list} />
-      </details>
-      <details data-testid="expert-data" onToggle={(e) => setExpert(e.currentTarget.open)}>
-        <summary data-testid="layers-button">More data (for experts)</summary>
-        {expert ? <LegendBody active /> : null}
-      </details>
-    </>
-  );
-}
+/** Records that arrive in this first stretch of the page's life are already seen: only later ones light the dot. */
+const LOAD_BASELINE_MS = 20_000;
 
 const THEME_LABELS: Record<ThemeModeId, string> = { light: "Light", dark: "Dark", tactical: "Tactical" };
 
 function Theme({ mode, onPick }: { mode: ThemeModeId; onPick: (mode: ThemeModeId) => void }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "theme");
   const id = useId();
   return (
     <>
@@ -436,10 +383,10 @@ export function ThemeChoices({ mode, onPick }: { mode: ThemeModeId; onPick: (mod
  * Look (GE9): the visual presets and the map window (shape, size, soft edge), as an icon button in the cluster. Its
  * popover opens below it, right edges aligned.
  */
-function Look({ look, shape, size, feather }: LookState) {
+function Look({ look, shape, size, feather, blur }: LookState) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef);
+  const pop = usePopover(triggerRef, popRef, "look");
   const id = useId();
   return (
     <Anchor>
@@ -463,10 +410,12 @@ function Look({ look, shape, size, feather }: LookState) {
             shape={shape}
             size={size}
             feather={feather}
+            blur={blur}
             onLook={setLook}
             onShape={setScopeShape}
             onSize={setScopeSize}
             onFeather={setScopeFeather}
+            onBlur={setScopeBlur}
           />
         </PopoverBox>
       ) : null}
@@ -486,7 +435,18 @@ function DeveloperIcon() {
 /** Developer: opens the provider keys panel ("Power up the globe", client/hud/developer); closing it hands focus back here. */
 function Developer() {
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
+  const menu = useSyncExternalStore(
+    (cb) => subscribe(MENU, cb),
+    () => get<string | null>(MENU) ?? null,
+    () => null,
+  );
+  const open = menu === "developer";
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const isOpen = get<string | null>(MENU) === "developer";
+    const value = typeof next === "function" ? next(isOpen) : next;
+    if (value) set<string | null>(MENU, "developer");
+    else if (isOpen) set<string | null>(MENU, null);
+  };
   const close = () => {
     setOpen(false);
     triggerRef.current?.focus({ preventScroll: true });
@@ -520,19 +480,21 @@ function Developer() {
 export default function TopBar(props: ChromeProps) {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
   const [mode, setMode] = useActiveState<ThemeModeId>(THEME);
+  const [seen, setSeen] = useActiveState<number>(ALERTS_SEEN);
   const look: LookState = {
     look: lookOf(useActiveState<LookId>(LOOK)[0]),
     shape: shapeOf(useActiveState<ScopeShape>(SCOPE_SHAPE)[0]),
     size: sizeOf(useActiveState<number>(SCOPE_SIZE)[0]),
     feather: featherOf(useActiveState<number>(SCOPE_FEATHER)[0]),
+    blur: blurOf(useActiveState<number>(SCOPE_BLUR)[0]),
   };
-  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} />;
+  return <TopBarView {...props} feeds={feeds ?? []} mode={mode ?? "dark"} onTheme={setMode} look={look} seen={seen ?? 0} onSeen={setSeen} />;
 }
 
 type ChromeProps = { focus: boolean; onFocus: (next: boolean) => void; helpOpen: boolean; onHelp: (open: boolean) => void };
 /** The Look keys the Look popover shows. */
-type LookState = { look: LookId; shape: ScopeShape; size: number; feather: number };
-const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined) };
+type LookState = { look: LookId; shape: ScopeShape; size: number; feather: number; blur: number };
+const DEFAULT_LOOK_STATE: LookState = { look: lookOf(undefined), shape: shapeOf(undefined), size: sizeOf(undefined), feather: featherOf(undefined), blur: blurOf(undefined) };
 
 /** The chrome over plain props (the stores are read by TopBar), so it renders anywhere, tests included. */
 export function TopBarView({
@@ -540,11 +502,12 @@ export function TopBarView({
   mode,
   onTheme,
   look = DEFAULT_LOOK_STATE,
-  ...props
-}: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState }) {
+  seen = 0,
+  onSeen = () => {},
+}: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState; seen?: number; onSeen?: (ms: number) => void }) {
   return (
     <Bar data-testid="hud-topbar">
-      <About list={feeds} {...props} />
+      <LiveData list={feeds} seen={seen} onSeen={onSeen} />
       <Theme mode={mode} onPick={onTheme} />
       <Look {...look} />
       <Developer />

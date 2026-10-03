@@ -1,4 +1,4 @@
-import { set } from "@calvinjs/active-state";
+import { get, set } from "@calvinjs/active-state";
 
 import { getGlobe, type CameraTarget } from "client/globe/api";
 import { fitInPane } from "client/globe/fit";
@@ -10,6 +10,10 @@ import { altitudeToFit } from "client/state/view";
 import { applyUiEvent } from "client/voice/ui-command-handler";
 import type { AgentStreamEvent, BBox } from "shared/agent/events";
 import { cellCentre, primaryRegion } from "shared/apps";
+import { SWITCH_REQUEST } from "shared/switch-request";
+import { AGENT_CHAT } from "client/state";
+
+import { asThread, type AgentThread } from "./thread";
 
 /** Side effects of agent output on the rest of the app: camera, timeline, selection. */
 /** Camera height when flying to one cited entity. */
@@ -93,14 +97,55 @@ export function applyCarpViewEvent(event: object, nowMs = Date.now()): boolean {
 
 /** Citation chip: select the evidence, open the drawer, and fly there when the id carries coordinates. */
 export function openEvidence(id: string): void {
+  // A carp sighting is not in the evidence database: its panel and the flight there are the map controls'.
+  if (id.startsWith("fish:")) {
+    applyUiEvent({ name: "open_evidence", args: { evidenceId: id } });
+    return;
+  }
   set<SelectionState>(SELECTION, (prev) => ({ ...SELECTION.defaults, ...prev, evidenceId: id, drawerOpen: true }));
   const at = evidenceCoordinates(id);
   if (at) getGlobe()?.flyTo({ ...at, altitudeM: EVIDENCE_ALTITUDE_M });
 }
 
+/** How long the finished answer stays in view before the app moves to the species the agent switched to. */
+export const SWITCH_AFTER_ANSWER_MS = 1200;
+
+/** The app a `switch_app` call asked for during the turn in flight: applied once its answer is whole (a switch remounts the chat). */
+let pendingSwitch: string | null = null;
+
+/** Asks a question again in the app the chat just moved to, without a second bubble from the user; the chat registers it. */
+let reask: ((question: string) => void) | null = null;
+export function onReask(fn: ((question: string) => void) | null): void {
+  reask = fn;
+}
+
+/** The newest message when it is the user's own typed question (a voice turn or a card is not asked again). */
+function lastTypedQuestion(): string | null {
+  const last = asThread(get<AgentThread>(AGENT_CHAT)).messages.at(-2);
+  return last?.role === "user" ? last.text : null;
+}
+
 /** Side effects of one streamed event. */
 export function applyAgentSideEffects(event: AgentStreamEvent, nowMs = Date.now()): void {
   if (event.type === "view") applyViewEvent(event, nowMs);
+  // The switch waits for the end of the turn: moving apps mid-answer would stop the stream and wipe the reply.
+  if (event.type === "ui" && event.name === "switch_app") {
+    const app = (event.args as { app?: unknown } | undefined)?.app;
+    pendingSwitch = typeof app === "string" ? app : null;
+    return;
+  }
   // A map control (toggle_layer, set_look): validated again here, since the event crossed the network.
   if (event.type === "ui") applyUiEvent(event, nowMs);
+  if (event.type === "done") {
+    const app = pendingSwitch;
+    pendingSwitch = null;
+    if (app && event.content) {
+      // A typed question that only named the other species ("tell me about carp") is asked again in the new app, as the answer to it.
+      const question = lastTypedQuestion();
+      setTimeout(() => {
+        applyUiEvent({ name: "switch_app", args: { app } }, Date.now());
+        if (question && reask && !SWITCH_REQUEST.test(question)) reask(question);
+      }, SWITCH_AFTER_ANSWER_MS);
+    }
+  }
 }

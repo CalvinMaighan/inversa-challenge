@@ -39,7 +39,7 @@ Eval harness requirements (the grader parses these lines, per app, `--app carp`)
   EXPECT: /AGENT app=carp flow=ok tools=[1-9]\d* citation=ok view=ok/
   EVIDENCE: 2026-10-01 09:00Z `bun run e2e:agent -- --app carp` (next dev over the fixture stub, Chromium, GPT-6 Luna live) → `[e2e:agent] tool rows: site_status, set_view (Worked for 7s)`, 12 citation chips (`forecast:MCGL1:1790782320000`, …, `fetch:c-nwsa-4418`), citation click opened the drawer, Missions tab and back kept the thread, 375 px sheet inside the viewport (`docs/evidence/agent-carp-375.png`), then `[e2e:agent] replay view: asOf=2026-09-30T20:00:00.000Z replay=true site=AEXL1 tools=site_status,river_forecast,alerts,set_view` and the line `AGENT app=carp flow=ok tools=2 citation=ok view=ok`. `set_view` input: `{bbox?, preset?, site?, time?, asOf?, replay?}`; the `view` event carries `site` (NWPS lid), `asOf` (unix ms) and `replay` (`shared/agent/events.ts` `CarpViewState`, also accepted on the request view). Note: `next dev` (Turbopack) refuses a symlinked `node_modules` in a worktree; the worktree uses a real `bun install --frozen-lockfile`.
 
-- [ ] G8: web tests, typecheck, lint clean; python and lionfish agent tests still pass (state counts)
+- [x] G8: web tests, typecheck, lint clean; python and lionfish agent tests still pass (state counts)
   CHECK: bun run --cwd apps/web test 2>&1 | grep -E "^ *[0-9]+ fail" && bun run --cwd apps/web typecheck >/dev/null 2>&1 && bun run --cwd apps/web lint >/dev/null 2>&1 && echo CLEAN
   EXPECT: /^ *0 fail[\s\S]*CLEAN/m
-  EVIDENCE: pending
+  EVIDENCE: 0 fail | CLEAN

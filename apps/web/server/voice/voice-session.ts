@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { isAgentStreamEvent } from "shared/agent/events";
-import type { AppConfig } from "shared/apps";
+import { getApp, type AppConfig } from "shared/apps";
 import {
   VOICE_INPUT_SAMPLE_RATE,
   VOICE_OUTPUT_SAMPLE_RATE,
@@ -23,7 +23,10 @@ import {
   type RealtimeEvent,
   type RealtimeTarget,
 } from "./grok-realtime";
-import { claimTurn, looksLikeHangUp, looksLikeStop } from "./stop-intent";
+import { foreignAppFor } from "@/server/agent/scope";
+import { buildDataSnapshot, lastSnapshotError } from "./data-snapshot";
+import { hintFor, routeMessage, type Route, type RouteInput } from "@/server/agent/decisions";
+import { claimTurn, decidesStop, looksLikeHangUp, looksLikeStop } from "./stop-intent";
 import { isUiToolName, validateUiToolCall } from "./ui-command";
 import {
   CANCEL_TASK_TOOL,
@@ -33,6 +36,7 @@ import {
   SPAWN_THINKING_TOOL,
   VIEW_SCREEN_TOOL,
   buildVoiceInstructions,
+  greetingInstructions,
   voiceToolsFor,
   formatProgressContext,
   formatResultContext,
@@ -40,6 +44,22 @@ import {
 } from "./voice-prompt";
 
 /** Delivery retry while the announcement window is blocked. */
+/** Server VAD: how sure the model must be that it hears speech, and how long a pause ends the turn. */
+const VAD_THRESHOLD = 0.6;
+/** Silence that ends a turn for the provider. Shorter than a breath-and-think pause is wrong, longer feels slow: the early path below does not wait for it. */
+const VAD_SILENCE_MS = 450;
+/** A sentence the transcript ends with . ? or !, quiet this long, is treated as said: the analyst starts without waiting for the provider's end of turn. */
+/** How long after a stop the provider's automatic reply is cancelled. */
+const STOP_MUTE_MS = 2500;
+/** The data briefing is read again at most this often. */
+const SNAPSHOT_EVERY_MS = 60_000;
+const EARLY_QUIET_MS = 180;
+const SENTENCE_END = /[.?!]['")\]]*\s*$/;
+const normalizeSaid = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** Data questions the analyst can start on at once (GLiDE intents). */
+const EAGER_INTENTS: ReadonlySet<string> = new Set(["reports", "conditions", "priority", "data_sources", "species_info"]);
+/** Words that point back at an earlier turn: such a question is worded by the voice model, not eagerly. (Not "this", "there", "more", "also", "other": "this week" and "how many are there" stand alone.) */
+const LEANS_ON_BEFORE = /\b(it|its|that|those|them|these|same|again|previous|earlier)\b/i;
 const ANNOUNCE_RETRY_MS = 1_000;
 /** Progress updates are spoken at most this often per task. */
 const PROGRESS_MIN_INTERVAL_MS = 8_000;
@@ -75,6 +95,8 @@ type TrackedTask = {
   step: string | null;
   summary: string | null;
   error: string | null;
+  /** What the analyst cited (id to label), handed to the voice for `show_card`. */
+  sources: Map<string, string>;
 };
 
 type ToolReceipt = Record<string, unknown>;
@@ -90,6 +112,14 @@ export type VoiceSessionOptions = {
   budget: VoiceBudget;
   maxSessionMs: number;
   meterMs?: number;
+  /** Speak a one-line "I'm listening" as soon as the microphone is live (default on). */
+  greet?: boolean;
+  /** The first-run welcome ("Welcome to the Inversa Experience"), spoken in place of the plain listening line. */
+  welcome?: boolean;
+  /** Decides what a transcript is (Fastino); a stub in tests. Defaults to `routeMessage`. */
+  route?: (input: RouteInput) => Promise<Route | null>;
+  /** The briefing of the newest data the voice model gets (see data-snapshot.ts); a stub in tests. */
+  snapshot?: (app: AppConfig, now: number, signal?: AbortSignal) => Promise<string | null>;
 };
 
 function fingerprint(objective: string): string {
@@ -184,6 +214,20 @@ export class VoiceSession {
   private viewStateAt: number | null = null;
   private turnCounter = 0;
   private closed = false;
+  private greeted = false;
+  /** The user's words so far this turn, from the streaming transcript, and the sentence the analyst was started on early. */
+  private snapshotAt = 0;
+  private snapshotBody = "";
+  private snapshotText: string | null = null;
+  /** The turn whose species the session already switched the app for. */
+  private switchedTurn = "";
+  /** The turn whose router hint the voice model already got. */
+  private hintedTurn = "";
+  /** After a stop, replies the provider starts on its own are cancelled until this time. */
+  private mutedUntil = 0;
+  private partialText = "";
+  private earlyTimer: ReturnType<typeof setTimeout> | null = null;
+  private early: { turnId: string; said: string; taskId: string | null } | null = null;
   private connGeneration = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private meterTimer: ReturnType<typeof setInterval> | null = null;
@@ -263,10 +307,12 @@ export class VoiceSession {
           conn.send({
             type: "session.update",
             session: {
-              instructions: buildVoiceInstructions(this.opts.app),
+              instructions: buildVoiceInstructions(this.opts.app, { welcome: this.opts.welcome }),
               tools: voiceToolsFor(this.opts.app),
               voice: VOICE_REALTIME_VOICE,
-              turn_detection: { type: "server_vad" },
+              // Explicit, so a quiet room ends the turn: 0.6 ignores a hum that 0.5 hears as speech, and 650 ms of silence
+              // ends it (the default 200 ms cuts a pause mid-question; far longer feels sluggish).
+              turn_detection: { type: "server_vad", threshold: VAD_THRESHOLD, prefix_padding_ms: 300, silence_duration_ms: VAD_SILENCE_MS },
               audio: {
                 input: {
                   format: { type: "audio/pcm", rate: VOICE_INPUT_SAMPLE_RATE },
@@ -285,6 +331,8 @@ export class VoiceSession {
       if (result === "ok") {
         this.setState("listening");
         this.startMeter();
+        this.greet();
+        void this.refreshSnapshot();
       } else {
         this.conn?.close();
         this.conn = null;
@@ -425,6 +473,7 @@ export class VoiceSession {
     this.chargeElapsed();
     this.closed = true;
     this.connGeneration += 1;
+    this.clearEarly();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.meterTimer) clearInterval(this.meterTimer);
     if (this.maxTimer) clearTimeout(this.maxTimer);
@@ -449,6 +498,8 @@ export class VoiceSession {
   private onProviderEvent(event: RealtimeEvent): void {
     switch (event.type) {
       case "input_audio_buffer.speech_started": {
+        void this.refreshSnapshot();
+        this.clearEarly();
         const turnId = this.nextTurnId();
         this.window.beginTurn(turnId);
         this.emit({ type: "playback.clear", reason: "user_speaking" });
@@ -470,6 +521,7 @@ export class VoiceSession {
           text: userTranscriptText(event),
           final: false,
         });
+        this.onPartial(userTranscriptText(event));
         return;
       case "conversation.item.input_audio_transcription.completed": {
         const text = userTranscriptText(event);
@@ -479,6 +531,12 @@ export class VoiceSession {
       }
       case "response.created": {
         const id = responseIdOf(event);
+        // The provider answers every spoken turn on its own: the reply to "stop" is not wanted.
+        if (Date.now() < this.mutedUntil) {
+          this.pendingResponses.shift();
+          this.conn?.send({ type: "response.cancel" });
+          return;
+        }
         if (this.inputMode === "dictate") {
           this.pendingResponses.shift();
           this.conn?.send({ type: "response.cancel" });
@@ -605,11 +663,131 @@ export class VoiceSession {
       return;
     }
     if (looksLikeStop(text)) {
-      this.interrupt();
-      for (const tracked of this.tasks.values()) {
-        if (!isTerminal(tracked.status)) this.cancelTask(tracked.id);
-      }
+      this.stopEverything();
+      return;
     }
+    // The sentence was already acted on while the provider waited out its silence: the same words change nothing; more words
+    // mean the early question was cut short, so its analyst is stopped and the whole one is asked.
+    const early = this.early;
+    this.clearEarly();
+    if (early && early.turnId === this.window.currentTurnId()) {
+      if (early.said === normalizeSaid(text)) return;
+      this.dropEarlyTask(early);
+    }
+    void this.decideAndAct(text);
+  }
+
+  private clearEarly(): void {
+    if (this.earlyTimer) clearTimeout(this.earlyTimer);
+    this.earlyTimer = null;
+    this.partialText = "";
+    this.early = null;
+  }
+
+  /** Stop the analyst started on a sentence the user then went on from, and free the turn for the whole question. */
+  private dropEarlyTask(early: { turnId: string; taskId: string | null }): void {
+    if (!early.taskId) return;
+    this.cancelTask(early.taskId);
+    this.turnTasks.delete(early.turnId);
+  }
+
+  /** A streaming transcript update: when it ends a sentence and nothing more arrives for a moment, start the analyst now. */
+  private onPartial(text: string): void {
+    if (this.closed || this.inputMode !== "talk") return;
+    this.partialText = text.trim();
+    // A stop is acted on as the words stream in, before the provider's own reply to them can start.
+    if (looksLikeStop(this.partialText)) {
+      this.stopEverything();
+      return;
+    }
+    if (this.earlyTimer) clearTimeout(this.earlyTimer);
+    this.earlyTimer = null;
+    if (!SENTENCE_END.test(this.partialText) || this.partialText.split(/\s+/).length < 3) return;
+    this.earlyTimer = setTimeout(() => {
+      this.earlyTimer = null;
+      const said = normalizeSaid(this.partialText);
+      const turnId = this.window.currentTurnId();
+      if (!said || this.early?.said === said) return;
+      if (looksLikeStop(this.partialText) || looksLikeHangUp(this.partialText)) return;
+      // A longer sentence replaces the shorter one the analyst started on.
+      if (this.early && this.early.turnId === turnId) this.dropEarlyTask(this.early);
+      this.early = { turnId, said, taskId: null };
+      void this.decideAndAct(this.partialText, true);
+    }, EARLY_QUIET_MS);
+  }
+
+  private stopEverything(): void {
+    this.mutedUntil = Date.now() + STOP_MUTE_MS;
+    this.interrupt();
+    for (const tracked of this.tasks.values()) {
+      if (!isTerminal(tracked.status)) this.cancelTask(tracked.id);
+    }
+  }
+
+  /**
+   * What a transcript's wording does not settle goes to Fastino GLiDE (null without a key, so nothing changes then): whether a
+   * short utterance is a stop, and whether a data question can be handed to the analyst this instant instead of waiting for the
+   * voice model to decide to. The analyst joins the one task per turn (claimTurn), so the voice model calling spawn_thinking too
+   * attaches to it. Not for a follow-up that leans on earlier turns ("and those?"): the voice model words that objective.
+   */
+  private async decideAndAct(text: string, early = false): Promise<void> {
+    const turnId = this.window.currentTurnId();
+    const [stop, route] = await Promise.all([decidesStop(text), (this.opts.route ?? routeMessage)({ app: this.opts.app, question: text })]);
+    if (this.closed) return;
+    if (stop === true) {
+      this.stopEverything();
+      return;
+    }
+    if (this.switchForSpecies(text, turnId)) return;
+    if (!route || turnId !== this.window.currentTurnId()) return;
+    const leans = LEANS_ON_BEFORE.test(text);
+    let started = false;
+    if (!leans && EAGER_INTENTS.has(route.intent) && route.intentConfidence >= 0.9 && route.onTopic >= 0.8) {
+      const receipt = this.spawnThinking(text);
+      started = true;
+      if (early && this.early && this.early.turnId === turnId && typeof receipt.task_id === "string") this.early.taskId = receipt.task_id;
+    }
+    this.passDecision(route, turnId, started);
+  }
+
+  /**
+   * The user named another app's species (or asked to switch to it): the app switches now, on our side, with the same UI command
+   * the model's switch_app tool sends, and the model is told so it only has to say it. Once per turn, so a model that also calls the
+   * tool changes nothing.
+   */
+  private switchForSpecies(text: string, turnId: string): boolean {
+    if (!this.conn || this.switchedTurn === turnId) return false;
+    const target = foreignAppFor(this.opts.app, text);
+    if (!target) return false;
+    this.switchedTurn = turnId;
+    this.hintedTurn = turnId;
+    this.runUiTool("switch_app", { app: target });
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<router_hint>The app is switching to ${getApp(target).name} right now. Say in one short sentence that you are switching and what they can ask there. Do not refuse, and do not tell them to switch.</router_hint>` }] },
+    });
+    return true;
+  }
+
+  /**
+   * Fastino's decision goes to the voice model as context before it replies (once per turn): the kind of request, the tools
+   * that usually serve it, and whether the analyst is already working on it. It is a hint, never an order: the voice model
+   * overrules it when the words say otherwise.
+   */
+  private passDecision(route: Route, turnId: string, analystStarted: boolean): void {
+    if (!this.conn || this.hintedTurn === turnId) return;
+    const hint = hintFor(route);
+    if (!hint) return;
+    this.hintedTurn = turnId;
+    const next = analystStarted
+      ? "The analyst is already working on this question: say one short sentence that you are looking into it, and do not call spawn_thinking again."
+      : route.intent === "map_control"
+        ? "This is a map or menu command: do it yourself now with the matching UI tool, with no analyst."
+        : "";
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<router_hint>${[hint, next].filter(Boolean).join(" ")}</router_hint>` }] },
+    });
   }
 
   private async runToolCall(call: {
@@ -665,13 +843,34 @@ export class VoiceSession {
 
   private viewScreen(): ToolReceipt {
     if (!this.viewState) {
-      return { ok: true, screen: null, note: "The screen has not reported its state yet." };
+      return { ok: true, screen: null, note: "The screen has not reported its state yet.", latest_data: this.snapshotText, latest_data_error: this.snapshotText ? null : lastSnapshotError };
     }
     return {
       ok: true,
       screen: this.viewState,
       reported_ms_ago: this.viewStateAt === null ? null : Date.now() - this.viewStateAt,
+      latest_data: this.snapshotText,
     };
+  }
+
+  /**
+   * The newest data, as a briefing the voice model keeps in its conversation (once at the start, then again whenever it
+   * changed and the user speaks, at most once a minute), so it can answer quick questions from it and knows what the analyst
+   * will be reading. It reads the API for now, not what the timeline has drawn.
+   */
+  private async refreshSnapshot(): Promise<void> {
+    if (this.closed || Date.now() - this.snapshotAt < SNAPSHOT_EVERY_MS) return;
+    this.snapshotAt = Date.now();
+    const text = await (this.opts.snapshot ?? buildDataSnapshot)(this.opts.app, Date.now()).catch(() => null);
+    if (!text || this.closed || !this.conn) return;
+    const body = text.replace(/^Data as of [^\n]*\n/, "");
+    if (body === this.snapshotBody) return;
+    this.snapshotBody = body;
+    this.snapshotText = text;
+    this.conn.send({
+      type: "conversation.item.create",
+      item: { type: "message", role: "user", content: [{ type: "input_text", text: `<data_snapshot>${text}</data_snapshot>` }] },
+    });
   }
 
   private spawnThinking(objective: string): ToolReceipt {
@@ -698,6 +897,7 @@ export class VoiceSession {
       step: null,
       summary: null,
       error: null,
+      sources: new Map(),
     };
     this.tasks.set(tracked.id, tracked);
     if (turnId) this.turnTasks.set(turnId, tracked.id);
@@ -711,6 +911,7 @@ export class VoiceSession {
           if (tracked.status !== "running") return;
           // Every C7 agent event streams to the orb card; anything else the runner emits stays local.
           if (isAgentStreamEvent(event)) this.emit({ type: "task.event", taskId: tracked.id, event });
+          if (event.type === "citation" && typeof event.id === "string" && typeof event.label === "string") tracked.sources.set(event.id, event.label);
           if (event.type === "tool_start") this.onTaskStep(tracked.id, str(event.capabilityName) || "working");
           if (event.type === "status") this.onTaskStep(tracked.id, str(event.state) || "working");
         },
@@ -798,6 +999,7 @@ export class VoiceSession {
       objective: tracked.objective,
       result: tracked.summary,
       error: tracked.error,
+      sources: [...tracked.sources].slice(0, 8).map(([id, label]) => ({ id, label })),
     });
     this.scheduleAnnouncements();
   }
@@ -844,6 +1046,14 @@ export class VoiceSession {
       response: { modalities: ["text", "audio"], tool_choice: "none", instructions },
     });
     this.setState("thinking");
+  }
+
+  /** The spoken "I'm listening" the moment the microphone goes live (once per session, not on a reconnect). */
+  private greet(): void {
+    if (!this.conn || this.greeted || this.opts.greet === false) return;
+    this.greeted = true;
+    this.pendingResponses.push({ origin: "announcement", turnId: this.nextTurnId() });
+    this.conn.send({ type: "response.create", response: { modalities: ["text", "audio"], tool_choice: "none", instructions: greetingInstructions(this.opts.app, { welcome: this.opts.welcome }) } });
   }
 
   private nextTurnId(): string {

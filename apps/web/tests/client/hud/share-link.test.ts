@@ -212,7 +212,7 @@ describe("share link store", () => {
     registerGlobe(globe);
     expect(flights.length).toBe(1);
     // 1999 is before the live window: the window recentres on it instead of clamping the cursor.
-    expect(get<TimeState>(TIME)).toMatchObject({ at: "1999-01-01T00:00:00.000Z", from: "1998-07-02T12:00:00.000Z", to: "1999-07-02T12:00:00.000Z" });
+    expect(get<TimeState>(TIME)).toMatchObject({ at: "1999-01-01T00:00:00.000Z", from: "1998-01-01T00:00:00.000Z", to: "2000-01-01T00:00:00.000Z" });
     cancel();
     registerGlobe(null);
     set(TIME, TIME.defaults);

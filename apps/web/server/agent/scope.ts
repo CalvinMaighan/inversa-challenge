@@ -1,15 +1,39 @@
 /**
- * Deterministic scope guard (P4, C-A5): a question that names another app's focus species is refused with
- * this app's refusal text before any model call. Built from the configs: the other apps' taxa names, aliases
- * and ids, minus anything this app itself covers. Everything subtler (abundance, catch, access, safety,
+ * Deterministic scope guidance (P4, C-A5): a question that names another app's focus species, or asks for what no
+ * feed can give (a risk percent, a causal claim, a population count, a place outside the regions), is recognised from
+ * the configs and given to the model as guidance (`scopeGuidance`); the model still answers, in its own words, with
+ * its tools. The patterns are built from the configs: the other apps' taxa names, aliases and ids, minus anything this
+ * app itself covers. Everything subtler (abundance, catch, access, safety,
  * places outside the region) is the model's job under the prompt's boundary rules and the tools' region checks.
  */
 
-import { APP_IDS, loadApps, type AppConfig } from "@/shared/apps";
+import { APP_IDS, loadApps, type AppConfig, type AppId } from "@/shared/apps";
+import { SWITCH_REQUEST } from "@/shared/switch-request";
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const cache = new WeakMap<AppConfig, RegExp | null>();
+
+/** Mishearings of the species names that speech-to-text produces (`car app`, `carb`, `lion fish`), as the word the user meant. */
+export function correctSpeciesWords(text: string): string {
+  let t = text.replace(/\b(carbs?|karps?)\b/gi, APP_IDS[0]).replace(/\blion fish\b/gi, APP_IDS[1]);
+  if (/\b(switch|go|open|select|take me|change|move|jump|pick|choose)\b/i.test(t)) t = t.replace(/\bcars?\b/gi, APP_IDS[0]);
+  return t;
+}
+
+/** The other app a question names by its species (or a mishearing of it), or null. For the voice, which switches at once. */
+export function foreignAppFor(app: AppConfig, question: string): AppId | null {
+  const text = correctSpeciesWords(question);
+  const apps = loadApps();
+  for (const id of APP_IDS) {
+    if (id === app.id) continue;
+    const names = apps[id].taxa.flatMap((t) => [t.id, t.name, t.scientificName, ...(t.aliases ?? [])]).filter((n) => n.length >= 4);
+    const own = new Set(app.taxa.flatMap((t) => [t.id, t.name, t.scientificName, ...(t.aliases ?? [])]).map((s) => s.toLowerCase()));
+    const pattern = new RegExp(`\\b(${names.filter((n) => !own.has(n.toLowerCase())).sort((a, b) => b.length - a.length).map(escape).join("|")})(es|s)?\\b`, "i");
+    if (names.length && pattern.test(text)) return id;
+  }
+  return /\bcarp\b/i.test(text) && app.id !== APP_IDS[0] ? APP_IDS[0] : null;
+}
 
 /** Names of species that belong to other apps only. */
 export function foreignSpeciesPattern(app: AppConfig): RegExp | null {
@@ -32,11 +56,28 @@ export function foreignSpeciesPattern(app: AppConfig): RegExp | null {
   return pattern;
 }
 
-/** The refusal to answer with, or null when the question passes the guard. */
+/**
+ * What the model is told about a question the guard recognised, or null when it passes. It steers, it does not answer:
+ * the model says plainly what the data cannot show, and then gives the most useful thing it can, cited from its tools.
+ */
+export function scopeGuidance(app: AppConfig, question: string): string | null {
+  const guard = scopeGuard(app, question);
+  if (!guard) return null;
+  if (guard.includes("switch_app")) return ["Scope guidance for this question, from this app's own rules:", guard].join("\n");
+  return [
+    "Scope guidance for this question, from this app's own rules:",
+    guard,
+    "Answer the user yourself, in your own words; do not paste the guidance. Say plainly what this app and its data cannot tell, then give the most useful thing they can: call your tools for the part that is in scope (reports in a window, counts of reports, the survey priority and its separate components, conditions at a configured place) and cite it. If nothing in the question is in scope, say so in a sentence and offer what this app does answer. Never invent numbers or sources.",
+  ].join("\n");
+}
+
+/** The guard's wording for a question, or null when the question passes the guard. */
 export function scopeGuard(app: AppConfig, question: string): string | null {
+  // Asking to switch to another species or app is an action the model takes (switch_app), not a question out of scope.
+  if (SWITCH_REQUEST.test(question)) return null;
   const pattern = foreignSpeciesPattern(app);
   const hit = pattern?.exec(question);
-  if (hit) return `${app.agent.refusal} "${hit[0]}" is outside what this app answers for.`;
+  if (hit) return `"${hit[0]}" is another species of this product, not this app's. Do not refuse and do not answer it from this app's data: call switch_app for that species, then say in one sentence that you switched; the question is asked again in the new app, so do not answer it.`;
   return topicGuard(app, question);
 }
 

@@ -29,10 +29,12 @@ pub const DEFAULT_APP: &str = "carp";
 /// `openmeteo` and `goes19` (L4). The carp (conditions) sources are `usgs` (shared with python,
 /// OGC API), `nwps`, `nws-alerts` (the `nws` poller scoped to `area=LA` and matched to sites),
 /// `nws-forecast` (gridpoint) and `iem` (HML archive backfill) (C4).
-pub const SOURCES: [(&str, Mode); 18] = [
+pub const SOURCES: [(&str, Mode); 19] = [
     ("inat", Mode::Poll),
     ("nas", Mode::Poll),
     ("gbif", Mode::Poll),
+    // EDDMapS (Bugwood): verified invasive-species reports, the python app (`ingest::poll::eddmaps`).
+    ("eddmaps", Mode::Poll),
     ("nws", Mode::Poll),
     ("usgs", Mode::Poll),
     ("ndbc", Mode::Poll),

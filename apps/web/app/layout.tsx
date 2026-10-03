@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import type { ReactNode } from "react";
 
 import { appBootstrapScript } from "client/state/app";
+import { INTRO_CSS, introBootstrapScript } from "client/intro/bootstrap";
 import { DEFAULT_APP_ID, getApp } from "shared/apps";
 import { themeBootstrapScript } from "client/themes/bootstrap";
 import { DEFAULT_ACCENT, DEFAULT_MODE } from "client/themes/palette";
@@ -61,6 +62,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script id="theme-bootstrap" dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <style id="app-pending" dangerouslySetInnerHTML={{ __html: APP_PENDING_CSS }} />
         <script id="app-bootstrap" dangerouslySetInnerHTML={{ __html: APP_BOOTSTRAP }} />
+        <style id="intro-css" dangerouslySetInnerHTML={{ __html: INTRO_CSS }} />
+        <script id="intro-bootstrap" dangerouslySetInnerHTML={{ __html: introBootstrapScript() }} />
       </head>
       <body>
         <Providers>{children}</Providers>

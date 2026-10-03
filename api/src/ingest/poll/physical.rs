@@ -238,7 +238,7 @@ mod tests {
         // Lionfish Watch lists no NWS, USGS, CO-OPS or Open-Meteo forecast feed; carp runs the river adapters (C4).
         let lf = Arc::new(App::builtin("lionfish").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &lf).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["ndbc", "openmeteo-marine"], "bulk buoys and marine only (L4)");
+        assert_eq!(ids, ["ndbc", "coops", "openmeteo-marine"], "bulk buoys, tide stations and marine (L4)");
         let carp = Arc::new(App::builtin("carp").unwrap());
         let ids: Vec<&str> = sources(&Config::for_tests(), &carp).iter().map(|s| s.info().id).collect();
         assert_eq!(ids, ["nws-alerts", "usgs", "nwps", "nws-forecast", "iem"]);

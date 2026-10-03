@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ThemeProvider } from "@emotion/react";
 import { init } from "@calvinjs/active-state";
 
+import { getApp } from "shared/apps";
 import type { FeedState } from "shared/feed-state";
 
 import { ExpertDetails, Summary } from "client/hud/drawer/EvidenceDrawer";
@@ -12,7 +13,7 @@ import { evidenceQuery, fetchEvidence, OPTIONAL_EVIDENCE_FIELDS, resetSchemaProb
 import { placeWords, plainSummary, qualityWords, speciesCard } from "client/hud/drawer/summary";
 import { GqlError } from "client/threads/api";
 import { freshnessLines } from "client/hud/topbar/freshness";
-import { AboutContent, ThemeChoices, TopBarView } from "client/hud/topbar/TopBar";
+import { ThemeChoices, TopBarView } from "client/hud/topbar/TopBar";
 import { state } from "client/state";
 import { emotionTheme } from "client/themes/theme";
 import { nearestPlace } from "client/voice/gazetteer";
@@ -46,7 +47,7 @@ const feed = (source: string, state: FeedState["state"], extra: Partial<FeedStat
 });
 
 describe("status popover", () => {
-  test("status popover: the chrome is four icon buttons (About, Theme, Look, Developer) with dialogs and no visible text", () => {
+  test("status popover: the chrome is four icon buttons (Live data, Theme, Look, Developer; no About button) with dialogs and no visible text", () => {
     const markup = html(<TopBarView focus={false} onFocus={noop} helpOpen={false} onHelp={noop} feeds={[feed("inat", "down")]} mode="dark" onTheme={noop} />);
     const triggers = [...markup.matchAll(/<button[^>]*aria-haspopup="dialog"[^>]*>/g)];
     expect(triggers).toHaveLength(4);
@@ -54,35 +55,17 @@ describe("status popover", () => {
     for (const trigger of triggers) expect(trigger[0]).toMatch(/aria-label="[^"]+"/);
     // In this order, left to right.
     const ids = triggers.map((t) => /data-testid="([^"]+)"/.exec(t[0])?.[1]);
-    expect(ids).toEqual(["status-button", "theme-button", "look-button", "developer-button"]);
+    expect(ids).toEqual(["live-data-button", "theme-button", "look-button", "developer-button"]);
     expect(markup).toContain('aria-label="Look: filters and map window"');
     // The Developer panel mounts only when its button is pressed.
     expect(markup).not.toContain('data-testid="developer-panel"');
     expect(textOf(markup)).toBe("");
-    // Feeds, theme, focus and help are not on the bar: they live in the popovers.
+    expect(markup).not.toContain("status-button");
+    // Feeds and theme are not on the bar: they live in the popovers.
     for (const gone of ["data-feed", 'role="radiogroup"', "data-help-button", "aria-pressed", "Everglades Ops", "LIVE", "CURSOR"]) expect(markup).not.toContain(gone);
   });
 
-  test("status popover: About holds plain freshness, Focus, Help, the data sources (worst first) and the expert layers", () => {
-    const list = [
-      feed("usgs", "nominal"),
-      feed("inat", "lagging", { lastFetchAt: "2026-09-30T20:54:00Z", newestObservedAt: "2026-09-30T19:00:00Z", note: "upstream slow" }),
-      feed("nws", "down", { note: "HTTP 503" }),
-    ];
-    const markup = html(<AboutContent list={list} nowMs={NOW} focus={false} onFocus={noop} helpOpen={false} onHelp={noop} />);
-    const text = textOf(markup);
-    expect(text).toContain("Sightings checked 6 min ago.");
-    expect(text).toContain("Newest sighting reported 2 h ago.");
-    expect(text).toContain("iNaturalist is running late");
-    expect(markup).toContain('data-help-button=""');
-    expect(markup).toContain('aria-pressed="false"');
-    expect(text).toContain("Focus");
-    // Technical health is collapsed under "Data sources", worst feed first.
-    const sources = markup.slice(markup.indexOf('data-testid="data-sources"'));
-    expect(sources.startsWith('data-testid="data-sources">')).toBe(true);
-    expect([...sources.matchAll(/data-feed="(\w+)"/g)].map((m) => m[1])).toEqual(["nws", "inat", "usgs"]);
-    expect(markup).toContain("More data (for experts)");
-    expect(markup).not.toMatch(/<details[^>]*\sopen/);
+  test("status popover: the theme popover offers light, dark and tactical", () => {
     const themes = html(<ThemeChoices mode="dark" onPick={noop} />);
     expect([...themes.matchAll(/role="radio"/g)]).toHaveLength(3);
     expect(themes).toMatch(/aria-checked="true"[^>]*>Dark</);
@@ -141,8 +124,14 @@ describe("plain evidence summary", () => {
     expect(qualityWords("curated", "nas")).toBe("official record");
     expect(qualityWords("casual", "inat")).toBe("casual record (unconfirmed)");
     expect(placeWords(25.47, -80.48)).toBe("near Homestead");
-    expect(placeWords(26.3, -81.0)).toBe("in South Florida");
-    expect(placeWords("25.7", -80.2)).toBe("in South Florida");
+    // No named place close: the app's own area (python here), never another region's name.
+    expect(placeWords(26.3, -81.0)).toBe("in South Florida and the Keys");
+    expect(placeWords("25.7", -80.2)).toBe("in South Florida and the Keys");
+    // A lionfish report from Isla Mujeres is in the Mexican Caribbean, not South Florida.
+    expect(placeWords(21.2, -86.7, getApp("lionfish"))).toBe("in the Mexican Caribbean");
+    expect(placeWords(26.3, -81.0, getApp("lionfish"))).toBe("in the Florida Keys");
+    expect(placeWords(17.5, -88.0, getApp("lionfish"))).toBe("in Belize");
+    expect(placeWords(36.0, -90.0, getApp("carp"))).toBe("in the Mississippi River Basin");
     expect(nearestPlace(25.7215, -80.2684)?.name).toBe("Coral Gables");
     // The national park is an area, never "near".
     expect(nearestPlace(25.3, -80.85)?.name).not.toBe("Everglades National Park");
@@ -161,6 +150,17 @@ describe("plain evidence summary", () => {
     expect(expert).toContain('aria-label="Normalized record"');
     expect(expert).toContain('aria-label="Raw payload"');
     expect(expert).toContain("raw/inat/2026/09/30/0412.json.gz");
+  });
+
+  test("a sighting with no photo shows the species picture as a stand-in, with a line saying so; one with a photo shows only the photo", () => {
+    const withPhoto = html(<Summary kind="sighting" evidence={sighting} atMs={NOW} />);
+    expect(withPhoto).not.toContain("evidence-no-photo");
+    const bare = { ...sighting, record: { ...sighting.record, mediaUrl: null } } as typeof sighting;
+    const lead = html(<Summary kind="sighting" evidence={bare} atMs={NOW} />);
+    expect(lead).toContain('data-testid="evidence-no-photo"');
+    expect(lead).toContain('src="/species/python.png"');
+    expect(lead).toContain("No photo for this sighting");
+    expect(lead).not.toContain('data-testid="evidence-photo"');
   });
 
   test("plain evidence summary: the species card gives the Latin name, its status, the app's About line, its icon and colour, and its iNaturalist page", () => {

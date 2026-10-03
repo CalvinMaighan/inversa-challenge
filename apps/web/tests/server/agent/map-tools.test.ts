@@ -88,12 +88,12 @@ describe("set_look schema", () => {
 });
 
 describe("agent map tools", () => {
-  test("agent map tools: carp and lionfish register vessels, toggle_layer and set_look; python the two controls only", () => {
+  test("agent map tools: every app registers toggle_layer and set_look, and none the ships tool (ships were removed)", () => {
     const names = (app: typeof CARP) => buildAgentRegistry(app).list().map((c) => c.name);
-    for (const app of [CARP, LIONFISH]) for (const n of ["vessels", "toggle_layer", "set_look"]) expect(names(app)).toContain(n);
-    expect(names(PYTHON)).toContain("toggle_layer");
-    expect(names(PYTHON)).toContain("set_look");
-    expect(names(PYTHON)).not.toContain("vessels");
+    for (const app of [CARP, LIONFISH, PYTHON]) {
+      for (const n of ["toggle_layer", "set_look"]) expect(names(app)).toContain(n);
+      expect(names(app)).not.toContain("vessels");
+    }
   });
 
   test("agent map tools: toggle_layer emits a validated ui event for the app's own layer, and refuses another app's", async () => {
@@ -113,27 +113,12 @@ describe("agent map tools", () => {
     expect(emitted).toEqual([{ type: "ui", name: "set_look", args: { look: "nvg" } }]);
   });
 
-  test("agent map tools: vessels asks GraphQL vessels for the box and window, and cites each ship as vessel:<mmsi> with the aisstream feed", async () => {
-    const result = await buildAgentRegistry(CARP).execute("vessels", { hours: 6 }, ctxFor());
-    if (!result.ok) throw new Error(result.error);
-    const out = result.output;
-    expect(asked[0]!.operationName).toBe("AgentVessels");
-    expect(Date.parse(asked[0]!.variables.to as string)).toBe(NOW.getTime());
-    expect(Date.parse(asked[0]!.variables.from as string)).toBe(NOW.getTime() - 6 * 3_600_000);
-    const mmsi = String(FRAME.Message.PositionReport.UserID);
-    expect(out.evidence.find((e) => e.kind === "vessel")).toEqual({ id: `vessel:${mmsi}`, kind: "vessel", label: "FEDERAL OSHIMA (Cargo)", feed: "aisstream" });
-    const row = (out.data.rows as Record<string, unknown>[])[0]!;
-    expect(row).toMatchObject({ evidenceId: `vessel:${mmsi}`, name: "FEDERAL OSHIMA", speedKn: 6.2, lat: 29.31, lon: -91.38, fixes: 2 });
-    expect(out.feeds.map((f) => f.source)).toEqual(["aisstream"]);
-    expect(out.count).toBe(1);
-  });
-
   test("agent map tools: the prompt lists what each app can toggle, the water and weather layers, the vessel citation rule and the looks", () => {
     const carp = agentSystemPrompt(CARP);
     expect(carp).toContain("## The map: layers, ships and looks");
     // Ships are no longer a layer of any app.
     expect(carp).not.toContain("vessels (Ships (AIS))");
-    for (const id of ["sst-map", "radar", "clouds", "lightning", "cyclones"]) expect(carp).toContain(`${id} (`);
+    for (const id of ["sst-map", "radar", "lightning", "cyclones"]) expect(carp).toContain(`${id} (`);
     expect(carp).not.toContain("[e:vessel:<mmsi>]");
     expect(carp).toContain("nvg (night vision");
     const python = agentSystemPrompt(PYTHON);

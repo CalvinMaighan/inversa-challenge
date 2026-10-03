@@ -1,6 +1,7 @@
 pub mod bio;
 pub mod coops;
 pub mod crw;
+pub mod eddmaps;
 pub mod gbif;
 pub mod iem;
 pub mod inat;
@@ -39,10 +40,10 @@ mod tests {
     use crate::app::test_support::{router_for, test_state_for};
     use crate::ingest::scheduler::{plan, start};
 
-    const LIONFISH_FEEDS: [&str; 8] = ["aisstream", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
+    const LIONFISH_FEEDS: [&str; 8] = ["coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"];
 
-    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those (seven plus `aisstream`, GE4): no
-    /// NWS/NWWS, no CO-OPS water level, no Open-Meteo forecast, no GOES LST/cloud/fire.
+    /// G5: Lionfish Watch runs only its own feeds, and `/health` lists exactly those (seven, with CO-OPS tide
+    /// stations for the Florida Keys): no NWS/NWWS, no Open-Meteo forecast, no GOES LST/cloud/fire.
     #[tokio::test]
     async fn lionfish_feed_set() {
         let state = test_state_for("lionfish");
@@ -50,7 +51,7 @@ mod tests {
         let mut known = p.known_ids();
         known.sort_unstable();
         assert_eq!(known, LIONFISH_FEEDS);
-        assert_eq!(p.runnable_ids(), ["ndbc", "openmeteo-marine", "inat", "nas", "gbif", "crw"], "goes19-sst waits for its SQS secrets");
+        assert_eq!(p.runnable_ids(), ["ndbc", "coops", "openmeteo-marine", "inat", "nas", "gbif", "crw"], "goes19-sst waits for its SQS secrets");
         assert_eq!(crate::ingest::push::goes_sqs::products(&state.app), ["ABI-L2-SSTF"]);
 
         start(state.clone(), Default::default()).await.unwrap();
@@ -61,13 +62,13 @@ mod tests {
         let mut feeds: Vec<&str> = app["feeds"].as_array().unwrap().iter().map(|f| f["source"].as_str().unwrap()).collect();
         feeds.sort_unstable();
         assert_eq!(feeds, LIONFISH_FEEDS, "{app}");
-        for gone in ["nws", "nwws", "coops", "openmeteo", "goes19", "usgs"] {
+        for gone in ["nws", "nwws", "openmeteo", "goes19", "usgs"] {
             assert!(!feeds.contains(&gone), "{gone}");
         }
 
         // The python app keeps every adapter it had (shared code, its own params).
         let python = test_state_for("python");
-        assert_eq!(plan(&python).known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "goes19", "nwws"]);
+        assert_eq!(plan(&python).known_ids(), ["nws", "usgs", "ndbc", "coops", "openmeteo", "inat", "nas", "gbif", "eddmaps", "goes19", "nwws"]);
     }
 
     /// R14/G4 (K1): no adapter runs for nobody. Every source id an adapter registers (runnable,
@@ -89,6 +90,8 @@ mod tests {
             registered.extend(known);
         }
         let listed: BTreeSet<&str> = crate::app::config::SOURCES.iter().map(|(id, _)| *id).collect();
+        // The AIS adapter is dormant: ships were removed from the maps, so no app lists the feed.
+        registered.insert("aisstream");
         assert_eq!(registered, listed, "every known source id is used by an app");
         assert!(crate::app::config::PENDING_SOURCES.is_empty(), "no feed waits for an adapter");
         assert!(!listed.contains("web"), "the web hook source serves no app");

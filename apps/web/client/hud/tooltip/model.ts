@@ -21,11 +21,13 @@ export type TooltipText = {
   title: string;
   /** The rest, joined with " · ". */
   parts: string[];
+  /** A sighting that has a photo: the popover shows the image icon (only set when true). */
+  image?: boolean;
 };
 
 /** The marker as one line. */
 export function tooltipLine(t: TooltipText): string {
-  return [t.title, ...t.parts].join(" · ");
+  return [t.title, ...t.parts, ...(t.image ? ["has a photo"] : [])].join(" · ");
 }
 
 /** Station networks as an analyst names them. */
@@ -93,7 +95,7 @@ function station(f: StationFacts, atMs: number): TooltipText {
 }
 
 /** The bits of a sighting's evidence record the tooltip uses, when the drawer cache already has it. */
-export type SightingRecordHint = { source?: unknown; observedAt?: unknown };
+export type SightingRecordHint = { source?: unknown; observedAt?: unknown; mediaUrl?: unknown };
 
 function sighting(f: SightingFacts, atMs: number, record: SightingRecordHint | null): TooltipText {
   const quality = QUALITY_LABELS[f.quality] ?? QUALITY_CODES[f.quality] ?? "unknown grade";
@@ -103,6 +105,8 @@ function sighting(f: SightingFacts, atMs: number, record: SightingRecordHint | n
   return {
     title: speciesName(f.taxon),
     parts: [quality, ...(source ? [source] : []), when, ...(f.conflict ? ["IDs conflict"] : [])],
+    // Only the full record says whether the observer took a photo (the same-origin media path the card shows).
+    ...(typeof record?.mediaUrl === "string" && record.mediaUrl.startsWith("/") ? { image: true } : {}),
   };
 }
 

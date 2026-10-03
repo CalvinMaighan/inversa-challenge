@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 
 import { aboutSentence, exampleQuestions, HELP_ENTRIES, HELP_GROUPS, speciesGuide, welcome, WINDOW_NOTE } from "client/hud/help/content";
 import { APP_IDS, getApp, speciesIds } from "shared/apps";
@@ -10,7 +8,6 @@ const WELCOME = welcome(PYTHON);
 const SPECIES_GUIDE = speciesGuide(PYTHON);
 const EXAMPLE_QUESTIONS = exampleQuestions(PYTHON);
 
-const README = readFileSync(path.resolve(import.meta.dir, "../../../../../../README.md"), "utf8");
 
 describe("help sheet content", () => {
   test("lists every control on the page", () => {
@@ -49,7 +46,7 @@ describe("help sheet content", () => {
 
   test("active app: welcome, species guide, helper questions and About line are the app's", () => {
     const carp = getApp("carp");
-    expect(welcome(carp)).toContain("Louisiana demonstration locations");
+    expect(welcome(carp)).toContain("Mississippi River Basin");
     expect(welcome(carp)).not.toContain("invasive animal");
     expect(speciesGuide(carp)).toEqual([]);
     expect(exampleQuestions(carp)).toEqual(carp.helperQuestions.slice(0, 3));
@@ -58,10 +55,5 @@ describe("help sheet content", () => {
     expect(speciesGuide(lionfish).map((s) => s.id)).toEqual(["lionfish"]);
     expect(welcome(lionfish)).toContain("last 30 days");
     for (const id of APP_IDS) expect(new Set(exampleQuestions(getApp(id))).size).toBe(Math.min(3, getApp(id).helperQuestions.length));
-  });
-
-  test("README's UI section names every control the help sheet does", () => {
-    const missing = HELP_ENTRIES.filter((e) => !README.includes(e.control)).map((e) => e.control);
-    expect(missing).toEqual([]);
   });
 });

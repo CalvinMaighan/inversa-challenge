@@ -90,8 +90,16 @@ impl Usgs {
             .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .filter(|v: &Vec<String>| !v.is_empty())
             .unwrap_or_else(|| DEFAULT_PARAMETERS.iter().map(|s| s.to_string()).collect());
-        let sites: Vec<(String, String, f64, f64)> =
+        let mut sites: Vec<(String, String, f64, f64)> =
             app.cfg.locations.iter().filter_map(|l| l.usgs.clone().map(|u| (u, l.name.clone(), l.lat, l.lon))).collect();
+        // `extraSites`: gauges polled with the locations' but not locations themselves (carp's Mississippi River stations).
+        for e in params.get("extraSites").and_then(Value::as_array).into_iter().flatten() {
+            if let (Some(id), Some(name), Some(lat), Some(lon)) = (e["id"].as_str(), e["name"].as_str(), e["lat"].as_f64(), e["lon"].as_f64()) {
+                if !sites.iter().any(|(s, ..)| s == id) {
+                    sites.push((id.to_string(), name.to_string(), lat, lon));
+                }
+            }
+        }
         let query = if sites.is_empty() { Query::Boxes(physical::region_boxes(&app)) } else { Query::Sites(sites) };
         Usgs { query, parameters, api_key: config.usgs_api_key.clone(), history_days: None, names: Mutex::new(None) }
     }
@@ -513,7 +521,7 @@ mod tests {
 
     // ---- OGC (carp and python config) --------------------------------------------------------
 
-    /// Carp: one batched request naming the eight gauges and both parameters; python: one request
+    /// Carp: one batched request naming the seventeen gauges and both parameters; python: one request
     /// per region box with its four parameters. The time window grows with the gap since the
     /// last poll and caps at 7 days.
     #[test]
@@ -521,23 +529,26 @@ mod tests {
         let now = 1_790_800_000_000;
         let usgs = Usgs::for_tests(carp());
         let Query::Sites(sites) = usgs.query() else { panic!("carp queries by site") };
-        assert_eq!(sites.len(), 8);
+        assert_eq!(sites.len(), 17, "eight locations and nine Mississippi River stations (`extraSites`)");
         let urls = usgs.request_urls(None, now);
         assert_eq!(urls.len(), 1, "ONE request per poll");
         assert_eq!(
             urls[0],
             format!(
-                "{OGC}/continuous/items?f=json&monitoring_location_id=USGS-07381490,USGS-07381500,USGS-07381515,USGS-07381600,USGS-07374000,USGS-07355500,USGS-07367005,USGS-02489500&parameter_code=00065,00060&time=PT180M&limit=10000"
+                "{OGC}/continuous/items?f=json&monitoring_location_id=USGS-07381490,USGS-07381500,USGS-07381515,USGS-07381600,USGS-07374000,USGS-07355500,USGS-07367005,USGS-02489500,USGS-05331000,USGS-05420500,USGS-05474500,USGS-05587450,USGS-07010000,USGS-07020500,USGS-07022000,USGS-07032000,USGS-07289000&parameter_code=00065,00060,00010&time=PT180M&limit=10000"
             )
         );
         assert_eq!(Usgs::time_param(Some(now - 15 * 60_000), now), "&time=PT180M");
         assert_eq!(Usgs::time_param(Some(now - 10 * 3_600_000), now), "&time=PT660M");
         assert_eq!(Usgs::time_param(Some(now - 30 * 24 * 3_600_000), now), "&time=PT10080M");
         assert!(Usgs::for_tests(carp()).with_history_days(7).request_urls(None, now)[0].ends_with("&time=P7D&limit=10000"), "backfill --days 7");
-        // The recorded fixture is the same query over 12 h.
+        // The recorded fixture is the same query over 12 h, for the eight locations (before the river stations were added).
         let manifest: Value = serde_json::from_slice(&fixture("usgs_ogc/manifest.json")).unwrap();
-        let recorded_url = manifest["files"][0]["url"].as_str().unwrap();
-        assert_eq!(recorded_url.replace("&time=PT12H", "&time=PT180M"), urls[0]);
+        let recorded_url = manifest["files"][0]["url"].as_str().unwrap().replace("&time=PT12H", "&time=PT180M");
+        let (recorded_sites, recorded_rest) = recorded_url.split_once("&parameter_code").unwrap();
+        assert!(urls[0].starts_with(recorded_sites));
+        assert!(recorded_rest.starts_with("=00065,00060&") && urls[0].contains("&parameter_code=00065,00060,00010&"), "carp also asks for water temperature (00010) now");
+        assert!(urls[0].ends_with("&time=PT180M&limit=10000"));
 
         let py = Usgs::for_tests(python_app());
         let Query::Boxes(boxes) = py.query() else { panic!("python queries by box") };

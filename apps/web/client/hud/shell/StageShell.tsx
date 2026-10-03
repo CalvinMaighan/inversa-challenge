@@ -5,11 +5,12 @@ import { get, subscribe } from "@calvinjs/active-state";
 
 import { SHEET_MEDIA, SHEET_PEEK_PX } from "client/agent/layout/geometry";
 import { useActiveApp } from "client/hud/appselect/use-active-app";
-import { featherOf, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
+import { blurOf, featherOf, SCOPE_BLUR, SCOPE_FEATHER, SCOPE_SHAPE, SCOPE_SIZE } from "client/state/look";
+import Embers from "client/intro/Embers";
 import styled from "client/styled";
 
-import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
-import { scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
+import { DEFAULT_FEATHER, featherValue, GUTTER_PX, SCOPE_BLUR_MASK_CSS, SCOPE_MASK_CSS, STAGE_DIAMETER_CSS, STAGE_MEDIA, STAGE_QUERY } from "./geometry";
+import { scopeBlurMaskCss, scopeClipCss, scopeMaskCss, scopeWindow } from "./scope";
 
 /**
  * The page frame (docs/GODS_EYE.md GC1). From 768 px up: a black page, the globe in a centred window on the stage,
@@ -102,8 +103,9 @@ const GlobeLayer = styled.div`
   z-index: 0;
 
   ${STAGE_MEDIA} {
+    /* Transparent, not black: the page behind is black already, and the embers drift on it around the window. */
     & [data-globe] {
-      background: #000;
+      background: transparent;
     }
     [data-shell] & [data-globe] canvas {
       ${SCOPE_RULES}
@@ -120,6 +122,33 @@ export const STAGE_SCOPE_CSS = `
     [data-shell] & {
       ${SCOPE_RULES}
     }
+  }
+`;
+
+/**
+ * The soft edge's progressive blur: a backdrop blur over the globe, masked by the inverse of the window's mask, so the
+ * map is exactly as sharp as before inside the window and blurs more and more along the fade, outward. Stage layout
+ * only; no blur at all when the soft edge is off (feather 100).
+ */
+const EdgeBlur = styled.div`
+  display: none;
+
+  ${STAGE_MEDIA} {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    -webkit-backdrop-filter: blur(var(--scope-blur, 6px));
+    backdrop-filter: blur(var(--scope-blur, 6px));
+    mask-image: var(--scope-blur-mask, ${SCOPE_BLUR_MASK_CSS});
+    mask-repeat: no-repeat;
+    mask-position: 0 0;
+    -webkit-mask-image: var(--scope-blur-mask, ${SCOPE_BLUR_MASK_CSS});
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    display: none;
   }
 `;
 
@@ -182,6 +211,8 @@ function applyScope(shell: HTMLElement): void {
   shell.dataset.shape = win.shape;
   const style = shell.style;
   style.setProperty("--scope-mask", scopeMaskCss(win, vw, vh));
+  style.setProperty("--scope-blur", `${blurOf(get(SCOPE_BLUR))}px`);
+  style.setProperty("--scope-blur-mask", scopeBlurMaskCss(win, vw, vh));
   style.setProperty("--scope-clip", scopeClipCss(win));
   style.setProperty("--scope-w", `${win.width}px`);
   style.setProperty("--scope-h", `${win.height}px`);
@@ -205,7 +236,7 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
     if (!main) return;
     const sync = () => applyScope(main);
     sync();
-    const offs = [SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER].map((k) => subscribe(k, sync));
+    const offs = [SCOPE_SHAPE, SCOPE_SIZE, SCOPE_FEATHER, SCOPE_BLUR].map((k) => subscribe(k, sync));
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(sync) : null;
     observer?.observe(main);
     return () => {
@@ -237,9 +268,11 @@ export default function StageShell({ side, globe, hud }: StageShellSlots) {
   return (
     <Main ref={mainRef} data-shell="" data-layout={stage ? "stage" : "dock"}>
       <Title>{app.name}</Title>
+      <Embers />
       <GlobePane data-slot="globe-pane" $sheet={hasSide}>
         <Stage data-stage="" aria-hidden="true" />
         <GlobeLayer data-slot="globe">{globe}</GlobeLayer>
+        <EdgeBlur data-slot="edge-blur" aria-hidden="true" />
         <HudLayer data-slot="hud">{hud}</HudLayer>
         {hasSide ? (
           <SideSlot ref={sideRef} data-slot="side" data-hud-obstacle={stage ? "" : undefined}>

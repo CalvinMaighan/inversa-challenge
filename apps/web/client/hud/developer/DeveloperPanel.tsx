@@ -4,17 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEve
 import { set } from "@calvinjs/active-state";
 import { useActiveState } from "@calvinjs/active-state/react";
 
-import ExternalLink from "client/external-link";
 import { FEEDS } from "client/state/feeds";
 import type { FeedState } from "shared/feed-state";
-import { readGoogleCap, readGoogleCounts, writeGoogleCap } from "client/globe/quota";
 import { browserKeyStore } from "client/keys";
-import { savePlacesCapField } from "client/places/budget";
-import PlacesCapField from "client/hud/search/PlacesCapField";
 import styled from "client/styled";
 import type { BrowserKeyId, ServerKeyStatus } from "shared/keys";
 
-import { Dot, Icon, IconButton } from "../primitives";
+import { Dot, GLASS_CSS, Icon, IconButton, POPOVER_BUTTONS_CSS } from "../primitives";
 import { feedChip, sortFeedsForStatus } from "../topbar/feed-chips";
 import { DEVELOPER_TAB, DEVELOPER_TABS, type DeveloperTab } from "./tab";
 import { DEV_KEYS_URL, panelRows, removeBrowserKey, saveBrowserKeys, splitPasted, type PanelRow } from "./model";
@@ -23,15 +19,16 @@ const Dialog = styled.dialog`
   /* The HUD row lets the pointer through to the globe; the panel takes it back. */
   pointer-events: auto;
   width: min(640px, calc(100vw - 24px));
-  max-height: min(86vh, 900px);
+  /* A fixed height, so switching tabs never resizes the panel (each tab scrolls inside it). */
+  height: min(86vh, 900px);
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
+  ${POPOVER_BUTTONS_CSS}
 
   &[open] {
     display: flex;
@@ -173,13 +170,6 @@ const Line = styled.div`
   }
 `;
 
-const Priority = styled.span<{ $headline: boolean }>`
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: ${(p) => (p.$headline ? "var(--danger)" : "var(--warn)")};
-`;
-
 const Badge = styled.span`
   padding: 2px 6px;
   border: 1px solid var(--border);
@@ -299,10 +289,11 @@ const FeedsBody = styled.div`
 /** Tab 1: every data source the app reads, worst first, each with its mode, state and lag (the lionfish survey's feed list, for all apps). */
 function FeedsPane() {
   const [feeds] = useActiveState<FeedState[]>(FEEDS);
-  const list = sortFeedsForStatus(feeds ?? []);
+  // A feed switched off by configuration (a push feed without its credentials) is not a source this app reads.
+  const list = sortFeedsForStatus((feeds ?? []).filter((f) => !f.note?.startsWith("disabled:")));
   return (
     <FeedsBody role="tabpanel" id="developer-pane-feeds" aria-labelledby="developer-tab-feeds" data-testid="developer-feeds">
-      <p>Every data source this app reads, worst first. Each shows how it is fetched and how fresh its newest data is.</p>
+      <p>Every data source this app reads, worst first. Green: running normally. Yellow: lagging behind its usual schedule. Red: stale or down.</p>
       {list.length === 0 ? (
         <p>No feed state received yet.</p>
       ) : (
@@ -328,23 +319,18 @@ function FeedsPane() {
   );
 }
 
-function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: number; onRemove: (id: BrowserKeyId) => void }) {
+function Row({ row, onRemove }: { row: PanelRow; onRemove: (id: BrowserKeyId) => void }) {
   return (
     <li data-key-row={row.id} data-scope={row.scope} data-set={row.set ? "1" : "0"} data-pending={row.pending ? "1" : "0"}>
       <Line>
         <Dot $tone={row.set ? "ok" : row.pending ? "warn" : "muted"} $pulse={row.pending} role="img" aria-label={row.set ? "set" : row.pending ? "saved, loading" : "not set"} data-status="" />
         <b>{row.label}</b>
-        <Priority $headline={row.priority === "headline"} role="img" aria-label={row.priority === "headline" ? "unlocks a headline feature" : "optional"} title={row.priority === "headline" ? "Unlocks a headline feature" : "Optional"} />
         {row.scope === "browser" ? <Badge title="Runs in the browser: restrict it at the provider">BROWSER-SIDE</Badge> : null}
-        {row.external ? <Badge title="Set through the environment or Doppler; shown, never changed here">CONFIGURED EXTERNALLY</Badge> : null}
         {row.removable ? (
           <button type="button" className="text" onClick={() => onRemove(row.id as BrowserKeyId)} aria-label={`Remove the ${row.label} key stored in this browser`}>
             REMOVE
           </button>
         ) : null}
-        <ExternalLink href={row.link.href} data-key-link={row.link.label} style={row.removable ? { marginLeft: 8 } : undefined}>
-          {row.link.label}
-        </ExternalLink>
       </Line>
       <Purpose>{row.purpose}</Purpose>
       {row.inputs.map((input) => (
@@ -371,20 +357,6 @@ function Row({ row, cap, used, onRemove }: { row: PanelRow; cap: number; used: n
           ))}
         </Note>
       ) : null}
-      {row.id === "google-maps" ? (
-        <Note>
-          <label>
-            Monthly cap
-            <input type="number" name="google-cap" min={1} max={100000} step={1} defaultValue={cap} aria-label="Google 3D monthly cap, sessions in this browser" data-google-cap="" />
-          </label>
-          sessions in this browser · {used} used this month
-        </Note>
-      ) : null}
-      {row.id === "google-maps" ? (
-        <Note>
-          <PlacesCapField />
-        </Note>
-      ) : null}
     </li>
   );
 }
@@ -403,12 +375,9 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
   const [message, setMessage] = useState<string | null>(null);
   const [needsReload, setNeedsReload] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [openedAt] = useState(() => Date.now());
   const tab = useActiveState<DeveloperTab>(DEVELOPER_TAB)[0] ?? "feeds";
   const store = browserKeyStore();
   const rows = panelRows(store, server);
-  const cap = readGoogleCap(store);
-  const used = readGoogleCounts(store, openedAt).sessions;
   const pending = rows.some((r) => r.pending);
 
   useLayoutEffect(() => {
@@ -453,22 +422,14 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
     const form = e.currentTarget;
     const data = new FormData(form);
     const values: Record<string, string> = {};
-    for (const [name, value] of data.entries()) if (typeof value === "string" && name !== "google-cap") values[name] = value;
+    for (const [name, value] of data.entries()) if (typeof value === "string") values[name] = value;
     const { browser, server: serverValues } = splitPasted(values);
-    const capValue = Number(data.get("google-cap"));
-    const capChanged = data.has("google-cap") && capValue !== cap;
-    const placesNote = savePlacesCapField(store, data);
-    if (browser.length === 0 && Object.keys(serverValues).length === 0 && !capChanged && !placesNote) {
+    if (browser.length === 0 && Object.keys(serverValues).length === 0) {
       setMessage("Paste a key first.");
       return;
     }
     setBusy(true);
     const notes: string[] = [];
-    if (placesNote) notes.push(placesNote);
-    if (capChanged) {
-      const now = writeGoogleCap(store, capValue);
-      notes.push(now === capValue ? `Google 3D cap set to ${now} sessions a month.` : "The cap must be a whole number from 1 to 100000.");
-    }
     if (browser.length > 0) {
       if (saveBrowserKeys(store, browser)) {
         notes.push("Browser keys saved in this browser; they apply on the next globe load.");
@@ -537,14 +498,12 @@ export default function DeveloperPanel({ onClose }: { onClose: () => void }) {
       </TabList>
       {tab === "feeds" ? <FeedsPane /> : null}
       <Body ref={formRef} onSubmit={save} key={revision} autoComplete="off" hidden={tab !== "keys"} role="tabpanel" id="developer-pane-keys" aria-labelledby="developer-tab-keys">
-        <p>The globe works without any keys. Each key below switches on another real feed.</p>
+        <p>The globe works without any keys. Each key below switches on another real feed. Green: the key is set. Grey: not set.</p>
         <Rows tabIndex={0} aria-label="Providers">
           {rows.map((row) => (
             <Row
               key={row.id}
               row={row}
-              cap={cap}
-              used={used}
               onRemove={(id) => {
                 removeBrowserKey(store, id);
                 setNeedsReload(true);

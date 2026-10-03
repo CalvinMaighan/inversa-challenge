@@ -5,11 +5,15 @@ import { set } from "@calvinjs/active-state";
 
 import { LOOK_PRESETS } from "client/globe/look/presets";
 import {
+  blurOf,
+  DEFAULT_SCOPE_BLUR,
   featherOf,
   LOOK,
+  MAX_SCOPE_BLUR,
   MAX_SCOPE_FEATHER,
   MAX_SCOPE_SIZE,
   MIN_SCOPE_SIZE,
+  SCOPE_BLUR,
   SCOPE_FEATHER,
   SCOPE_SHAPE,
   SCOPE_SHAPES,
@@ -21,7 +25,7 @@ import {
 } from "client/state/look";
 import styled from "client/styled";
 
-import { IconButton, Surface } from "../primitives";
+import { GLASS_CSS, IconButton, POPOVER_BUTTONS_CSS, Surface } from "../primitives";
 
 /**
  * The Look controls (docs/GODS_EYE.md GC2, GE9, GE11): the seven presets and the map window: its shape and size
@@ -73,12 +77,10 @@ export const Popover = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: color-mix(in oklch, var(--surface) 82%, transparent);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;
@@ -178,6 +180,7 @@ export const SIZE_STEP = 5;
 export const setLook = (id: LookId) => set<LookId>(LOOK, id);
 export const setScopeShape = (shape: ScopeShape) => set<ScopeShape>(SCOPE_SHAPE, shapeOf(shape));
 export const setScopeSize = (pct: number) => set<number>(SCOPE_SIZE, sizeOf(pct));
+export const setScopeBlur = (px: number) => set<number>(SCOPE_BLUR, blurOf(px));
 export const setScopeFeather = (pct: number) => set<number>(SCOPE_FEATHER, featherOf(pct));
 
 /** Arrow keys move focus between the buttons of a group (`selector`); Enter and Space are the buttons' own. */
@@ -199,14 +202,17 @@ export type LookChoicesProps = {
   shape: ScopeShape;
   size: number;
   feather: number;
+  /** The edge blur, px; the slider shows only with `onBlur`. */
+  blur?: number;
   onLook: (id: LookId) => void;
   onShape: (shape: ScopeShape) => void;
   onSize: (pct: number) => void;
   onFeather: (pct: number) => void;
+  onBlur?: (px: number) => void;
 };
 
 /** The popover's body over plain props, so it renders anywhere (tests included). */
-export function LookChoices({ look, shape, size, feather, onLook, onShape, onSize, onFeather }: LookChoicesProps) {
+export function LookChoices({ look, shape, size, feather, blur = DEFAULT_SCOPE_BLUR, onLook, onShape, onSize, onFeather, onBlur }: LookChoicesProps) {
   const ids = useId();
   return (
     <>
@@ -277,7 +283,25 @@ export function LookChoices({ look, shape, size, feather, onLook, onShape, onSiz
         />
         <output aria-hidden="true">{feather}</output>
       </SliderRow>
-      <Note>The window is always clear. Soft edge fades the map out past it: sharp at 0, no vignette at 100.</Note>
+      {onBlur ? (
+        <SliderRow htmlFor={`${ids}-blur`}>
+          Edge blur
+          <input
+            id={`${ids}-blur`}
+            type="range"
+            min={0}
+            max={MAX_SCOPE_BLUR}
+            step={1}
+            value={blur}
+            aria-label="Window edge blur"
+            aria-valuetext={blur === 0 ? "0, no blur" : `${blur} pixels at the rim`}
+            data-testid="scope-blur"
+            onChange={(e) => onBlur(Number(e.currentTarget.value))}
+          />
+          <output aria-hidden="true">{blur}</output>
+        </SliderRow>
+      ) : null}
+      <Note>The window is always clear. Soft edge fades the map out past it: sharp at 0, no vignette at 100. Edge blur softens the fade, from nothing at the window to full at the rim.</Note>
     </>
   );
 }

@@ -4,7 +4,7 @@
  * and the "Water and weather" rows (client/globe/layers/overlays/legend.ts), so the popover holds no state of its
  * own: every switch writes LAYERS, the same key the expert legend and the agent write.
  *
- *   On the map        sightings, field notes (on at first load: the novice rule)
+ *   On the map        sightings (on at first load: the novice rule); field notes are not offered for now
  *   Ships             vessels, carp and lionfish only (off at first load)
  *   Water and weather the app's overlays (off at first load), rendered by WaterWeather
  */
@@ -27,7 +27,7 @@ export const LAYER_BLURBS: Partial<Record<LayerId, string>> = {
 };
 
 const GROUPS: readonly { id: LayersGroup["id"]; label: string; layers: readonly LayerId[] }[] = [
-  { id: "map", label: "On the map", layers: [SIGHTINGS, NOTES] },
+  { id: "map", label: "On the map", layers: [SIGHTINGS] },
   { id: "ships", label: "Ships", layers: [VESSELS] },
 ];
 

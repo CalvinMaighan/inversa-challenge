@@ -119,22 +119,9 @@ export const CreditSlot = styled.div`
   & .cesium-credit-logoContainer img {
     display: block;
   }
-  /* On-screen credits (Google's logo and data providers with Google 3D): one line, cut with an ellipsis at the card's
-     edge (the full text is the element's title); the logo first, never cut. */
+  /* The row is the two icons only: the on-screen credit text (radar, imagery, 3D data) is in the map icon's lightbox. */
   & .cesium-credit-textContainer {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  & .cesium-credit-textContainer > * {
-    display: inline;
-  }
-  & .cesium-credit-textContainer img {
-    display: inline;
-    vertical-align: middle !important;
-  }
-  & .cesium-credit-delimiter {
-    padding: 0 3px;
+    display: none;
   }
   /* The ion logo is its mark only, the same size as the map icon. */
   & .cesium-credit-logoContainer img {

@@ -798,8 +798,12 @@ mod tests {
 
     #[tokio::test]
     async fn vessels_ingest_from_mock_socket_to_graphql_and_evidence() {
-        use crate::app::test_support::test_state_for;
-        let state = test_state_for("carp");
+        // No built-in app lists the AIS feed any more (ships were removed from the maps), so the carp config gets it back here.
+        let mut v: Value = serde_json::from_str(crate::app::config::builtin_json("carp").unwrap()).unwrap();
+        v["feeds"].as_array_mut().unwrap().push(json!({ "source": "aisstream", "mode": "push", "params": {} }));
+        v["agent"]["tools"].as_array_mut().unwrap().push(json!("vessels"));
+        let cfg = crate::app::config::AppConfig::parse("carp-ais.json", &v.to_string()).unwrap();
+        let state = crate::state::AppState::memory(crate::state::Config::for_tests(), crate::app::config::App::new(cfg).unwrap());
         crate::ingest::scheduler::start(state.clone(), Default::default()).await.unwrap();
         let now = physical::now_ms();
         // Five seconds into a minute, so t0 and t0 + 20 s share it.
@@ -810,7 +814,7 @@ mod tests {
             frame_at("class_b_position.json", t0 + 20_000, 29.21, -89.99), // same minute: thinned
             frame_at("class_b_position.json", t0 + 120_000, 29.22, -89.98),
             fixture("malformed.txt"),
-            frame_at("position_report.json", t0, 42.3, -83.0), // Detroit: outside carp, skipped
+            frame_at("position_report.json", t0, 42.3, -71.0), // Boston: outside carp, skipped
         ];
         let (url, sub) = mock_server(frames).await;
         let key = ApiKey::new("mock-key-123".into());
@@ -820,13 +824,13 @@ mod tests {
         let payloads = ais.fetch(&ctx).await.unwrap();
         let sub: Value = serde_json::from_str(&sub.await.unwrap()).unwrap();
         assert_eq!(sub["APIKey"], "mock-key-123");
-        assert_eq!(sub["BoundingBoxes"], json!([[[28.9, -94.0], [32.9, -88.8]]]), "the carp box, latitude first");
+        assert_eq!(sub["BoundingBoxes"], json!([[[28.9, -97.0], [47.0, -82.0]]]), "the carp box, latitude first");
         assert_eq!(payloads.len(), 1);
         let lines = String::from_utf8_lossy(&payloads[0].bytes).lines().count();
         assert_eq!(lines, 4, "static + 2 positions + the out-of-region one; the same-minute fix and the bad frame never queued");
         assert_eq!((ais.status.thinned.load(Ordering::Relaxed), ais.status.malformed.load(Ordering::Relaxed)), (1, 1));
         let out = crate::ingest::scheduler::ingest_payload(&state, &ais, payloads[0].clone(), None).await.unwrap();
-        assert_eq!((out.rows_in, out.rows_skipped), (4, 1), "the Detroit fix is outside the app's region");
+        assert_eq!((out.rows_in, out.rows_skipped), (4, 1), "the Boston fix is outside the app's region");
 
         let q = r#"query($bbox: BBox!, $from: Time!, $to: Time!) { vessels(bbox: $bbox, from: $from, to: $to) { mmsi name type points { at lat lon sog cog heading } } }"#;
         let vars = json!({ "bbox": { "west": -94.0, "south": 28.9, "east": -88.8, "north": 32.9 }, "from": iso(t0 - 60_000), "to": iso(now) });
@@ -854,7 +858,7 @@ mod tests {
         assert!(f.newest_observed_at.is_some(), "stored history still counts");
 
         // Python does not list the feed: no vessels there.
-        let py = test_state_for("python");
+        let py = crate::app::test_support::test_state_for("python");
         let res = crate::graphql::schema().execute(async_graphql::Request::new("{ vessels(bbox: {west: -81, south: 25, east: -80, north: 26}, from: \"2026-09-30T00:00:00Z\", to: \"2026-09-30T01:00:00Z\") { mmsi } }").data(py)).await;
         assert_eq!(res.errors[0].extensions.as_ref().unwrap().get("code"), Some(&async_graphql::Value::from("NO_VESSEL_FEED")));
     }

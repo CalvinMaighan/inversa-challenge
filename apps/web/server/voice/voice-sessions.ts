@@ -2,10 +2,10 @@ import { timingSafeEqual } from "node:crypto";
 
 import type { AppConfig } from "shared/apps";
 
-import { defaultAgentRunner, type AgentRunner } from "./agent-runner";
+import type { AgentRunner } from "./agent-runner";
 import { IpRateLimiter, VoiceBudget, voiceLimitsFromEnv, type VoiceLimits } from "./budget";
 import { defaultRealtimeTarget, type RealtimeTarget } from "./grok-realtime";
-import { VoiceSession } from "./voice-session";
+import type { VoiceSession } from "./voice-session";
 
 /** No browser listener: close soon so a missed Stop cannot keep Grok open for the whole cap. */
 const IDLE_CLOSE_MS = 20_000;
@@ -72,7 +72,7 @@ export class VoiceSessionRegistry {
     }
   }
 
-  async open(ip: string, app: AppConfig): Promise<OpenResult> {
+  async open(ip: string, app: AppConfig, opts: { welcome?: boolean } = {}): Promise<OpenResult> {
     const target = this.deps.target();
     if (!target) return { ok: false, status: 503, error: "Voice mode is not configured" };
     if (this.budget.exhausted()) {
@@ -93,12 +93,15 @@ export class VoiceSessionRegistry {
     }
     for (const existing of replacing) existing.close("replaced");
 
-    const session = new VoiceSession({
+    // Loaded here, not at the top: the registry outlives dev hot reloads, and a class imported once would never see an edit.
+    const { VoiceSession: Session } = await import("./voice-session");
+    const session = new Session({
       ip,
       app,
       target,
       runner: this.deps.runner,
       budget: this.budget,
+      welcome: opts.welcome === true,
       maxSessionMs: this.deps.limits.maxSessionMs,
     });
     try {
@@ -126,13 +129,24 @@ export class VoiceSessionRegistry {
   }
 }
 
+/**
+ * The analyst runner, looked up on each run: the registry below outlives Turbopack module reloads in dev, and a runner captured
+ * when it was made would keep calling the old module's chunks ("Cannot find module") after the next edit.
+ */
+const latestRunner: AgentRunner = {
+  async run(input, onEvent) {
+    const { defaultAgentRunner: runner } = await import("./agent-runner");
+    return runner.run(input, onEvent);
+  },
+};
+
 /** Process-wide registry. Survives Turbopack module reloads in dev; one process in production. */
 export function voiceRegistry(): VoiceSessionRegistry {
-  const g = globalThis as unknown as { __inversaVoiceRegistry?: VoiceSessionRegistry };
-  g.__inversaVoiceRegistry ??= new VoiceSessionRegistry({
+  const g = globalThis as unknown as { __inversaVoiceRegistryV3?: VoiceSessionRegistry };
+  g.__inversaVoiceRegistryV3 ??= new VoiceSessionRegistry({
     limits: voiceLimitsFromEnv(),
-    runner: defaultAgentRunner,
+    runner: latestRunner,
     target: defaultRealtimeTarget,
   });
-  return g.__inversaVoiceRegistry;
+  return g.__inversaVoiceRegistryV3;
 }

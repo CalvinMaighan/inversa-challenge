@@ -6,7 +6,7 @@ import type { CarpSighting } from "client/carp/sighting-type";
 
 /**
  * Asian carp sightings on the carp map (silver, bighead, grass and black carp in the Mississippi River Basin), from
- * `/api/carp/sightings` (iNaturalist, GBIF and USGS NAS merged on the server). One shared store: the markers draw it, the Carp
+ * `/v1/carp/sightings` (iNaturalist, GBIF and USGS NAS, stored in the carp SQLite database by the API). One shared store: the markers draw it, the Carp
  * chip counts it and toggles it. The timeline picks a start and an end date (the last `YEARS` years at most, what the server
  * returns) and a cursor within them that it moves (and plays): the map shows the sightings dated from the start up to the cursor,
  * each a dot in its species' colour.
@@ -15,7 +15,7 @@ export type { CarpSighting };
 
 export const FISH_COLOR = "#e8a33d";
 export const YEARS = 2;
-const MAX = 2000;
+const MAX = 5000;
 
 /** One colour per species, as the legend and the map dots use them. */
 export const SPECIES_COLORS: readonly { name: string; color: string }[] = [
@@ -93,6 +93,16 @@ export function toggleSpecies(name: string): void {
   set({ hidden, shown: upTo(state.windowed, state.atMs, hidden) });
 }
 
+/** Show only (or show or hide) one species by name, as the legend chips do; `only` hides the others. */
+export function filterSpecies(name: string, visible: boolean, only = false): void {
+  const all = SPECIES_COLORS.map((s) => s.name);
+  const hidden = only ? all.filter((n) => n !== name) : visible ? state.hidden.filter((n) => n !== name) : [...new Set([...state.hidden, name])];
+  set({ hidden, shown: upTo(state.windowed, state.atMs, hidden) });
+}
+
+/** One loaded sighting by id, or undefined. */
+export const fishById = (id: string): CarpSighting | undefined => state.all.find((s) => s.id === id);
+
 /** The records dated within `[startMs, endMs]` (the end day included), newest first, capped. */
 export function rangeFish(all: readonly CarpSighting[], startMs: number, endMs: number): CarpSighting[] {
   return all.filter((s) => s.date !== null && Date.parse(s.date) >= startMs && Date.parse(s.date) < endMs + DAY_MS).slice(0, MAX);
@@ -115,6 +125,19 @@ export function setFishRange(startMs: number, endMs: number, nowMs = Date.now())
 
 export function setFishSpeed(speed: Speed): void {
   set({ speed });
+}
+
+/** The cursor at the start of the timeline, not playing (the first-run gate parks it there). */
+export function parkFishAtStart(): void {
+  stopPlay();
+  set({ playing: false, atMs: state.startMs, shown: upTo(state.windowed, state.startMs) });
+}
+
+/** Press play at `speed` from the start (the first-run gate does this on entry); a no-op when already playing. */
+export function startFishPlay(speed: Speed): void {
+  if (state.playing) return;
+  setFishSpeed(speed);
+  toggleFishPlay();
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -152,17 +175,20 @@ export function setFishVisible(visible: boolean): void {
   set({ visible });
 }
 
-/** Fetch once per page load. */
-export function loadFish(): void {
-  if (state.status !== "idle") return;
+let loading: Promise<void> = Promise.resolve();
+
+/** Fetch once per page load (the first-run preload starts it; the map's own call joins it). Resolves when it settled. */
+export function loadFish(): Promise<void> {
+  if (state.status !== "idle") return loading;
   set({ status: "loading" });
-  fetch("/api/carp/sightings")
+  loading = fetch("/v1/carp/sightings")
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
     .then((body: { sightings: CarpSighting[]; sources: Record<string, number | string> }) => {
       const windowed = rangeFish(body.sightings, state.startMs, state.endMs);
       set({ status: "ready", all: body.sightings, windowed, shown: upTo(windowed, state.atMs), sources: body.sources });
     })
     .catch(() => set({ status: "error" }));
+  return loading;
 }
 
 const subscribe = (cb: () => void) => {

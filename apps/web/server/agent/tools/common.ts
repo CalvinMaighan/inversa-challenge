@@ -9,6 +9,7 @@ import { z } from "zod";
 import type { CapabilityContext, CapabilityOutput, Evidence } from "@/server/agent/runtime/registry";
 import { evidence, parseEvidenceId } from "@/server/agent/tools/evidence";
 import { gql, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
+import { isDisabledFeed } from "@/shared/feed-state";
 import { feedsFor, given, localTime, output } from "@/server/agent/tools/shared";
 import { findSite } from "@/server/agent/tools/sites";
 import { SOURCE_FACTS } from "@/server/agent/tools/source-facts";
@@ -65,8 +66,11 @@ export const sourceInfo = {
     if (asked && direct.length === 0) throw new Error(`"${input.feed}" is not a feed of this app (feeds: ${configured.join(", ")}).`);
     // An archive and the live source it copies belong in one answer: asking for one brings the other.
     const known = new Set<string>(configured);
-    const wanted = !asked ? [...configured] : [...new Set(direct.flatMap((s) => [s, ...(SOURCE_FACTS[s]?.related ?? []).filter((r) => known.has(r))]))];
+    const wantedAll = !asked ? [...configured] : [...new Set(direct.flatMap((s) => [s, ...(SOURCE_FACTS[s]?.related ?? []).filter((r) => known.has(r))]))];
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeeds", "query AgentFeeds { feeds { ...FeedFields } }", {}, ctx);
+    const off = new Set(data.feeds.filter(isDisabledFeed).map((f) => f.source));
+    data.feeds = data.feeds.filter((f) => !isDisabledFeed(f));
+    const wanted = wantedAll.filter((source) => !off.has(source));
     const feeds = feedsFor(data.feeds, wanted, []);
     const rows = wanted.map((source) => {
       const facts = SOURCE_FACTS[source];

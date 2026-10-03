@@ -19,12 +19,14 @@ import {
   speciesKeys,
 } from "@/server/agent/tools/evidence";
 import { carpTools, weatherForecast } from "@/server/agent/tools/carp";
+import { carpSightings } from "@/server/agent/tools/carp-fish";
+import { speciesInfo } from "@/server/agent/tools/species-info";
 import { commonTools } from "@/server/agent/tools/common";
 import { findArea, isComponentApp, lionfishExplainCell, lionfishHotspots, lionfishSetView, lionfishTools } from "@/server/agent/tools/lionfish";
 import { inRegion, lookupGazetteer, openMeteoGeocode } from "@/server/agent/tools/gazetteer";
 import { gqlWindowed, gqlWithFeeds, type GqlFeedState } from "@/server/agent/tools/gql";
 import { notes } from "@/server/agent/tools/notes";
-import { setLook, toggleLayer, vessels } from "@/server/agent/tools/map";
+import { controlTools, setLook, toggleLayer, vessels } from "@/server/agent/tools/map";
 import { ageWords, atTime, bboxSchema, feedsFor, feedSummary, given, givenList, givenTime, HOUR_MS, lookbackWindow, output, padBbox, resolveBbox, timeSchema } from "@/server/agent/tools/shared";
 import { findSite, presetBox, resolveSites, siteBox, sitesBox } from "@/server/agent/tools/sites";
 import { localTime } from "@/server/agent/tools/shared";
@@ -52,12 +54,15 @@ import {
 import type { BBox } from "@/shared/agent/events";
 import type { AppConfig } from "@/shared/apps";
 import { QUALITY_CODES } from "@/shared/frames";
+import { isDisabledFeed } from "@/shared/feed-state";
 import { sightingPageUrl } from "@/shared/source-pages";
 import { regionAt } from "@/shared/apps";
 import { LAYER_IDS } from "@/shared/voice/ui-tools";
 
 /** Longest window a sightings or readings call may ask for: the 90-day backfill (lionfish replays a quarter). */
 const MAX_LOOKBACK_HOURS = 24 * 90;
+/** A sightings window may reach back as far as the map and timeline do: the two years held in the API's SQLite (fetched in 31-day pages). */
+const MAX_SIGHTING_HOURS = 24 * 731;
 /** Frames cover a 30-day window (PLAN.md C15): an empty recent window widens to it. */
 const WIDEN_HOURS = 24 * 30;
 const MAX_MODEL_ROWS = 40;
@@ -67,7 +72,7 @@ const DEFAULT_SIGHTING_HOURS = 24 * 7;
  * Counting by submission date looks this far back for the observations. The API filters by observed time only (31-day
  * pages), so a record observed earlier than this and uploaded recently is beyond what the tool can search; the result says so.
  */
-const SUBMITTED_LOOKBACK_HOURS = MAX_LOOKBACK_HOURS;
+const SUBMITTED_LOOKBACK_HOURS = 24 * 90;
 /**
  * Conditions query this much around the asked-for box. Rows inside the box win; when no station lies inside it
  * ("water levels near Homestead", with the nearest gauge a few km out), the nearby stations answer instead.
@@ -101,8 +106,9 @@ function resolveWindow(
   input: { from?: string; to?: string; hours?: number },
   ctx: CapabilityContext,
   defaultHours: number,
+  maxHours: number = MAX_LOOKBACK_HOURS,
 ): { from: string; to: string } {
-  const window = lookbackWindow(input, ctx.now, defaultHours, MAX_LOOKBACK_HOURS);
+  const window = lookbackWindow(input, ctx.now, defaultHours, maxHours);
   return { from: window.from, to: window.to };
 }
 
@@ -185,7 +191,7 @@ const sightingsInput = z.object({
   quality: z.array(z.enum(QUALITY)).optional().describe("Limit to these quality grades."),
   from: timeSchema.optional(),
   to: timeSchema.optional(),
-  hours: z.number().min(1).max(MAX_LOOKBACK_HOURS).optional().describe("Lookback from `to` (default: the app's window, 7 days for python, 30 days for lionfish)."),
+  hours: z.number().min(1).max(MAX_SIGHTING_HOURS).optional().describe("Lookback from `to` (default: the app's window, 7 days for python, 30 days for lionfish). Up to 17544 (two years, the span of the map)."),
   dateField: z
     .enum(["observed", "submitted"])
     .optional()
@@ -220,7 +226,7 @@ const sightings = {
     }
     const explicit = Boolean(input.from) || Boolean(input.to) || input.hours !== undefined;
     const defaultHours = Math.min(ctx.app.windows?.defaultHours ?? DEFAULT_SIGHTING_HOURS, MAX_LOOKBACK_HOURS);
-    const asked = resolveWindow(input, ctx, defaultHours);
+    const asked = resolveWindow(input, ctx, defaultHours, MAX_SIGHTING_HOURS);
     const bySubmitted = input.dateField === "submitted";
     const knownAt = givenTime(input.knownAt);
     // The same call fetches the whole 30 days before `to`. A "recent" window (none given, or one ending now) that
@@ -963,6 +969,7 @@ const feedState = {
   inputSchema: z.object({}),
   async execute(_input: Record<string, never>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const data = await gqlWithFeeds<{ feeds: GqlFeedState[] }>("AgentFeedState", FEEDS_ONLY_QUERY, {}, ctx);
+    data.feeds = data.feeds.filter((f) => !isDisabledFeed(f));
     const out = output({ asOf: ctx.now.toISOString(), note: "One line per feed: source, state word (nominal, lagging, stale, down), age of the newest observation (newestAge), last fetch, and its fetch marker. feedSummary.line already spells out every degraded feed: copy it. This is the feeds' health only: whether one feed's data for a place is current needs that feed's data tool as well (sightings for inat, gbif or nas rows with their dates; reef_heat for crw; marine_forecast for the marine forecast), cited beside the fetch marker." }, [], data.feeds, data.feeds.length);
     return withView(out, feedsView(out.feeds));
   },
@@ -984,7 +991,7 @@ const setViewInput = z
 const setView = {
   name: "set_view",
   description:
-    "Fly the globe to an area, a camera preset or a configured location, and move the timeline. asOf switches the timeline to replay: what was known then. Use it when the answer is about a place or a past moment.",
+    "Fly the globe to a camera preset or one of the app's configured locations (not a town: for any other place call fly_to), and move the timeline. asOf switches the timeline to replay: what was known then. Use it when the answer is about a configured location or a past moment.",
   inputSchema: setViewInput,
   async execute(input: z.infer<typeof setViewInput>, ctx: CapabilityContext): Promise<CapabilityOutput> {
     const presetName = given(input.preset);
@@ -1023,7 +1030,7 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
   // set_view plus reef_heat and marine_forecast; a species app scored density × activity × access keeps python's.
   const component = speciesOnly && isComponentApp(app as Partial<AppConfig> as AppConfig);
   // The NWS gridpoint forecast reads by point too, so a species app may list it (python's weekend planning).
-  const riverTools = kind === "species" ? [weatherForecast] : carpTools;
+  const riverTools = kind === "species" ? [weatherForecast] : [...carpTools, carpSightings];
   return [
     geocode,
     ...(speciesOnly ? [sightings, speciesCounts] : []),
@@ -1033,11 +1040,13 @@ function allCapabilities(app: AppConfig): AnyCapability[] {
     ...(component ? lionfishTools : []),
     ...riverTools,
     feedState,
+    speciesInfo,
     ...commonTools,
     notes,
     component ? lionfishSetView : setView,
     // GE7: the map controls and the ships (server/agent/tools/map.ts); the app's allowlist decides.
     toggleLayer(app as AppConfig),
+    ...controlTools(app as AppConfig),
     setLook,
     vessels,
   ];

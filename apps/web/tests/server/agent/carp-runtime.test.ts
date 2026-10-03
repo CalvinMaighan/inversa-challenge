@@ -3,15 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ofType, resetState } from "./helpers";
+import { resetState } from "./helpers";
 
 import { CARP_FIXTURE_NOW } from "@/eval/stub-carp";
 import { startStub, type Stub } from "@/eval/stub-server";
 import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
-import { runTurn } from "@/server/agent/run-turn";
-import { foreignSpeciesPattern, scopeGuard } from "@/server/agent/scope";
+import { foreignSpeciesPattern, scopeGuard, scopeGuidance } from "@/server/agent/scope";
 import { buildAgentRegistry, CAPABILITY_NAMES } from "@/server/agent/tools/capabilities";
-import { isAgentStreamEvent, type AgentStreamEvent } from "@/shared/agent/events";
 import { APP_IDS, getApp } from "@/shared/apps";
 
 /**
@@ -74,7 +72,7 @@ describe("agent carp", () => {
     expect(PROMPT).toMatch(/L'CARP/);
     expect(PROMPT).toMatch(/Atchafalaya Basin/);
     expect(PROMPT).toMatch(/silver, grass, bighead and black carp/);
-    expect(PROMPT).toMatch(/It cannot say where carp are or what moves them/);
+    expect(PROMPT).toMatch(/carp_sightings returns the stored reports/);
   });
 
   test("agent carp: UTC and Central time handling, the four times, units with their sources, and 'known at time T' semantics are stated", () => {
@@ -123,30 +121,22 @@ describe("agent carp", () => {
     }
   });
 
-  test("agent carp: the scope guard is built from the other apps' taxa and refuses before any model call", async () => {
+  test("agent carp: the scope guard is built from the other apps' taxa and guides the model", async () => {
     const pattern = foreignSpeciesPattern(CARP)!;
     expect(pattern.test("Where are Burmese pythons active in the Everglades?")).toBe(true);
     expect(pattern.test("Any lionfish near Key Largo?")).toBe(true);
     expect(pattern.test("Which locations need operational review today?")).toBe(false);
     expect(pattern.test("How much water is the Atchafalaya carrying at Simmesport?")).toBe(false);
-    expect(scopeGuard(CARP, "Where are Burmese pythons active in the Everglades?")).toContain(CARP.agent.refusal);
+    expect(scopeGuard(CARP, "Where are Burmese pythons active in the Everglades?")).toContain("switch_app");
     expect(scopeGuard(CARP, "What is the river stage at Krotz Springs right now?")).toBeNull();
     // Python and lionfish each answer for their one species and refuse the other's by name; carp (no taxa) is not a foreign species anywhere.
-    expect(scopeGuard(getApp("python"), "Any lionfish near Key Largo?")).toContain(getApp("python").agent.refusal);
+    expect(scopeGuard(getApp("python"), "Any lionfish near Key Largo?")).toContain("switch_app");
     expect(scopeGuard(getApp("python"), "Show python sightings in the Everglades from the last 7 days.")).toBeNull();
-    expect(scopeGuard(getApp("lionfish"), "How many Burmese pythons were reported around Marathon?")).toContain(getApp("lionfish").agent.refusal);
+    expect(scopeGuard(getApp("lionfish"), "How many Burmese pythons were reported around Marathon?")).toContain("switch_app");
 
-    process.env.OPENROUTER_API_KEY = "test-key-never-used";
-    const events: AgentStreamEvent[] = [];
-    const result = await runTurn({ app: "carp", sessionId: `guard-${Date.now()}`, question: "Where are Burmese pythons active in the Everglades?", now: NOW, cache: false }, (e) => events.push(e));
-    expect(result.model).toBe("scope-guard");
-    expect(result.content).toContain("Python app");
-    expect(result.content).toContain("Louisiana");
-    expect(result.toolCalls).toEqual([]);
-    expect(events.every(isAgentStreamEvent)).toBe(true);
-    expect(events.at(-1)).toEqual({ type: "done", content: result.content });
-    expect(ofType(events, "tool_start")).toHaveLength(0);
-    expect(stub.requests).toHaveLength(0);
+    // The guard steers the model: another species means switch_app, not a refusal.
+    const guidance = scopeGuidance(CARP, "Where are Burmese pythons active in the Everglades?")!;
+    expect(guidance).toContain("switch_app");
   });
 
   test("agent carp: the prompt and the turn context never carry a supported-question hint (the benchmark is blind)", () => {

@@ -98,7 +98,7 @@ describe("vessels layer: track maths", () => {
 });
 
 describe("vessels layer: config, legend and card", () => {
-  test("vessels layer: no app lists it any more (ships were removed from the maps); the layer id and the AIS feed stay", () => {
+  test("vessels layer: no app lists it any more (ships were removed from the maps); the AIS feed is gone from every app", () => {
     expect(LAYER_IDS).toContain("vessels");
     for (const id of ["carp", "lionfish", "python"] as const) {
       const app = getApp(id);
@@ -107,7 +107,7 @@ describe("vessels layer: config, legend and card", () => {
       const toggle = uiToolsFor(app).find((t) => t.name === "toggle_layer")!;
       expect(JSON.stringify(toggle.parameters)).not.toContain("vessels");
     }
-    for (const id of ["carp", "lionfish"] as const) expect(getApp(id).feeds.some((f) => f.source === "aisstream" && f.mode === "push")).toBe(true);
+    for (const id of ["carp", "lionfish", "python"] as const) expect(getApp(id).feeds.some((f) => f.source === "aisstream")).toBe(false);
   });
 
   test("vessels layer: the evidence card names the ship, its type, speed and course, and links VesselFinder in a new tab", () => {

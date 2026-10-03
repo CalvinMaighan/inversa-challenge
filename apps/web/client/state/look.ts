@@ -14,8 +14,11 @@ export { LOOK_IDS, type LookId };
 
 export const DEFAULT_LOOK: LookId = "normal";
 /** Soft edge, 0 (hard edge, black outside the shape) to 100 (no vignette); the default is a gentle visible fade. */
-export const DEFAULT_SCOPE_FEATHER = 35;
+export const DEFAULT_SCOPE_FEATHER = 50;
 export const MAX_SCOPE_FEATHER = 100;
+/** Edge blur, in px of backdrop blur at the window's outer rim: 0 (none) to 40; the blur grows from nothing inside the window to this along the soft edge. */
+export const DEFAULT_SCOPE_BLUR = 6;
+export const MAX_SCOPE_BLUR = 40;
 
 /** The window's shape: a circle, a wide oval, a wide rounded rectangle, or the whole page with only the soft edge. */
 export const SCOPE_SHAPES = ["circle", "oval", "rounded", "frame"] as const;
@@ -28,6 +31,7 @@ export const DEFAULT_SCOPE_SIZE = 65;
 
 export const LOOK = key<"LOOK", LookId>("LOOK", DEFAULT_LOOK);
 export const SCOPE_FEATHER = key<"SCOPE_FEATHER", number>("SCOPE_FEATHER", DEFAULT_SCOPE_FEATHER);
+export const SCOPE_BLUR = key<"SCOPE_BLUR", number>("SCOPE_BLUR", DEFAULT_SCOPE_BLUR);
 export const SCOPE_SHAPE = key<"SCOPE_SHAPE", ScopeShape>("SCOPE_SHAPE", DEFAULT_SCOPE_SHAPE);
 export const SCOPE_SIZE = key<"SCOPE_SIZE", number>("SCOPE_SIZE", DEFAULT_SCOPE_SIZE);
 
@@ -50,6 +54,11 @@ function wholeIn(value: unknown, lo: number, hi: number, fallback: number): numb
 /** A stored or decoded feather: a whole number 0..100, anything else the default. */
 export function featherOf(value: unknown): number {
   return wholeIn(value, 0, MAX_SCOPE_FEATHER, DEFAULT_SCOPE_FEATHER);
+}
+
+/** A stored or decoded edge blur: a whole number 0..40 px, anything else the default. */
+export function blurOf(value: unknown): number {
+  return wholeIn(value, 0, MAX_SCOPE_BLUR, DEFAULT_SCOPE_BLUR);
 }
 
 export function isScopeShape(value: unknown): value is ScopeShape {

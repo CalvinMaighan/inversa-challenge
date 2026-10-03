@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { PYTHON_LAYERS, selectPython } from "@/tests/client/python-app";
 import { get, init, set } from "@calvinjs/active-state";
 
-import { LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
+import { asThread, type AgentThread } from "client/agent/chat/thread";
+import { AGENT_CHAT, LAYERS, SELECTION, state, TIME, VIEW, VOICE } from "client/state";
 import type { LayersState } from "client/state/layers";
 import type { SelectionState } from "client/state/selection";
 import { timeWindow, type TimeState } from "client/state/time";
@@ -33,6 +34,17 @@ const layers = () => get<LayersState>(LAYERS)!;
 const selection = () => get<SelectionState>(SELECTION)!;
 
 describe("ui command handler", () => {
+  test("show_card pins an info card with its sources in the chat thread", () => {
+    set(AGENT_CHAT, AGENT_CHAT.defaults);
+    const args = { title: "Newest python report", text: "Reported on 2026-10-02 in the Everglades.", sources: [{ id: "sighting:42", label: "Burmese python · 2026-10-02 · EDDMapS" }] };
+    expect(applyUiCommand({ name: "show_card", args }, NOW)).toBe(true);
+    const [card] = asThread(get<AgentThread>(AGENT_CHAT)).messages;
+    expect(card?.card?.title).toBe("Newest python report");
+    expect(card?.card?.sources).toEqual([{ id: "sighting:42", kind: "sighting", label: "Burmese python · 2026-10-02 · EDDMapS" }]);
+    // No title, no card.
+    expect(applyUiCommand({ name: "show_card", args: { text: "x" } }, NOW)).toBe(false);
+  });
+
   test("fly_to with lat/lon moves the camera, updates bbox and bumps seq", () => {
     expect(applyUiCommand({ name: "fly_to", args: { lat: 25.5, lon: -80.9, altitudeM: 5000 } }, NOW)).toBe(true);
     expect(view()).toEqual({
@@ -73,7 +85,7 @@ describe("ui command handler", () => {
     expect(selection()).toEqual(SELECTION.defaults);
   });
 
-  test("set_time snaps into the one-year window and pauses; now is the live edge", () => {
+  test("set_time snaps into the two-year window and pauses; now is the live edge", () => {
     set(TIME, { ...time(), playing: true });
     expect(applyUiCommand({ name: "set_time", args: { time: "2026-09-29T22:07:00-04:00" } }, NOW)).toBe(true);
     expect(time()).toMatchObject({ at: "2026-09-30T02:00:00.000Z", playing: false, ...{ from: WINDOW.from, to: WINDOW.to } });
@@ -85,12 +97,12 @@ describe("ui command handler", () => {
     expect(time().at).toBe(WINDOW.to);
   });
 
-  test("set_time before the one-year window recentres the window on it", () => {
-    expect(applyUiCommand({ name: "set_time", args: { time: "2025-02-01T17:00:00Z" } }, NOW)).toBe(true);
+  test("set_time before the two-year window recentres the window on it", () => {
+    expect(applyUiCommand({ name: "set_time", args: { time: "2024-02-01T17:00:00Z" } }, NOW)).toBe(true);
     expect(time()).toMatchObject({
-      at: "2025-02-01T17:00:00.000Z",
-      from: "2024-08-03T05:00:00.000Z",
-      to: "2025-08-03T05:00:00.000Z",
+      at: "2024-02-01T17:00:00.000Z",
+      from: "2023-02-01T17:00:00.000Z",
+      to: "2025-01-31T17:00:00.000Z",
       playing: false,
     });
     // Back into the live window: the live window returns.
@@ -98,7 +110,7 @@ describe("ui command handler", () => {
     expect(time()).toMatchObject({ at: "2026-09-20T00:00:00.000Z", from: WINDOW.from, to: WINDOW.to });
   });
 
-  test("play_timeline accepts a window before the live one, capped at a year and at now", () => {
+  test("play_timeline accepts a window before the live one, capped at two years and at now", () => {
     expect(
       applyUiCommand({ name: "play_timeline", args: { from: "2026-01-30T00:00:00Z", to: "2026-02-04T00:00:00Z" } }, NOW),
     ).toBe(true);
@@ -107,10 +119,10 @@ describe("ui command handler", () => {
     expect(applyUiCommand({ name: "play_timeline", args: { from: "2026-02-01T00:00:00Z" } }, NOW)).toBe(true);
     expect(time()).toMatchObject({ from: "2026-02-01T00:00:00.000Z", to: "2026-02-04T00:00:00.000Z" });
     // Only from, far from the current end: the year from it.
-    expect(applyUiCommand({ name: "play_timeline", args: { from: "2024-06-01T00:00:00Z" } }, NOW)).toBe(true);
-    expect(time()).toMatchObject({ from: "2024-06-01T00:00:00.000Z", to: "2025-06-01T00:00:00.000Z" });
+    expect(applyUiCommand({ name: "play_timeline", args: { from: "2023-06-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(time()).toMatchObject({ from: "2023-06-01T00:00:00.000Z", to: "2025-05-31T00:00:00.000Z" });
     // A span over a year keeps its end; an end in the future stops at now.
-    expect(applyUiCommand({ name: "play_timeline", args: { from: "2025-01-01T00:00:00Z", to: "2027-01-01T00:00:00Z" } }, NOW)).toBe(true);
+    expect(applyUiCommand({ name: "play_timeline", args: { from: "2023-01-01T00:00:00Z", to: "2027-01-01T00:00:00Z" } }, NOW)).toBe(true);
     expect(time()).toMatchObject({ from: WINDOW.from, to: WINDOW.to, at: WINDOW.from });
   });
 
@@ -165,7 +177,7 @@ describe("ui command handler", () => {
     expect(hud.camera.place).toBe("Key West");
     expect(hud.bbox).toEqual(view().bbox);
     expect(hud.time).toMatchObject({ live: true, at: WINDOW.to });
-    expect(hud.layers).toEqual(["sightings", "missions", "peers", "notes"]);
+    expect(hud.layers).toEqual(["sightings"]);
     // "Hide pythons on hotspots" switches the species off: nothing is shown.
     expect(hud.species).toEqual([]);
     expect(hud.selection).toBe("hotspot:python:10:20:1759190400000");

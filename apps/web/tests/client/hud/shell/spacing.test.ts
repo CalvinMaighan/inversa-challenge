@@ -73,7 +73,7 @@ describe("stage spacing", () => {
     expect(STAGE_DIAMETER_CSS).toContain(`100vw - ${2 * GUTTER_PX}px`);
     expect(CARD_MAX_WIDTH_CSS).toContain(`${GUTTER_PX + 48}px`);
     // The top row keeps the cluster's width: four 36 px buttons, three gutters between them.
-    expect(TOPBAR_WIDTH_CSS).toBe("calc(144px + 3 * var(--gap-m))");
+    expect(TOPBAR_WIDTH_CSS).toBe("calc(180px + 4 * var(--gap-m))");
   });
 
   test("stage spacing: no hand-written 8, 10, 14, 16, 18 or 20 px outer margin or gap on the stage chrome", () => {

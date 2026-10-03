@@ -75,16 +75,16 @@ describe("agent side effects", () => {
   });
 
   test("view time before the replay window recentres the window on it", () => {
-    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2024-06-01T17:05:00Z" }, FIXTURE_NOW);
+    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2023-06-01T17:05:00Z" }, FIXTURE_NOW);
     expect(get<TimeState>(TIME)).toMatchObject({
-      at: "2024-06-01T17:00:00.000Z",
-      from: "2023-12-02T05:00:00.000Z",
-      to: "2024-12-01T05:00:00.000Z",
+      at: "2023-06-01T17:00:00.000Z",
+      from: "2022-06-01T17:00:00.000Z",
+      to: "2024-05-31T17:00:00.000Z",
       playing: false,
     });
     // Back inside the new window only the cursor moves.
-    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2024-06-10T00:00:00Z" }, FIXTURE_NOW);
-    expect(get<TimeState>(TIME)).toMatchObject({ at: "2024-06-10T00:00:00.000Z", from: "2023-12-02T05:00:00.000Z" });
+    applyViewEvent({ type: "view", bbox: { west: -81, south: 25, east: -80, north: 26 }, time: "2023-06-10T00:00:00Z" }, FIXTURE_NOW);
+    expect(get<TimeState>(TIME)).toMatchObject({ at: "2023-06-10T00:00:00.000Z", from: "2022-06-01T17:00:00.000Z" });
   });
 
   test("an unreadable view time moves the camera but not TIME", () => {

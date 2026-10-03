@@ -9,6 +9,9 @@ import { TIME, type TimeState } from "client/state/time";
 import styled from "client/styled";
 
 import { loadEvidence } from "../drawer/evidence";
+import ImageGlyph from "client/media/ImageGlyph";
+
+import { GLASS_CSS } from "../primitives";
 import { placeTooltip, tooltipLine, tooltipText, type SightingRecordHint, type TooltipText } from "./model";
 
 /** Dwell on one sighting before asking the evidence cache for its source and exact time. */
@@ -23,11 +26,17 @@ const Box = styled.div`
   padding: 5px 9px;
   border: 1px solid var(--border);
   border-radius: var(--radius-s);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 12px / 1.35 var(--font-ui);
   pointer-events: none;
+  /* A sighting's popover has a red border when the sighting has a photo and none when it has not. */
+  &[data-sighting] {
+    border-color: transparent;
+  }
+  &[data-sighting][data-image] {
+    border-color: var(--accent);
+  }
   white-space: normal;
   overflow-wrap: anywhere;
 
@@ -39,7 +48,7 @@ const Box = styled.div`
   }
 `;
 
-type Shown = { id: string; text: TooltipText };
+type Shown = { id: string; text: TooltipText; sighting: boolean };
 
 /**
  * Globe hover tooltip (T40): what the marker under the pointer is and its key value. The pick runs at most
@@ -96,7 +105,7 @@ export default function GlobeTooltip() {
         loadEvidence(id)
           .then((evidence) => {
             if (shownRef.current?.id !== id || !facts) return;
-            show({ id, text: tooltipText(facts, cursorMs(), evidence.record as SightingRecordHint) });
+            show({ id, text: tooltipText(facts, cursorMs(), evidence.record as SightingRecordHint), sighting: true });
           })
           .catch(() => {
             // The layer's own facts already show; the drawer reports load errors on click.
@@ -116,7 +125,7 @@ export default function GlobeTooltip() {
       }
       if (shownRef.current?.id !== id) {
         facts = next;
-        show({ id, text: tooltipText(next, cursorMs()) });
+        show({ id, text: tooltipText(next, cursorMs()), sighting: next.kind === "sighting" });
         enrich(id, next);
       }
       position();
@@ -162,11 +171,12 @@ export default function GlobeTooltip() {
 
   if (!shown) return null;
   return (
-    <Box ref={boxRef} role="tooltip" data-testid="globe-tooltip" data-evidence-id={shown.id} aria-label={tooltipLine(shown.text)} style={{ visibility: "hidden" }}>
+    <Box ref={boxRef} role="tooltip" data-testid="globe-tooltip" data-evidence-id={shown.id} data-sighting={shown.sighting ? "" : undefined} data-image={shown.text.image ? "" : undefined} aria-label={tooltipLine(shown.text)} style={{ visibility: "hidden" }}>
       <b>{shown.text.title}</b>
       {shown.text.parts.map((p, i) => (
         <span key={i}> · {p}</span>
       ))}
+      {shown.text.image ? <ImageGlyph /> : null}
     </Box>
   );
 }

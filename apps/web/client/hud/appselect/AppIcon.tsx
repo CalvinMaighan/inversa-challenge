@@ -1,4 +1,4 @@
-import { NOTO_ICON_URLS } from "client/noto-icons";
+import { SPECIES_IMAGE_URLS } from "client/species-images";
 import { appIconShape, ICON_STROKE, ICON_VIEWBOX } from "shared/app-icons";
 
 /**
@@ -7,10 +7,10 @@ import { appIconShape, ICON_STROKE, ICON_VIEWBOX } from "shared/app-icons";
  */
 export default function AppIcon({ icon, color, size = 16, outline = true, title, emoji = true }: { icon: string; color: string; size?: number; outline?: boolean; title?: string; emoji?: boolean }) {
   // `emoji={false}`: the plain outline icon in `color` (the sighting card keeps its own).
-  const noto = emoji ? NOTO_ICON_URLS[icon] : undefined;
-  // The fish apps use their colour emoji (a plain image, no tint or outline).
-  // eslint-disable-next-line @next/next/no-img-element -- a small same-origin SVG, no optimiser needed
-  if (noto) return <img src={noto} width={size} height={size} alt={title ?? ""} aria-hidden={title ? undefined : true} data-app-icon={icon} style={{ flex: "none" }} />;
+  const image = emoji ? SPECIES_IMAGE_URLS[icon] : undefined;
+  // Each app shows its species picture (a plain image, no tint or outline).
+  // eslint-disable-next-line @next/next/no-img-element -- a small same-origin picture, no optimiser needed
+  if (image) return <img src={image} width={size} height={size} alt={title ?? ""} aria-hidden={title ? undefined : true} data-app-icon={icon} style={{ flex: "none", objectFit: "contain" }} />;
   const shape = appIconShape(icon);
   const strokes = (stroke: string, width: number, key: string) => (
     <g key={key} stroke={stroke} strokeWidth={width} fill="none" strokeLinecap="round" strokeLinejoin="round">

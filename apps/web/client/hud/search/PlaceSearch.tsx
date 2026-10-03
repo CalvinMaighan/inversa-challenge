@@ -8,7 +8,7 @@ import { createPlaceSearch, LIMITED_MESSAGE, MIN_REMOTE_CHARS, type SearchResult
 import styled from "client/styled";
 import type { PlaceHit } from "shared/places";
 
-import { MOBILE } from "../primitives";
+import { GLASS_CSS, MOBILE, POPOVER_BUTTONS_CSS } from "../primitives";
 import { usePopover } from "../topbar/TopBar";
 import Credit from "./Credit";
 
@@ -46,9 +46,10 @@ const Trigger = styled.button`
 
 const Pop = styled.div`
   position: absolute;
+  /* Above the button, its right edge on the button's right edge. */
   bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  right: 0;
+  left: auto;
   z-index: 9;
   width: min(380px, calc(100vw - 2 * var(--gap-m)));
   max-height: min(60vh, 460px);
@@ -57,11 +58,11 @@ const Pop = styled.div`
   padding: var(--gap-m);
   border: 1px solid var(--border);
   border-radius: var(--radius-m);
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  ${GLASS_CSS}
   color: var(--text);
   font: 400 13px / 1.45 var(--font-ui);
   scrollbar-width: thin;
+  ${POPOVER_BUTTONS_CSS}
 
   &:focus-visible {
     outline-offset: -2px;

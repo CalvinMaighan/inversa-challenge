@@ -3,7 +3,7 @@
  * lag and the server's note in the tooltip. After God's Eye View `feedState.js`, minus its inference: the
  * server already decided the state, the chip only presents it.
  */
-import { worstHealth, type FeedHealth, type FeedState } from "shared/feed-state";
+import { isDisabledFeed, worstHealth, type FeedHealth, type FeedState } from "shared/feed-state";
 
 /** GraphQL selection for a C3 envelope. */
 export const FEED_FIELDS = "source mode state newestObservedAt lastFetchAt lastFetchRunId lagSeconds note";
@@ -37,6 +37,7 @@ const LABELS: Record<string, string> = {
   openmeteo: "METEO",
   nas: "NAS",
   gbif: "GBIF",
+  eddmaps: "EDDMapS",
   aisstream: "AIS",
 };
 
@@ -120,4 +121,10 @@ export function normalizeFeedState(raw: unknown): FeedState | null {
     lagSeconds: typeof r.lagSeconds === "number" && Number.isFinite(r.lagSeconds) ? r.lagSeconds : null,
     note: str(r.note),
   };
+}
+
+/** A feed row to show: `normalizeFeedState` without the feeds the API does not run (note `disabled: …`). */
+export function shownFeedState(raw: unknown): FeedState | null {
+  const f = normalizeFeedState(raw);
+  return f && !isDisabledFeed(f) ? f : null;
 }

@@ -3,16 +3,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ofType, resetState } from "./helpers";
+import { resetState } from "./helpers";
 
 import { LIONFISH_FIXTURE_NOW } from "@/eval/stub-lionfish";
 import { startStub, type Stub } from "@/eval/stub-server";
 import { EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { filterCitations } from "@/server/agent/cordis/citations";
 import { agentSystemPrompt } from "@/server/agent/prompt";
-import { runTurn } from "@/server/agent/run-turn";
 import type { CapabilityContext } from "@/server/agent/runtime/registry";
-import { scopeGuard } from "@/server/agent/scope";
+import { scopeGuard, scopeGuidance } from "@/server/agent/scope";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import type { AgentStreamEvent } from "@/shared/agent/events";
 import { getApp } from "@/shared/apps";
@@ -69,17 +68,13 @@ function expectMeetsRefusal(id: string, text: string): void {
 }
 
 describe("lionfish boundary", () => {
-  test("lionfish boundary: other apps' species are refused by the scope guard before any model call", async () => {
-    process.env.OPENROUTER_API_KEY = "test-key-never-used";
+  test("lionfish boundary: other apps' species are recognised by the scope guard and handed to the model as guidance, not answered for it", () => {
     for (const question of ["Where are Burmese pythons on Cozumel?", "Any Burmese python reports in the Keys?", "Show python sightings near Belize City."]) {
-      const events: AgentStreamEvent[] = [];
-      const result = await runTurn({ app: "lionfish", sessionId: `lf-boundary-${Date.now()}-${question.length}`, question, now: NOW, cache: false }, (e) => events.push(e));
-      expect(result.model).toBe("scope-guard");
-      expect(result.content).toContain(LIONFISH.agent.refusal);
-      expect(ofType(events, "tool_start")).toHaveLength(0);
+      const guidance = scopeGuidance(LIONFISH, question)!;
+      expect(guidance).toContain("switch_app");
+      expect(guidance).toMatch(/switched/);
     }
-    expect(stub.requests).toHaveLength(0);
-    expectMeetsRefusal("lionfish-boundary-other-species", scopeGuard(LIONFISH, "Where are Burmese pythons on Cozumel?")!);
+    expect(scopeGuidance(LIONFISH, "Where were lionfish reported in the last 7 days?")).toBeNull();
   });
 
   test("lionfish boundary: a risk percent, causal reef damage, heat stress as proof and a population count are refused by topic, in words that meet the documented criteria", () => {

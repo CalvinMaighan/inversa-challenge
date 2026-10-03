@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ofType, resetState } from "./helpers";
+import { resetState } from "./helpers";
 
 import carpFixture from "@/eval/fixtures/carp.json";
 import { CARP_FIXTURE_NOW } from "@/eval/stub-carp";
@@ -11,9 +11,8 @@ import { startStub, type Stub } from "@/eval/stub-server";
 import { filterCitations } from "@/server/agent/cordis/citations";
 import { EvidenceLedger } from "@/server/agent/cordis/capability-tools";
 import { agentSystemPrompt } from "@/server/agent/prompt";
-import { runTurn } from "@/server/agent/run-turn";
 import type { CapabilityContext } from "@/server/agent/runtime/registry";
-import { scopeGuard } from "@/server/agent/scope";
+import { scopeGuard, scopeGuidance } from "@/server/agent/scope";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
 import type { AgentStreamEvent } from "@/shared/agent/events";
 import { getApp } from "@/shared/apps";
@@ -97,18 +96,14 @@ describe("carp boundary", () => {
     expect(stub.requests).toHaveLength(0);
   });
 
-  test("carp boundary: other species (another app's) are refused by the scope guard without a model call; common carp is left to the prompt's boundary", async () => {
-    process.env.OPENROUTER_API_KEY = "test-key-never-used";
+  test("carp boundary: other species (another app's) are recognised by the scope guard and handed to the model as guidance; common carp is left to the prompt's boundary", () => {
     for (const question of ["Where are Burmese pythons active in the Everglades?", "Any lionfish sightings near Key Largo?", "How many pythons were reported around Marathon this week?"]) {
-      const events: AgentStreamEvent[] = [];
-      const result = await runTurn({ app: "carp", sessionId: `boundary-${Date.now()}-${question.length}`, question, now: NOW, cache: false }, (e) => events.push(e));
-      expect(result.model).toBe("scope-guard");
-      expect(result.content).toContain(CARP.agent.refusal);
-      expect(ofType(events, "tool_start")).toHaveLength(0);
+      const guidance = scopeGuidance(CARP, question)!;
+      expect(guidance).toContain("switch_app");
+      expect(guidance).toMatch(/switched/);
     }
     expect(scopeGuard(CARP, "Where are common carp in Louisiana right now?")).toBeNull();
-    expect(PROMPT).toMatch(/'Where are \(common\) carp'.*refuse without calling any tool/);
-    expect(PROMPT).toMatch(/It cannot say where carp are or what moves them/);
+    expect(PROMPT).toMatch(/carp_sightings returns the stored reports/);
     expect(stub.requests).toHaveLength(0);
   });
 

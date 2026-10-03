@@ -15,13 +15,13 @@ import { VoiceSessionRegistry } from "@/server/voice/voice-sessions";
  * are cheap on purpose (bad JSON, voice without a provider), so nothing here reaches a model or a socket.
  */
 
-const g = globalThis as unknown as { __inversaVoiceRegistry?: VoiceSessionRegistry };
-const savedRegistry = g.__inversaVoiceRegistry;
+const g = globalThis as unknown as { __inversaVoiceRegistryV3?: VoiceSessionRegistry };
+const savedRegistry = g.__inversaVoiceRegistryV3;
 const dataDir = mkdtempSync(path.join(tmpdir(), "inversa-rate-limit-"));
 
 beforeAll(() => {
   // No provider target: every voice open under the limit answers 503 without opening a socket.
-  g.__inversaVoiceRegistry = new VoiceSessionRegistry({
+  g.__inversaVoiceRegistryV3 = new VoiceSessionRegistry({
     limits: { dataDir, maxSessionMs: 60_000, dailyMinutes: 10, ipSessionsPerHour: 1_000, maxLiveSessions: 4 },
     runner: defaultAgentRunner,
     target: () => null,
@@ -29,7 +29,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  g.__inversaVoiceRegistry = savedRegistry;
+  g.__inversaVoiceRegistryV3 = savedRegistry;
   rmSync(dataDir, { recursive: true, force: true });
 });
 

@@ -91,7 +91,7 @@ describe("ui tool validation", () => {
     const props = (id: "carp" | "lionfish" | "python") => (toggle(id).parameters as { properties: Record<string, { enum?: string[] }> }).properties;
     // Config order; carp's `locations` layer has no client layer yet, so voice cannot toggle it. The GE5 water
     // and weather overlays follow (docs/GODS_EYE.md GC5).
-    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes", "sst-map", "radar", "clouds", "lightning", "cyclones"]);
+    expect(props("carp").layer!.enum).toEqual(["alerts", "stations", "missions", "peers", "notes", "sst-map", "radar", "lightning", "cyclones"]);
     expect(props("python").layer!.enum).not.toContain("vessels");
     expect(props("carp").species?.enum).toBeUndefined();
     expect(toggle("carp").description).not.toContain("python");
@@ -142,6 +142,8 @@ describe("stop intents and prompt formatting", () => {
     expect(looksLikeStop("Stop.")).toBe(true);
     expect(looksLikeStop("never mind")).toBe(true);
     expect(looksLikeStop("stop showing hotspots")).toBe(false);
+    for (const said of ["Okay, stop talking please.", "stop now", "Hey stop", "be quiet", "enough", "hold on"]) expect(looksLikeStop(said)).toBe(true);
+    expect(looksLikeStop("stop the carp filter and show python")).toBe(false);
     expect(looksLikeHangUp("Hang up!")).toBe(true);
     expect(looksLikeHangUp("stop")).toBe(false);
     expect(claimTurn("task-1")).toEqual({ action: "attach", taskId: "task-1" });
@@ -158,5 +160,16 @@ describe("stop intents and prompt formatting", () => {
     expect(long).toContain(RESULT_TRUNCATION_NOTE);
     expect(long.length).toBeLessThan(RESULT_CONTEXT_MAX_CHARS + 400);
     expect(formatProgressContext("a", "sightings")).toContain("progress: sightings");
+  });
+});
+
+describe("result context sources", () => {
+  test("the analyst's sources reach the voice for show_card, with a note that they are not read aloud", () => {
+    const text = formatResultContext([
+      { taskId: "t1", status: "completed", objective: "newest bighead", result: "One report.", error: null, sources: [{ id: "fish:inat:1", label: "Bighead carp · 2026-08-29 · iNaturalist" }] },
+      { taskId: "t2", status: "completed", objective: "feeds", result: "All live.", error: null },
+    ]);
+    expect(text).toContain("sources (for show_card, never read aloud): fish:inat:1 = Bighead carp · 2026-08-29 · iNaturalist");
+    expect(text.match(/sources \(for show_card/g)).toHaveLength(1);
   });
 });

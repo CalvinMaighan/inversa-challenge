@@ -57,6 +57,7 @@ export const FEED_SOURCES = {
   inat: "poll",
   nas: "poll",
   gbif: "poll",
+  eddmaps: "poll",
   nws: "poll",
   usgs: "poll",
   ndbc: "poll",

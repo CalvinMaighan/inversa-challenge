@@ -11,11 +11,11 @@ import { TIME, timeWindow, type TimeState } from "client/state/time";
 import styled from "client/styled";
 import { frameIndexAt, type FrameSightings } from "client/threads/api";
 
-import { Dot, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
+import { Dot, GLASS_CSS, Icon, IconButton, Mono, MOBILE, Surface } from "../primitives";
 import { useHudBottom } from "../shell/use-hud-bottom";
 import { formatClocks, isLive } from "../topbar/clock";
 import { drawTrack, TRACK, type TrackColors } from "./draw";
-import { stepAt, timeAtStep, windowSteps } from "./frames";
+import { playStride, stepAt, timeAtStep, windowSteps } from "./frames";
 import { frameGapFlags, GAP_FLAG } from "./gaps";
 import RegionChip from "./RegionChip";
 import { filteredCounts } from "./sparkline";
@@ -151,7 +151,7 @@ const Tip = styled(Mono)`
   left: 0;
   padding: 3px 6px;
   border-radius: var(--radius-s);
-  background: var(--surface);
+  ${GLASS_CSS}
   border: 1px solid var(--border);
   font-size: 11px;
   white-space: pre;
@@ -197,7 +197,7 @@ function sparkCounts(sightings: FrameSightings | null, filter: LayersState["spec
   return filteredCounts(sightings.counts.length, (i) => sightings.records(i), filter);
 }
 
-/** Advance TIME.at by one step every `1000 / speed` ms while playing; stop on the live edge. */
+/** Advance TIME.at by one frame every `1000 / speed` ms while playing (a day a frame on a long window, `playStride`); stop on the live edge. */
 function usePlayback(playing: boolean, speed: number) {
   useEffect(() => {
     if (!playing) return;
@@ -214,7 +214,7 @@ function usePlayback(playing: boolean, speed: number) {
         set<TimeState>(TIME, (prev = TIME.defaults) => {
           const from = Date.parse(prev.from);
           const to = Date.parse(prev.to);
-          const next = stepAt(Date.parse(prev.at ?? prev.to), from, to) + steps;
+          const next = stepAt(Date.parse(prev.at ?? prev.to), from, to) + steps * playStride(from, to);
           if (next >= windowSteps(from, to)) return { ...prev, at: prev.to, playing: false };
           return { ...prev, at: new Date(timeAtStep(next, from)).toISOString() };
         });

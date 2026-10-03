@@ -37,7 +37,7 @@ describe("layers bar", () => {
       const groups = layersGroups(layersFor(app), null, app);
       if (groups.some((g) => g.id === "ships")) ships.push(id);
       const map = groups.find((g) => g.id === "map")?.rows.map((r) => r.layer) ?? [];
-      expect(map).toEqual([SIGHTINGS, NOTES].filter((l) => hasLayer(app, l)));
+      expect(map).toEqual([SIGHTINGS].filter((l) => hasLayer(app, l)));
       const ids = layersBarIds(layersFor(app), app);
       expect(ids.filter((l) => (OVERLAY_IDS as readonly string[]).includes(l)).length).toBeGreaterThan(0);
       // Nothing for experts here: no stations, alerts, hotspots, rasters, missions or cursors.
@@ -49,7 +49,7 @@ describe("layers bar", () => {
   test("layers bar: the novice default is unchanged, only sightings and notes on at first load", () => {
     for (const id of APP_IDS) {
       const app = getApp(id);
-      expect(layersOn(layersFor(app), app)).toEqual([SIGHTINGS, NOTES].filter((l) => hasLayer(app, l)));
+      expect(layersOn(layersFor(app), app)).toEqual([SIGHTINGS].filter((l) => hasLayer(app, l)));
     }
   });
 
@@ -60,7 +60,9 @@ describe("layers bar", () => {
     const text = textOf(markup);
     expect(text).not.toContain("Ships");
     expect(markup).not.toContain("legend-toggle-vessels");
-    expect(text).toContain("Water and weather");
+    expect(text).not.toContain("Water and weather");
+    expect(text).toContain("Sea surface temperature map");
+    expect(text).not.toContain("Clouds");
     // Switches with names, off by default, in the order a reader scans them.
     for (const o of OVERLAY_IDS.filter((l) => hasLayer(app, l))) expect(markup).toContain(`data-testid="legend-toggle-${o}"`);
     expect(markup).not.toContain('data-testid="legend-group-ships"');

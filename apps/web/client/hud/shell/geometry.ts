@@ -24,8 +24,8 @@ export const SIDE_ROOM_PX = 360 + 2 * GUTTER_PX;
 export const STAGE_MIN_HEIGHT_SHARE = 0.72;
 /** A card's right (chat) or left (details) edge stays this far from the stage centre. */
 export const CENTRE_CLEAR_PX = 48;
-/** Soft edge default (GC2 SCOPE_FEATHER 40 of 100): the fade outside the window, as a share of its radius. */
-export const DEFAULT_FEATHER = 0.35;
+/** Soft edge default (GC2 SCOPE_FEATHER 50 of 100): the fade outside the window, as a share of its radius. */
+export const DEFAULT_FEATHER = 0.5;
 
 /**
  * Stage diameter in px for a viewport: as tall as the screen allows, narrowed so both cards fit beside it on a
@@ -63,3 +63,9 @@ export function featherValue(feather: number): string {
 const STAGE_RADIUS_CSS = `calc(${STAGE_DIAMETER_CSS} / 2)`;
 const FEATHER_VAR = `var(--scope-feather, ${DEFAULT_FEATHER})`;
 export const SCOPE_MASK_CSS = `radial-gradient(circle at 50% 50%, #000 ${STAGE_RADIUS_CSS}, rgb(0 0 0 / calc(${FEATHER_VAR} * ${FEATHER_VAR})) calc(${STAGE_RADIUS_CSS} * (1 + ${FEATHER_VAR})))`;
+
+/**
+ * The progressive blur's mask before the shell measures the page: the inverse of `SCOPE_MASK_CSS`, clear inside the
+ * radius and rising to `1 - feather²` at the end of the fade.
+ */
+export const SCOPE_BLUR_MASK_CSS = `radial-gradient(circle at 50% 50%, transparent ${STAGE_RADIUS_CSS}, rgb(0 0 0 / calc(1 - ${FEATHER_VAR} * ${FEATHER_VAR})) calc(${STAGE_RADIUS_CSS} * (1 + ${FEATHER_VAR})))`;

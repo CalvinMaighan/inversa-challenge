@@ -11,9 +11,10 @@ import { bindCapabilityTools, EvidenceLedger } from "@/server/agent/cordis/capab
 import { filterCitations } from "@/server/agent/cordis/citations";
 import { AGENT_LIMITS, attachTurnLimits, type AgentLimits, type LimitHit } from "@/server/agent/cordis/limits";
 import { attachStreamBridge, type ToolCallRecord, type TurnUsage } from "@/server/agent/cordis/stream-bridge";
+import { greetingReply, hintFor, offTopicReply, routeMessage, shortcutFor, type Route, type RouteInput } from "@/server/agent/decisions";
 import { agentSystemPrompt, viewContext } from "@/server/agent/prompt";
 import { MISSING_KEY_MESSAGE, openRouterApiKey, resolveAgentEndpoint } from "@/server/agent/runtime/model";
-import { scopeGuard } from "@/server/agent/scope";
+import { scopeGuidance } from "@/server/agent/scope";
 import type { CapabilityRegistry } from "@/server/agent/runtime/registry";
 import { appendSessionTurn, sessionHistory, type SessionMessage } from "@/server/agent/session";
 import { buildAgentRegistry } from "@/server/agent/tools/capabilities";
@@ -31,6 +32,8 @@ export type RunTurnParams = AgentStreamRequest & {
   now?: Date;
   /** Set false to bypass the answer cache. */
   cache?: boolean;
+  /** The routing decision (default: Fastino GLiDE); null turns it off, tests pass a stub. */
+  router?: ((input: RouteInput) => Promise<Route | null>) | null;
 };
 
 export type RunTurnResult = {
@@ -125,16 +128,14 @@ async function runTurnUnguarded(
   if (overSpend) return refuse(overSpend.message);
   if (!openRouterApiKey()) return refuse(MISSING_KEY_MESSAGE);
 
-  // P4: another app's species is refused from the config, without a model call.
-  const refusal = scopeGuard(app, question);
-  if (refusal) {
-    onEvent({ type: "status", state: "generating" });
-    onEvent({ type: "content_delta", text: refusal });
-    appendSessionTurn(sessionId, question, refusal);
-    return finish({ content: refusal, citations: [], toolCalls: [], usage: empty, model: "scope-guard", cached: false });
-  }
+  // P4: a question the config rules recognise as out of scope (another app's species, a risk percent, a population count)
+  // is not refused here: the model gets the app's own wording as guidance and answers with its tools.
+  const guidance = scopeGuidance(app, question);
+  if (guidance) onEvent({ type: "debug", text: "scope guidance given to the model" });
 
   const history = sessionHistory(sessionId);
+  // GLiDE decides what the message is while the feeds are checked for the cache: null (no key, slow, down) changes nothing.
+  const routing: Promise<Route | null> = params.router === null ? Promise.resolve(null) : (params.router ?? routeMessage)({ app, question, history, signal: params.signal });
 
   // Cache only standalone questions: a follow-up's meaning depends on the transcript.
   let cacheKey: string | undefined;
@@ -149,6 +150,16 @@ async function runTurnUnguarded(
         text: `answer cache skipped: ${error instanceof Error ? error.message : String(error)}`,
       });
     }
+  }
+  const route = await routing.catch(() => null);
+  if (route) onEvent({ type: "debug", text: `router: ${route.intent} ${Math.round(route.intentConfidence * 100)}%, on topic ${Math.round(route.onTopic * 100)}%, tools ${route.suggestedTools.join("/") || "none"} (${route.latencyMs} ms)` });
+  const shortcut = route ? shortcutFor(route, question) : null;
+  if (shortcut) {
+    const reply = shortcut === "off_topic" ? offTopicReply(app) : greetingReply(app);
+    onEvent({ type: "status", state: "generating" });
+    onEvent({ type: "content_delta", text: reply });
+    appendSessionTurn(sessionId, question, reply);
+    return finish({ content: reply, citations: [], toolCalls: [], usage: empty, model: "glide-router", cached: false });
   }
   const hit = cacheKey ? readAnswerCache(cacheKey) : undefined;
   if (hit) {
@@ -240,6 +251,23 @@ async function runTurnUnguarded(
         createUserMessage({
           content: [{ type: "text", text: `Conversation so far:\n${prior}` }],
           source: { kind: "plugin", plugin: "inversa-history", form: "recall" },
+        }),
+      );
+    }
+    const hint = route ? hintFor(route) : null;
+    if (hint) {
+      agent.inject(
+        createUserMessage({
+          content: [{ type: "text", text: hint }],
+          source: { kind: "plugin", plugin: "inversa-router", form: "recall" },
+        }),
+      );
+    }
+    if (guidance) {
+      agent.inject(
+        createUserMessage({
+          content: [{ type: "text", text: guidance }],
+          source: { kind: "plugin", plugin: "inversa-scope", form: "recall" },
         }),
       );
     }

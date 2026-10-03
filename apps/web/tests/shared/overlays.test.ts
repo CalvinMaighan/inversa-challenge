@@ -48,7 +48,7 @@ describe("overlay catalogue", () => {
     expect(overlaysForApp("lionfish").map((o) => o.id)).toEqual([SST_MAP, RADAR, CLOUDS, LIGHTNING, CYCLONES]);
     expect(isOverlayId("radar")).toBe(true);
     expect(isOverlayId("sst")).toBe(false);
-    expect(DEFAULT_OVERLAY_OPACITY).toBe(0.75);
+    expect(DEFAULT_OVERLAY_OPACITY).toBe(0.4);
     // Every overlay speaks plainly and names its source.
     for (const o of OVERLAYS) {
       expect(o.blurb.length).toBeGreaterThan(20);

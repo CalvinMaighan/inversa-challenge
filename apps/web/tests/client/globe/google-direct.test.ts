@@ -1,16 +1,14 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import * as Cesium from "cesium";
 
-import carp from "app-configs/carp.json";
 import { setCesium, type Cesium as CesiumNs } from "client/globe/cesium";
 import { installImagery } from "client/globe/imagery";
 import {
+  AREA_3D_MAX_ALTITUDE_M,
   GOOGLE_3D_ZONES,
   GOOGLE_TILES_ROOT,
   googleZoneActive,
-  insideBBox,
   loadGoogle3d,
-  LOUISIANA_3D_ZONE,
   next3dRoute,
   planLadder,
   type Google3dRoute,
@@ -166,17 +164,18 @@ describe("google direct", () => {
     expect(recordGoogleSession(throwing, NOW).sessions).toBe(1);
   });
 
-  test("Louisiana zone for carp: every demonstration river site, not Miami; Miami/Keys stay python and lionfish", () => {
+  test("each app's whole area, up to its own altitude: python 2,000 km, carp and lionfish 5,000 km", () => {
     const plan = planLadder({ ionToken: "", quota: fresh, googleKey: "g", google });
-    expect(GOOGLE_3D_ZONES.carp).toBe(LOUISIANA_3D_ZONE);
-    expect(googleZoneActive(plan, { ...KROTZ_SPRINGS, altitudeM: 5_000 }, GOOGLE_3D_ZONES.carp)).toBe(true);
-    expect(googleZoneActive(plan, { ...KROTZ_SPRINGS, altitudeM: 40_000 }, GOOGLE_3D_ZONES.carp)).toBe(false);
-    expect(googleZoneActive(plan, { ...MIAMI, altitudeM: 5_000 }, GOOGLE_3D_ZONES.carp)).toBe(false);
-    expect(googleZoneActive(plan, { ...KROTZ_SPRINGS, altitudeM: 5_000 }, GOOGLE_3D_ZONES.python)).toBe(false);
-    expect(googleZoneActive(plan, { ...MIAMI, altitudeM: 5_000 }, GOOGLE_3D_ZONES.lionfish)).toBe(true);
-    const sites = (carp as { locations: { name: string; lat: number; lon: number; group?: unknown }[] }).locations.filter((l) => !/^All sites$/.test(l.name));
-    expect(sites.length).toBeGreaterThanOrEqual(8);
-    for (const s of sites) expect([s.name, LOUISIANA_3D_ZONE.some((b) => insideBBox(b, s.lon, s.lat))]).toEqual([s.name, true]);
+    const at = (p: { lon: number; lat: number }, altitudeM: number, app: keyof typeof GOOGLE_3D_ZONES) => googleZoneActive(plan, { ...p, altitudeM }, GOOGLE_3D_ZONES[app], AREA_3D_MAX_ALTITUDE_M[app]);
+    const EVERGLADES = { lon: -81.0, lat: 26.0 };
+    const MISSISSIPPI = { lon: -89.5, lat: 38 };
+    expect(at(EVERGLADES, 1_900_000, "python")).toBe(true);
+    expect(at(EVERGLADES, 2_100_000, "python")).toBe(false);
+    expect(at(MISSISSIPPI, 4_900_000, "carp")).toBe(true);
+    expect(at(MISSISSIPPI, 5_100_000, "carp")).toBe(false);
+    expect(at(MIAMI, 4_900_000, "lionfish")).toBe(true);
+    expect(at(MISSISSIPPI, 1_000_000, "python")).toBe(false);
+    expect(at(KROTZ_SPRINGS, 5_000, "carp")).toBe(true);
     expect(GOOGLE_TILES_ROOT).toBe("https://tile.googleapis.com/v1/3dtiles/root.json");
   });
 

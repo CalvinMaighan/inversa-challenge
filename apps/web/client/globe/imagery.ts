@@ -71,6 +71,8 @@ export function installImagery(
     quotaStore: QuotaStore | null;
     /** Where Google 3D may show, read on each camera update (the active app can change). Miami/Keys by default. */
     zones?: () => readonly Readonly<BBox>[];
+    /** The highest the camera may be for Google 3D to show, read with the zones. */
+    maxAltitudeM?: () => number;
     now?: () => number;
     requestRender(): void;
     onChange?(state: ImageryState): void;
@@ -214,7 +216,7 @@ export function installImagery(
     state: () => ({ ...state, errors: [...state.errors] }),
     update(camera) {
       if (destroyed) return;
-      const active = googleZoneActive(plan, camera, zones());
+      const active = googleZoneActive(plan, camera, zones(), opts.maxAltitudeM?.());
       if (active === lastActive && (tileset || !active)) return;
       lastActive = active;
       if (active && !tileset) loadGoogle();

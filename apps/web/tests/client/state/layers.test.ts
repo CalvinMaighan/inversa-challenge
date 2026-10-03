@@ -16,13 +16,13 @@ const SPECIES_IDS = speciesIds(PYTHON);
 /** Python's LAYERS preset. */
 const PY = layersFor(PYTHON);
 
-const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS, MISSIONS, PEERS, NOTES] = LAYER_IDS;
+const [SIGHTINGS, HOTSPOTS, LST, SST, STATIONS, ALERTS] = LAYER_IDS;
 const now = () => get<LayersState>(LAYERS)!;
 
 describe("LAYERS per app", () => {
-  test("active app: LAYERS starts as carp's (the default app): alerts on, gauge readings off, no sightings, no species", () => {
+  test("active app: LAYERS starts as carp's (the default app): every layer off, no sightings layer, no species", () => {
     const carp = LAYERS.defaults;
-    expect(LAYER_IDS.filter((id) => carp.visible[id])).toEqual(["alerts", "missions", "peers", "notes"]);
+    expect(LAYER_IDS.filter((id) => carp.visible[id])).toEqual([]);
     expect(carp.species).toEqual({});
   });
 
@@ -42,9 +42,9 @@ describe("LAYERS", () => {
     expect(PY.species).toEqual({ python: true });
   });
 
-  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; team marks and field notes on; the python shown; 7-day window", () => {
+  test("sightings-first defaults: sightings on; stations, alerts, hotspots, lst and sst hidden; only sightings on; the python shown; 7-day window", () => {
     const on = LAYER_IDS.filter((id) => PY.visible[id]);
-    expect(on).toEqual([SIGHTINGS, MISSIONS, PEERS, NOTES]);
+    expect(on).toEqual([SIGHTINGS]);
     for (const id of [STATIONS, ALERTS, HOTSPOTS, LST, SST]) expect(PY.visible[id]).toBe(false);
     expect(PY.sightingHours).toBe(SIGHTING_WINDOW_HOURS);
     expect(SIGHTING_WINDOW_HOURS).toBe(168);

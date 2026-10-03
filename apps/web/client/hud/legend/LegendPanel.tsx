@@ -8,9 +8,8 @@ import styled from "client/styled";
 import { legendTitle } from "shared/apps";
 
 import { useActiveApp } from "../appselect/use-active-app";
-import { Mono } from "../primitives";
 import AppIcon from "../appselect/AppIcon";
-import { formatCount, GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
+import { GAP_SWATCHES, legendRows, type LegendRow, type LegendSwatch, type SwatchShape } from "./model";
 import { useGlobeStats } from "./useGlobeStats";
 
 /** The app's legend line (config `legend.title`). */
@@ -51,13 +50,6 @@ const RowHead = styled.label`
     flex: 1;
     min-width: 0;
   }
-`;
-
-const Count = styled(Mono)`
-  flex: none;
-  color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
 `;
 
 const Note = styled.p`
@@ -151,7 +143,6 @@ function SwatchMark({ swatch }: { swatch: LegendSwatch }) {
 }
 
 function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolean }) {
-  const count = swatch.count === null ? null : <Count data-testid={`legend-count-${swatch.key}`}>{formatCount(swatch.count)}</Count>;
   if (swatch.species) {
     const species = swatch.species;
     return (
@@ -161,7 +152,6 @@ function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolea
           <SwatchMark swatch={swatch} />
           {swatch.label}
         </label>
-        {count}
       </Sub>
     );
   }
@@ -171,7 +161,6 @@ function SwatchItem({ swatch, layerOn }: { swatch: LegendSwatch; layerOn: boolea
         <SwatchMark swatch={swatch} />
       </span>
       <span data-label="">{swatch.label}</span>
-      {count}
     </Sub>
   );
 }
@@ -182,9 +171,6 @@ export function LegendRowView({ row }: { row: LegendRow }) {
       <RowHead>
         <Check type="checkbox" role="switch" checked={row.visible} onChange={(e) => setLayerVisible(row.layer, e.currentTarget.checked)} aria-label={`Show ${row.label}`} data-testid={`legend-toggle-${row.layer}`} />
         <span>{row.label}</span>
-        <Count data-testid={`legend-count-${row.layer}`} title={`${formatCount(row.count)} ${row.unit}`}>
-          {row.visible ? `${formatCount(row.count)} ${row.unit}` : "off"}
-        </Count>
       </RowHead>
       <Note>{row.note}</Note>
       {row.swatches.length > 0 ? (

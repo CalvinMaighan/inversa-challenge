@@ -50,6 +50,7 @@ export const emotionTheme = {
     hudLine: "var(--hud-line)",
     hudGlow: "var(--hud-glow)",
     shadow: "var(--shadow)",
+    shadowButton: "var(--shadow-button)",
   },
   font: {
     sans: "var(--font-sans)",

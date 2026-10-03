@@ -20,3 +20,8 @@ const RANK: Record<FeedHealth, number> = { nominal: 0, lagging: 1, stale: 2, dow
 export function worstHealth(states: readonly FeedState[]): FeedHealth {
   return states.reduce<FeedHealth>((worst, s) => (RANK[s.state] > RANK[worst] ? s.state : worst), "nominal");
 }
+
+/** A feed the API does not run (a missing credential or account): its note starts `disabled:`. It is shown nowhere, in the app, the agent or the health counts. */
+export function isDisabledFeed(feed: { note?: string | null }): boolean {
+  return typeof feed.note === "string" && feed.note.startsWith("disabled:");
+}

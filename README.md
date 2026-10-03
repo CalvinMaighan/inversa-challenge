@@ -1,193 +1,175 @@
 # Inversa take-home: three field apps on one engine
 
-A natural-language interface for exploring questions about the physical world from live public feeds, with evidence you can follow to the raw payload and a timeline that replays what was known at the time. One engine runs three apps, each with its own question, feeds, score, agent and benchmark:
+Live: **https://inversa.bigvalue.lol**
 
-| App | Question | Feeds |
+A CesiumJS globe over live public feeds, with a field agent you can ask about what you see. One engine (Next.js on Bun + a Rust Axum API with SQLite per app) runs three apps. Pick one with the species button at the top left, or `?app=carp|lionfish|python`.
+
+| App | What the map shows | Default place |
 |---|---|---|
-| **Carp Field Conditions** (default) | How have river and weather conditions changed around candidate carp-removal locations, and which need operational review today? | USGS Water Data, NOAA NWPS, NWS alerts and forecasts, IEM forecast archive, NWWS-OI (push, pending); on the map: AISStream.io ships (push), NOAA nowCOAST radar, clouds and lightning, NASA GIBS sea temperature, NHC storms |
-| **Lionfish Watch** | Where should we prioritize lionfish surveys, given recent sightings, reef heat stress and ocean conditions? | iNaturalist, GBIF, USGS NAS, NOAA Coral Reef Watch, Open-Meteo Marine, NDBC, GOES-19 SST (push, pending); on the map: AISStream.io ships (push), NOAA nowCOAST radar, clouds and lightning, NASA GIBS sea temperature, NHC storms |
-| **Everglades Ops** (python) | Where are Burmese pythons active and where should removal crews go next? | iNaturalist, USGS NAS, GBIF, NWS, USGS Water, NDBC, CO-OPS, Open-Meteo, GOES-19 and NWWS-OI (push, pending); on the map: NOAA nowCOAST radar, clouds and lightning, NHC storms |
+| **Carp** (default) | Asian carp sightings (silver, bighead, grass, black) from USGS NAS and iNaturalist, one dot per report, one color per species | Mississippi River Basin |
+| **Lionfish** | Lionfish reports (iNaturalist, USGS NAS), NOAA Coral Reef Watch heat maps (DHW, bleaching alert, hotspot, SST), survey priority | Florida Keys |
+| **Python** | Burmese python reports (iNaturalist, USGS NAS) | Florida |
 
-![Carp Field Conditions at first load: chat column on the left, the eight demonstration sites on the globe with the review board, the stage timeline with replay coverage at the bottom](docs/evidence/carp-desktop.png)
+![Carp: sightings in the Mississippi basin, species legend, period button, sighting panel on the right](docs/evidence/readme-carp.jpg)
+![Lionfish: one dot per report and the Coral Reef Watch heat map around the Florida Keys](docs/evidence/readme-lionfish.jpg)
+![Python: Burmese python reports across south Florida](docs/evidence/readme-python.jpg)
 
-- Target URL: https://inversa.bigvalue.lol. **Not deployed yet**: the build is production-ready and the deploy waits on the human steps in [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md).
-- Brief, line by line, with status per app: [docs/brief-compliance.md](docs/brief-compliance.md). Interview prep: [docs/interview-notes.md](docs/interview-notes.md). Design choices: [docs/design-alternatives.md](docs/design-alternatives.md). Scaling: [docs/scaling.md](docs/scaling.md). New technology: [docs/new-technology.md](docs/new-technology.md). Walkthrough: [docs/demo-script.md](docs/demo-script.md). App specs: [docs/APPS.md](docs/APPS.md), [docs/LIONFISH_WATCH.md](docs/LIONFISH_WATCH.md), [docs/PRD.md](docs/PRD.md).
+## Data sources
 
-## Run locally
+Live and polled by the Axum API. Per-source detail, checks and evidence: [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md); live health in the Developer panel (Feeds).
 
-| Tool | Version checked | Why |
+| Source | Apps | What we take |
 |---|---|---|
-| bun | 1.3.14 | workspaces, Next, scripts |
-| cargo | 1.96.1 | the Axum API in `api/` |
-| CMake and Xcode command line tools (Ubuntu: `cmake build-essential zlib1g-dev`) | any recent | `hdf5-metno-src` compiles HDF5 into the API for the GOES decoder; the first release build takes a few minutes |
-| doppler (optional) | any | the agent's key comes from Doppler `inversa/dev` |
+| iNaturalist | carp, lionfish, python | Citizen sightings with photos, polled every 10 minutes |
+| USGS NAS | carp, lionfish, python | Curated non-native species records, polled weekly |
+| GBIF | lionfish, python | Occurrence records with deep history; copies of iNaturalist are linked, not counted twice |
+| EDDMapS (Bugwood, Univ. of Georgia) | python | Reviewer-verified Burmese python occurrences (new) |
+| USGS Water Data | carp, python | Gauge stage, discharge and water temperature; carp has nine Mississippi River gauges from St. Paul to Vicksburg (water temperature new) |
+| NOAA CO-OPS Tides & Currents | lionfish, python | 6-minute water level and water temperature at coastal stations; Florida Keys stations for lionfish (new) |
+| NOAA NWPS | carp | River stage and flow forecasts, flood thresholds |
+| IEM river forecast archive | carp | Past NWS river forecasts for replay |
+| NWS alerts and gridpoint forecast | carp, python | Active warnings and rain, wind and temperature forecasts |
+| NOAA Coral Reef Watch | lionfish | Sea temperature, heat stress (DHW), bleaching alert, hotspot |
+| Open-Meteo (marine and forecast) | lionfish, python | Waves and currents; air temperature for the python activity rule |
+| NDBC buoys | lionfish, python | Measured sea and air temperature |
 
-```sh
-bun install
-bun run data      # backfill each app (live APIs, 7 days; DAYS=30 for the full replay window) and load the python cold-snap scene
-bun run dev       # Axum on 127.0.0.1:4041, Next on http://localhost:3050, signal Worker on 127.0.0.1:8799
-```
+Disabled: GOES-19 and NWWS-OI (need AWS and NOAA accounts). AISStream was removed with the vessel layer.
 
-Open http://localhost:3050. It opens on carp; `?app=lionfish` or `?app=python` opens the others, or use the app selector.
+## Roadmap: data sources not added yet
 
-- `bun run dev` needs ports 4041, 3050 and 8799 free (`INVERSA_API_PORT`, `INVERSA_WEB_PORT`, `INVERSA_SIGNAL_PORT` move them). It loads `data/local-keys.env` under the shell and Doppler and restarts the API and web when that file changes. `INVERSA_DATA_DIR` moves the databases (default `./data`, git-ignored; one folder per app). `INVERSA_SOURCES=off` stops all fetching.
-- Offline, load the recorded fixtures instead of the live backfill, one app at a time:
+Not integrated. Each needs a sign-up, a request or an agreement first.
 
-  ```sh
-  INVERSA_SOURCES=off cargo run -q --release --manifest-path api/Cargo.toml -- backfill --fixtures --app carp
-  ```
-
-  Each prints `BACKFILL-OK` (re-measured 2026-10-01: carp 0.07 s, lionfish 2.1 s, python 0.9 s on the release binary).
-
-### Other commands
-
-| Command | What it does |
-|---|---|
-| `bun run check` | lint, typecheck, all bun tests, `cargo test`; prints `CHECK-OK`. Re-measured 2026-10-01: web 997 pass, active-state 96, signal-worker 37, active-theme 4, API 365 passed, all 0 failed |
-| `bun run eval -- --app carp` | the blind agent benchmark for one app against the live model (needs Doppler); `--holdout` runs the held-out set |
-| `bun run grade` | scores the submission against the rubric in [docs/grading/rubric.md](docs/grading/rubric.md) and writes `docs/grading/report.md`; `--fast` skips e2e and live checks |
-| `bun run check:questions` | validates the three question files and prints their counts |
-| `bun run --cwd apps/web e2e:firstload --app carp` | Playwright on the real stack: what a newcomer sees; `--evidence-shots` also writes `docs/evidence/<app>-desktop.png` and `docs/evidence/mobile/<app>-375.png` |
-
-### Keys (all optional; Doppler, the shell, or the Developer panel)
-
-The globe runs with no key at all. The **Developer** button (`<>`, top right) opens "Power up the globe": one row per provider, set or missing, a MANAGE or GET KEY link, and a password field for each missing key. Browser-side keys are stored in that browser's localStorage and never sent to our server. Server-side keys pasted there are written to `data/local-keys.env` (git-ignored, mode 0600) only under `bun run dev` on loopback; `bun run dev` then restarts the API and web with them. A key set in the shell or Doppler wins over that file and shows CONFIGURED EXTERNALLY. Anywhere else the panel shows the `doppler secrets set NAME` command. Step by step: [docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) section 14.
-
-| Variable | Where | Get it | Enables | Without it |
-|---|---|---|---|---|
-| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | browser: Developer panel or build env | https://developers.google.com/maps/documentation/tile/get-api-key (enable Map Tiles API, restrict by HTTP referrer) | Google Photorealistic 3D Tiles direct, tried before ion; capped at 1,000 sessions per browser per month (editable in the panel) | Google 3D through ion, else none |
-| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | browser: Developer panel or build env | https://ion.cesium.com/tokens | Cesium World Terrain, Bing aerial and Google 3D through ion | keyless Esri imagery |
-| `AISSTREAM_API_KEY` | server | https://aisstream.io/apikeys | live ships in carp and lionfish (Layers, Ships), and the agent's `vessels` tool | the ships layer replays stored history; the feed reads DOWN with the reason |
-| (none) | | | Water and weather (NOAA nowCOAST radar, clouds, lightning; NASA GIBS sea temperature; NHC storms) through the same-origin overlay proxy | always on offer in Layers |
-| `OPENROUTER_API_KEY` | server | https://openrouter.ai/settings/keys | the agent: `openai/gpt-6-luna` on OpenRouter | `/api/agent/stream` answers 503 `agent unavailable`; there is no mock or scripted fallback |
-| `XAI_API_KEY` | server | https://console.x.ai/ | voice through the grok-voice relay | voice answers 503; text works |
-| `GOES_SQS_URL`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | server | AWS console, see docs/HUMAN_STEPS.md section 7 | GOES-19 push (python, lionfish) | the GOES feed reads DOWN with the reason |
-| `NWWS_USER`, `NWWS_PASS` | server | email `NWWS.Issue@noaa.gov`, docs/HUMAN_STEPS.md section 8 | NWS products over NWWS-OI XMPP | `nwws` reads DOWN; the `api.weather.gov` poll covers alerts |
-| `INGEST_HOOK_SECRET`, `INGEST_NUDGE_TOKEN` | server (Doppler) | you choose them | the signed ingest webhook and provider nudges | hook and nudges answer 503; feeds still poll |
-| `R2_*` | server (Doppler) | docs/HUMAN_STEPS.md section 3 | raw payload archive and Litestream in R2 | raw payloads go to `<data dir>/archive/` |
-
-Google bills Map Tiles per root-tileset request after a monthly free allowance. Check the current price at https://developers.google.com/maps/billing-and-pricing/pricing before you enable billing; this README does not state it.
-
-Agent spend is capped per day: $5 across all apps, $2 per app, priced at $0.10/M input and $0.50/M output (`apps/web/server/agent/budget.ts`).
+| Source | App | Access | Notes |
+|---|---|---|---|
+| **USGS API key** (optional) | carp, python | Free sign-up at api.waterdata.usgs.gov/signup; set `USGS_API_KEY` in Doppler | The code already reads it. Only raises the rate limit |
+| **Global Fishing Watch** | lionfish | Free, needs a token (globalfishingwatch.org/our-apis); the API returns 401 without one | Only pays off if vessel layers return to the UI |
+| **REEF volunteer survey data** | lionfish | Free on request, no public API; ask for a data export | Most of it already reaches us through NAS |
+| **UF and USGS python telemetry** | python | Free, static dataset from the USGS data release | A history layer, not a live feed |
+| **MICRA and RAFT carp acoustic telemetry** | carp | Unverified; likely a download or data request | No public endpoint confirmed |
+| **FWC Python Action Team and SFWMD bounty logs** | python | Internal to Inversa | Needs a data export or webhook from Inversa |
+| **Sentinel GPS prey project** | python | Needs a data-sharing agreement with the research partners | Not public |
 
 ## Using it
 
-### The app selector
+- **First visit (every load)**: the chat and the HUD are hidden and only the zoomed-out globe shows, behind a blurred full-screen gate. Pick one of the three species (Asian carp, lionfish, Burmese python); the app switches to it at once. The second click, "Enter the Inversa Experience", asks for the microphone; when it is granted the gate blurs away, the interface fades in, the globe flies to the species' area at 5,000 km, and the voice says "Welcome to the Inversa Experience, I'm your voice assistant, how may I help you today?" word for word, and later suggests clicking a dot to open a sighting (and tells you once that every record links to its source website). "Continue without voice" skips the microphone. Behind the gate, carp's sightings and the lionfish and python frame chunks (two years) load in the background, so the choice opens fast. `?intro=0` skips the gate; the e2e build skips it unless `?intro=1`. Details: [docs/intro.md](docs/intro.md).
+- **Period** (top left, next to the species chips): 30 days, 90 days, 180 days, 1 year, 2 years (default). Dots, counts and the timeline all follow it.
+- **Species chips**: click to show or hide a species. The number is the count in the period.
+- **Place chip** (bottom left, above the timeline): the area in focus.
+- **Dots**: hover for details, click to select (pulses) and open the sighting panel on the right.
+- **Timeline** (bottom): reports per day as spikes, drag to replay; LIVE jumps back to now.
+- **Layers** (bottom right): sightings, reef heat map (lionfish, off by default, drawn at 15% opacity; pick heat stress, alert level, hotspot or sea temperature), radar, clouds, lightning, storms, sea temperature.
+- **Live data** (bell, top right): the newest record from each live feed with its age, freshest first. A dot shows when something new arrives.
+- **Look** (eye, top right): visual modes and the map window (shape, size, soft edge). The soft edge fades the map out and blurs it progressively (a masked backdrop blur that is clear inside the window and strongest at the outer rim); no blur at soft edge 100. The Look popover has an Edge blur slider (0 to 40 px, default 6).
+- **Developer** (`<>`, top right): tab **Feeds** shows every data source and its health; tab **API Keys** shows which keys are set and lets you paste missing ones.
+- **Agent** (left column, tab 1): ask about the species and places on the map; answers cite their sources. It stays on topic (anything else is steered back to what it covers) and can drive the map: fly to a town, zoom, pick an area, set the period, filter species, open menus (layers, live data, look, period) and open a sighting's card to read it out. Tap the microphone and it answers aloud at once ("I'm listening"); the same controls work by voice, what you say and what it says appear in the chat, and it can pin an info card with its sources. Under each answer, "Ask next" offers the most likely follow-up questions.
+- **Questions** (tab 2): every question the agent supports, by topic, one tap to ask.
 
-The round species icon at the top left of the globe opens a popover listing the three apps with icon, name, one-line question and a feed-health dot. Choosing one swaps the config, map preset, layers, helper questions, agent and timeline; the choice lives in the URL (`?app=`) and is remembered in the browser. Keyboard: Enter opens it, Escape closes it and returns focus.
+## Run locally
 
-### Carp: what to try
+Needs bun, cargo (Rust 1.96+), and CMake plus a C toolchain (the API builds HDF5; the first release build takes a few minutes). Doppler is optional.
 
-1. Read the **Locations to review** board: each site says "needs review", "no rule fired" or "cannot be assessed", with the reasons in words. Click **Atchafalaya Basin (L'CARP)** to frame the four basin sites.
-2. Click KRZL1 (Krotz Springs). The timeline draws USGS gauge height and NWPS stage on different datums, with a "sources disagree" chip that explains the datum offset (2.45 ft in the C1 probe).
-3. Press **What we knew yesterday afternoon**. The board and forecast switch to what was held then (the forecast issued at or before that time, labelled `nwps-live` or `iem-archive`); later observations are drawn apart. LIVE returns.
-4. Ask a starter question: "Which location had the largest 24 h stage rise?" or "Why did this location start needing review?". Click a citation to open the record and its source page.
+```sh
+bun install
+bun run env      # optional: pull keys from Doppler (inversa/dev) into a git-ignored .env
+bun run data     # backfill all three apps from the live APIs (DAYS=30 by default; DAYS=730 for the two years the map shows)
+bun run dev      # Axum API on :4041, Next on http://localhost:3050
+```
 
-### Lionfish: what to try
+Open http://localhost:3050.
 
-1. Read the honesty banner: reports are not abundance, heat stress is context, priority is not a probability.
-2. Open the **Lionfish survey** panel: four areas, Belize and Colombia marked "Thin data". Switch **Observed date** to **Submitted date** and watch the counts change, with the explanation.
-3. Click a numbered priority cell: four components side by side, DHW and BAA together, the field window kept apart.
-4. Ask "Show recent lionfish reports near reefs with elevated heat stress in Belize." or "Where does this number come from?".
+| Command | What it does |
+|---|---|
+| `bun run api` | Axum API alone (uses Doppler if installed, else `.env`) |
+| `bun run api:kill` / `bun run dev:kill` | stop the API / everything `dev` started |
+| `bun run check` | full local gate: lint, typecheck, all bun tests, `cargo test` |
+| `bun run check:ci` | what CI runs: lint and typecheck (plus `cargo clippy -D warnings`) |
+| `bun run eval -- --app carp` | agent benchmark against the live model (needs keys) |
 
-### Python: what to try
+Ports move with `INVERSA_WEB_PORT`, `INVERSA_API_PORT`; `INVERSA_DATA_DIR` moves the databases (default `./data`, one folder per app).
 
-1. Snake markers are Burmese python reports in the last 7 days. Hover one for the ID grade, click it for the evidence card.
-2. Ask "Which cells rank highest for a removal crew tonight, and why?": the answer names the score's terms (density, activity, access) and calls it a heuristic.
-3. Type `2026-02-01` in the timeline's date field and press Enter: the window moves to the February 2026 cold snap; switch on Alerts and Hotspots under About, More data, and press Play.
-4. Ask "Which feeds are stale right now?": each stale or down source is named with its state.
+### Keys
 
-### Real-time notes and direct messages (two browsers)
+The globe works with none of them. Set them in Doppler (`inversa`, config `dev` or `prd`), the shell, or the Developer panel.
 
-Open the same app in two browser windows. In the **Notes** tab, pick a spot on the globe and write a field note: the other window sees the pin and the text as it is typed, with the author's caret. Direct messages, a thread per teammate in the same tab, stream per keystroke to the other window with an "is typing" line, and commit on Enter. Under the hood: CRDT ops over WebRTC data channels, with the GraphQL WebSocket as fallback and durable copy.
-
-### Controls
-
-**Help**, inside About, lists every control; its text lives in [`apps/web/client/hud/help/content.ts`](apps/web/client/hud/help/content.ts), and a unit test fails if this table misses one. Rows marked carp or species apply only to that kind of app.
-
-| Where | Control | What it does |
+| Variable | Enables | Without it |
 |---|---|---|
-| Map | App selector | Top left: switches between carp, Lionfish Watch and Everglades Ops. |
-| Map (species) | Species chip | The app's one species with its icon, colour and count in the window; click to show or hide its markers. |
-| Map (species) | Sighting markers | One per reported animal, brightest when newest; hover for how sure the ID is, click for the record. |
-| Map (species) | Evidence card | What was seen, where, when and how sure, the Latin name, the photo, the publisher link; the raw record under Details for experts. |
-| Map (carp) | Location markers | One per demonstration river location: ◆ ! needs review, ● ✓ no rule fired (not "safe"), dashed ■ ? cannot assess; freshness as a ring. |
-| Map (carp) | Review board | Every location, those needing review first, with reasons in words; the All sites and Atchafalaya Basin presets; the conditions-only notice. |
-| Map (carp) | Location briefing | What changed, what is expected, what is missing; readings with units and times, forecast issuance and source, thresholds, alerts, source pages. |
-| Map | About (ⓘ) | Top right: what the map is, how fresh its data is, Focus, Help, Data sources and More data (for experts). |
-| Map | Data sources | Inside About: one row per source with its health (nominal, lagging, stale, down), push or poll, and lag. |
-| Map | More data (for experts) | Inside About: a switch, legend and live count for every expert layer (stations, alerts, hotspots, temperature grids, missions, cursors). |
-| Map | Look | Top right, the eye: seven looks (Normal, CRT, NVG, FLIR, Noir, Anime, Snow) and the map window, always clear: its shape (circle, oval, rounded, frame) and its size, and a soft edge that fades the map out past it (sharp at 0, no vignette at 100). |
-| Map | Layers | Bottom of the map, beside the place search: sightings and field notes (on at first), Ships (carp and lionfish) and Water and weather, one plain line each; every layer follows the timeline. |
-| Map (carp, lionfish) | Ships | Inside Layers: AIS ships by type with fading trails, moving with the timeline; a click opens the ship with its VesselFinder page in a new tab. |
-| Map | Focus | Inside About: dims the globe outside a circle around the selection. |
-| Map | Theme (◐) | Top right: light, dark or tactical, remembered. |
-| Map | Developer (<>) | Top right: "Power up the globe", every API key with set or missing, where to get it and a paste field (see Keys below). No value is ever shown. |
-| Map | Help | Inside About: opens the help sheet. |
-| Map | Share links | The address bar holds the app, camera, time, layers and selection. |
-| Timeline (species) | Play / pause (Space) | Plays time forward at the chosen speed. |
-| Timeline (species) | Speed | Playback speed in frames per second. |
-| Timeline (species) | LIVE / REPLAY | Now or the past; click while replaying to jump to now. |
-| Timeline (species) | Date jump | Loads any UTC day, including days outside the loaded window. |
-| Timeline (species) | Scrubber | Drag, or arrow keys; hatched stretches are gaps in the data. |
-| Timeline (carp) | Stage timeline | USGS gauge height, NWPS observed stage and forecast with the spread of recent issuances, flood thresholds, alerts, the replay-coverage marker, "sources disagree" chips. |
-| Timeline (carp) | What we knew | Scrub, or press What we knew yesterday afternoon: everything shows what was held then. |
-| Chat column | Agent tab | Ask the agent; answers cite evidence, show their tools and data, and move the map. |
-| Chat column | Notes tab | Field notes pinned to the globe, team chat, direct messages, who is online, crew missions. |
-| Chat column | Mic | Talk instead of typing (needs `XAI_API_KEY`). |
-| Chat column | Citations [1] [2] … | Open the cited record in the evidence card. |
-| Chat column | Data panels and Expand | Tables and charts behind an answer; Expand opens them wide. |
-| Chat column | Column edge | Drag or use the arrow keys to resize the column; on phones, drag the sheet's handle. |
+| `OPENROUTER_API_KEY` | the agent (`openai/gpt-6-luna` via OpenRouter) | agent answers 503; there is no mock |
+| `NEXT_PUBLIC_CESIUM_ION_TOKEN` | Cesium terrain and aerial imagery | keyless Esri imagery |
+| `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` | Google Photorealistic 3D Tiles (optional) | ion imagery |
+| `XAI_API_KEY` | voice | text still works |
+| `FASTINO_API_KEY` | Fastino GLiDE decisions: every question is routed before the big model (off-topic and greetings answered in about a second), suggested next questions, and the voice's stop and eager-analysis decisions | everything runs as before, just without those shortcuts |
+| `R2_*` | Litestream backups and raw archive in Cloudflare R2 | local files only |
 
-### Honesty rules every app follows
+Agent spend is capped per day ($5 total, $2 per app).
 
-- Stale, missing and conflicting data are shown and named, never hidden or filled in. A feed without its account reads DOWN with the reason.
-- No single risk or probability number. Scores show their parts and are labelled as heuristics.
-- Sightings are not abundance. Conditions are not catch, legal access or trip safety. The agent refuses or caveats those questions.
-- Every number in an answer must come from a tool output, and every citation must be an id a tool returned in that turn.
+## Deploy (Hetzner CX23, Caddy, systemd, Cloudflare)
+
+Flow: **merge to `main`** → `release.yml` builds the Axum binary and the Next standalone tree and publishes GitHub Release `v0.1.<n>` → run **Actions → deploy** with that `version` (blank = latest; an older version is a rollback). Details in [deploy/README.md](deploy/README.md).
+
+First-time setup, once ([docs/HUMAN_STEPS.md](docs/HUMAN_STEPS.md) has the step by step):
+
+1. VM with Ubuntu, `deploy/` bootstrap script, Caddy and the two systemd units.
+2. Cloudflare DNS `inversa.bigvalue.lol` → VM IP, proxied, SSL mode Full (strict).
+3. Doppler `inversa/prd` with the keys above plus R2 credentials; a Doppler service token on the VM; GitHub secrets for the deploy SSH key and host.
+4. R2 buckets `inversa-litestream` and `inversa-raw`.
+5. Backfill on the server, once per app (use `tmux`; each takes a while):
+
+   ```sh
+   for a in python carp lionfish; do
+     sudo -u inversa bash -c "set -a; . /etc/inversa/env; set +a; INVERSA_DATA_DIR=/var/lib/inversa /opt/inversa/api/inversa-api backfill --app $a --days 730"
+   done
+   ```
+
+Everything the map reads is stored in SQLite and cached, so visitors never wait on a public API: carp sightings live in the carp database (refreshed every 30 minutes by the API, filled once by the backfill), frames are built once and kept two years (the API warms missing months in the background after a start), and reef heat pictures and weather overlays are fetched once by the server and shared.
+
+Check: `curl https://inversa.bigvalue.lol/api/health` returns 200 (`degraded` only names a missing optional key).
 
 ## Architecture
 
 ```
- Browser (one tab)
-   main: chat column, CesiumJS globe, HUD, timeline
-   workers: gql (GraphQL HTTP + WS), db (sqlite-wasm on OPFS, CRDT, frame cache), rtc (WebRTC data channels)
-   SharedArrayBuffer rings between threads (active-state ./threads)
-        | /v1/{app}/graphql, /v1/{app}/frames          | /api/agent/stream (NDJSON)
-        v                                              v
-   Axum API (Rust)                                 Next.js on Bun
-     AppRegistry: carp | lionfish | python           UI shell, agent (cordis, GPT-6 Luna on OpenRouter)
-     per app: pollers, push consumers, scheduler,    agent tools call /v1/{app}/graphql over loopback
-       SQLite writer + read pool, frames, hub
-     signed webhook  POST /v1/{app}/ingest/hook/{source}
-     nudges          /v1/{app}/ingest/nudge/{source}/{token}
-   Litestream: every app's SQLite files to R2
-
- Cloudflare Worker + R2: WebRTC signalling (SDP and ICE only), TURN credentials
- AWS SQS: GOES-19 SNS topic (pending)       NWWS-OI XMPP (pending)
+Browser: CesiumJS globe, HUD, timeline, workers (active-state over SharedArrayBuffer)
+   | /v1/{app}/graphql, /v1/{app}/frames          | /api/agent/stream
+   v                                               v
+Axum API (Rust)                                Next.js on Bun
+  per app: pollers, backfill CLI, carp sightings,            UI, agent
+  SQLite writer + read pool, frames
+Litestream: SQLite files → R2
 ```
 
-| Part | What it is | Where |
-|---|---|---|
-| Pollers | tokio tasks per feed per app under a rate governor (backoff on 429/5xx, `Retry-After`) | `api/src/ingest/poll/`, `api/src/ingest/governor.rs` |
-| Push consumers | GOES-19 SQS long-poll; NWWS-OI XMPP | `api/src/ingest/push/` |
-| Webhooks | one HMAC-signed hook for any raw provider body; idempotent on the body hash | `api/src/ingest/push/hook.rs` |
-| Nudges | IEMBot and ERDDAP subscriptions wake a poller; the payload is never trusted | `docs/ingest-modes.md` |
-| SQLite | `observations.db` and `team.db` per app, one writer thread, WAL readers | `api/src/db/` |
-| GraphQL | per app, HTTP and WebSocket subscriptions; frames over REST | `api/schema.graphql`, `api/src/graphql/` |
-| WebSockets | feed state, frame updates and team ops fan out from each app's hub | `api/src/realtime.rs` |
-| Workers | gql, db and rtc workers in the browser | `apps/web/client/threads/` |
-| active-state | shared state across threads over SharedArrayBuffer | `packages/active-state/` |
-| WebRTC | peer mesh (up to 8) for notes, DMs, cursors; signalling Worker | `apps/web/client/threads/rtc/`, `apps/signal-worker/` |
-| App config | one JSON per app, one schema, read by Rust and TS | `spec/apps/` |
+| Part | Where |
+|---|---|
+| Pollers (iNaturalist, NAS, GBIF, EDDMapS, USGS Water, CO-OPS, NWPS, IEM, NWS, Coral Reef Watch, Open-Meteo, NDBC) | `api/src/ingest/poll/` |
+| Backfill CLI | `api/src/backfill.rs` |
+| SQLite, GraphQL | `api/src/db/`, `api/schema.graphql`, `api/src/graphql/` |
+| App config (one JSON per app, read by Rust and TS) | `spec/apps/` |
+| Map UI | `apps/web/client/` (`carp/`, `lionfish/`, `hud/`, `globe/`) |
+| Client state (`@calvinjs/active-state`) | `apps/web/client/state/`, `packages/active-state/` |
 
-Boundaries: only Axum writes the server databases; the agent has no database access and reaches data only through GraphQL; each app's data is in its own files and every request carries the app in its path (`/v1/<app>/...`); the CRDT merge exists in Rust and TypeScript and both pass the same vectors.
+Only Axum writes the databases; the agent reaches data only through GraphQL. Each app's data is its own files and every request carries the app in its path.
 
-## Status and known gaps
+## Decisions with Fastino GLiDE
 
-- **Not deployed** (see above).
-- **GOES-19 and NWWS-OI push** wait on an AWS queue and a NOAA account; both read DOWN with the reason.
-- **Agent benchmark**: grounding holds (`ungrounded=0`) in every final run, but the rubric's 95%/90% bars are not met three runs in a row by any app; numbers in [docs/brief-compliance.md](docs/brief-compliance.md) row 23.
-- **Agent first token**, re-measured 2026-10-01 with `e2e:perf --app`: carp p50 1,123 ms, lionfish 1,272 and 1,343 ms, python 1,566 and 1,584 ms; the rubric's bar is 1,200 ms. The python run also failed its answer-cache check twice: a repeated question was answered by the model again instead of from the cache.
-- **Phone layout**, from the 375 px screenshots: carp's opening camera shows only part of the eight sites and the timeline's hint text is clipped; lionfish's honesty banner covers the top third of the map until dismissed.
-- Every task's gates file is under [gates/](gates/); gates blocked on a human step carry an `ABANDON` line naming it.
+[GLiDE](https://docs.fastino.ai/concepts/glide) is a decision model: it reads a state and answers typed questions with probabilities instead of writing text. The app asks it small questions where a decision is all that is needed, and keeps the large model for answers:
+
+- **Routing** (`apps/web/server/agent/decisions.ts`): each message gets `on_topic` (yes/no) and `intent` (reports, conditions, priority, data sources, map control, greeting, off topic). A confident off-topic message or greeting is answered at once from the app's own topics (no model call, no spend); everything else reaches the agent with the intent and the tools that usually serve it as a hint.
+- **Ask next** (`server/agent/followups.ts`): picks the likeliest next questions from the supported-questions list.
+- **Voice** (`server/voice/voice-session.ts`): decides whether a short utterance means stop, and starts the analyst on a data question at once instead of waiting for the voice model.
+- Without `FASTINO_API_KEY`, or when the API is slow or down (4 s timeout, then a 60 s cool-down after three failures), none of it runs and the app behaves as before.
+
+## Honesty rules
+
+- Stale, missing or conflicting data is shown and named, never filled in.
+- Sightings are not abundance: more reports can mean more observers.
+- Heat stress is context, not proof of lionfish damage. Survey priority orders places to look; it is not a probability.
+- Every number in an agent answer comes from a tool result.
+
+## Known gaps
+
+- **Voice** was tuned (server VAD threshold 0.6, 650 ms of silence ends a turn) but could only be checked against the mocked provider; if a turn still hangs on in a noisy room, raise `VAD_THRESHOLD` in `apps/web/server/voice/voice-session.ts`.
+- **Lionfish is heavy on the small server**: the first load of a long period builds many heat-map frames and can take several seconds, especially while a backfill runs.
+- **GOES-19 and NWWS-OI feeds are disabled** (need AWS and NOAA accounts).
+- **Notes, teammates and the WebRTC signal worker** are no longer in the UI (the Notes tab became Questions) but their code is still in the repo, undeployed.
+- **Lionfish survey card** still carries older layer wording; restyle pending.
+- Tests run locally (`bun run check`), not in CI, to keep CI fast.
+
+More background: [docs/brief-compliance.md](docs/brief-compliance.md), [docs/scaling.md](docs/scaling.md), [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md), [docs/security.md](docs/security.md).

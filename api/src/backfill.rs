@@ -28,7 +28,7 @@
 //! 429/5xx and honours `Retry-After`. A network backfill walks the bio sources, the only ones
 //! with paginated history.
 //!
-//! Afterwards the stored hourly frames of the last 30 days are rebuilt: the backfill runs in its
+//! Afterwards the stored hourly frames of the last two years are rebuilt: the backfill runs in its
 //! own process, so the server's frame builder never saw these rows. A scene skips the rebuild; its
 //! frames build on first request.
 //!
@@ -49,6 +49,7 @@ use serde::Deserialize;
 use crate::app::config::{App, APP_IDS};
 use crate::ingest::governor::{self, Attempt, Governor};
 use crate::ingest::poll::bio::{self, Pacer, Pager};
+use crate::ingest::poll::eddmaps::{self, Eddmaps};
 use crate::ingest::poll::gbif::{self, Gbif};
 use crate::ingest::poll::iem::{self, Iem};
 use crate::ingest::poll::inat::{self, Inat};
@@ -330,6 +331,15 @@ pub async fn run(state: AppState, args: &[String]) -> anyhow::Result<()> {
         }
         // Reef heat stress (Lionfish Watch): the recent CRW product days, one request per region, once. The live
         // poller keeps it current afterwards (its cursor continues from the newest stored day).
+        // Asian carp sightings (carp): the last two years from iNaturalist, GBIF and NAS into the sightings table.
+        if app.id() == "carp" {
+            let n = retry("carp-sightings", || crate::carp_fish::refresh(&target)).await?;
+            println!("carp-sightings: {n} records stored");
+        }
+        // EDDMapS reports (python): one request, the whole public set.
+        if app.cfg.has_feed(eddmaps::ID) {
+            soft_fetch(&target, eddmaps::ID, &Eddmaps::new(app.clone()), &mut out, &mut skipped).await;
+        }
         if app.cfg.has_feed(crw::SOURCE_ID) {
             let src = crw::Crw::new(app.clone()).with_days((days as i64).min(CRW_BACKFILL_DAYS));
             soft_fetch(&target, crw::SOURCE_ID, &src, &mut out, &mut skipped).await;
@@ -498,10 +508,10 @@ async fn ingest_all(state: &AppState, source: &dyn Source, pages: Vec<RawPayload
     Ok(tally)
 }
 
-/// Rebuild the stored hourly frames of the whole window (PLAN.md C15) and tell subscribers.
+/// Rebuild the stored hourly frames of the whole two-year window and tell subscribers.
 pub async fn rebuild_frames(state: &AppState) -> anyhow::Result<(i64, i64)> {
     let now = crate::frames::now_ms();
-    let (from, to) = crate::frames::rebuild(&state.obs, &state.app, now - crate::frames::WINDOW_MS, now).await?;
+    let (from, to) = crate::frames::rebuild(&state.obs, &state.app, now - crate::frames::KEEP_MS, now).await?;
     state.hub.publish(crate::realtime::Event::FramesUpdated { from, to });
     Ok((from, to))
 }
@@ -524,7 +534,8 @@ pub fn fixture_sources(state: &AppState) -> Vec<Arc<dyn Source>> {
     if app.cfg.has_feed(crw::SOURCE_ID) {
         out.push(Arc::new(crw::Crw::new(app.clone())));
     }
-    out.extend(crate::ingest::poll::bio::sources(&state.config, app));
+    // EDDMapS has no recorded fixture: its reports are today's, so it is network-only.
+    out.extend(crate::ingest::poll::bio::sources(&state.config, app).into_iter().filter(|s| s.info().id != eddmaps::ID));
     out
 }
 
@@ -899,7 +910,7 @@ mod tests {
         run(lf.clone(), &s(&["--fixtures", "--app", "lionfish", "--dry-run"])).await.unwrap();
         assert!(run(lf.clone(), &s(&["--fixtures", "--app", "python"])).await.unwrap_err().to_string().contains("--app python"));
         let ids: Vec<&str> = fixture_sources(&lf).iter().map(|s| s.info().id).collect();
-        assert_eq!(ids, ["ndbc", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
+        assert_eq!(ids, ["ndbc", "coops", "openmeteo-marine", "goes19-sst", "crw", "inat", "nas", "gbif"]);
         assert_eq!(measure(&state, inat::ID).await.unwrap().sightings, 13, "python's database is untouched");
     }
 

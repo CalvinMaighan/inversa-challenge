@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { isAgentStreamEvent } from "shared/agent/events";
-import { type FeedState, worstHealth } from "shared/feed-state";
+import { type FeedState, isDisabledFeed, worstHealth } from "shared/feed-state";
 import { ENV_FLAGGED, ENV_MISSING, EVF_HEADER_BYTES, evfFrameBytes, evfFrameLayout, isEnvValue, readEvfHeader } from "shared/frames";
 import { isVoiceControlRequest, VOICE_INPUT_SAMPLE_RATE, VOICE_OUTPUT_SAMPLE_RATE } from "shared/voice/protocol";
 import { parseUiCommand, uiToolSchemasFor, UI_TOOL_NAMES } from "shared/voice/ui-tools";
@@ -62,7 +62,7 @@ describe("shared contracts", () => {
   });
 
   test("ui tools validate", () => {
-    expect(UI_TOOL_NAMES).toEqual(["fly_to", "set_time", "play_timeline", "toggle_layer", "select", "open_evidence", "set_look"]);
+    expect(UI_TOOL_NAMES).toEqual(["fly_to", "set_time", "play_timeline", "toggle_layer", "select", "open_evidence", "open_menu", "set_period", "filter_species", "select_area", "zoom", "switch_app", "close_panel", "show_card", "set_look"]);
     const python = getApp("python");
     expect(parseUiCommand("fly_to", { place: "Flamingo" }, python)?.name).toBe("fly_to");
     expect(parseUiCommand("fly_to", {}, python)).toBeNull();
@@ -85,5 +85,13 @@ describe("shared contracts", () => {
     const schema = z.toJSONSchema(uiToolSchemasFor(lionfish).toggle_layer, { io: "input" }) as unknown as { properties: { layer: { enum: string[] }; species: { enum: string[] } } };
     expect(schema.properties.layer.enum).toEqual(appLayerIds(lionfish));
     expect(schema.properties.species.enum).toEqual(["lionfish"]);
+  });
+});
+
+describe("disabled feeds", () => {
+  test("a feed whose note starts disabled: is not shown", () => {
+    expect(isDisabledFeed({ note: "disabled: NWWS_USER and NWWS_PASS not set" })).toBe(true);
+    expect(isDisabledFeed({ note: "no fetch for 8m" })).toBe(false);
+    expect(isDisabledFeed({ note: null })).toBe(false);
   });
 });

@@ -16,12 +16,15 @@ type Side = "left" | "right";
  * (carp's "Locations to review", the lionfish survey) opens at the left of the globe, next to the chat card, at the
  * bottom just above the timeline.
  */
+/** Height of the bottom bar's pills (client/hud/shell/BottomBar.tsx). */
+const BAR_PX = 32;
+
 const Frame = styled(Surface)<{ $side: Side; $width: number; $maxHeight?: number }>`
   position: absolute;
-  /* One gutter below the top row and one above the timeline (both measured by the HUD, GE9). */
+  /* One gutter below the top row and one above the bottom bar (Search, Layers: 32 px pills, one gutter above the timeline), so the card never runs behind the Layers button (both measured by the HUD, GE9). */
   top: var(--hud-top);
-  bottom: var(--hud-bottom);
-  ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom)));` : "")}
+  bottom: calc(var(--hud-bottom) + ${BAR_PX}px + var(--gap-m));
+  ${(p) => (p.$maxHeight ? `bottom: auto; height: min(${p.$maxHeight}px, calc(100cqh - var(--hud-top) - var(--hud-bottom) - ${BAR_PX}px - var(--gap-m)));` : "")}
   /* A left panel sits at the bottom, just above the timeline, and stops under the top row. */
   ${(p) => (p.$side === "left" ? "top: auto; bottom: var(--hud-bottom); height: auto; max-height: calc(100cqh - var(--hud-top) - var(--hud-bottom));" : "")}
   ${(p) => p.$side}: max(var(--gap-m), env(safe-area-inset-${(p) => p.$side}));

@@ -40,22 +40,6 @@ const Message = styled.p`
   color: var(--muted);
 `;
 
-const MissionList = styled.ul`
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 13px;
-  li {
-    padding: var(--gap-s) 0;
-    border-bottom: 1px solid var(--border);
-  }
-  small {
-    display: block;
-    color: var(--muted);
-    font-family: var(--font-mono);
-  }
-`;
-
 function feeds(nowMs: number): FeedState[] {
   const iso = (agoS: number) => new Date(nowMs - agoS * 1000).toISOString();
   const feed = (source: string, mode: FeedState["mode"], state: FeedState["state"], lag: number | null, note: string | null): FeedState => ({
@@ -241,20 +225,7 @@ export default function HudFixture() {
   return (
     <AppShell
       side={
-        <AgentColumn
-          missions={
-            <MissionList>
-              <li>
-                Python sweep, L-67 levee
-                <small>planned · python · 20:00–02:00 EDT</small>
-              </li>
-              <li>
-                Python survey, Shark Valley
-                <small>in progress · python · 3 removals</small>
-              </li>
-            </MissionList>
-          }
-        />
+        <AgentColumn />
       }
       globe={<FixtureGlobe grid={ready.grid} />}
       hud={<Hud sync={false} />}

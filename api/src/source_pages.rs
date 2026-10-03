@@ -311,6 +311,20 @@ pub fn source_facts(source: &str) -> Option<SourceFacts> {
             limits: &["Curated, verified records: never real time."],
             why_poll: Some("NAS Alerts (email and RSS) announce a species new to an area, not new records."),
         },
+        "eddmaps" => SourceFacts {
+            publisher: "Bugwood Center, University of Georgia (EDDMapS, Florida's IveGot1)",
+            api_url: "https://api.bugwood.org/rest/api/occurrence",
+            page_url: "https://www.eddmaps.org",
+            licence: "Open, no key; terms of use not confirmed when this was added.",
+            attribution: "Data: EDDMapS, Bugwood Center, University of Georgia.",
+            doi: None,
+            cadence: "Every 30 min, one request.",
+            expected_latency: "Reports appear the day they are entered, plus up to 30 min.",
+            rate_limit: "No published limit; one request per poll.",
+            coverage: "Burmese python reports in the app's regions (41 records when added).",
+            limits: &["A small set: it adds recent verified reports, not volume.", "Some reports repeat iNaturalist or NAS records and are not linked as duplicates."],
+            why_poll: Some("The API has no subscription or push endpoint."),
+        },
         "ndbc" => SourceFacts {
             publisher: "NOAA National Data Buoy Center",
             api_url: "https://www.ndbc.noaa.gov/data/latest_obs/latest_obs.txt",
@@ -893,7 +907,7 @@ mod tests {
         let sources = body["data"]["sources"].as_array().unwrap_or_else(|| panic!("{body}"));
         let mut feeds: Vec<&str> = sources.iter().map(|s| s["feed"].as_str().unwrap()).collect();
         feeds.sort_unstable();
-        assert_eq!(feeds, ["aisstream", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
+        assert_eq!(feeds, ["coops", "crw", "gbif", "goes19-sst", "inat", "nas", "ndbc", "openmeteo-marine"]);
         assert_eq!(body["data"]["crw"], serde_json::json!({"feed": "crw", "mode": "WEBHOOK", "doi": CRW_DOI}));
         assert_eq!(body["data"]["none"], serde_json::Value::Null);
         let goes = sources.iter().find(|s| s["feed"] == "goes19-sst").unwrap();
