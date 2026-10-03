@@ -57,7 +57,7 @@ Not integrated. Each needs a sign-up, a request or an agreement first.
 - **Place chip** (bottom left, above the timeline): the area in focus.
 - **Dots**: hover for details, click to select (pulses) and open the sighting panel on the right.
 - **Timeline** (bottom): reports per day as spikes, drag to replay; LIVE jumps back to now.
-- **Layers** (bottom right): sightings, reef heat map (lionfish, off by default, drawn at 35% opacity; pick heat stress, alert level, hotspot or sea temperature), radar, clouds, lightning, storms, sea temperature.
+- **Layers** (bottom right): sightings, reef heat map (lionfish, off by default, drawn at 15% opacity; pick heat stress, alert level, hotspot or sea temperature), radar, clouds, lightning, storms, sea temperature.
 - **Live data** (bell, top right): the newest record from each live feed with its age, freshest first. A dot shows when something new arrives.
 - **Look** (eye, top right): visual modes and the map window (shape, size, soft edge). The soft edge fades the map out and blurs it progressively (a masked backdrop blur that is clear inside the window and strongest at the outer rim); no blur at soft edge 100. The Look popover has an Edge blur slider (0 to 40 px, default 6).
 - **Developer** (`<>`, top right): tab **Feeds** shows every data source and its health; tab **API Keys** shows which keys are set and lets you paste missing ones.

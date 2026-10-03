@@ -189,7 +189,7 @@ export type OverlayProps = {
 
 type Placed = { lat: number; lon: number };
 
-const HEAT_ALPHA = 0.35;
+const HEAT_ALPHA = 0.15;
 /** The timeline must rest this long before the reef pictures change to its day. */
 const SCRUB_SETTLE_MS = 450;
 /** Each tile is laid a cell (0.05 degrees) wider than its grid box, so neighbours overlap instead of leaving a hairline between them. */
