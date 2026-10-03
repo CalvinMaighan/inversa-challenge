@@ -17,19 +17,14 @@ import type { MenuId } from "shared/voice/ui-tools";
 import { THEME_MODES, type ThemeModeId } from "client/themes/palette";
 
 import { hasNewData, latestMs, liveRows } from "../alerts/model";
-import LegendBody from "../legend/LegendPanel";
 import { Dot, Icon, IconButton, MOBILE, Surface } from "../primitives";
-import { useActiveApp } from "../appselect/use-active-app";
-import { aboutSentence, WINDOW_NOTE } from "../help/content";
 import DeveloperPanel from "../developer/DeveloperPanel";
 import { LookChoices, LookIcon, setLook, setScopeBlur, setScopeFeather, setScopeShape, setScopeSize } from "../look/LookBar";
-import { openEvidence } from "../selection";
-import { feedChip, feedSummary, formatLag, sortFeedsForStatus } from "./feed-chips";
-import { freshnessLines } from "./freshness";
+import { formatLag } from "./feed-chips";
 
 /** An icon button's size. */
 export const ROUND_PX = 36;
-/** The cluster's buttons, left to right: Live data, About, Theme, Look, Developer. */
+/** The cluster's buttons, left to right: Live data, Theme, Look, Developer. */
 export const TOPBAR_BUTTONS = 5;
 /** The cluster's width (the top row keeps this much room, plus a gutter, at its right). */
 export const TOPBAR_WIDTH_CSS = `calc(${TOPBAR_BUTTONS * ROUND_PX}px + ${TOPBAR_BUTTONS - 1} * var(--gap-m))`;
@@ -144,67 +139,6 @@ const Popover = styled.div`
   }
 `;
 
-const Fresh = styled.ul`
-  margin: 0 0 var(--gap-s);
-  padding: 0;
-  list-style: none;
-  color: var(--muted);
-  font-size: 12.5px;
-`;
-
-const Row = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap-s);
-`;
-
-const FeedList = styled.ul`
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-
-  li {
-    display: grid;
-    grid-template-columns: 9px 1fr auto auto;
-    align-items: center;
-    column-gap: 7px;
-  }
-
-  b {
-    font: 600 12px / 1.3 var(--font-mono);
-  }
-
-  small {
-    color: var(--muted);
-    font: 400 11px / 1.3 var(--font-mono);
-    white-space: nowrap;
-  }
-
-  p {
-    grid-column: 2 / -1;
-    margin: 0 0 3px;
-    color: var(--muted);
-    font-size: 11.5px;
-  }
-`;
-
-/** A feed's name, as a button that opens its latest fetch run in the evidence drawer. */
-const FeedRun = styled.button`
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  &:hover b,
-  &:focus-visible b {
-    text-decoration: underline;
-  }
-`;
-
 const Choices = styled.div`
   display: flex;
   flex-direction: column;
@@ -280,134 +214,6 @@ export function PopoverBox({ id, label, testId, popRef, onClose, children, align
     >
       {children}
     </Popover>
-  );
-}
-
-/** Technical feed health, worst first, each with its lag and, off nominal, the server's note. */
-function Feeds({ list }: { list: FeedState[] }) {
-  if (list.length === 0) return <p>No feed state received yet.</p>;
-  return (
-    <FeedList aria-label="Feeds">
-      {sortFeedsForStatus(list).map((feed) => {
-        const chip = feedChip(feed);
-        // The chip opens the feed's latest fetch run in the drawer: state, note and error readable without a hover.
-        const run = feed.lastFetchRunId ? `fetch:${feed.lastFetchRunId}` : null;
-        const open = run ? () => openEvidence(run) : undefined;
-        return (
-          <li key={chip.source} title={chip.title} data-feed={chip.source} data-state={chip.state}>
-            <Dot $tone={chip.tone} />
-            {open ? (
-              <FeedRun type="button" onClick={open} title={`Open ${chip.label}'s latest fetch run: state, note and error`}>
-                <b>{chip.label}</b>
-              </FeedRun>
-            ) : (
-              <b>{chip.label}</b>
-            )}
-            <small>
-              {chip.state} · {chip.mode}
-            </small>
-            <small>{chip.lag}</small>
-            {chip.state !== "nominal" && feed.note ? <p>{feed.note}</p> : null}
-          </li>
-        );
-      })}
-    </FeedList>
-  );
-}
-
-function About({ list, focus, onFocus, helpOpen, onHelp }: ChromeProps & { list: FeedState[] }) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const pop = usePopover(triggerRef, popRef, "about");
-  const id = useId();
-  const summary = feedSummary(list);
-  const label =
-    list.length === 0
-      ? "About this map and its data"
-      : `About this map and its data: ${summary.degraded === 0 ? "every data source running normally" : `${summary.degraded} of ${list.length} data sources delayed or down`}`;
-  return (
-    <>
-      <Round
-        ref={triggerRef}
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={pop.open}
-        aria-controls={pop.open ? id : undefined}
-        aria-label={label}
-        title={label}
-        data-testid="status-button"
-        data-health={list.length === 0 ? "unknown" : summary.state}
-        onClick={pop.toggle}
-      >
-        <Icon name="info" />
-        {list.length > 0 && summary.degraded > 0 ? <Dot $tone={summary.tone} /> : null}
-      </Round>
-      {pop.open ? (
-        <PopoverBox id={id} label="About this map" testId="status-popover" popRef={popRef} onClose={pop.close}>
-          <AboutContent
-            list={list}
-            focus={focus}
-            onFocus={onFocus}
-            helpOpen={helpOpen}
-            onHelp={() => {
-              pop.close();
-              onHelp(!helpOpen);
-            }}
-          />
-        </PopoverBox>
-      ) : null}
-    </>
-  );
-}
-
-/** What the About popover holds: what this is, freshness, Focus, Help, the data sources and the expert layers. */
-export function AboutContent({
-  list,
-  nowMs,
-  focus,
-  onFocus,
-  helpOpen,
-  onHelp,
-}: {
-  list: FeedState[];
-  /** Wall clock for "checked 6 min ago"; taken when the popover opens unless given (tests). */
-  nowMs?: number;
-  focus: boolean;
-  onFocus: (next: boolean) => void;
-  helpOpen: boolean;
-  onHelp: () => void;
-}) {
-  const [expert, setExpert] = useState(false);
-  const [now] = useState(() => nowMs ?? Date.now());
-  const app = useActiveApp();
-  return (
-    <>
-      <p>{aboutSentence(app)}</p>
-      <p data-testid="window-note">{WINDOW_NOTE}</p>
-      <Fresh aria-label="Data freshness">
-        {freshnessLines(list, now).map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </Fresh>
-      <Row>
-        <IconButton type="button" $active={focus} aria-pressed={focus} onClick={() => onFocus(!focus)} title="Focus: dim everything outside the selection">
-          <Icon name="focus" />
-          Focus
-        </IconButton>
-        <IconButton type="button" $active={helpOpen} title="Help: what every control does" data-help-button="" data-testid="help-button" onClick={onHelp}>
-          <Icon name="help" />
-          Help
-        </IconButton>
-      </Row>
-      <details data-testid="data-sources">
-        <summary>Data sources</summary>
-        <Feeds list={list} />
-      </details>
-      <details data-testid="expert-data" onToggle={(e) => setExpert(e.currentTarget.open)}>
-        <summary data-testid="layers-button">More data (for experts)</summary>
-        {expert ? <LegendBody active /> : null}
-      </details>
-    </>
   );
 }
 
@@ -698,12 +504,10 @@ export function TopBarView({
   look = DEFAULT_LOOK_STATE,
   seen = 0,
   onSeen = () => {},
-  ...props
 }: ChromeProps & { feeds: FeedState[]; mode: ThemeModeId; onTheme: (mode: ThemeModeId) => void; look?: LookState; seen?: number; onSeen?: (ms: number) => void }) {
   return (
     <Bar data-testid="hud-topbar">
       <LiveData list={feeds} seen={seen} onSeen={onSeen} />
-      <About list={feeds} {...props} />
       <Theme mode={mode} onPick={onTheme} />
       <Look {...look} />
       <Developer />

@@ -15,7 +15,7 @@ import { LOOK_IDS, LOOK_WORDS } from "shared/look";
 export { LAYER_IDS };
 
 /** The HUD menus the agent may open: each is a button's popover (client/hud). */
-export const MENU_IDS = ["layers", "live_data", "look", "theme", "about", "period", "developer"] as const;
+export const MENU_IDS = ["layers", "live_data", "look", "theme", "period", "developer"] as const;
 export type MenuId = (typeof MENU_IDS)[number];
 /** The periods of the period button, in days (client/state/range.ts keeps the labels). */
 export const PERIOD_DAYS = [30, 90, 180, 365, 730] as const;
@@ -58,7 +58,7 @@ function schemas(layers: readonly LayerId[], species: readonly string[], filtera
     open_evidence: z.object({
       evidenceId: z.string().min(3),
     }),
-    open_menu: z.object({ menu: z.enum(MENU_IDS).describe("layers, live_data (newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes), developer (API keys and feeds)"), open: z.boolean().default(true) }),
+    open_menu: z.object({ menu: z.enum(MENU_IDS).describe("layers, live_data (newest data per feed), look, theme, period (how far back the timeline goes), developer (API keys and feeds)"), open: z.boolean().default(true) }),
     set_period: z.object({ days: z.union(PERIOD_DAYS.map((d) => z.literal(d)) as [z.ZodLiteral<30>, z.ZodLiteral<90>, ...z.ZodLiteral<number>[]]).describe("30, 90, 180, 365 or 730 days back from today") }),
     filter_species: filterable.length > 0 ? z.object({ species: z.enum(filterable as [string, ...string[]]), visible: z.boolean().default(true), only: z.boolean().optional().describe("true: show only this one and hide the others") }) : z.object({ species: z.never().optional(), visible: z.boolean().default(true), only: z.boolean().optional() }),
     select_area: z.object({ area: z.string().min(2).describe("An area of this app by id or name, e.g. the Florida Keys, the Mexican Caribbean, Belize, the Mississippi River Basin") }),

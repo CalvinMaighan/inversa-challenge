@@ -51,7 +51,7 @@ export function toggleLayer(app: AppConfig) {
 // ---------------------------------------------------------------- the rest of the controls
 
 const CONTROL_DESCRIPTIONS = {
-  open_menu: "Open or close one on-screen menu: layers, live_data (newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes) or developer. Returns at once.",
+  open_menu: "Open or close one on-screen menu: layers, live_data (newest data per feed), look, theme, period (how far back the timeline goes) or developer. Returns at once.",
   set_period: "Set how far back the map and timeline reach: 30, 90, 180, 365 (1 year) or 730 (2 years) days; dots, counts and the timeline change together. Returns at once.",
   filter_species: "Show or hide one species on the map (the species chips); only=true shows just that one. Returns at once.",
   select_area: "Choose one of this app's own named areas (the area button above the timeline) and fly there: lionfish has the Florida Keys, Mexican Caribbean, Belize and Colombian Caribbean; the other apps have one. Not for towns or rivers: use fly_to for any other place. Returns at once.",

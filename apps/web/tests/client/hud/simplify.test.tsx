@@ -12,7 +12,7 @@ import { evidenceQuery, fetchEvidence, OPTIONAL_EVIDENCE_FIELDS, resetSchemaProb
 import { placeWords, plainSummary, qualityWords, speciesCard } from "client/hud/drawer/summary";
 import { GqlError } from "client/threads/api";
 import { freshnessLines } from "client/hud/topbar/freshness";
-import { AboutContent, ThemeChoices, TopBarView } from "client/hud/topbar/TopBar";
+import { ThemeChoices, TopBarView } from "client/hud/topbar/TopBar";
 import { state } from "client/state";
 import { emotionTheme } from "client/themes/theme";
 import { nearestPlace } from "client/voice/gazetteer";
@@ -46,43 +46,25 @@ const feed = (source: string, state: FeedState["state"], extra: Partial<FeedStat
 });
 
 describe("status popover", () => {
-  test("status popover: the chrome is five icon buttons (Live data, About, Theme, Look, Developer) with dialogs and no visible text", () => {
+  test("status popover: the chrome is four icon buttons (Live data, Theme, Look, Developer; no About button) with dialogs and no visible text", () => {
     const markup = html(<TopBarView focus={false} onFocus={noop} helpOpen={false} onHelp={noop} feeds={[feed("inat", "down")]} mode="dark" onTheme={noop} />);
     const triggers = [...markup.matchAll(/<button[^>]*aria-haspopup="dialog"[^>]*>/g)];
-    expect(triggers).toHaveLength(5);
-    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(5);
+    expect(triggers).toHaveLength(4);
+    expect([...markup.matchAll(/<button\b/g)]).toHaveLength(4);
     for (const trigger of triggers) expect(trigger[0]).toMatch(/aria-label="[^"]+"/);
     // In this order, left to right.
     const ids = triggers.map((t) => /data-testid="([^"]+)"/.exec(t[0])?.[1]);
-    expect(ids).toEqual(["live-data-button", "status-button", "theme-button", "look-button", "developer-button"]);
+    expect(ids).toEqual(["live-data-button", "theme-button", "look-button", "developer-button"]);
     expect(markup).toContain('aria-label="Look: filters and map window"');
     // The Developer panel mounts only when its button is pressed.
     expect(markup).not.toContain('data-testid="developer-panel"');
     expect(textOf(markup)).toBe("");
-    // Feeds, theme, focus and help are not on the bar: they live in the popovers.
+    expect(markup).not.toContain("status-button");
+    // Feeds and theme are not on the bar: they live in the popovers.
     for (const gone of ["data-feed", 'role="radiogroup"', "data-help-button", "aria-pressed", "Everglades Ops", "LIVE", "CURSOR"]) expect(markup).not.toContain(gone);
   });
 
-  test("status popover: About holds plain freshness, Focus, Help, the data sources (worst first) and the expert layers", () => {
-    const list = [
-      feed("usgs", "nominal"),
-      feed("inat", "lagging", { lastFetchAt: "2026-09-30T20:54:00Z", newestObservedAt: "2026-09-30T19:00:00Z", note: "upstream slow" }),
-      feed("nws", "down", { note: "HTTP 503" }),
-    ];
-    const markup = html(<AboutContent list={list} nowMs={NOW} focus={false} onFocus={noop} helpOpen={false} onHelp={noop} />);
-    const text = textOf(markup);
-    expect(text).toContain("Sightings checked 6 min ago.");
-    expect(text).toContain("Newest sighting reported 2 h ago.");
-    expect(text).toContain("iNaturalist is running late");
-    expect(markup).toContain('data-help-button=""');
-    expect(markup).toContain('aria-pressed="false"');
-    expect(text).toContain("Focus");
-    // Technical health is collapsed under "Data sources", worst feed first.
-    const sources = markup.slice(markup.indexOf('data-testid="data-sources"'));
-    expect(sources.startsWith('data-testid="data-sources">')).toBe(true);
-    expect([...sources.matchAll(/data-feed="(\w+)"/g)].map((m) => m[1])).toEqual(["nws", "inat", "usgs"]);
-    expect(markup).toContain("More data (for experts)");
-    expect(markup).not.toMatch(/<details[^>]*\sopen/);
+  test("status popover: the theme popover offers light, dark and tactical", () => {
     const themes = html(<ThemeChoices mode="dark" onPick={noop} />);
     expect([...themes.matchAll(/role="radio"/g)]).toHaveLength(3);
     expect(themes).toMatch(/aria-checked="true"[^>]*>Dark</);

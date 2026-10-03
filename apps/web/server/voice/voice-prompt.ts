@@ -43,7 +43,7 @@ const UI_TOOL_DESCRIPTIONS: Record<Exclude<UiToolName, "toggle_layer">, string> 
   open_evidence:
     "Open the evidence drawer for one evidence id `<kind>:<key>`, exactly as it appeared in a result. Returns at once.",
   open_menu:
-    "Open or close one of the on-screen menus: layers, live_data (the newest data per feed), look, theme, about (help and data sources), period (how far back the timeline goes) or developer. Use it when the user asks to open a menu or wants to see what is in it. Returns at once.",
+    "Open or close one of the on-screen menus: layers, live_data (the newest data per feed), look, theme, period (how far back the timeline goes) or developer. Use it when the user asks to open a menu or wants to see what is in it. Returns at once.",
   set_period:
     "Set how far back the map and timeline reach: 30, 90, 180, 365 or 730 days (1 or 2 years). This is the period button's choice; it changes the dots, the counts and the timeline together. Returns at once.",
   filter_species:
