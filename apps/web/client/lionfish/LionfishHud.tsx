@@ -8,6 +8,7 @@ import { DEFAULT_RANGE_DAYS, RANGE_DAYS } from "client/state/range";
 import { TIME, type TimeState } from "client/state/time";
 
 import { fitGlobeInPane, fitInPane } from "client/globe/fit";
+import { gateOpen } from "client/intro/gate";
 import { Icon, IconButton, MOBILE, MOBILE_QUERY, Surface, useIsMobile } from "client/hud/primitives";
 import { clearSelection, openEvidence } from "client/hud/selection";
 import { useStageLayout } from "client/hud/shell/StageShell";
@@ -142,6 +143,7 @@ export default function LionfishHud({ app }: { app: AppConfig }) {
   // under them or off the edge of a phone; the fixed-margin framing is the fallback.
   useEffect(() => {
     const id = requestAnimationFrame(() => {
+      if (gateOpen()) return;
       const areas = areasOf(app);
       const box = { west: Math.min(...areas.map((a) => a.bbox.west)), south: Math.min(...areas.map((a) => a.bbox.south)), east: Math.max(...areas.map((a) => a.bbox.east)), north: Math.max(...areas.map((a) => a.bbox.north)) };
       // A load always starts on the whole globe, its edge on the scope circle's, over the areas.

@@ -7,6 +7,7 @@ import { useActiveState } from "@calvinjs/active-state/react";
 import CarpFishHud from "client/carp/CarpFishHud";
 import FishLegend from "client/carp/FishLegend";
 import { fitGlobeInPane } from "client/globe/fit";
+import { gateOpen } from "client/intro/gate";
 import LionfishChip from "client/lionfish/LionfishChip";
 import LionfishHud from "client/lionfish/LionfishHud";
 import { isSurveyApp, parseCellEvidenceId } from "client/lionfish/model";
@@ -152,6 +153,7 @@ function HudBody({ sync = true }: HudProps) {
   useEffect(() => {
     if (!speciesApp) return;
     const id = requestAnimationFrame(() => {
+      if (gateOpen()) return;
       const { lat, lon } = viewFor(app);
       const frame = fitGlobeInPane({ lat, lon });
       if (frame) set<ViewState>(VIEW, (prev = VIEW.defaults) => ({ ...prev, ...frame, place: null, seq: prev.seq + 1 }));
